@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING, Any
 
 import clickhouse_connect
@@ -23,6 +23,10 @@ from app.schemas.market import Kline, Market, Period, SymbolMeta
 
 if TYPE_CHECKING:
     from clickhouse_connect.driver.asyncclient import AsyncClient
+
+# CH Date 列非 nullable,SymbolMeta.listed_date 为 None 时用这个哨兵代替
+# (CH Date 合法范围起点)。读出时如果是这个值,语义就是「上游未提供」
+_LISTED_DATE_UNKNOWN: date = date(1970, 1, 1)
 
 logger = logging.getLogger(__name__)
 
@@ -232,7 +236,7 @@ class ClickHouseClient:
                 m.market,
                 m.name,
                 m.name_en,
-                m.listed_date,
+                m.listed_date if m.listed_date is not None else _LISTED_DATE_UNKNOWN,
                 1 if m.is_active else 0,
                 self._to_aware_utc(m.updated_at),
             )
@@ -277,7 +281,10 @@ class ClickHouseClient:
                 market=row[1],
                 name=row[2],
                 name_en=row[3] or "",
-                listed_date=row[4] if row[4] else None,
+                # CH 里存的 _LISTED_DATE_UNKNOWN 视为「未提供」,读出时翻译回 None
+                listed_date=(
+                    row[4] if row[4] and row[4] != _LISTED_DATE_UNKNOWN else None
+                ),
                 is_active=bool(row[5]),
                 updated_at=row[6].replace(tzinfo=UTC),
             )

@@ -114,8 +114,9 @@ services:
 
   worker:
     build:
-      context: ../apps/worker
-      dockerfile: Dockerfile
+      # context 是仓库根:worker 容器要同时拥有 apps/api(app.* 模块)和 apps/worker
+      context: ..
+      dockerfile: apps/worker/Dockerfile
     container_name: midas-worker
     restart: unless-stopped
     env_file:

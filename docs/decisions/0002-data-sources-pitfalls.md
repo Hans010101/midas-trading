@@ -111,3 +111,60 @@ E1 实测 `ak.stock_zh_a_hist(symbol="600519", period="daily")` 一直挂在
 - 若分钟 K 也长期挂,需要降级方案(M0 不做,留给 Task 2.6 监控 + 告警)
 - 0002 后续若发现 Sina 也挂,记录第二个 fallback(腾讯 / 中财网)
 - **不要把 Sina 当唯一来源:** Sina 没有分钟 K + 没有最新 1 个交易日的早盘数据(午盘后才更新),局限性写进 stdout 日志
+
+---
+
+## 5. Celery `autodiscover_tasks` 不适配扁平 `tasks/<feature>.py` 布局
+
+### 问题
+F4 worker beat 启动后,日志疯狂报 `Received unregistered task of type 'tasks.incremental.update_crypto_demo'`,任务被 broker 派发但 worker 无法解析。
+
+### 排查
+- Manus 留下的 `celery_app.py` 用 `app.autodiscover_tasks(["tasks"])`
+- 该函数源自 Django `INSTALLED_APPS` 风格,它扫描每个"app" 下的 `tasks.py` 文件
+  (即查找 `tasks/tasks.py`,我们的文件叫 `tasks/incremental.py`,扫不到)
+- `data_ingest` 之前没被调度过,所以这个问题在 F3 阶段没暴露
+- F4 beat 把 incremental 任务排队后,worker consumer 找不到 strategy → 报错
+
+### 修复
+`apps/worker/celery_app.py`:
+```python
+# 删掉 autodiscover_tasks(...)
+from tasks import data_ingest, incremental  # noqa: F401 -- register @shared_task
+```
+
+显式 import 任务模块,在 Celery app 创建后触发 `@shared_task` 装饰器副作用。
+
+### 防御层
+- Celery beat schedule 里挂的每个 task 在新增模块后**必须确认有显式 import** ——
+  这条对 autodiscover 是 hidden 假设,不挂任务永远暴不出来
+- 后续新加 `tasks/<x>.py` 时,要么在 `celery_app.py` 加一行 import,
+  要么改用真正的 `autodiscover_tasks([具体的包路径])`
+
+---
+
+## 6. ClickHouse `Date` 列非 nullable,`None` 写入会被 clickhouse-connect 翻车
+
+### 问题
+F5 跑 `python -m tasks.data_ingest` 演示回填时:
+```
+TypeError: unsupported operand type(s) for -: 'NoneType' and 'datetime.date'
+  File "clickhouse_connect/datatypes/temporal.py", in _write_column_binary
+    column = [(x - esd).days for x in column]
+```
+
+### 排查
+- `SymbolMeta.listed_date: date | None = None`(我们的 schema 允许)
+- ClickHouse `symbol_meta.listed_date` 列声明为 `Date`(非 Nullable)
+- clickhouse-connect 序列化时直接 `(x - epoch_start_date).days`,x=None 报错
+- 美股 / 加密 demo 标的没有 listed_date,踩到这个 None 路径
+
+### 修复
+- `apps/api/app/services/clickhouse_client.py`:写入时 None → 哨兵 `date(1970, 1, 1)`
+  (CH Date 列合法起点);读出时这个值翻译回 None
+- 不改 CH schema(免迁移)
+
+### 防御层
+- **铁律:写入 CH 非 nullable 列前,所有 None 必须显式替换为该类型的哨兵或默认值**
+- 后续如果 schema 设计想要表达「未知」语义,优先 `Nullable(T)` 而非占位哨兵
+  —— 但 M0 阶段两个都接受,只要文档化清楚

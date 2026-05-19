@@ -114,3 +114,23 @@ class TestSymbolMeta:
         first = next(m for m in found if m.symbol == sym)
         assert first.name == meta.name
         assert first.name_en == meta.name_en
+
+    async def test_upsert_with_listed_date_none(self, ch: ClickHouseClient) -> None:
+        """0002 翻车 6 回归:listed_date=None 时不能让 clickhouse-connect 翻车。"""
+        sym = _test_symbol()
+        meta = SymbolMeta(
+            symbol=sym,
+            market="us",
+            name="No Listed Date Co",
+            name_en="No Listed Date Co",
+            listed_date=None,
+            is_active=True,
+            updated_at=datetime.now(tz=UTC),
+        )
+        n = await ch.upsert_symbol_meta([meta])
+        assert n == 1
+
+        # 读出时哨兵翻译回 None
+        found = await ch.search_symbols(query=sym, market="us")
+        first = next(m for m in found if m.symbol == sym)
+        assert first.listed_date is None
