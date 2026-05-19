@@ -17,7 +17,7 @@ M0 验收标准:陌生人能注册 → 看跨市场 K 线 → 建虚拟单 → �
 - 后端: FastAPI + Pydantic v2 + SQLAlchemy 2.0 async + Celery
 - 数据: PostgreSQL 16 + ClickHouse + Redis
 - 数据源: AKShare (A股) + yfinance (美股) + ccxt (加密)
-- AI: LangGraph + DashScope (通义千问)
+- AI: LangGraph + DeepSeek API(替换原 DashScope,见 docs/decisions/0003)
 
 ## 视觉系统(严格执行)
 - 主色 中国红 #C8102E
@@ -108,3 +108,14 @@ M0 验收标准:陌生人能注册 → 看跨市场 K 线 → 建虚拟单 → �
 - 同一个错误自验失败 ≥ 3 次(协作铁律 § 2 的红线)
 - 遇到协作铁律 § 3 要问的两类决策:① 涉及钱(付费工具 / 真实交易接口);② 多个合理路径且选错代价大(主要技术栈变更 / 数据库 schema 不可逆设计)
 - 当前 Checkpoint 已收尾(汇报后**默认继续下一个**,除非用户提前说停)
+
+## 待用环境变量(后续阶段才接,当前 Task 不动)
+
+| 变量 | 用途 | 何时接 |
+|---|---|---|
+| `DEEPSEEK_API_KEY` | LLM provider(主用 DeepSeek,见 docs/decisions/0003) | Task 3+ AI Agent 阶段 |
+| `HTTPS_PROXY` | 国内访问 yfinance / ccxt 可选代理 | Task 2 适配器(可选,默认不配) |
+| `FEISHU_WEBHOOK_URL` | 飞书机器人 webhook | Task 6 推送 |
+| `TG_BOT_TOKEN` / `TG_CHAT_ID` | Telegram bot 推送 | Task 6 推送 |
+| `SMTP_HOST` / `SMTP_USER` / `SMTP_PASSWORD` 或 `RESEND_API_KEY` | 邮箱验证 | NextAuth v5(M0 验收第 2 步) |
+| `LLM_PROVIDER` | 切换 LLM 供应商(默认 `deepseek`)| Task 3+ |
