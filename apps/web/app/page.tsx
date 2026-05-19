@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { VirtualBadge } from '@/components/ui/virtual-badge'
 
 export default function HomePage() {
@@ -18,7 +19,19 @@ export default function HomePage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-center gap-4">
-        <Button size="lg">立即体验</Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {/* Radix Tooltip 在 disabled 按钮上不触发,用 span 承载 hover/keyboard;
+                cursor-not-allowed 放 span(disabled 按钮自身 pointer-events:none,
+                光标样式不生效),visual 上仍呈现禁用感。 */}
+            <span tabIndex={0} className="inline-block cursor-not-allowed">
+              <Button size="lg" disabled className="cursor-not-allowed">
+                立即体验
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>M0 阶段未实装,Task 7.1 开放</TooltipContent>
+        </Tooltip>
         <Badge>M0 · Checkpoint C</Badge>
         <VirtualBadge size="md" />
       </div>

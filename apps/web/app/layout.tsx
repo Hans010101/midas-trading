@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { JetBrains_Mono, Noto_Sans_SC, Noto_Serif_SC } from 'next/font/google'
 
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { QueryProvider } from '@/lib/providers/query-provider'
 import { ThemeProvider } from '@/lib/providers/theme-provider'
 import { UiStoreProvider } from '@/lib/store/ui-store-provider'
@@ -47,7 +48,9 @@ export default function RootLayout({
       <body className="font-sans antialiased bg-background text-foreground">
         <ThemeProvider>
           <QueryProvider>
-            <UiStoreProvider>{children}</UiStoreProvider>
+            <UiStoreProvider>
+              <TooltipProvider>{children}</TooltipProvider>
+            </UiStoreProvider>
           </QueryProvider>
         </ThemeProvider>
       </body>
