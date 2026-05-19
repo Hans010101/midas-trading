@@ -223,7 +223,29 @@ TypeError: stock_zh_a_daily() got an unexpected keyword argument 'period'
 
 ---
 
-## F 阶段总结 · 组装期通用预防策略
+## 8. 前端 TanStack Query × 后端 BaseDataSource._retry 双层重试,失败时长翻倍
+
+### 问题
+H Checkpoint playwright 截图,600519/15m 等了 25s 仍显示空白 chart(预期 EmptyKline)。
+直接 curl `/api/v1/market/kline?symbol=600519&market=cn&period=15m` 实测 22s 返回 503。
+但前端等到 44s+ 才进 EmptyKline。
+
+### 排查
+- 后端 BaseDataSource._retry 已做 4 次尝试,1/5/15s 指数退避 ≈ 21s + 调用时长 ≈ 22s 确定 503
+- 前端 useKline 设置了 `retry: 1`,TanStack Query 又额外重试 1 次
+- 双层叠加:前端总等 ≈ 44s 才把 query.status 变 'error',EmptyKline 才出现
+- 期间 query.status='pending',KlineChart 落到 `<div>` 分支,klinecharts 已 init 一个空 canvas → 用户看到「带 Y 轴的空图」,不是 EmptyKline
+
+### 修复
+`apps/web/hooks/use-kline.ts`:
+- `retry: 1` → `retry: 0`
+- 后端已经在做指数退避重试,前端没必要叠加 —— 后端失败 = 立刻向用户显示
+
+### 防御层
+- **铁律:retry 只在最贴近 transport 的一层做**,不要分层叠加
+  (我们是后端做,前端不重试;反过来也行,但不能两层都做)
+- 进 useQuery / useSWR / 类似 client 状态库时,默认 retry 配置必须显式设 0 或评估后写明
+- 这条对 Task 4 自选股(WebSocket 重连)/ Task 6 通知发送 / 所有 RPC 调用都成立
 
 D / E 阶段都是单一模块自验,翻车都是**模块内部**;F 阶段把 D + E + 数据库 + worker
 + FastAPI 全栈拼装起来,踩的两次坑(翻车 5 + 6)都**发生在接缝**。提炼成 4 条通用

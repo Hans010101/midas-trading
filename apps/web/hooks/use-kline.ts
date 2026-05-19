@@ -37,7 +37,9 @@ export function useKline(args: UseKlineArgs): UseQueryResult<KlineResponse> {
         signal,
       }),
     staleTime: 60 * 1000,
-    retry: 1, // 后端已经有 retry,前端只重试 1 次防瞬抖
+    // 后端 BaseDataSource._retry 已经做 4 次重试(1/5/15s 退避,~22s 才确定失败),
+    // 前端再 retry 会把 503 失败时长拉到 44s+,体验崩。后端失败 = 前端立刻 EmptyKline。
+    retry: 0,
     enabled: args.enabled ?? true,
   })
 }

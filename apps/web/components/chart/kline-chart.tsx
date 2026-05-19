@@ -22,6 +22,7 @@ import type { Market, Period } from '@midas/shared'
 import { EmptyKline } from '@/components/chart/empty-kline'
 import { useKline } from '@/hooks/use-kline'
 import { MarketApiError } from '@/lib/api/market'
+import type { IndicatorName } from '@/lib/store/workbench-store'
 
 const PERIOD_TO_KL: Record<Period, KLPeriod> = {
   '1m': { type: 'minute', span: 1 },
@@ -37,11 +38,19 @@ interface KlineChartProps {
   symbol: string
   market: Market
   period: Period
+  /** 指标开关 · 父组件从 useWorkbenchStore 读取后传入 */
+  indicators?: Record<IndicatorName, boolean>
   /** EmptyKline 触发"切到日 K"时的回调(父组件管 period 状态)*/
   onSwitchToDaily?: () => void
 }
 
-export function KlineChart({ symbol, market, period, onSwitchToDaily }: KlineChartProps) {
+export function KlineChart({
+  symbol,
+  market,
+  period,
+  indicators,
+  onSwitchToDaily,
+}: KlineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<Chart | null>(null)
   const dataRef = useRef<KLineData[]>([])
@@ -124,6 +133,20 @@ export function KlineChart({ symbol, market, period, onSwitchToDaily }: KlineCha
     if (query.status !== 'success') return
     chart.setSymbol({ ticker: symbol, pricePrecision: 2, volumePrecision: 4 })
   }, [query.status, query.data, symbol])
+
+  // 5. indicators 状态同步到 chart 实例
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+    if (!indicators) return
+    // 先清空所有指标(暴力但简单 · M0 demo 4 个指标切换不频繁,无性能压力)
+    chart.removeIndicator()
+    // 按状态重建:MA / BOLL 主图叠加(isStack=true);MACD / RSI 副图独立 pane
+    if (indicators.MA) chart.createIndicator('MA', true)
+    if (indicators.BOLL) chart.createIndicator('BOLL', true)
+    if (indicators.MACD) chart.createIndicator('MACD')
+    if (indicators.RSI) chart.createIndicator('RSI')
+  }, [indicators])
 
   // ========== Empty / Error states ==========
   if (query.status === 'error') {

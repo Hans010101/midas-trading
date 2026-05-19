@@ -1,33 +1,41 @@
+'use client'
+
 /**
- * /workbench - K 线工作台。
+ * /workbench - K 线工作台 · H Checkpoint 完整三栏布局。
  *
- * G Checkpoint:占位实现,只渲染一只标的 BTC/USDT 1d 验证 KLineChart 通。
- * H Checkpoint 会扩展到三栏 + 市场 Tab + 周期切换 + 4 指标 + 标的切换。
+ * 布局(响应式桌面优先 ≥1280px,移动端 M3+ 再说):
+ *   ┌──────────────────────────────────────────────────────────────┐
+ *   │  Header(Logo + 市场 Tab + 用户菜单占位)1px 红色 border       │
+ *   ├──────┬───────────────────────────────────────┬───────────────┤
+ *   │ 60px │  信号条占位(M1)                       │ 280px         │
+ *   │ 工具 ├───────────────────────────────────────┤ 自选股 demo   │
+ *   │ 占位 │  symbol + 指标 + 周期 切换 + K 线图   │ ───────────── │
+ *   │ M1   │                                        │ AI 决策卡 M1 │
+ *   └──────┴───────────────────────────────────────┴───────────────┘
  */
 
-import { KlineChart } from '@/components/chart/kline-chart'
+import { useEffect } from 'react'
+
+import { ChartArea } from '@/components/workbench/chart-area'
+import { Header } from '@/components/workbench/header'
+import { ToolBar } from '@/components/workbench/tool-bar'
+import { WatchlistColumn } from '@/components/workbench/watchlist-column'
+import { useWorkbenchStore } from '@/lib/store/workbench-store'
 
 export default function WorkbenchPage() {
+  // skipHydration=true,在 client mount 后手动 rehydrate(避免 SSR 阶段访问 localStorage)
+  useEffect(() => {
+    void useWorkbenchStore.persist.rehydrate()
+  }, [])
+
   return (
-    <main className="min-h-screen bg-background p-8">
-      <div className="mx-auto max-w-6xl space-y-4">
-        <header className="space-y-1">
-          <h1 className="font-serif text-3xl font-bold text-foreground">
-            点金 <span className="text-midas-red">Midas</span> · 工作台
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            G Checkpoint 占位 · 验证 KLineChart 渲染 · 工作台完整布局在 H Checkpoint 落地
-          </p>
-        </header>
-
-        <section className="h-[560px] w-full rounded-lg border border-paper bg-cream p-4">
-          <KlineChart symbol="BTC/USDT" market="crypto" period="1d" />
-        </section>
-
-        <footer className="text-xs text-muted-foreground/70">
-          模拟交易,不构成投资建议
-        </footer>
+    <div className="flex h-screen flex-col bg-background">
+      <Header />
+      <div className="flex flex-1 overflow-hidden">
+        <ToolBar />
+        <ChartArea />
+        <WatchlistColumn />
       </div>
-    </main>
+    </div>
   )
 }
