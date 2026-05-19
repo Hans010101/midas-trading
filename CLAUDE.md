@@ -125,6 +125,8 @@ M0 验收标准:陌生人能注册 → 看跨市场 K 线 → 建虚拟单 → �
 - **数据流终态用 SQL/工具直接看,别只看 Python 层打印** —— `toUnixTimestamp` /
   `SELECT *` / `clickhouse-client` 是调试存储层问题的金标准。
   详见 0002 § F 阶段总结 P4 + 翻车 3 + 翻车 6
+- **retry 只在最贴 transport 的一层做,不要分层叠加。**
+  详见 docs/decisions/0002-data-sources-pitfalls.md § 翻车 8 —— 前端 TanStack Query × 后端 `_retry` 双层叠加 = 44s 卡住用户。任何分布式系统都会撞这个坑,不只是数据源。
 
 ## 待用环境变量(后续阶段才接,当前 Task 不动)
 
