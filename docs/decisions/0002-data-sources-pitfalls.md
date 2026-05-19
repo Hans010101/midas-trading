@@ -171,6 +171,37 @@ TypeError: unsupported operand type(s) for -: 'NoneType' and 'datetime.date'
 
 ---
 
+## 7. AKShare `stock_zh_a_daily` 不接受 `period` 参数,1w K 必须走 EM
+
+### 问题
+Task 3 启动前的预热运行 `python -m tasks.data_ingest --all-periods` 时,600519 / 1w 报:
+```
+TypeError: stock_zh_a_daily() got an unexpected keyword argument 'period'
+```
+
+### 排查
+- 我在 E1 阶段以为 `stock_zh_a_daily(symbol, period="weekly")` 支持周 K(类比 EM 的
+  `stock_zh_a_hist(period="weekly")`),实际 AKShare 这两个函数签名**不一样**
+- `ak.stock_zh_a_daily` 只接受 `(symbol, start_date, end_date, adjust)`,**无 period**
+- E1 阶段只测了 1d,所以 1w 这条路径根本没真跑过(单元测试 mock 了 `stock_zh_a_daily`,
+  也没暴露签名问题)
+
+### 修复
+`apps/api/app/services/data_sources/cn_source.py`:
+- `_SINA_DAILY` 只保留 `{"1d": None}`,Sina 路径专门跑日 K
+- 新增 `_EM_DAILY_LIKE = {"1w": "weekly"}` 路径,走 EM `stock_zh_a_hist(period="weekly")`
+- 新增 `_fetch_em_daily_like` + `_em_daily_df_to_klines`(字段 `日期/开盘/收盘/...`,与 minute K 的 `时间` 不同)
+- `_fetch_sina_daily` 签名去掉 period 参数
+
+**注意:** EM 路径继承翻车 4 的不稳定性。1w 数据可能拉不到。M0 demo 接受这条限制。
+
+### 防御层
+- **铁律(扩展):** 不要假设 SDK 同一族函数的签名是一致的。每条新路径(每个 period × 每家上游)
+  都要在 E 阶段真打一次,否则可能踩这种「mock 单测过,集成实测炸」的坑(对应 0002 F 总结 P1)
+- 后续如新增 monthly K / yearly K,需要单独验证 AKShare 哪个函数支持
+
+---
+
 ## F 阶段总结 · 组装期通用预防策略
 
 D / E 阶段都是单一模块自验,翻车都是**模块内部**;F 阶段把 D + E + 数据库 + worker

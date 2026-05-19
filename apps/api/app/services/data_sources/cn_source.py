@@ -37,13 +37,16 @@ logger = logging.getLogger(__name__)
 
 CN_TZ = ZoneInfo("Asia/Shanghai")
 
-# Sina 日/周 K 周期映射(传 None / 'weekly' / 'monthly' 给 stock_zh_a_daily 的 period 参数)
-_SINA_DAILY_LIKE: dict[Period, str | None] = {
-    "1d": None,  # Sina 默认 daily
+# Sina 只用于日 K(stock_zh_a_daily 不接受 period 参数 —— 翻车 7 实测)
+_SINA_DAILY: dict[Period, None] = {"1d": None}
+
+# EM 日/周 K 走 stock_zh_a_hist(period 参数支持 daily/weekly/monthly)
+# 这里只用 "1w";"1d" 让给 Sina(更稳)
+_EM_DAILY_LIKE: dict[Period, str] = {
     "1w": "weekly",
 }
 
-# EM 分钟 K 周期映射
+# EM 分钟 K 走 stock_zh_a_hist_min_em(注意是 min_em 后缀,跟 daily/weekly 不同函数)
 _EM_MINUTE_LIKE: dict[Period, str] = {
     "1m": "1",
     "5m": "5",
@@ -107,21 +110,19 @@ class AKShareCnSource(BaseDataSource):
     # ===========================
 
     def _fetch_sync(self, symbol: str, period: Period, limit: int) -> list[Kline]:
-        if period in _SINA_DAILY_LIKE:
-            return self._fetch_sina_daily(symbol, period, limit)
+        if period in _SINA_DAILY:
+            return self._fetch_sina_daily(symbol, limit)
+        if period in _EM_DAILY_LIKE:
+            return self._fetch_em_daily_like(symbol, period, limit)
         if period in _EM_MINUTE_LIKE:
             return self._fetch_em_minute(symbol, period, limit)
         msg = f"AKShare 不支持的周期:{period}"
         raise DataFormatError(msg, market="cn", symbol=symbol, upstream="akshare")
 
-    def _fetch_sina_daily(self, symbol: str, period: Period, limit: int) -> list[Kline]:
+    def _fetch_sina_daily(self, symbol: str, limit: int) -> list[Kline]:
         sina_symbol = _to_sina_symbol(symbol)
-        sina_period = _SINA_DAILY_LIKE[period]
         try:
-            kwargs: dict[str, str] = {"symbol": sina_symbol, "adjust": "qfq"}
-            if sina_period is not None:
-                kwargs["period"] = sina_period
-            df = ak.stock_zh_a_daily(**kwargs)
+            df = ak.stock_zh_a_daily(symbol=sina_symbol, adjust="qfq")
         except (ConnectionError, TimeoutError, OSError) as e:
             raise UpstreamUnavailableError(
                 str(e), market="cn", symbol=symbol, upstream="akshare-sina",
@@ -136,6 +137,26 @@ class AKShareCnSource(BaseDataSource):
             )
 
         return self._sina_df_to_klines(df, symbol=symbol, limit=limit)
+
+    def _fetch_em_daily_like(self, symbol: str, period: Period, limit: int) -> list[Kline]:
+        """EM `stock_zh_a_hist` 走日/周 K。M0 只用周 K(日 K 让给 Sina)。"""
+        em_period = _EM_DAILY_LIKE[period]
+        try:
+            df = ak.stock_zh_a_hist(symbol=symbol, period=em_period, adjust="qfq")
+        except (ConnectionError, TimeoutError, OSError) as e:
+            raise UpstreamUnavailableError(
+                str(e), market="cn", symbol=symbol, upstream="akshare-em",
+            ) from e
+
+        if df is None or df.empty:
+            raise SymbolNotFoundError(
+                f"EM 未返回 {symbol} 任何 {period} 数据",
+                market="cn",
+                symbol=symbol,
+                upstream="akshare-em",
+            )
+
+        return self._em_daily_df_to_klines(df, symbol=symbol, limit=limit)
 
     def _fetch_em_minute(self, symbol: str, period: Period, limit: int) -> list[Kline]:
         em_period = _EM_MINUTE_LIKE[period]
@@ -202,6 +223,38 @@ class AKShareCnSource(BaseDataSource):
             df_sorted, symbol=symbol, upstream="akshare-sina",
             ts_col="date", ts_builder=_daily_ts,
             volume_scale=0.01,  # 股 → 手
+        )
+
+    @staticmethod
+    def _em_daily_df_to_klines(df: pd.DataFrame, *, symbol: str, limit: int) -> list[Kline]:
+        """EM daily/weekly:日期 / 开盘 / 收盘 / 最高 / 最低 / 成交量(手) / 成交额(元)。
+
+        跟 minute K 字段几乎一样,但 ts 列名是 `日期` 而非 `时间`,且只到日级精度。
+        """
+        required = {"日期", "开盘", "收盘", "最高", "最低", "成交量", "成交额"}
+        cols = set(df.columns)
+        if not required.issubset(cols):
+            raise DataFormatError(
+                f"EM daily/weekly 字段不全 · 实际: {sorted(cols)}",
+                market="cn", symbol=symbol, upstream="akshare-em",
+            )
+
+        df_sorted = df.sort_values("日期").tail(limit)
+        df_renamed = df_sorted.rename(
+            columns={
+                "日期": "ts_str",
+                "开盘": "open",
+                "收盘": "close",
+                "最高": "high",
+                "最低": "low",
+                "成交量": "volume",
+                "成交额": "amount",
+            },
+        )
+        return _to_klines(
+            df_renamed, symbol=symbol, upstream="akshare-em",
+            ts_col="ts_str", ts_builder=_daily_ts,
+            volume_scale=1.0,  # EM 已经是 手
         )
 
     @staticmethod
