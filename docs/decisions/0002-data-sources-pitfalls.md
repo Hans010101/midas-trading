@@ -168,3 +168,31 @@ TypeError: unsupported operand type(s) for -: 'NoneType' and 'datetime.date'
 - **铁律:写入 CH 非 nullable 列前,所有 None 必须显式替换为该类型的哨兵或默认值**
 - 后续如果 schema 设计想要表达「未知」语义,优先 `Nullable(T)` 而非占位哨兵
   —— 但 M0 阶段两个都接受,只要文档化清楚
+
+---
+
+## F 阶段总结 · 组装期通用预防策略
+
+D / E 阶段都是单一模块自验,翻车都是**模块内部**;F 阶段把 D + E + 数据库 + worker
++ FastAPI 全栈拼装起来,踩的两次坑(翻车 5 + 6)都**发生在接缝**。提炼成 4 条通用
+预防策略,后续 Task 3-6 组装期对照检查:
+
+### P1 · 接缝处必有翻车,组装期专门留 buffer
+- D / E 单元测试全过 ≠ F 端到端通。每条新连线(API ↔ DB / worker ↔ API / front ↔ back)都要单独跑一次实测。
+- 翻车 5(Celery autodiscover)和 6(CH listed_date None)都是「文档/代码默认行为 ≠ 我们布局/数据假设」。
+- **应用:** Task 3 G Checkpoint 后第一件事就是端到端打通"前端 → /kline → 渲染",不只是组件单测。
+
+### P2 · 用 framework 默认配置前,验证它的隐式假设
+- `autodiscover_tasks(["tasks"])` 隐式假设 `tasks/tasks.py`,我们的布局是 `tasks/<feature>.py`,没对上就静默不挂载,**直到 beat 触发才暴露**。
+- 同理:`clickhouse_connect.insert(...)` 隐式假设输入是该列类型的合法值,None 不算合法。
+- **应用:** 用任何 "convention over configuration" 的 API,先读它的 convention,再决定要不要走默认。
+
+### P3 · Nullable 边界必须显式跨越
+- Pydantic schema 允许 `field: T | None`,**但持久层(SQLAlchemy / ClickHouse)的列可能非空**。
+- 翻车 6 就是 `SymbolMeta.listed_date: date | None` 撞 CH `Date`(非 Nullable)。
+- **应用:** 设计 schema 时给每个可空字段问一遍:存储层接受 None 吗?不接受就在写入层加哨兵/默认值映射。下游读出时反映射回 None。
+
+### P4 · 数据流终态用 SQL/工具直接看,别只看 Python 层
+- 翻车 3 我们用 `toUnixTimestamp(ts)` 直接看 CH 存的 epoch,才发现 -8h 偏移是 client 序列化(不是 server)的锅。
+- 翻车 6 也是看 `SELECT listed_date FROM symbol_meta` 直接看了哨兵值生效。
+- **应用:** 调试存储层问题,**不要只看 Python 模型/dataclass 打印**,直接用 SQL / `clickhouse-client` / `psql` 看二进制层的真值。这条来自产品负责人 F 阶段的反馈。

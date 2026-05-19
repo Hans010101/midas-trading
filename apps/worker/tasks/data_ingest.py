@@ -116,7 +116,7 @@ def backfill_kline(
 
 
 def demo_backfill_sync() -> list[dict[str, Any]]:
-    """同步跑 3 个 demo 标的(不经过 broker),用于 F5 演示和验证。"""
+    """同步跑 3 个 demo 标的的日 K(不经过 broker),用于 F5 演示和验证。"""
     configure_logging()
     results: list[dict[str, Any]] = []
     for symbol, market, name in DEMO_SYMBOLS:
@@ -130,5 +130,45 @@ def demo_backfill_sync() -> list[dict[str, Any]]:
     return results
 
 
+# Task 3 启动前的数据预热:3 标的 × 4 周期 × 各 500 根
+# 保证 KLineChart 周期切换器 4 档(15m / 1h / 1d / 1w)切过去都有数据
+_PRE_TASK3_PERIODS: list[tuple[Period, int]] = [
+    ("15m", 500),
+    ("1h", 500),
+    ("1d", 500),
+    ("1w", 500),
+]
+
+
+def demo_backfill_all_periods() -> list[dict[str, Any]]:
+    """3 标的 × 4 周期 × 各 500 根。Task 3 启动前的演示数据预热。
+
+    AKShare 分钟 K 走 EM(目前不稳,可能失败);Sina 走日/周(稳定)。
+    失败的不阻塞后续,记到 results 里。
+    """
+    configure_logging()
+    results: list[dict[str, Any]] = []
+    for symbol, market, name in DEMO_SYMBOLS:
+        for period, limit in _PRE_TASK3_PERIODS:
+            try:
+                r = asyncio.run(_backfill_one(symbol, market, name, period, limit))
+            except DataSourceError as e:
+                logger.exception("预热失败 %s/%s @%s", symbol, market, period)
+                r = {
+                    "symbol": symbol,
+                    "market": market,
+                    "period": period,
+                    "error": str(e),
+                }
+            results.append(r)
+            logger.info("预热进度:%s", r)
+    return results
+
+
 if __name__ == "__main__":
-    print(demo_backfill_sync())
+    import sys
+
+    if "--all-periods" in sys.argv:
+        print(demo_backfill_all_periods())
+    else:
+        print(demo_backfill_sync())
