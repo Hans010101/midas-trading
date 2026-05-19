@@ -72,3 +72,39 @@ M0 验收标准:陌生人能注册 → 看跨市场 K 线 → 建虚拟单 → �
 - 其他全部自己定,但所有决策落到 commit message 或 docs/decisions/ 里
 - Checkpoint 汇报时列出"本阶段自主决策清单"
 - 命名 / 文件结构 / 小依赖选择 / 注释风格 / 报错处理 → 全部你自己定
+
+## 多 Task 工作模式(Checkpoint 模式)
+
+「协作铁律」的战术化补充。当一次会话授权连跑多个 Task 时,按这个模式落地。
+
+### 触发条件
+- 用户明确说「一次会话连跑」/「只在 N 个节点 review」/「不要每个 sub-task 等我」之类
+- 同时给出 N 个里程碑(通常 3-4 个),每个里程碑覆盖一组主题相关的 sub-task
+
+### Checkpoint 划分与命名
+- 用大写字母:**Checkpoint A / B / C / D**,按主题分组,不按时间均匀切
+- 在 session 开头用 TaskCreate 列出全部 sub-task,让用户能跟进度
+- 一个 Checkpoint 内的 sub-task 可以任意顺序、可并行,Checkpoint 之间按依赖排序
+
+### 每个 Checkpoint 的收尾(三步,缺一不可)
+1. **自验**:跑真实命令,看实际输出(`ruff` / `mypy` / `pytest` / `pnpm build` / `curl` 端点 / `docker compose ps` healthy)
+2. **commit**:1~2 个 commit(主题分组),中文 message + 阶段前缀(`[P0]` / `[Task 1.2]` / `[Task 7.3]` / `[Rules]` / `[Decisions]`),body 多段描述变更 + 测试结果 + 自主决策
+3. **tag**:`git tag checkpoint-a` / `checkpoint-b` / `checkpoint-c`,打在该 Checkpoint 的最后一个 commit 上
+
+### 每次 Checkpoint 汇报必含字段
+- **本阶段用时**(粗估即可,含构建等待)
+- **自主决策清单**(每条一行 + 为什么这么选)
+- **新增依赖**(npm / pip 都列出)
+- **P1 残留 / 视觉细节没到位 / 下一步建议**
+
+### 禁忌
+- ❌ 不要在 sub-task 之间停下等 review(那是 Checkpoint 边界才做的事)
+- ❌ 不要写完代码不跑就报「完成」(违反协作铁律 § 2)
+- ❌ 不要为了赶进度跳过 docker rebuild / 浏览器验证 —— 没实测证据 = 没完成
+- ❌ 不要在 Checkpoint 中段做需要拍板的大方向决策(归到 commit body 或 docs/decisions/)
+
+### 退出该模式(必须停下找产品负责人)
+- 用户主动说「暂停」/「停一下」/「等我」/「我看看」
+- 同一个错误自验失败 ≥ 3 次(协作铁律 § 2 的红线)
+- 遇到协作铁律 § 3 要问的两类决策:① 涉及钱(付费工具 / 真实交易接口);② 多个合理路径且选错代价大(主要技术栈变更 / 数据库 schema 不可逆设计)
+- 当前 Checkpoint 已收尾(汇报后**默认继续下一个**,除非用户提前说停)
