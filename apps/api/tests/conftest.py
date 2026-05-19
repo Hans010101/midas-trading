@@ -11,3 +11,5 @@ os.environ.setdefault(
     "DATABASE_URL",
     "postgresql+asyncpg://midas:midas_dev@localhost:5432/midas_test",
 )
+os.environ.setdefault("CLICKHOUSE_USER", "midas")
+os.environ.setdefault("CLICKHOUSE_PASSWORD", "midas_dev")

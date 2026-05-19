@@ -33,6 +33,12 @@ services:
     image: clickhouse/clickhouse-server:latest
     container_name: midas-clickhouse
     restart: unless-stopped
+    # ClickHouse 25.x 起 default 用户被自动随机密码;显式建一个 midas 业务用户绕过
+    # 详见 docs/decisions/0002 第 1 条
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-midas}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-midas_dev}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     ports:
       - "8123:8123"
       - "9000:9000"

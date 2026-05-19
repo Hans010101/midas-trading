@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     clickhouse_host: str = "localhost"
     clickhouse_port: int = 8123
     clickhouse_database: str = "default"
+    clickhouse_user: str = "midas"
+    clickhouse_password: str = "midas_dev"
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
