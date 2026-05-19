@@ -1,26 +1,27 @@
 """加密数据源适配器(ccxt Binance 现货)。
 
-实现:
-- 用 `ccxt.async_support.binance()` 异步 client(原生 async,不用 to_thread)
-- fetch_ohlcv 返回 [ts_ms, O, H, L, C, V],V 是 base 货币数量
-- ccxt 抛标准异常树,直接映射到我们的业务异常
+设计:
+- ccxt async exchange 由外部(FastAPI lifespan / worker init)创建并注入,
+  适配器**不负责生命周期**(不调 close)
+- 这样多个请求共享一个 aiohttp ClientSession,避免每请求建/拆连接
+- worker 侧 task per process 自己建/关 exchange(Celery 没有 lifespan)
 
 时区:
 - ccxt 返回 Unix milliseconds(UTC epoch),直接转 UTC datetime
 
 成交额 amount:
 - ccxt 标准 OHLCV 不含 quote volume → amount 字段固定 None
-- 后续 M1 如需 quote volume,改用 binance 私有 endpoint(M0 不做)
+- 显示侧用 "—" 占位,不要在适配器里估算(产品负责人 2026-05-19 拍板)
 
-symbol 格式:**统一用 ccxt 风格 `BTC/USDT`**(带斜杠),内部传给 binance 时 ccxt 自动转 `BTCUSDT`。
+symbol 格式:**统一用 ccxt 风格 `BTC/USDT`**(带斜杠)。
 """
 
 from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
-import ccxt.async_support as ccxt_async
 from ccxt.base.errors import (
     BadSymbol,
     ExchangeError,
@@ -37,9 +38,12 @@ from app.services.data_sources.exceptions import (
     UpstreamUnavailableError,
 )
 
+if TYPE_CHECKING:
+    import ccxt.async_support as ccxt_async
+
 logger = logging.getLogger(__name__)
 
-# ccxt 的 timeframe 字符串和我们的 Period 一致(都是 1m/5m/.../1d/1w),直接传
+# ccxt 的 timeframe 字符串和我们的 Period 一致,直接传
 _VALID_PERIODS: set[Period] = {"1m", "5m", "15m", "30m", "1h", "1d", "1w"}
 
 # M0 demo 列表(Binance 高流动性现货)
@@ -58,18 +62,17 @@ _DEMO_SYMBOLS: list[tuple[str, str]] = [
 
 
 class CcxtBinanceCryptoSource(BaseDataSource):
-    """加密数据源(Binance 现货,通过 ccxt 异步)。"""
+    """加密数据源(Binance 现货,通过 ccxt 异步)。
+
+    需要外部传入已经初始化好的 `ccxt.async_support.binance` 实例。
+    `close()` 由外部调用方负责。
+    """
 
     name = "ccxt-binance"
     market = "crypto"
 
-    def __init__(self) -> None:
-        # ccxt async 客户端,需要在异步上下文里关闭(close()),M0 阶段我们用完即关
-        # 每次 fetch 重新建一个最简单,生产可改成 lifespan 管理单例
-        self._exchange_kwargs: dict[str, object] = {
-            "enableRateLimit": True,
-            "timeout": 30_000,  # 30s
-        }
+    def __init__(self, exchange: ccxt_async.binance) -> None:
+        self._exchange = exchange
 
     async def fetch_kline(
         self,
@@ -106,32 +109,27 @@ class CcxtBinanceCryptoSource(BaseDataSource):
     # ===========================
 
     async def _fetch_async(self, symbol: str, period: Period, limit: int) -> list[Kline]:
-        exchange = ccxt_async.binance(self._exchange_kwargs)
         try:
-            try:
-                ohlcv = await exchange.fetch_ohlcv(symbol, timeframe=period, limit=limit)
-            except RateLimitExceeded as e:
-                raise RateLimitError(
-                    str(e), market="crypto", symbol=symbol, upstream="ccxt-binance",
-                ) from e
-            except BadSymbol as e:
-                raise SymbolNotFoundError(
-                    str(e), market="crypto", symbol=symbol, upstream="ccxt-binance",
-                ) from e
-            except NetworkError as e:
-                raise UpstreamUnavailableError(
-                    str(e), market="crypto", symbol=symbol, upstream="ccxt-binance",
-                ) from e
-            except ExchangeError as e:
-                # 兜底 Exchange 错误:既可能是限流也可能是临时不可用,当作可重试
-                raise UpstreamUnavailableError(
-                    f"ccxt ExchangeError: {e}",
-                    market="crypto",
-                    symbol=symbol,
-                    upstream="ccxt-binance",
-                ) from e
-        finally:
-            await exchange.close()
+            ohlcv = await self._exchange.fetch_ohlcv(symbol, timeframe=period, limit=limit)
+        except RateLimitExceeded as e:
+            raise RateLimitError(
+                str(e), market="crypto", symbol=symbol, upstream="ccxt-binance",
+            ) from e
+        except BadSymbol as e:
+            raise SymbolNotFoundError(
+                str(e), market="crypto", symbol=symbol, upstream="ccxt-binance",
+            ) from e
+        except NetworkError as e:
+            raise UpstreamUnavailableError(
+                str(e), market="crypto", symbol=symbol, upstream="ccxt-binance",
+            ) from e
+        except ExchangeError as e:
+            raise UpstreamUnavailableError(
+                f"ccxt ExchangeError: {e}",
+                market="crypto",
+                symbol=symbol,
+                upstream="ccxt-binance",
+            ) from e
 
         if not ohlcv:
             raise SymbolNotFoundError(
@@ -164,6 +162,5 @@ class CcxtBinanceCryptoSource(BaseDataSource):
                 ) from e
             klines.append(k)
 
-        # ccxt 已经按 ts 升序,但显式 sort 一次防御
         klines.sort(key=lambda k: k.ts)
         return klines

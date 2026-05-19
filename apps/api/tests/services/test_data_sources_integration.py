@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import ccxt.async_support as ccxt_async
 import pytest
 
 from app.schemas.market import Kline
@@ -61,11 +62,14 @@ class TestUsIntegration:
 
 class TestCryptoIntegration:
     async def test_real_btc_daily(self) -> None:
-        src = CcxtBinanceCryptoSource()
+        exchange = ccxt_async.binance({"enableRateLimit": True, "timeout": 30_000})
         try:
-            rows = await src.fetch_kline("BTC/USDT", "1d", limit=10)
-        except UpstreamUnavailableError as e:
-            pytest.skip(f"ccxt Binance 不可达:{e}")
-        _assert_klines_valid(rows)
-        # BTC 价格量级(几万美元起)
-        assert 1_000 < rows[-1].close < 1_000_000
+            src = CcxtBinanceCryptoSource(exchange=exchange)
+            try:
+                rows = await src.fetch_kline("BTC/USDT", "1d", limit=10)
+            except UpstreamUnavailableError as e:
+                pytest.skip(f"ccxt Binance 不可达:{e}")
+            _assert_klines_valid(rows)
+            assert 1_000 < rows[-1].close < 1_000_000
+        finally:
+            await exchange.close()

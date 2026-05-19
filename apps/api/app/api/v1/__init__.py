@@ -1,5 +1,8 @@
 from fastapi import APIRouter
 
-router = APIRouter()
+from app.api.v1.market import router as market_router
 
-# TODO(M0): 子路由会随 Task 2 / 4 / 5 / 6 逐步挂载到这个 router 上。
+router = APIRouter()
+router.include_router(market_router)
+
+# TODO(M0): 后续子路由(watchlist / virtual / notifications)随 Task 4-6 挂载到这里。
