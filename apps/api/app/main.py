@@ -3,6 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1 import router as api_v1_router
 from app.core.config import settings
+from app.core.logging import configure_logging
+
+configure_logging()
 
 app = FastAPI(
     title="点金 Midas API",
