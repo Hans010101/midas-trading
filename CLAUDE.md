@@ -116,6 +116,15 @@ M0 验收标准:陌生人能注册 → 看跨市场 K 线 → 建虚拟单 → �
 
 - **clickhouse-connect 永远传 tz-aware datetime,绝不传 naive。**
   详见 docs/decisions/0002-data-sources-pitfalls.md 翻车 3 —— Python `astimezone()` 对 naive 默认按 OS 本地时区解释,在 CN(+8)环境下会写入偏移 8 小时的 epoch。
+- **接缝处必有翻车** · 组装期单独跑端到端实测,模块单测全过 ≠ 集成层通。
+  详见 docs/decisions/0002-data-sources-pitfalls.md § F 阶段总结 P1
+- **用 framework 默认配置前先读 convention**,不要走默认走到 KeyError 才发现。
+  详见 0002 § F 阶段总结 P2
+- **Nullable 边界必须显式跨越**(Pydantic `T | None` ≠ DB / CH 列接受 None)。
+  详见 0002 § F 阶段总结 P3 + 翻车 6
+- **数据流终态用 SQL/工具直接看,别只看 Python 层打印** —— `toUnixTimestamp` /
+  `SELECT *` / `clickhouse-client` 是调试存储层问题的金标准。
+  详见 0002 § F 阶段总结 P4 + 翻车 3 + 翻车 6
 
 ## 待用环境变量(后续阶段才接,当前 Task 不动)
 
