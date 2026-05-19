@@ -107,8 +107,12 @@ export function KlineChart({
     })
 
     chart.setDataLoader({
-      getBars: ({ callback }) => {
+      getBars: ({ type, callback }) => {
         callback(dataRef.current)
+        // init 加载完成后默认滚到最新(任何 K 线工具的默认体验)
+        if (type === 'init') {
+          requestAnimationFrame(() => chartRef.current?.scrollToRealTime(0))
+        }
       },
     })
 
