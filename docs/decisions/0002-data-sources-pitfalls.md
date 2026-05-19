@@ -81,3 +81,33 @@ clickhouse-connect 1.0 在序列化 naive datetime 时调用 `datetime.astimezon
 - **铁律:不要给 clickhouse-connect 传 naive datetime,永远传 tz-aware**
 - 后续所有数据源适配器返回的 `Kline.ts` 必须是 tz-aware(Pydantic schema 强校验 `AwareDatetime` 已经把这条变成静态约束)
 - 这条对 PostgreSQL / asyncpg 不成立(那边有不同的处理),不要混淆
+
+---
+
+## 4. AKShare EastMoney 端点不稳,改 Sina 做主路径
+
+### 问题
+E1 实测 `ak.stock_zh_a_hist(symbol="600519", period="daily")` 一直挂在
+`('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))`。
+4 次重试 + 1/5/15s 退避全失败。
+
+### 排查
+- 直接 `curl https://push2his.eastmoney.com/api/qt/stock/kline/get` → `(52) Empty reply from server`(0 字节响应,服务端直接拒)
+- 同一时刻 ccxt Binance / yfinance NVDA 全部正常 —— 不是 general 网络问题
+- 切换 `ak.stock_zh_a_daily(symbol="sh600519")`(Sina 通道)→ ✓ 立刻返回完整 DataFrame
+
+结论:**EM 的 `push2his.eastmoney.com` 高频 K 端点对我这个 IP 当前 5xx 或限流**。
+不是代码问题,是上游问题,但既然 Sina 同时可用,不应该让用户也跟着卡。
+
+### 修复
+`apps/api/app/services/data_sources/cn_source.py`:
+- 日 K / 周 K → 走 **Sina** (`stock_zh_a_daily`,symbol 加 `sh/sz` 前缀)
+- 分钟 K (1m/5m/15m/30m/1h) → 仍走 **EM**(Sina 不提供股票分钟 K)
+- 标的列表 → 走 `stock_info_a_code_name`(EM 但不同接口,目前稳)
+- Sina 返回 volume 单位是 **股**,在适配器层除 100 归一到 **手**(A 股标准)
+
+### 防御层
+- EM 路径仍保留,但只服务分钟 K
+- 若分钟 K 也长期挂,需要降级方案(M0 不做,留给 Task 2.6 监控 + 告警)
+- 0002 后续若发现 Sina 也挂,记录第二个 fallback(腾讯 / 中财网)
+- **不要把 Sina 当唯一来源:** Sina 没有分钟 K + 没有最新 1 个交易日的早盘数据(午盘后才更新),局限性写进 stdout 日志

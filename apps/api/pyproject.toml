@@ -56,8 +56,8 @@ known-first-party = ["app"]
 [tool.ruff.lint.per-file-ignores]
 # alembic 自动生成的 migration 模板含未直接使用的 op/sa 占位导入,允许 F401
 "alembic/versions/*.py" = ["F401"]
-# 单元测试要测受保护的内部方法(如 BaseDataSource._retry),允许 SLF001
-"tests/**/*.py" = ["SLF001"]
+# 单元测试要测受保护的内部方法(SLF001)+ fixture 仅作 side-effect 注入(PT019)
+"tests/**/*.py" = ["SLF001", "PT019"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -69,6 +69,12 @@ strict = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-# clickhouse-connect 1.0 没发 py.typed 标记 / 没 stubs
-module = "clickhouse_connect.*"
+# 三方 SDK 都没发 py.typed 标记 / 没 stubs(到 2026-05 为止)
+module = [
+    "clickhouse_connect.*",
+    "akshare.*",
+    "yfinance.*",
+    "ccxt.*",
+    "pandas.*",
+]
 ignore_missing_imports = true
