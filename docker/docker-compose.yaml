@@ -1,0 +1,170 @@
+name: midas
+
+# 点金 Midas M0 本地编排
+# 启动:cd docker && docker compose up -d
+# 验证:curl http://localhost:8000/health → {"status":"ok",...}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: midas-postgres
+    restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: true
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-midas}
+      POSTGRES_USER: ${POSTGRES_USER:-midas}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-midas_dev}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - midas-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-midas} -d ${POSTGRES_DB:-midas}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: midas-clickhouse
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - midas-net
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "-nv", "-O-", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: midas-redis
+    restart: unless-stopped
+    # 宿主机映射 6380(本机存在另一个项目的 redis 占用 6379);
+    # docker 内部 DNS 依旧用 redis:6379
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - midas-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  api:
+    build:
+      context: ../apps/api
+      dockerfile: Dockerfile
+    container_name: midas-api
+    restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: true
+    environment:
+      # 容器内部域名覆盖
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-midas}:${POSTGRES_PASSWORD:-midas_dev}@postgres:5432/${POSTGRES_DB:-midas}
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - midas-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  worker:
+    build:
+      context: ../apps/worker
+      dockerfile: Dockerfile
+    container_name: midas-worker
+    restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: true
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-midas}:${POSTGRES_PASSWORD:-midas_dev}@postgres:5432/${POSTGRES_DB:-midas}
+      CLICKHOUSE_HOST: clickhouse
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    networks:
+      - midas-net
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    container_name: midas-web
+    restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: true
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - midas-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+networks:
+  midas-net:
+    name: midas-net
+    driver: bridge
+
+volumes:
+  postgres_data:
+    name: midas-postgres-data
+  clickhouse_data:
+    name: midas-clickhouse-data
+  redis_data:
+    name: midas-redis-data
