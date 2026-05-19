@@ -1,0 +1,22 @@
+{
+  "name": "@midas/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "点金 Midas · 前后端共享 TypeScript 类型契约(后续 Task 1.1 用 openapi-typescript 从 FastAPI 自动生成)",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "lint": "tsc --noEmit",
+    "type-check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

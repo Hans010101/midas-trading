@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* 点金 Midas 主题 — Light Only */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 10%;
+
+    --card: 45 20% 99%;
+    --card-foreground: 0 0% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+
+    --primary: 350 88% 43%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 43 89% 38%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 40 14% 96%;
+    --muted-foreground: 240 4% 46%;
+
+    --accent: 40 14% 96%;
+    --accent-foreground: 0 0% 10%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 40 10% 90%;
+    --input: 40 10% 90%;
+    --ring: 350 88% 43%;
+
+    --radius: 4px;
+
+    /* 自定义 token */
+    --midas-red: #C8102E;
+    --midas-red-deep: #9E1024;
+    --midas-gold: #B8860B;
+    --midas-paper: #F7F6F1;
+    --midas-cream: #FCFCF9;
+    --midas-bull: #DC143C;
+    --midas-bear: #0F6E5F;
+  }
+
+  /* Dark theme token 预留（M0 不实现切换） */
+  .dark {
+    --background: 0 0% 7%;
+    --foreground: 0 0% 95%;
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 95%;
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 350 88% 43%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 43 89% 38%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 64%;
+    --accent: 0 0% 15%;
+    --accent-foreground: 0 0% 95%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 0 0% 95%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 350 88% 43%;
+  }
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* 数字等宽字体 */
+  .font-tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
