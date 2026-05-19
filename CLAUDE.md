@@ -109,12 +109,20 @@ M0 验收标准:陌生人能注册 → 看跨市场 K 线 → 建虚拟单 → �
 - 遇到协作铁律 § 3 要问的两类决策:① 涉及钱(付费工具 / 真实交易接口);② 多个合理路径且选错代价大(主要技术栈变更 / 数据库 schema 不可逆设计)
 - 当前 Checkpoint 已收尾(汇报后**默认继续下一个**,除非用户提前说停)
 
+## 项目铁律(由实战总结)
+
+工程纪律,跟「协作铁律」(工作流)是两件事——这里是实战中踩出来的血泪。
+**每条必须引用 docs/decisions/0002 / 0004 / ... 中的某一条具体翻车**,不允许凭空想象。
+
+- **clickhouse-connect 永远传 tz-aware datetime,绝不传 naive。**
+  详见 docs/decisions/0002-data-sources-pitfalls.md 翻车 3 —— Python `astimezone()` 对 naive 默认按 OS 本地时区解释,在 CN(+8)环境下会写入偏移 8 小时的 epoch。
+
 ## 待用环境变量(后续阶段才接,当前 Task 不动)
 
 | 变量 | 用途 | 何时接 |
 |---|---|---|
 | `DEEPSEEK_API_KEY` | LLM provider(主用 DeepSeek,见 docs/decisions/0003) | Task 3+ AI Agent 阶段 |
-| `HTTPS_PROXY` | 国内访问 yfinance / ccxt 可选代理 | Task 2 适配器(可选,默认不配) |
+| `HTTPS_PROXY` | 代理 yfinance / ccxt | 2026-05-19 实测国内直连可用,**暂不接入**,直连失败再启用 |
 | `FEISHU_WEBHOOK_URL` | 飞书机器人 webhook | Task 6 推送 |
 | `TG_BOT_TOKEN` / `TG_CHAT_ID` | Telegram bot 推送 | Task 6 推送 |
 | `SMTP_HOST` / `SMTP_USER` / `SMTP_PASSWORD` 或 `RESEND_API_KEY` | 邮箱验证 | NextAuth v5(M0 验收第 2 步) |
