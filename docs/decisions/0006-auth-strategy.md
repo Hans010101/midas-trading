@@ -105,3 +105,43 @@ M0 验收第 2 步「陌生人能注册 → 邮箱验证 → 登录」必须打�
 
 **保留 JWT 路径:**
 即便切到 DB session,前端调 FastAPI 时仍用短期 JWT(NextAuth `getToken` 派发),后端验签不变。DB session 只管 NextAuth 自己的 cookie。
+
+## OAuth 计划
+
+### Task 7.1 引入 Google OAuth(M0 不做,留档)
+
+**M0 不做的理由:**
+- M0 阶段邮箱密码已能完整跑通验收链路(注册 → 邮箱验证 → 登录 → /workbench)
+- OAuth 引入 3 个新问题,都在 M0 是低 ROI:
+  - **`redirect_uri` 配置摩擦**:Google Console 注册的 redirect_uri 是固定的,本地 dev(localhost) + Vercel preview + 生产域名各要一组,M0 还没有稳定生产域名
+  - **OAuth 用户的 `email_verified` 分支**:Google 已验邮箱,我们的 `email_verified_at` 字段要直接填,不走 verification_token 路径,代码多一个分支
+  - **跨开发/生产域名同步**:Vercel 部署后 redirect_uri 又要改,流程上需要额外的 release checklist
+
+**Task 7.1 引入的实施方案:**
+- **复用 CryptoSharp 现有 Google client_id**(产品负责人决策,可省一次 Google Console 注册申请)
+- redirect_uri 统一在生产域名(`midas.so` 或最终域名)注册,一次性配好 dev/preview/prod 三组
+- OAuth 用户跳过邮箱验证(`email_verified_at = func.now()` 注册时直接填)
+- **邮箱密码登录保留**(给不想用 Google 的用户 / 国内用户访问 Google 不畅的场景)
+- 实装在 NextAuth v5 配置的 `providers` 数组里加 `GoogleProvider`:
+
+  ```ts
+  // apps/web/auth.ts
+  import GoogleProvider from "next-auth/providers/google"
+
+  providers: [
+    CredentialsProvider({ /* 已存在 */ }),
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      // OAuth 用户自动 email_verified
+    }),
+  ]
+  ```
+
+- 后端 `/api/v1/auth/oauth-sync` 新增端点:NextAuth 拿到 Google profile 后调一次,后端 upsert `users` 表 + 标记 email_verified_at + 派发 JWT
+
+**时机选择:**
+Task 7.1 是「视觉营销 + 上线准备」阶段,届时:
+- 生产域名已敲定
+- Google Console redirect_uri 一次性配齐
+- 上线公告里宣传「也支持 Google 一键登录」是个不错的 marketing 卖点
