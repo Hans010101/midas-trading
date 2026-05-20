@@ -23,6 +23,7 @@ import type { ReactNode } from 'react'
 import { toast } from 'sonner'
 
 import { useChartInstance } from '@/lib/chart-instance-context'
+import { ensureMidasOverlays } from '@/lib/klinecharts-extensions'
 import { cn } from '@/lib/utils'
 
 interface ToolDef {
@@ -38,7 +39,9 @@ const TOOLS: ToolDef[] = [
   { overlay: 'straightLine', label: '趋势线', icon: <TrendingUp className="h-4 w-4" /> },
   { overlay: 'horizontalStraightLine', label: '水平线', icon: <MoveHorizontal className="h-4 w-4" /> },
   { overlay: 'verticalStraightLine', label: '垂直线', icon: <MoveVertical className="h-4 w-4" /> },
-  { overlay: 'rect', label: '矩形', icon: <Square className="h-4 w-4" /> },
+  // klinecharts 没有 'rect' overlay 模板,只有 rect 图元,
+  //   之前用 'rect' 静默不画,本次跟随 chan-overlay 切到自定义 midas-rect
+  { overlay: 'midas-rect', label: '矩形', icon: <Square className="h-4 w-4" /> },
   { overlay: 'simpleAnnotation', label: '文字标注', icon: <Type className="h-4 w-4" /> },
 ]
 
@@ -52,6 +55,8 @@ export function ToolBar() {
       toast.error('K 线未就绪')
       return
     }
+    // 确保 midas-rect / midas-fractal 已注册(幂等)
+    ensureMidasOverlays()
     try {
       chart.createOverlay({
         name: t.overlay,
@@ -59,6 +64,7 @@ export function ToolBar() {
         styles: {
           line: { color: '#C8102E', size: 1.5 },
           rect: {
+            style: 'stroke_fill',
             color: 'rgba(200, 16, 46, 0.06)',
             borderColor: '#C8102E',
             borderSize: 1,

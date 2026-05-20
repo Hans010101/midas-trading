@@ -1,7 +1,7 @@
 # 0011 · 缠论引擎设计
 
 ## 状态
-Approved (2026-05-20)
+Approved (2026-05-20) · **2026-05-20 配色 + 图层顺序调整(详见末尾 § 配色调整 v2)**
 
 ## 上下文
 
@@ -231,3 +231,101 @@ GET /api/v1/analysis/chan?symbol=X&market=cn&period=1d&limit=300
 - 缠论分析跟任何交易决策都必须分离 · UI 文案严守「仅供参考」「不构成投资建议」
 - 本波只做笔 + 中枢 + 分型 · 「自动信号 / 自动买卖点 / 自动出场」全部 M1 第二波 AI 决策卡
 - 视觉效果以「克制 · 不喧宾夺主」为准 · K 线本身是主角,缠论标注是辅助
+
+---
+
+## 配色调整 v2 · 2026-05-20
+
+产品负责人浏览器验收 M1-X 截图,发现两个问题,本节记录修复方案 + 最终配色。
+
+### 问题 A · 中枢矩形不可见
+
+**根因:**
+1. **图层顺序错** · 原实现 push 顺序 `[bis, zhongshus, fractals]` · klinecharts 按 push 顺序绘制,
+   后绘的盖在前面 → 中枢矩形被压到笔连线之上,但因为半透明填充,
+   视觉上又被金色笔覆盖,几乎看不到
+2. **填充太淡** · 原 gold `rgba(184,134,11,0.12)` α=0.12 在米白底色上几乎透明
+3. **虚线边在小尺寸下不可见** · `borderStyle: 'dashed'`
+
+**修复:**
+1. push 顺序改为 `[zhongshus, bis, fractals]` · 中枢作为背景层 · 笔在中层 · 分型在顶层
+2. 填充 α 提到 0.18 + 实线边 + 颜色换成中性灰蓝(不再用 gold,跟笔的金色冲突)
+
+### 问题 B · 笔色 / 分型语义冲突
+
+**笔(原深红 `#9E1024`):** 跟 K 线朱红涨色 `#DC143C` 太接近 · 上升 K 线密集区分不出来 → 改帝王金 `#B8860B` · 醒目又跟涨跌色明确区分。
+
+**分型(原 ▼/▲ 都是 midas-red `#C8102E`):** 不分顶底色,用户要靠形状辨认,认知负担大 · 顶分型预示转跌 / 底分型预示转涨,跟产品涨跌色语义本来就对应 → 配色对齐:
+
+| 分型 | 形状 | 颜色 | 位置 | 语义 |
+|---|---|---|---|---|
+| 顶分型 G | ▽ 空心下三角 | 墨绿 `#0F6E5F`(bear)| K 线上方 y=-12 | 预示转跌 → 用「跌」色 |
+| 底分型 D | △ 空心上三角 | 朱红 `#DC143C`(bull)| K 线下方 y=+12 | 预示转涨 → 用「涨」色 |
+
+### 配色最终方案 v2
+
+| 元素 | klinecharts 类型 | 颜色 token | 备注 |
+|---|---|---|---|
+| 中枢 · 矩形(底层)| `rect` | 填充 `rgba(100,130,160,0.18)` + 实线边 `#6482A0` | **视觉系统外唯一新增中性色** · 仅限缠论中枢使用 |
+| 笔 · 连线(中层)| `segment` size=1.5 | 帝王金 `#B8860B` | 不分上升/下降 |
+| 顶分型(顶层)| `simpleAnnotation` ▽ size=12 | 墨绿 `#0F6E5F` | offset [0, -12] |
+| 底分型(顶层)| `simpleAnnotation` △ size=12 | 朱红 `#DC143C` | offset [0, +12] |
+
+### 视觉系统补充(已落 CLAUDE.md)
+
+```
+- 缠论中枢专用中性色:淡灰蓝 #6482A0(填充 rgba(100,130,160,0.18))
+  · 仅限缠论中枢矩形(震荡区间)· 视觉系统外唯一新增色 · 不得在其他模块使用
+```
+
+### 实现位置
+
+`apps/web/components/chart/chan-overlay.tsx` · 单 useEffect · push 顺序保证图层 ·
+配色 token 提到组件常量 · 后续要调一处改 `COLOR_BI` / `COLOR_ZS_*` / `COLOR_FX_*` 即可。
+
+### 新增翻车记录 · klinecharts 没有 `rect` overlay 模板
+
+**M1-X 隐藏 bug:**
+M1-X 原实现中枢矩形 + ToolBar 矩形画线工具都用了 `chart.createOverlay({ name: 'rect', ... })` ·
+**klinecharts 10 内置 overlay 模板只有:**
+
+```
+arc / circle / fibonacciLine / horizontalRayLine / horizontalSegment /
+horizontalStraightLine / line / parallelStraightLine / polygon /
+priceChannelLine / priceLine / rayLine / segment / simpleAnnotation /
+simpleTag / straightLine / verticalRayLine / verticalSegment / verticalStraightLine
+```
+
+**没有 `rect` 或 `rectangle` !** `rect` 只是底层图元(primitive figure),不是 overlay 模板。
+createOverlay 用未注册的 name 时 klinecharts **静默不画**,只在 console 提示
+`Overlay [name] not found`,不抛错。所以 M1-X 阶段验收时没发现 —— 截图里看不到中枢
+就以为是 z-index 问题,实际是 createOverlay 调用根本没有效果。
+
+**修法:** `apps/web/lib/klinecharts-extensions.ts` 新模块注册两个自定义 overlay:
+
+| 名称 | 用途 | 实现 |
+|---|---|---|
+| `midas-rect` | 两点矩形 · 缠论中枢 + 用户绘图「矩形」工具 | rect 图元 · `style: 'stroke_fill'` |
+| `midas-fractal` | 干净文字标记 · 顶/底分型 ▽ △ | text 图元 · 无虚线/箭头/背景框 |
+
+任何需要的组件 import 即触发注册副作用 · `registered` 标志位幂等。
+
+**额外发现 · klinecharts text 默认 backgroundColor=BLUE:**
+`getDefaultOverlayStyle().text` 默认 `backgroundColor: Color.BLUE` + `paddingLeft/Right/Top/Bottom: 4` ·
+导致 simpleAnnotation 文字外面被画一个蓝色方块边距。本组件强制覆盖
+`backgroundColor: 'transparent'` + `padding: 0` + `borderColor: 'transparent'`。
+
+**P1 副带修复:** `tool-bar.tsx` 的矩形画线工具同样切到 `midas-rect` + 加 `style: 'stroke_fill'`
+否则用户手动画的矩形也没填充。本波一并修。
+
+### 新铁律候选
+
+> **第三方组件库的 overlay/extension API 用前必须先 `getSupportedXxx()` 列一遍** —— klinecharts
+> 静默忽略未注册的 overlay name 是这次的根因,但任何 plug-in 框架都可能有类似行为
+> (能用 register / 不可用就吞错)· 直接信文档 / 信脑补名字 = 翻车。
+
+### M1 第二波启动后视觉再补一波
+
+- 买卖点(1买/2买/3买)标记:跟 AI 决策卡一起设计 · 配色待定
+- 顶部信号条:右栏 AI 决策卡 + 信号强度颜色:走 0009 的现有 token(强多/强空配色)
+
