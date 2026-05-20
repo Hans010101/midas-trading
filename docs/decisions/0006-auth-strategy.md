@@ -73,3 +73,35 @@ M0 验收第 2 步「陌生人能注册 → 邮箱验证 → 登录」必须打�
 3. **切 JWT-only session:** NextAuth 配置 `session: { strategy: 'jwt' }`,删 `user_session` 表
 4. **取消邮箱验证强制:** `email_verified_at` 字段允许 NULL,登录跳过检查
 5. **加 OAuth(未来):** NextAuth providers 加 GoogleProvider / GitHubProvider,无需破坏既有邮箱密码路径
+
+## 偏离与回归路径
+
+### 偏离 1 · M0 实际用 JWT session,不是 database session(2026-05-19)
+
+**偏离原因:**
+本 ADR 第 3 节决议「database session」,但 N Checkpoint 实装时改成了 NextAuth 默认的 **JWT session strategy**。理由:
+- NextAuth v5 默认即 JWT,跨 ORM 写 NextAuth 的 `account/session/verification_token` 表会跟我们的 SQLAlchemy `users` 表打架
+- database session 需要 Drizzle/Prisma 适配器,引入第二个 ORM 跟 FastAPI SQLAlchemy 并存,M0 阶段不值得
+- M0 是「端到端走通」阶段,JWT 已足够支撑完整链路
+
+**M0 接受的取舍:**
+- 不能主动失效会话(被泄露的 JWT 在 TTL 内仍有效;7d TTL 限制最大暴露窗口)
+- 不能查询活跃会话列表(产品功能,M0 不需要)
+- 不能审计单次登录(JWT 无服务端记录)
+
+**触发回归 DB session 的条件(任一即可):**
+- 用户量 > 100 真实用户(单次 leak 影响面增大)
+- 安全审计明确要求服务端会话管控
+- 产品需要「管理员强制踢人」/「显示已登录设备」功能
+- 出现 token 被泄露事件
+
+**回归路径(预估 1.5 天):**
+1. `pnpm add @auth/drizzle-adapter drizzle-orm` + `pnpm add -D drizzle-kit`
+2. 写 NextAuth schema 的 Drizzle 定义(account/session/verification_token 4 张表)
+3. `drizzle-kit push` 落到 Postgres(跟 SQLAlchemy 共存,不冲突)
+4. NextAuth 配置 `adapter: DrizzleAdapter(db)` + `session: { strategy: 'database' }`
+5. 兼容性:已有 JWT cookie 在切换后失效,所有用户需重新登录(一次性退出公告)
+6. 后端 `get_current_user` 改为查 Drizzle 的 `session` 表(而非验 JWT),需要写新的 `verify_session_id` 路径
+
+**保留 JWT 路径:**
+即便切到 DB session,前端调 FastAPI 时仍用短期 JWT(NextAuth `getToken` 派发),后端验签不变。DB session 只管 NextAuth 自己的 cookie。
