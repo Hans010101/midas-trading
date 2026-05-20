@@ -94,15 +94,24 @@ async def _prefill_demo(db: AsyncSession, *, user_id: object) -> None:
     "",
     response_model=list[WatchlistItemResponse],
     summary="当前用户的自选股列表",
-    description="首次访问(列表为空)且邮箱已验证 → 自动预填 3 个跨市场 demo symbols",
+    description=(
+        "首次访问(列表为空 + 邮箱已验证 + 未预填过)→ 自动预填 3 个跨市场 demo symbols。"
+        "用户主动清空 watchlist 后不会再触发(demo_prefilled 标志已置 true)。"
+    ),
 )
 async def list_watchlist(
     current_user: CurrentUserDep,
     db: DbDep,
 ) -> list[WatchlistItemResponse]:
     items = await _list_items_sorted(db, user_id=current_user.id)
-    if not items and current_user.email_verified_at is not None:
+    if (
+        not items
+        and current_user.email_verified_at is not None
+        and not current_user.demo_prefilled
+    ):
         await _prefill_demo(db, user_id=current_user.id)
+        current_user.demo_prefilled = True
+        await db.commit()
         items = await _list_items_sorted(db, user_id=current_user.id)
     return [WatchlistItemResponse.model_validate(it) for it in items]
 

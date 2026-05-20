@@ -55,8 +55,9 @@ ignore = ["COM812", "ISC001"]
 known-first-party = ["app"]
 
 [tool.ruff.lint.per-file-ignores]
-# alembic 自动生成的 migration 模板含未直接使用的 op/sa 占位导入,允许 F401
-"alembic/versions/*.py" = ["F401"]
+# alembic 自动生成的 migration 模板含未直接使用的 op/sa 占位导入,允许 F401;
+# sa.Column(...) DSL 强制宽行,允许 E501
+"alembic/versions/*.py" = ["F401", "E501"]
 # 单元测试要测受保护的内部方法(SLF001)+ fixture 仅作 side-effect 注入(PT019)
 "tests/**/*.py" = ["SLF001", "PT019"]
 # FastAPI 路由用 Query(...)/Path(...) 作参数默认值是官方惯例,B008 不适用

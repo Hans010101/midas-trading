@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, String, Uuid, func
+from sqlalchemy import Boolean, DateTime, String, Uuid, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -30,6 +30,11 @@ class User(Base):
         DateTime(timezone=True), nullable=True,
     )
     age_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # 0007 watchlist:首次 GET /watchlist 触发 demo 预填后翻为 True,
+    # 用户主动清空 watchlist 不会再触发(防止「删光 → 又被填回来」UX 怪圈)
+    demo_prefilled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false"), default=False,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
