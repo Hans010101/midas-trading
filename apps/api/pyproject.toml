@@ -22,6 +22,7 @@ dependencies = [
     "ccxt>=4.4.0",
     "clickhouse-connect>=0.8.0",
     "email-validator>=2.2.0",
+    "czsc>=0.10.12",
 ]
 
 [project.optional-dependencies]
@@ -84,6 +85,8 @@ module = [
     "pandas.*",
     "passlib.*",
     "jose.*",
+    "czsc.*",
+    "celery.*",
 ]
 ignore_missing_imports = true
 

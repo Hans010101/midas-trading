@@ -178,7 +178,14 @@ class ClickHouseClient:
         limit: int = 500,
         since: datetime | None = None,
     ) -> list[Kline]:
-        """查指定标的 / 周期最近 `limit` 根 K 线,ts 升序。"""
+        """查指定标的 / 周期**最近** `limit` 根 K 线,返回 ts 升序。
+
+        修复(0010 § A):此前用 ORDER BY ts ASC LIMIT N 会取**最早**的 N 根
+        (因为 LIMIT 在 ASC 排序后生效)· 现改 DESC LIMIT N(取最新 N 根)+
+        Python 端 reverse 保留 ASC 契约。所有 K 线相关调用方语义不变,
+        但 limit=1/2 这种小窗口请求(用于 price fetcher / price anomaly)
+        终于能拿到真正的「最新价」。
+        """
         sql = (
             "SELECT ts, open, high, low, close, volume, amount FROM kline "
             "WHERE symbol = %(symbol)s AND market = %(market)s AND period = %(period)s"
@@ -191,11 +198,13 @@ class ClickHouseClient:
         if since is not None:
             sql += " AND ts >= %(since)s"
             params["since"] = self._to_aware_utc(since)
-        sql += " ORDER BY ts ASC LIMIT %(limit)s"
+        # DESC 拿最新 N 根 · Python 端再 reverse 还原 ASC
+        sql += " ORDER BY ts DESC LIMIT %(limit)s"
         params["limit"] = limit
 
         result = await self._client.query(sql, parameters=params)
-        return [
+        # DB 返回 ts DESC · Python 端 reverse 还原 ASC(保持调用方契约)
+        klines = [
             Kline(
                 ts=row[0].replace(tzinfo=UTC),
                 open=row[1],
@@ -207,6 +216,8 @@ class ClickHouseClient:
             )
             for row in result.result_rows
         ]
+        klines.reverse()
+        return klines
 
     async def count_kline(
         self,
