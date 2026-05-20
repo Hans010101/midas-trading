@@ -16,6 +16,7 @@
 
 import { useEffect } from 'react'
 
+import { TopNav } from '@/components/layout/top-nav'
 import { ChartArea } from '@/components/workbench/chart-area'
 import { Header } from '@/components/workbench/header'
 import { ToolBar } from '@/components/workbench/tool-bar'
@@ -30,6 +31,7 @@ export default function WorkbenchPage() {
 
   return (
     <div className="flex h-screen flex-col bg-background">
+      <TopNav />
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <ToolBar />

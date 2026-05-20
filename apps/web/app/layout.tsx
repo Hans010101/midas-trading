@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { JetBrains_Mono, Noto_Sans_SC, Noto_Serif_SC } from 'next/font/google'
 
+import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { QueryProvider } from '@/lib/providers/query-provider'
 import { SessionProvider } from '@/lib/providers/session-provider'
@@ -56,6 +57,7 @@ export default function RootLayout({
             </QueryProvider>
           </ThemeProvider>
         </SessionProvider>
+        <Toaster position="top-center" closeButton />
       </body>
     </html>
   )

@@ -31,6 +31,7 @@ import { GripVertical, Plus, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { VirtualBadge } from '@/components/ui/virtual-badge'
+import { CurrentPositionCard } from '@/components/workbench/current-position-card'
 import { SymbolSearchDialog } from '@/components/workbench/symbol-search-dialog'
 import {
   useDeleteFromWatchlist,
@@ -108,6 +109,9 @@ export function WatchlistColumn() {
 
   return (
     <aside className="flex w-[280px] shrink-0 flex-col border-l border-midas-red bg-background">
+      {/* 当前标的持仓摘要(只在有持仓时显示)*/}
+      <CurrentPositionCard />
+
       {/* 标题 + 添加按钮 */}
       <section className="border-b border-paper px-3 py-2.5">
         <div className="flex items-center justify-between">
