@@ -42,6 +42,8 @@ interface KlineChartProps {
   indicators?: Record<IndicatorName, boolean>
   /** EmptyKline 触发"切到日 K"时的回调(父组件管 period 状态)*/
   onSwitchToDaily?: () => void
+  /** chart 实例就绪回调 · 缠论 overlay / 绘图工具栏需要 chart instance */
+  onChartReady?: (chart: Chart) => void
 }
 
 export function KlineChart({
@@ -50,6 +52,7 @@ export function KlineChart({
   period,
   indicators,
   onSwitchToDaily,
+  onChartReady,
 }: KlineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<Chart | null>(null)
@@ -116,11 +119,14 @@ export function KlineChart({
       },
     })
 
+    // 暴露 chart instance 给父组件(缠论 overlay / 绘图工具用)
+    onChartReady?.(chart)
+
     return () => {
       dispose(el)
       chartRef.current = null
     }
-  }, [])
+  }, [onChartReady])
 
   // 3. props 变化(symbol/market/period) → 同步给 chart
   useEffect(() => {

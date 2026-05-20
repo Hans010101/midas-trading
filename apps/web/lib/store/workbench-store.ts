@@ -35,6 +35,8 @@ interface WorkbenchState {
   symbol: string
   period: Period
   indicators: Record<IndicatorName, boolean>
+  /** 缠论标注层开关 · 默认关 · 0011 ADR § 7 */
+  chanEnabled: boolean
 }
 
 interface WorkbenchActions {
@@ -42,6 +44,7 @@ interface WorkbenchActions {
   setSymbol: (s: string) => void
   setPeriod: (p: Period) => void
   toggleIndicator: (name: IndicatorName) => void
+  toggleChan: () => void
 }
 
 export type WorkbenchStore = WorkbenchState & WorkbenchActions
@@ -53,6 +56,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()(
       symbol: 'BTC/USDT',
       period: '1d',
       indicators: { MA: true, MACD: false, RSI: false, BOLL: false },
+      chanEnabled: false,
       setMarket: (m) =>
         set((state) => {
           state.market = m
@@ -70,6 +74,10 @@ export const useWorkbenchStore = create<WorkbenchStore>()(
       toggleIndicator: (name) =>
         set((state) => {
           state.indicators[name] = !state.indicators[name]
+        }),
+      toggleChan: () =>
+        set((state) => {
+          state.chanEnabled = !state.chanEnabled
         }),
     })),
     {

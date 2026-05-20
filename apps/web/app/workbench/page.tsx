@@ -21,6 +21,7 @@ import { ChartArea } from '@/components/workbench/chart-area'
 import { Header } from '@/components/workbench/header'
 import { ToolBar } from '@/components/workbench/tool-bar'
 import { WatchlistColumn } from '@/components/workbench/watchlist-column'
+import { ChartInstanceProvider } from '@/lib/chart-instance-context'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
 
 export default function WorkbenchPage() {
@@ -30,14 +31,16 @@ export default function WorkbenchPage() {
   }, [])
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-      <TopNav />
-      <Header />
-      <div className="flex flex-1 overflow-hidden">
-        <ToolBar />
-        <ChartArea />
-        <WatchlistColumn />
+    <ChartInstanceProvider>
+      <div className="flex h-screen flex-col bg-background">
+        <TopNav />
+        <Header />
+        <div className="flex flex-1 overflow-hidden">
+          <ToolBar />
+          <ChartArea />
+          <WatchlistColumn />
+        </div>
       </div>
-    </div>
+    </ChartInstanceProvider>
   )
 }
