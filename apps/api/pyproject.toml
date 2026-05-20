@@ -23,6 +23,8 @@ dependencies = [
     "clickhouse-connect>=0.8.0",
     "email-validator>=2.2.0",
     "czsc>=0.10.12",
+    "litellm>=1.55.0",
+    "langgraph>=0.2.50",
 ]
 
 [project.optional-dependencies]
@@ -87,6 +89,8 @@ module = [
     "jose.*",
     "czsc.*",
     "celery.*",
+    "litellm.*",
+    "langgraph.*",
 ]
 ignore_missing_imports = true
 

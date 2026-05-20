@@ -35,5 +35,14 @@ class Settings(BaseSettings):
     # Celery
     celery_broker_url: str = "redis://localhost:6379/1"
 
+    # AI 决策卡 · 0012 ADR · M1 第二波
+    llm_provider: str = "deepseek"           # litellm 命名(deepseek / openai / claude 等)
+    llm_model: str = "deepseek/deepseek-chat"
+    deepseek_api_key: str = ""               # 产品负责人提供 · 空字符串时强制 mock 模式
+    llm_monthly_budget_cny: float = 200.0    # 软上限 · ai_usage_log 累计到 80% 邮件告警
+    llm_mock_mode: bool = False              # 显式 True 强制 mock(即使有 key)· 测试用
+    llm_max_tokens: int = 1024               # 单次响应硬上限
+    llm_timeout_seconds: float = 30.0
+
 
 settings = Settings()

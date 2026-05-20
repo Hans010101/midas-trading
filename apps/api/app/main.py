@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import router as api_v1_router
 from app.core.config import settings
 from app.core.logging import configure_logging
+from app.core.redis_client import close_redis
 from app.services.clickhouse_client import ClickHouseClient
 from app.services.data_sources.cn_source import AKShareCnSource
 from app.services.data_sources.crypto_source import CcxtBinanceCryptoSource
@@ -37,6 +38,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         await app.state.ccxt_binance.close()
         await app.state.clickhouse.close()
+        await close_redis()
         logger.info("Lifespan shutdown: 资源已释放")
 
 

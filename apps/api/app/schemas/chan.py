@@ -1,4 +1,4 @@
-"""缠论分析 Pydantic 契约 · 0011 ADR § 2。"""
+"""缠论分析 Pydantic 契约 · 0011 ADR § 2 + 0012 § 买卖点(M1 二波)。"""
 
 from __future__ import annotations
 
@@ -42,6 +42,16 @@ class ZhongshuResponse(BaseModel):
     low: float
 
 
+class BuySellPointResponse(BaseModel):
+    """缠论买卖点 · czsc 1/2/3 类买卖点 · 0012 M1 二波。"""
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    ts: AwareDatetime
+    price: float
+    kind: Literal["B1", "B2", "B3", "S1", "S2", "S3"]
+    description: str = Field(max_length=120)
+
+
 class ChanAnalysisResponse(BaseModel):
     """缠论分析综合响应 · GET /api/v1/analysis/chan"""
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -53,7 +63,7 @@ class ChanAnalysisResponse(BaseModel):
     fractals: list[FractalPointResponse]
     bis: list[BiResponse]
     zhongshus: list[ZhongshuResponse]
-    # M1 第二波填充 · 当前固定空列表
-    buy_sell_points: list[dict[str, object]] = Field(default_factory=list)
+    # M1 第二波填充 · czsc 6 类买卖点(B1-3 / S1-3)· 详见 0012 § 缠论买卖点提取
+    buy_sell_points: list[BuySellPointResponse] = Field(default_factory=list)
     # 红线 · 缠论 / AI 输出必带
     disclaimer: str = "仅供参考,不构成投资建议"

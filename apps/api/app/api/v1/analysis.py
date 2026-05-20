@@ -15,12 +15,16 @@ from app.api.deps import (
     CryptoSourceDep,
     UsSourceDep,
 )
+from app.schemas.ai_decision import DecisionCardResponse
 from app.schemas.chan import (
     BiResponse,
+    BuySellPointResponse,
     ChanAnalysisResponse,
     FractalPointResponse,
     ZhongshuResponse,
 )
+from app.services.ai.cache import get_cached_card, set_cached_card
+from app.services.ai.workflow import run_decision_workflow
 from app.schemas.market import Market, Period
 from app.services.analysis.chan import analyze as analyze_chan
 from app.services.data_sources.base import BaseDataSource
@@ -98,6 +102,14 @@ async def get_chan_analysis(
             )
             for z in result.zhongshus
         ],
+        buy_sell_points=[
+            BuySellPointResponse(
+                ts=p.ts, price=p.price,
+                kind=p.kind,  # type: ignore[arg-type]
+                description=p.description,
+            )
+            for p in result.buy_sell_points
+        ],
     )
 
 
@@ -112,3 +124,66 @@ def _source_for(
         "cn": cn, "us": us, "crypto": crypto,
     }
     return mapping[market]
+
+
+# ===== AI 决策卡 · 0012 ADR M1 二波 =====
+
+
+@router.get(
+    "/decision-card",
+    response_model=DecisionCardResponse,
+    summary="AI 决策卡 · 技术面单 Agent + 缠论买卖点(M1 第二波)",
+    description=(
+        "返回结构化 AI 决策卡:综合评分(M1 二波 = 技术面分)/ 解读 / 关键位 / "
+        "缠论近期买卖点 / disclaimer 双层兜底。"
+        "**结果仅供参考,不构成投资建议。** "
+        "当 DEEPSEEK_API_KEY 未配置时,llm_mode='mock' · 返回固定假分析以保持 UI 可用。"
+    ),
+)
+async def get_decision_card(
+    ch: ClickHouseDep,
+    cn: CnSourceDep,
+    us: UsSourceDep,
+    crypto: CryptoSourceDep,
+    symbol: str = Query(..., min_length=1, examples=["BTC/USDT", "NVDA", "600519"]),
+    market: Market = Query(...),
+    period: Period = Query("1d"),
+    limit: int = Query(300, ge=30, le=1000),
+) -> DecisionCardResponse:
+    # 1. 缓存命中检查
+    cached = await get_cached_card(market, symbol, period)
+    if cached is not None:
+        logger.info(
+            "[decision-card] CACHE HIT symbol=%s market=%s period=%s",
+            symbol, market, period,
+        )
+        return cached
+
+    # 2. 拿 K 线(跟 /chan 同源,先 CH 后回源)
+    klines = await ch.select_kline(
+        symbol=symbol, market=market, period=period, limit=limit,
+    )
+    if len(klines) < 30:
+        source = _source_for(market, cn=cn, us=us, crypto=crypto)
+        try:
+            klines = await source.fetch_kline(symbol, period, limit=limit)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"K 线数据不足 30 根 · 无法生成决策卡:{e}",
+            ) from e
+
+    # 3. 跑 LangGraph workflow(mock 或 real,workflow 不关心)
+    card = await run_decision_workflow(symbol, market, period, klines)
+
+    logger.info(
+        "[decision-card] symbol=%s market=%s period=%s score=%d label=%s"
+        " signals=%d mode=%s",
+        symbol, market, period, card.composite_score, card.composite_label,
+        len(card.chan_signals), card.llm_mode,
+    )
+
+    # 4. 写缓存 · 失败不阻塞
+    await set_cached_card(card)
+
+    return card
