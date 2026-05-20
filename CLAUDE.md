@@ -129,6 +129,8 @@ M0 验收标准:陌生人能注册 → 看跨市场 K 线 → 建虚拟单 → �
   详见 docs/decisions/0002-data-sources-pitfalls.md § 翻车 8 —— 前端 TanStack Query × 后端 `_retry` 双层叠加 = 44s 卡住用户。任何分布式系统都会撞这个坑,不只是数据源。
 - **可选 extra 是隐形坑** · pyproject 必须显式列所有用到的 backend。
   详见 docs/decisions/0002-data-sources-pitfalls.md § 翻车 9/10 —— `pydantic[email]` / `passlib[bcrypt,argon2]` 这类括号写法,在代码用了非 default backend 时必须更新 deps;docker build 阶段加冒烟 import test 提早暴露。
+- **SQL `ORDER BY ... LIMIT N` 凡涉及「最新 / 最旧」语义,必须显式 `DESC` + Python reverse,不依赖排序方向的偶然。**
+  详见 docs/decisions/0010-data-accuracy-diagnosis.md —— `select_kline` 用了 `ORDER BY ts ASC LIMIT N`,语义是「最早 N 根」而不是「最近 N 根」;`limit=1` 时取到 2018-06 NVDA $3.15(后复权古价),撮合 / 30s 报价 / 价格异动 / 浮盈估值整条链路全错,显示成 NVDA $6.55 / BTC $26K。修法:DB 端 `DESC LIMIT N` + Python `list.reverse()` 还原调用方期待的 ASC 升序契约。任何「最新 / 最近 / 最旧 / 最早」语义的窗口查询都必须走这套显式模式,绝不依赖隐式排序。
 
 ## 待用环境变量(后续阶段才接,当前 Task 不动)
 
