@@ -3,6 +3,7 @@ import { JetBrains_Mono, Noto_Sans_SC, Noto_Serif_SC } from 'next/font/google'
 
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { QueryProvider } from '@/lib/providers/query-provider'
+import { SessionProvider } from '@/lib/providers/session-provider'
 import { ThemeProvider } from '@/lib/providers/theme-provider'
 import { UiStoreProvider } from '@/lib/store/ui-store-provider'
 
@@ -46,13 +47,15 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="font-sans antialiased bg-background text-foreground">
-        <ThemeProvider>
-          <QueryProvider>
-            <UiStoreProvider>
-              <TooltipProvider>{children}</TooltipProvider>
-            </UiStoreProvider>
-          </QueryProvider>
-        </ThemeProvider>
+        <SessionProvider>
+          <ThemeProvider>
+            <QueryProvider>
+              <UiStoreProvider>
+                <TooltipProvider>{children}</TooltipProvider>
+              </UiStoreProvider>
+            </QueryProvider>
+          </ThemeProvider>
+        </SessionProvider>
       </body>
     </html>
   )

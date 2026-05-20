@@ -247,6 +247,59 @@ H Checkpoint playwright 截图,600519/15m 等了 25s 仍显示空白 chart(预�
 - 进 useQuery / useSWR / 类似 client 状态库时,默认 retry 配置必须显式设 0 或评估后写明
 - 这条对 Task 4 自选股(WebSocket 重连)/ Task 6 通知发送 / 所有 RPC 调用都成立
 
+---
+
+## 9. Pydantic v2 `EmailStr` 需要 `email-validator` 可选依赖
+
+### 问题
+Checkpoint N 部署 auth 路由后,api 容器 restart loop:
+```
+ImportError: email-validator is not installed, run `pip install 'pydantic[email]'`
+```
+
+### 排查
+- auth.py 用了 `EmailStr` 类型(RegisterIn / LoginIn / ResendIn)
+- Pydantic v2 把 email 校验放进可选 extra `pydantic[email]`(默认 不含 email-validator)
+- pyproject.toml 没显式列 `email-validator` 或 `pydantic[email]`
+- 本地 venv 安装时也没装这个 extra,本地没启动整套 FastAPI 所以没暴露
+- docker 容器 build 时 pip install 默认依赖,缺这个
+
+### 修复
+`apps/api/pyproject.toml` dependencies 加 `email-validator>=2.2.0`,重建 api 镜像。
+
+### 防御层
+- **可选 extra 是隐形坑**:Pydantic v2 / SQLAlchemy / yfinance 都有 extras,代码用了
+  `EmailStr` / 类型才报错
+- pyproject 把所有用到的可选 extras 显式列出来,而非依赖 `pydantic[email]`
+  (extra 形式在某些 pip 工具链下不稳定)
+- 类似情况后续若有 PR · 必须在 docker build 阶段做一次"全路由 import"冒烟:
+  `python -c "from app.main import app; print(len(app.routes))"`
+
+---
+
+## 10. passlib `argon2id` 需要 `argon2_cffi` 后端
+
+### 问题
+register 路由 500,passlib 报 `MissingBackendError: argon2: no backends available -- recommend you install one (e.g. 'pip install argon2_cffi')`。
+
+### 排查
+- pyproject 写的 `passlib[bcrypt]` extra · 只装了 bcrypt 后端
+- 0006 ADR 决定用 argon2id,但 passlib 默认不带 argon2 实现
+- argon2 需要单独 `passlib[argon2]` extra(底层装 argon2_cffi)
+
+### 修复
+`apps/api/pyproject.toml`:`passlib[bcrypt]` → `passlib[argon2,bcrypt]`,
+两个 backend 都装(bcrypt 留着以备老数据迁移)。
+
+### 防御层
+- 跟翻车 9 同根:**可选 extra 是隐形坑**。passlib / Pydantic / yfinance / requests
+  都有大量 optional extras
+- pyproject 写 extras 时,先 grep 代码用了哪些非 default 路径,把 extras 列全
+- 类似 docker build 阶段加冒烟 `from app.services.auth import hash_password; hash_password("x")`
+  这种"最简调用"也能提早暴露
+
+---
+
 D / E 阶段都是单一模块自验,翻车都是**模块内部**;F 阶段把 D + E + 数据库 + worker
 + FastAPI 全栈拼装起来,踩的两次坑(翻车 5 + 6)都**发生在接缝**。提炼成 4 条通用
 预防策略,后续 Task 3-6 组装期对照检查:

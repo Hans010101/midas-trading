@@ -15,12 +15,13 @@ dependencies = [
     "celery>=5.4.0",
     "httpx>=0.28.0",
     "python-jose[cryptography]>=3.3.0",
-    "passlib[bcrypt]>=1.7.4",
+    "passlib[argon2,bcrypt]>=1.7.4",
     "python-multipart>=0.0.17",
     "akshare>=1.14.0",
     "yfinance>=0.2.48",
     "ccxt>=4.4.0",
     "clickhouse-connect>=0.8.0",
+    "email-validator>=2.2.0",
 ]
 
 [project.optional-dependencies]
@@ -60,6 +61,8 @@ known-first-party = ["app"]
 "tests/**/*.py" = ["SLF001", "PT019"]
 # FastAPI 路由用 Query(...)/Path(...) 作参数默认值是官方惯例,B008 不适用
 "app/api/**/*.py" = ["B008"]
+# email service 内联 HTML 模板有长 style 字符串,E501 不适用
+"app/services/email.py" = ["E501"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -78,5 +81,7 @@ module = [
     "yfinance.*",
     "ccxt.*",
     "pandas.*",
+    "passlib.*",
+    "jose.*",
 ]
 ignore_missing_imports = true

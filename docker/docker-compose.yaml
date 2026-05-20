@@ -148,6 +148,11 @@ services:
         required: true
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      # NextAuth v5 在容器内 server-side 调后端走 docker 内部 DNS
+      API_INTERNAL_URL: http://api:8000
+      # NextAuth v5 用 AUTH_SECRET(原 NEXTAUTH_SECRET 是 v4)· 跟后端 JWT 共用
+      AUTH_SECRET: ${SECRET_KEY:-fallback-dev-only}
+      AUTH_TRUST_HOST: "true"
       NODE_ENV: production
     ports:
       - "3000:3000"
