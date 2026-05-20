@@ -86,3 +86,10 @@ module = [
     "jose.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# 测试代码不强制 strict 类型(fixtures / factory helpers / asserts 类型噪音多)
+module = ["tests.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+warn_return_any = false
