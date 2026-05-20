@@ -15,7 +15,7 @@ export function ToolBar() {
         <div className="text-[10px] leading-tight text-foreground [writing-mode:vertical-rl]">
           专业绘图
         </div>
-        <span className="rounded-full bg-midas-gold/15 px-1.5 py-0.5 font-mono text-[9px] font-bold text-midas-gold">
+        <span className="rounded-full bg-gold/15 px-1.5 py-0.5 font-mono text-[9px] font-bold text-gold">
           M1
         </span>
       </div>
