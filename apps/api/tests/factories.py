@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import secrets
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -110,3 +111,38 @@ async def make_watchlist_item(
     db.add(item)
     await db.flush()
     return item
+
+
+# ===== 虚拟交易 fixtures =====
+
+
+async def make_virtual_account(
+    db: AsyncSession,
+    *,
+    user_id: UUID,
+    market: str = "us",
+    initial_capital: Decimal = Decimal("100000"),
+) -> "VirtualAccount":
+    from app.models.virtual import MARKET_CURRENCY, VirtualAccount
+
+    account = VirtualAccount(
+        user_id=user_id,
+        market=market,
+        currency=MARKET_CURRENCY[market],
+        initial_capital=initial_capital,
+        cash_balance=initial_capital,
+    )
+    db.add(account)
+    await db.flush()
+    return account
+
+
+def make_static_price_fetcher(
+    prices: dict[tuple[str, str], Decimal | None],
+) -> "PriceFetcher":  # type: ignore[name-defined]
+    """造一个固定价 fetcher · 给 engine 测试用 · key 是 (symbol, market)。"""
+
+    async def fetcher(symbol: str, market: str) -> Decimal | None:
+        return prices.get((symbol, market))
+
+    return fetcher

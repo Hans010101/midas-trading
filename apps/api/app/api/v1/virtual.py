@@ -1,0 +1,374 @@
+"""虚拟交易路由 · /api/v1/virtual/* · 0008 v2。
+
+8 个端点 · 全部 CurrentUserDep + 三独立子账户 + 原币种,无 FX。
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import delete, desc, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import ClickHouseDep, CurrentUserDep
+from app.core.database import get_db
+from app.models.virtual import (
+    MARKET_CURRENCY,
+    SnapshotTrigger,
+    VirtualAccount,
+    VirtualEquitySnapshot,
+    VirtualOrder,
+    VirtualPosition,
+)
+from app.schemas.market import Market
+from app.schemas.virtual import (
+    AccountActivateIn,
+    AccountResponse,
+    AccountSummaryResponse,
+    EquityCurvesResponse,
+    EquitySnapshotResponse,
+    OrderPlaceIn,
+    OrderResponse,
+    PositionResponse,
+    PositionWithQuoteResponse,
+)
+from app.services.clickhouse_client import ClickHouseClient
+from app.services.virtual_trading.engine import (
+    PlaceOrderRequest,
+    PriceFetcher,
+    place_market_order,
+)
+from app.services.virtual_trading.equity import (
+    aggregate_portfolio,
+    snapshot_equity_for_account,
+)
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/virtual", tags=["virtual"])
+
+DbDep = Annotated[AsyncSession, Depends(get_db)]
+
+
+# ===== 价格 fetcher · 注入式 =====
+
+
+def make_price_fetcher(ch: ClickHouseClient) -> PriceFetcher:
+    """走 ClickHouse 拉最新 1d K 的 close · cache-aside 同源。"""
+
+    async def fetcher(symbol: str, market: str) -> Decimal | None:
+        # market 在 engine 层已校验 Market Literal,但 fetcher 签名宽容 str
+        rows = await ch.select_kline(
+            symbol=symbol,
+            market=market,  # type: ignore[arg-type]
+            period="1d",
+            limit=1,
+        )
+        if not rows:
+            return None
+        return Decimal(str(rows[-1].close))
+
+    return fetcher
+
+
+# ===== /accounts CRUD =====
+
+
+@router.get(
+    "/accounts",
+    response_model=list[AccountResponse],
+    summary="当前用户已激活的全部子账户(0~3)",
+)
+async def list_accounts(
+    current_user: CurrentUserDep, db: DbDep,
+) -> list[AccountResponse]:
+    accounts = (
+        await db.scalars(
+            select(VirtualAccount)
+            .where(VirtualAccount.user_id == current_user.id)
+            .order_by(VirtualAccount.market),
+        )
+    ).all()
+    return [AccountResponse.model_validate(a) for a in accounts]
+
+
+@router.get(
+    "/accounts/{market}",
+    response_model=AccountResponse,
+    summary="单市场子账户详情(404 = 未激活)",
+)
+async def get_account(
+    market: Market, current_user: CurrentUserDep, db: DbDep,
+) -> AccountResponse:
+    account = await db.scalar(
+        select(VirtualAccount).where(
+            VirtualAccount.user_id == current_user.id,
+            VirtualAccount.market == market,
+        ),
+    )
+    if account is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="该市场虚拟资金未激活",
+        )
+    return AccountResponse.model_validate(account)
+
+
+@router.put(
+    "/accounts/{market}",
+    response_model=AccountResponse,
+    summary="激活 / 重置市场子账户(重置会清空活仓 + 曲线)",
+)
+async def activate_or_reset_account(
+    market: Market,
+    payload: AccountActivateIn,
+    current_user: CurrentUserDep,
+    db: DbDep,
+) -> AccountResponse:
+    currency = MARKET_CURRENCY[market]
+    capital = payload.initial_capital
+
+    # 检查是否已存在(已激活)→ 走重置路径
+    existing = await db.scalar(
+        select(VirtualAccount).where(
+            VirtualAccount.user_id == current_user.id,
+            VirtualAccount.market == market,
+        ),
+    )
+
+    if existing is not None:
+        # 重置:清活仓 + 清快照 + 重写 cash/realized
+        await db.execute(
+            delete(VirtualPosition).where(
+                VirtualPosition.account_id == existing.id,
+                VirtualPosition.closed_at.is_(None),
+            ),
+        )
+        await db.execute(
+            delete(VirtualEquitySnapshot).where(
+                VirtualEquitySnapshot.account_id == existing.id,
+            ),
+        )
+        existing.initial_capital = capital
+        existing.cash_balance = capital
+        existing.realized_pnl = Decimal("0")
+        await db.commit()
+        await db.refresh(existing)
+        return AccountResponse.model_validate(existing)
+
+    # 首次激活 → 走 pg_insert 路径
+    stmt = (
+        pg_insert(VirtualAccount)
+        .values(
+            user_id=current_user.id,
+            market=market,
+            currency=currency,
+            initial_capital=capital,
+            cash_balance=capital,
+        )
+        .returning(VirtualAccount)
+    )
+    result = await db.execute(stmt)
+    account = result.scalar_one()
+    await db.commit()
+    return AccountResponse.model_validate(account)
+
+
+# ===== /portfolio =====
+
+
+@router.get(
+    "/portfolio",
+    response_model=list[AccountSummaryResponse],
+    summary="聚合 · 全部已激活市场 + 活仓 + 实时估值",
+)
+async def get_portfolio(
+    ch: ClickHouseDep, current_user: CurrentUserDep, db: DbDep,
+) -> list[AccountSummaryResponse]:
+    fetcher = make_price_fetcher(ch)
+    summaries = await aggregate_portfolio(
+        db, user_id=current_user.id, price_fetcher=fetcher,
+    )
+    return [
+        AccountSummaryResponse(
+            account_id=s.account_id,
+            market=s.market,
+            currency=s.currency,
+            initial_capital=s.initial_capital,
+            cash_balance=s.cash_balance,
+            realized_pnl=s.realized_pnl,
+            positions=[
+                PositionWithQuoteResponse(
+                    id=p.id,
+                    symbol=p.symbol,
+                    market=p.market,
+                    quantity=p.quantity,
+                    avg_entry_price=p.avg_entry_price,
+                    current_price=p.current_price,
+                    unrealized_pnl=p.unrealized_pnl,
+                    value=p.value,
+                )
+                for p in s.positions
+            ],
+            positions_value=s.positions_value,
+            total_equity=s.total_equity,
+        )
+        for s in summaries
+    ]
+
+
+# ===== /orders =====
+
+
+@router.post(
+    "/orders",
+    response_model=OrderResponse,
+    summary="市价单下单 · 200 + status=filled/rejected",
+)
+async def place_order(
+    payload: OrderPlaceIn,
+    ch: ClickHouseDep,
+    current_user: CurrentUserDep,
+    db: DbDep,
+) -> OrderResponse:
+    fetcher = make_price_fetcher(ch)
+    req = PlaceOrderRequest(
+        user_id=current_user.id,
+        symbol=payload.symbol,
+        market=payload.market,
+        side=payload.side,
+        quantity=payload.quantity,
+    )
+    order = await place_market_order(db, req, fetcher)
+    await db.commit()
+    return _serialize_order(order)
+
+
+@router.get(
+    "/orders",
+    response_model=list[OrderResponse],
+    summary="订单流水 · cursor 翻页",
+)
+async def list_orders(
+    current_user: CurrentUserDep,
+    db: DbDep,
+    market: Market | None = Query(None),
+    limit: int = Query(20, ge=1, le=200),
+    before_id: int | None = Query(None, description="cursor · 拿小于此 id 的"),
+) -> list[OrderResponse]:
+    # 仅当前用户的子账户下的订单
+    stmt = (
+        select(VirtualOrder)
+        .join(VirtualAccount, VirtualAccount.id == VirtualOrder.account_id)
+        .where(VirtualAccount.user_id == current_user.id)
+        .order_by(desc(VirtualOrder.id))
+        .limit(limit)
+    )
+    if market is not None:
+        stmt = stmt.where(VirtualOrder.market == market)
+    if before_id is not None:
+        stmt = stmt.where(VirtualOrder.id < before_id)
+    orders = (await db.scalars(stmt)).all()
+    return [_serialize_order(o) for o in orders]
+
+
+# ===== /positions =====
+
+
+@router.get(
+    "/positions",
+    response_model=list[PositionResponse],
+    summary="持仓列表(默认活仓 · include_closed=true 含历史)",
+)
+async def list_positions(
+    current_user: CurrentUserDep,
+    db: DbDep,
+    include_closed: bool = Query(False),
+    market: Market | None = Query(None),
+) -> list[PositionResponse]:
+    stmt = (
+        select(VirtualPosition)
+        .join(VirtualAccount, VirtualAccount.id == VirtualPosition.account_id)
+        .where(VirtualAccount.user_id == current_user.id)
+        .order_by(
+            VirtualPosition.closed_at.is_(None).desc(),
+            desc(VirtualPosition.opened_at),
+        )
+    )
+    if not include_closed:
+        stmt = stmt.where(VirtualPosition.closed_at.is_(None))
+    if market is not None:
+        stmt = stmt.where(VirtualPosition.market == market)
+    positions = (await db.scalars(stmt)).all()
+    return [PositionResponse.model_validate(p) for p in positions]
+
+
+# ===== /equity-curves =====
+
+
+@router.get(
+    "/equity-curves",
+    response_model=EquityCurvesResponse,
+    summary="多市场权益曲线(按 market 分组)",
+)
+async def get_equity_curves(
+    current_user: CurrentUserDep,
+    db: DbDep,
+    days: int = Query(30, ge=1, le=365),
+) -> EquityCurvesResponse:
+    since = datetime.now(UTC) - timedelta(days=days)
+    stmt = (
+        select(VirtualEquitySnapshot)
+        .join(
+            VirtualAccount,
+            VirtualAccount.id == VirtualEquitySnapshot.account_id,
+        )
+        .where(
+            VirtualAccount.user_id == current_user.id,
+            VirtualEquitySnapshot.snapshot_at >= since,
+        )
+        .order_by(VirtualEquitySnapshot.snapshot_at)
+    )
+    snapshots = (await db.scalars(stmt)).all()
+
+    curves: dict[str, list[EquitySnapshotResponse]] = {}
+    for s in snapshots:
+        market = s.market
+        if market not in curves:
+            curves[market] = []
+        curves[market].append(EquitySnapshotResponse.model_validate(s))
+
+    return EquityCurvesResponse(curves=curves)
+
+
+# ===== 内部 helper =====
+
+
+def _serialize_order(order: VirtualOrder) -> OrderResponse:
+    """统一序列化 · 处理临时未持久化的 rejected 订单(id=None)。"""
+    return OrderResponse(
+        id=order.id if order.id else None,
+        account_id=order.account_id if order.account_id else None,
+        symbol=order.symbol,
+        market=order.market,        side=order.side,
+        order_type=order.order_type,
+        quantity=order.quantity,
+        price=order.price,
+        notional=order.notional,
+        commission=order.commission,
+        slippage_cost=order.slippage_cost,
+        realized_pnl=order.realized_pnl,
+        status=order.status,
+        reject_reason=order.reject_reason,
+        placed_at=order.placed_at if order.id else None,
+        filled_at=order.filled_at,
+    )
+
+
+# Public re-export for celery beat job
+__all__ = ["router", "snapshot_equity_for_account", "SnapshotTrigger"]
