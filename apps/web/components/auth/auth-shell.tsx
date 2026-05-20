@@ -3,6 +3,9 @@
 /**
  * 鉴权页面共享外壳:Logo 衬线大标题 + 米白卡 + 中国红主 CTA + 合规副脚。
  * /login /register /verify-email 三个页面包在这里。
+ *
+ * 布局:min-h-screen 撑满背景,内容从顶部 padding 自然 flow,
+ * 不用垂直居中(避免 footer 之下出现一段视觉空白)。
  */
 
 import Link from 'next/link'
@@ -18,8 +21,8 @@ interface AuthShellProps {
 
 export function AuthShell({ title, subtitle, children, footer }: AuthShellProps) {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-background p-6">
-      <div className="w-full max-w-md">
+    <main className="min-h-screen bg-background">
+      <div className="mx-auto w-full max-w-md px-6 pt-16 pb-10">
         <Link href="/" className="mb-8 block text-center">
           <h1 className="font-serif text-3xl font-bold text-foreground">
             点金 <span className="text-midas-red">Midas</span>
