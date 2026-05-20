@@ -30,7 +30,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { GripVertical, Plus, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { VirtualBadge } from '@/components/ui/virtual-badge'
+import { AiDecisionCard } from '@/components/workbench/ai-decision-card'
 import { CurrentPositionCard } from '@/components/workbench/current-position-card'
 import { SymbolSearchDialog } from '@/components/workbench/symbol-search-dialog'
 import {
@@ -163,16 +163,10 @@ export function WatchlistColumn() {
         )}
       </section>
 
-      {/* AI 决策卡占位(M1)*/}
+      {/* AI 决策卡 · M1 二波实装(0012 ADR Checkpoint Z)*/}
       <div className="border-t border-paper" />
       <section className="p-3">
-        <div className="rounded-md border border-dashed border-paper bg-cream p-4 text-center">
-          <div className="mb-2 flex justify-center">
-            <VirtualBadge size="sm" />
-          </div>
-          <p className="font-serif text-sm font-bold text-foreground">AI 决策卡</p>
-          <p className="mt-1 text-xs text-muted-foreground/70">M1 待实装(缠论 + LLM)</p>
-        </div>
+        <AiDecisionCard />
       </section>
 
       <SymbolSearchDialog open={searchOpen} onOpenChange={setSearchOpen} />

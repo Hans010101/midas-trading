@@ -46,6 +46,9 @@ const COLOR_ZS_FILL = 'rgba(100, 130, 160, 0.18)'   // 淡灰蓝填充
 const COLOR_ZS_BORDER = '#6482A0'                   // 淡灰蓝实线边
 const COLOR_FX_TOP = '#0F6E5F'                      // 墨绿 · 顶分型(预示转跌)
 const COLOR_FX_BOTTOM = '#DC143C'                   // 朱红 · 底分型(预示转涨)
+// 0012 二波 · 买卖点 · 买点用「涨色」朱红 / 卖点用「跌色」墨绿
+const COLOR_BSP_BUY = '#DC143C'                     // B1/B2/B3
+const COLOR_BSP_SELL = '#0F6E5F'                    // S1/S2/S3
 
 // 自定义 overlay 注册位于 lib/klinecharts-extensions.ts(midas-rect + midas-fractal)·
 // 任何需要的组件 import 即触发注册副作用,幂等。
@@ -151,6 +154,39 @@ export function ChanOverlay({ chart }: Props) {
             paddingTop: 0,
             paddingBottom: 0,
             // y 偏移在 createPointFigures 里基于 extendData(▽/△)做了 ±14px
+          },
+        },
+      })
+    }
+
+    // 第 4 层 · 缠论买卖点(B1-3 / S1-3)· 0012 二波 · 复用 midas-fractal 自定义 overlay
+    // 显示在分型上方,可一目了然识别趋势节点
+    for (const bsp of data.buy_sell_points) {
+      const isBuy = bsp.kind.startsWith('B')
+      overlays.push({
+        name: 'midas-fractal',
+        groupId: CHAN_GROUP_ID,
+        paneId: 'candle_pane',
+        lock: true,
+        points: [
+          { timestamp: new Date(bsp.ts).getTime(), value: bsp.price },
+        ],
+        // 显示 B1/B2/B3/S1/S2/S3 字符 · midas-fractal 按首字母决定上下偏移
+        // (S → K 线上方较高 · B → K 线下方较低 · 避开分型)
+        extendData: bsp.kind,
+        styles: {
+          text: {
+            color: isBuy ? COLOR_BSP_BUY : COLOR_BSP_SELL,
+            size: 11,                  // 字符标签 · 比分型小一点 · 不喧宾夺主
+            family: 'JetBrains Mono, Consolas, monospace',
+            weight: 'bold',
+            backgroundColor: 'transparent',
+            borderColor: 'transparent',
+            borderSize: 0,
+            paddingLeft: 0,
+            paddingRight: 0,
+            paddingTop: 0,
+            paddingBottom: 0,
           },
         },
       })

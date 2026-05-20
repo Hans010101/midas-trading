@@ -63,9 +63,14 @@ export function ensureMidasOverlays() {
       coordinates: { x: number; y: number }[]
     }) => {
       const text = overlay.extendData ?? ''
-      // 顶分型 ▽ 画在 K 线上方,底分型 △ 画在 K 线下方
-      const isTop = text === '▽'
-      const yOffset = isTop ? -14 : 14
+      // 偏移方向规则:
+      //   - 文字 ▽(顶分型)  → K 线上方 -14
+      //   - 文字以 'S' 开头(卖点 S1/S2/S3)→ K 线上方 -18(避开分型)
+      //   - 文字 △(底分型)/ B 开头(买点 B1/B2/B3) → K 线下方
+      const isTopFractal = text === '▽'
+      const isSellPoint = text.startsWith('S')
+      const isAbove = isTopFractal || isSellPoint
+      const yOffset = isAbove ? (isSellPoint ? -22 : -14) : (text.startsWith('B') ? 22 : 14)
       return [
         {
           type: 'text',

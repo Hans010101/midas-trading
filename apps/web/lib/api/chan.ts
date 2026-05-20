@@ -35,6 +35,15 @@ export interface Zhongshu {
   low: number
 }
 
+export type BuySellPointKind = 'B1' | 'B2' | 'B3' | 'S1' | 'S2' | 'S3'
+
+export interface BuySellPoint {
+  ts: string
+  price: number
+  kind: BuySellPointKind
+  description: string
+}
+
 export interface ChanAnalysis {
   symbol: string
   market: Market
@@ -43,7 +52,7 @@ export interface ChanAnalysis {
   fractals: FractalPoint[]
   bis: Bi[]
   zhongshus: Zhongshu[]
-  buy_sell_points: unknown[]  // M1 第二波填
+  buy_sell_points: BuySellPoint[]   // M1 第二波 · czsc 6 类买卖点
   disclaimer: string
 }
 

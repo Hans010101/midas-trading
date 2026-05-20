@@ -13,6 +13,7 @@ import { ChanToggle } from '@/components/workbench/chan-toggle'
 import { IndicatorPanel } from '@/components/workbench/indicator-panel'
 import { KlineContextMenu } from '@/components/workbench/kline-context-menu'
 import { PeriodSwitcher } from '@/components/workbench/period-switcher'
+import { SignalBar } from '@/components/workbench/signal-bar'
 import { SymbolSwitcher } from '@/components/workbench/symbol-switcher'
 import { useChartInstance } from '@/lib/chart-instance-context'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
@@ -27,12 +28,8 @@ export function ChartArea() {
 
   return (
     <section className="flex flex-1 flex-col overflow-hidden bg-background">
-      {/* 顶部信号条占位 · M1 待实装(AI 决策卡)*/}
-      <div className="flex h-10 shrink-0 items-center justify-center border-b border-paper bg-cream/50">
-        <span className="text-xs text-muted-foreground/70">
-          信号条(信号强度 / 多空一致性 / 主力意图)· M1 待实装
-        </span>
-      </div>
+      {/* 顶部信号条 · M1 二波实装(0012 ADR Checkpoint Z)*/}
+      <SignalBar />
 
       {/* K 线区 + 缠论开关 + 周期 + 指标控制条 */}
       <div className="flex flex-1 flex-col overflow-hidden p-4">
