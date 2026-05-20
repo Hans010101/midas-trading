@@ -40,4 +40,9 @@ beat_schedule = {
         # 时区按 Asia/Shanghai · A 股日盘已收 + 美股次日早盘前 · 合理快照点
         "schedule": crontab(hour="23", minute="59"),
     },
+    "scan-price-anomalies": {
+        "task": "tasks.price_alerts.scan_price_anomalies",
+        # 0009 § 4 · 每 1 分钟扫所有自选股 · 涨跌 ±5% 触发 · Redis 5 分钟去重
+        "schedule": crontab(minute="*"),
+    },
 }

@@ -33,6 +33,7 @@ from app.models.virtual import (
     VirtualOrder,
     VirtualPosition,
 )
+from app.services.notifications.emit import emit_trade_filled
 from app.services.virtual_trading.equity import snapshot_equity_for_account
 from app.services.virtual_trading.fees import apply_slippage, calc_commission
 
@@ -278,6 +279,11 @@ async def _record_filled(
     )
     db.add(order)
     await db.flush()
+
+    # 0009 § 3 · 异步 emit · 绝不阻塞下单主链路
+    # broker IO ~5ms · broker 挂了 emit 内部捕获不抛
+    emit_trade_filled(order.id)
+
     return order
 
 
