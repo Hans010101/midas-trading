@@ -9,6 +9,7 @@
 import { KlineChart } from '@/components/chart/kline-chart'
 import { IndicatorPanel } from '@/components/workbench/indicator-panel'
 import { PeriodSwitcher } from '@/components/workbench/period-switcher'
+import { SymbolSwitcher } from '@/components/workbench/symbol-switcher'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
 
 export function ChartArea() {
@@ -30,14 +31,7 @@ export function ChartArea() {
       {/* K 线区 + 周期 + 指标控制条 */}
       <div className="flex flex-1 flex-col overflow-hidden p-4">
         <div className="mb-3 flex shrink-0 items-center justify-between">
-          <div className="flex items-baseline gap-3">
-            <h2 className="font-serif text-xl font-bold text-foreground">
-              {symbol}
-            </h2>
-            <span className="font-mono text-xs uppercase text-muted-foreground">
-              {market}
-            </span>
-          </div>
+          <SymbolSwitcher />
           <div className="flex items-center gap-3">
             <IndicatorPanel />
             <PeriodSwitcher />
