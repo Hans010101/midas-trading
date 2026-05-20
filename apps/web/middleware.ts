@@ -9,7 +9,7 @@
 import { auth } from '@/auth'
 import { NextResponse } from 'next/server'
 
-const PROTECTED = ['/workbench', '/dashboard', '/portfolio', '/settings']
+const PROTECTED = ['/workbench', '/dashboard', '/account', '/settings']
 const AUTH_PAGES = ['/login', '/register']
 
 export default auth((req) => {

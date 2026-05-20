@@ -1,14 +1,18 @@
 'use client'
 
 /**
- * /portfolio · 我的账户 · 0008 v2 § 9。
+ * /account · 我的账户(段 1 补丁 B 重组)。
  *
- * - 0 激活市场 → 空态卡 + CTA 跳设置
- * - N 激活市场 → N 张 KPI 卡 + N 条曲线 + 活仓表 + 历史持仓 + 订单流水
- * - 三个市场各用各的货币,绝不折算合计
+ * Sections:
+ *  1. 账户基本信息(邮箱)
+ *  2. 虚拟资金设置(从原 /settings/wallet 迁来)
+ *  3. KPI 卡 · 权益曲线 · 持仓 · 历史 · 订单(原 /portfolio 内容)
+ *
+ * 跟 /settings 区分:/settings 是「系统级配置」(推送 / 预警 / 偏好),
+ * 这里是「账户级数据 + 资金管理」。
  */
 
-import Link from 'next/link'
+import { useSession } from 'next-auth/react'
 import { useState } from 'react'
 import {
   CartesianGrid,
@@ -20,6 +24,7 @@ import {
   YAxis,
 } from 'recharts'
 
+import { WalletSection } from '@/components/account/wallet-section'
 import { TopNav } from '@/components/layout/top-nav'
 import { VirtualBadge } from '@/components/ui/virtual-badge'
 import { OrderConfirmDialog } from '@/components/workbench/order-confirm-dialog'
@@ -39,7 +44,8 @@ import { currencyOf, formatMoney, MARKET_LABEL } from '@/lib/format-money'
 import { cn } from '@/lib/utils'
 import type { Market } from '@midas/shared'
 
-export default function PortfolioPage() {
+export default function AccountPage() {
+  const { data: session } = useSession()
   const { data: accounts = [], isLoading } = useAccounts()
   const { data: portfolio = [] } = usePortfolio()
   const { data: equityCurves } = useEquityCurves(30)
@@ -67,12 +73,50 @@ export default function PortfolioPage() {
           <VirtualBadge size="sm" />
         </div>
 
+        {/* Section 1: 账户基本信息 */}
+        <section className="mb-10">
+          <h2 className="mb-3 font-serif text-xl font-bold text-foreground">
+            账户基本信息
+          </h2>
+          <div className="rounded-lg border border-paper bg-cream p-5 shadow-sm">
+            <dl className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">邮箱</dt>
+                <dd className="font-mono text-foreground">
+                  {session?.user?.email ?? '—'}
+                </dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">用户 ID</dt>
+                <dd className="font-mono text-xs text-muted-foreground/70">
+                  {session?.user?.id ?? '—'}
+                </dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">账户类型</dt>
+                <dd>
+                  <span className="rounded bg-gold/[0.08] border border-gold px-2 py-0.5 font-mono text-[10px] text-gold">
+                    VIRTUAL · 模拟
+                  </span>
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </section>
+
+        {/* Section 2: 虚拟资金设置(从旧 /settings/wallet 迁入)*/}
+        <WalletSection />
+
+        {/* Section 3: KPI + 曲线 + 持仓 + 历史 + 订单(仅有激活账户时显示)*/}
         {isLoading ? (
           <p className="py-12 text-center text-muted-foreground">载入中…</p>
-        ) : accounts.length === 0 ? (
-          <EmptyState />
-        ) : (
+        ) : accounts.length === 0 ? null : (
           <>
+            <div className="mb-3 flex items-center gap-2">
+              <h2 className="font-serif text-xl font-bold text-foreground">
+                账户实时全貌
+              </h2>
+            </div>
             {/* KPI 卡:N 张并列 */}
             <div
               className={cn(
@@ -171,30 +215,6 @@ function portfolioMap(
   portfolio: AccountSummary[],
 ): Map<string, AccountSummary> {
   return new Map(portfolio.map((s) => [s.market, s]))
-}
-
-// ===== 空态 =====
-
-function EmptyState() {
-  return (
-    <div className="mt-12 flex flex-col items-center justify-center rounded-lg border border-paper bg-cream p-12 text-center">
-      <span className="mb-4 text-5xl opacity-40" aria-hidden="true">
-        📊
-      </span>
-      <h2 className="mb-2 font-serif text-xl font-bold text-foreground">
-        你还没有设置任何市场的虚拟资金
-      </h2>
-      <p className="mb-6 max-w-md text-sm text-muted-foreground">
-        设置后即可在该市场练手 · M0 demo 期不收任何费用 · 三个市场各用各的货币
-      </p>
-      <Link
-        href="/settings/wallet"
-        className="rounded-md bg-midas-red px-6 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-midas-red-deep"
-      >
-        去设置页
-      </Link>
-    </div>
-  )
 }
 
 // ===== KPI 卡 =====

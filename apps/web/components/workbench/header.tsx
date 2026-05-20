@@ -131,7 +131,7 @@ function WalletIndicator({
       <div className="flex items-center gap-2 text-xs">
         <span className="text-warn">⚠ 未设置 {MARKET_LABEL[market]} 虚拟资金</span>
         <Link
-          href="/settings/wallet"
+          href="/account"
           className="text-midas-red hover:underline"
         >
           [去设置]
@@ -174,7 +174,7 @@ function DisabledTradeButtons({ market }: { market: Market }) {
   return (
     <div className="flex items-center gap-2">
       <Link
-        href="/settings/wallet"
+        href="/account"
         title={`请先设置 ${MARKET_LABEL[market]} 虚拟资金`}
         className="rounded-md bg-midas-red/30 px-4 py-1.5 text-sm font-medium text-white/70 cursor-not-allowed"
         aria-disabled="true"
@@ -182,7 +182,7 @@ function DisabledTradeButtons({ market }: { market: Market }) {
         买入
       </Link>
       <Link
-        href="/settings/wallet"
+        href="/account"
         title={`请先设置 ${MARKET_LABEL[market]} 虚拟资金`}
         className="rounded-md border border-midas-red/30 bg-background px-4 py-1.5 text-sm font-medium text-midas-red/40 cursor-not-allowed"
         aria-disabled="true"

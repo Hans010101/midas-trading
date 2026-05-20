@@ -1,18 +1,17 @@
 'use client'
 
 /**
- * /settings/wallet · 三市场虚拟资金设置页 · 0008 v2 § 7。
+ * 三市场虚拟资金设置 section · 段 1 补丁 B(从旧 /settings/wallet 抽离)。
  *
- * - 三张卡(A 股 / 美股 / 加密)各自货币符号
- * - 未激活 → 灰色「未设置」+ 激活并保存按钮
- * - 已激活 → 「✓ 已激活」+ 可用余额 + 持仓笔数 + 重置按钮(二次确认)
- * - 重置:清活仓 + 清快照 · 保留订单 + 历史持仓(0008 § 5)
+ * 嵌在 /account 页内。每市场一卡:
+ * - 未激活 → 黄色提示 + 中国红「激活并保存」
+ * - 已激活 → ✓ 帝王金 + 现金/持仓笔数/累计已实现 + 中国红 outline「重置该市场」
+ * - 重置二次确认弹窗:警告清活仓 + 清快照 · 保留订单 + 历史持仓
  */
 
 import { useState } from 'react'
 import { toast } from 'sonner'
 
-import { TopNav } from '@/components/layout/top-nav'
 import { VirtualBadge } from '@/components/ui/virtual-badge'
 import {
   useAccount,
@@ -34,32 +33,25 @@ const MARKET_EMOJI: Record<Market, string> = {
   crypto: '₿',
 }
 
-export default function WalletSettingsPage() {
+export function WalletSection() {
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <TopNav />
-      <main className="mx-auto w-full max-w-4xl px-6 py-10">
-        <div className="mb-6 flex items-center gap-3">
-          <h1 className="font-serif text-2xl font-bold text-foreground">
-            虚拟资金设置
-          </h1>
-          <VirtualBadge size="sm" />
-        </div>
-        <p className="mb-8 text-sm text-muted-foreground">
-          三个市场各用各的货币,绝不折算合计 · 没设置的市场无法下单
-        </p>
+    <section className="mb-10">
+      <div className="mb-4 flex items-center gap-3">
+        <h2 className="font-serif text-xl font-bold text-foreground">
+          虚拟资金设置
+        </h2>
+        <VirtualBadge size="sm" />
+      </div>
+      <p className="mb-4 text-sm text-muted-foreground">
+        三个市场各用各的货币,绝不折算合计 · 没设置的市场无法下单
+      </p>
 
-        <div className="space-y-4">
-          {MARKETS.map((m) => (
-            <WalletCard key={m} market={m} />
-          ))}
-        </div>
-
-        <p className="mt-10 text-center text-xs text-muted-foreground/70">
-          模拟交易,不构成投资建议
-        </p>
-      </main>
-    </div>
+      <div className="space-y-4">
+        {MARKETS.map((m) => (
+          <WalletCard key={m} market={m} />
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -95,7 +87,6 @@ function WalletCard({ market }: WalletCardProps) {
     }
 
     if (isActivated) {
-      // 已激活 → 二次确认
       setShowConfirm(true)
       return
     }
@@ -107,7 +98,6 @@ function WalletCard({ market }: WalletCardProps) {
       })
       toast.success(
         `${MARKET_LABEL[market]} 已激活 · ${formatMoney(input.trim(), currency)}`,
-        { className: 'midas-toast-success' },
       )
       setInput('')
     } catch (e) {
@@ -125,7 +115,6 @@ function WalletCard({ market }: WalletCardProps) {
       })
       toast.success(
         `${MARKET_LABEL[market]} 已重置 · ${formatMoney(input.trim(), currency)}`,
-        { className: 'midas-toast-success' },
       )
       setInput('')
     } catch (e) {
@@ -135,22 +124,17 @@ function WalletCard({ market }: WalletCardProps) {
   }
 
   return (
-    <div
-      className={cn(
-        'rounded-lg border bg-cream p-6 shadow-sm',
-        isActivated ? 'border-paper' : 'border-paper',
-      )}
-    >
+    <div className="rounded-lg border border-paper bg-cream p-5 shadow-sm">
       <div className="mb-3 flex items-center gap-2">
         <span className="text-xl" aria-hidden="true">
           {MARKET_EMOJI[market]}
         </span>
-        <h2 className="font-serif text-lg font-bold text-foreground">
+        <h3 className="font-serif text-base font-bold text-foreground">
           {MARKET_LABEL[market]} · {currency}
-        </h2>
+        </h3>
       </div>
 
-      <div className="mb-4 flex items-center gap-3">
+      <div className="mb-3 flex items-center gap-3">
         <div className="relative flex-1">
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-muted-foreground">
             {currency === 'USDT' ? '' : CURRENCY_SYMBOL[currency]}
@@ -159,11 +143,11 @@ function WalletCard({ market }: WalletCardProps) {
             type="number"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={isActivated ? '改金额会重置该市场' : `输入初始资金`}
+            placeholder={isActivated ? '改金额会重置该市场' : '输入初始资金'}
             min={1}
             max={999_999_999}
             className={cn(
-              'h-10 w-full rounded-md border border-paper bg-background font-mono text-base text-foreground placeholder:text-muted-foreground/50',
+              'h-10 w-full rounded-md border border-paper bg-background font-mono text-sm text-foreground placeholder:text-muted-foreground/50',
               currency === 'USDT' ? 'pl-3 pr-12' : 'pl-7 pr-3',
             )}
           />
@@ -197,7 +181,7 @@ function WalletCard({ market }: WalletCardProps) {
         <p className="text-xs text-muted-foreground/60">载入中…</p>
       ) : isActivated ? (
         <div className="space-y-1 text-xs text-muted-foreground">
-          <p className="text-bull">
+          <p className="text-gold">
             ✓ 已激活 · 初始 {formatMoney(account.initial_capital, currency)}
           </p>
           <p>
@@ -254,16 +238,14 @@ function ResetConfirmDialog({
         <h3 className="mb-2 font-serif text-lg font-bold text-foreground">
           重置{MARKET_LABEL[market]}虚拟资金?
         </h3>
-        <p className="mb-4 text-sm text-foreground">
-          这会清空该市场的:
-        </p>
+        <p className="mb-4 text-sm text-foreground">这会清空该市场的:</p>
         <ul className="mb-4 list-inside list-disc space-y-1 text-sm text-muted-foreground">
           <li>当前持仓(活仓全部清零)</li>
           <li>权益曲线快照</li>
           <li>账户余额改为 {formatMoney(newAmount, currency)}</li>
         </ul>
         <p className="mb-6 text-xs text-muted-foreground/80">
-          订单流水 + 历史持仓会保留 · 你可以在我的账户页查看复盘
+          订单流水 + 历史持仓会保留 · 你可以在下方表格查看复盘
         </p>
         <div className="flex justify-end gap-2">
           <button

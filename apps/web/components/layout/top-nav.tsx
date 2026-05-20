@@ -5,8 +5,8 @@
  *
  * 使用 usePathname 判断当前页高亮:
  * - /workbench    → 自选 K 线
- * - /portfolio    → 我的账户
- * - /settings/wallet → 设置
+ * - /account      → 我的账户
+ * - /settings    → 设置
  */
 
 import Link from 'next/link'
@@ -23,8 +23,8 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { href: '/workbench', label: '自选 K 线' },
-  { href: '/portfolio', label: '我的账户' },
-  { href: '/settings/wallet', label: '设置', matchPrefix: '/settings' },
+  { href: '/account', label: '我的账户' },
+  { href: '/settings', label: '设置' },
 ]
 
 export function TopNav() {
