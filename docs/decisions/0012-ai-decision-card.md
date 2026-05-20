@@ -1,7 +1,7 @@
 # 0012 · AI 决策卡 · 设计 + 成本估算
 
 ## 状态
-Approved (2026-05-20) · 设计完整 + 成本估算完成 · 等产品负责人提供 DEEPSEEK_API_KEY 后实装(Checkpoint Y/Z)
+Approved (2026-05-20) · 设计完整 + 成本估算完成 · 2026-05-20 微调:**M1 二波只做技术面单 Agent**(详见末尾 § M1 二波降级 v2)· 等产品负责人提供 DEEPSEEK_API_KEY 后实装(Checkpoint Y/Z)
 
 ## 上下文
 
@@ -550,3 +550,90 @@ M1 第二波替换为真组件。
   ③ DeepSeek 账户硬上限 ¥200/月
   ④ disclaimer 「仅供参考,不构成投资建议」API + UI 双层兜底
   ⑤ M1 第二波不接 Task 7.1 首页(第三波)· 不接真实交易
+
+---
+
+## M1 二波降级 v2 · 单 Agent 卡片(2026-05-20 微调)
+
+**产品负责人 2026-05-20 拍板:M1 二波 AI 决策卡只做「技术面 Agent」,卡片 UI 只显示
+技术面这一个 Agent,不挂基本面 / 消息面 / 价值面占位。**
+
+### 改动范围
+
+| 原 0012 设计(4 Agent 卡片)| M1 二波微调(单 Agent 卡片) |
+|---|---|
+| LangGraph 7 节点 · 4 Agent 并行 | LangGraph **6 节点** · 1 Agent(去掉并行 fan-out)|
+| Aggregator 加权 40/30/15/15 | **Aggregator 直通**:综合分 = 技术面分 · 综合 label = 技术面 label |
+| `agent_scores: list[AgentScore]` 长度 4 | 长度 1 · 只含技术面 |
+| 卡片 UI 展开各维度评分(4 行)| **UI 不展开** · 只展示技术面评分 + 解读 |
+| 矛盾提示(max-min > 80)| **不显示**(单 Agent 无内部矛盾)|
+
+### M1 二波 LangGraph workflow(简化版)
+
+```
+EntryNode → DataPrepareNode → 技术面 Agent → DecisionCardNode → ValidatorNode → ExitNode
+                                  (单一)
+```
+
+**去掉的节点:** AggregatorNode(因为只有一个 Agent,综合 = 技术面)。
+**保留的节点:** 其余 5 个不变 · Validator / Cache / disclaimer 等机制照旧。
+
+### 卡片 UI 简化版(M1 二波)
+
+```
+┌───────────────────────────────────────────────┐
+│ AI 决策卡 · 技术面分析       VIRTUAL · 模拟    │  ← header 帝王金徽章
+├───────────────────────────────────────────────┤
+│           ╭───────╮                            │
+│           │ +47  │   弱多                      │  ← 综合 = 技术面评分
+│           ╰───────╯   置信度 72%               │
+├───────────────────────────────────────────────┤
+│ 关键位:  支撑 $76,200  阻力 $82,850          │
+├───────────────────────────────────────────────┤
+│ 技术面分析:                                    │
+│ 缠论结构显示上升笔延伸,中枢上沿突破有效。      │
+│ MACD 死叉但 RSI 未超买,短线分歧明显。          │
+├───────────────────────────────────────────────┤
+│ 缠论买卖点:                                    │
+│  2026-05-06 B2 二买  ¥82,850                  │  ← czsc 提取的买卖点列表
+├───────────────────────────────────────────────┤
+│ ⚠ 仅供参考,不构成投资建议                     │  ← 强制 disclaimer
+│ 上次更新:2 分钟前(缓存)                      │
+└───────────────────────────────────────────────┘
+```
+
+跟原 ascii 草图相比:
+- 删除「▶ 各维度评分(展开)」一行
+- header 副标题改成「· 技术面分析」明示当前只覆盖技术面
+- 多加一行「缠论买卖点」总结 czsc 提取出的近期买卖点(原本只画在 K 线 overlay 上)
+
+### 输出 schema 微调
+
+```python
+class DecisionCard(BaseModel):
+    ...
+    agent_scores: list[AgentScore]   # M1 二波长度恒为 1;M2 升级到 4
+    contradiction: str | None = None # M1 二波永远 None;M2 启用
+    ...
+```
+
+向后兼容:M2 升级到 4 Agent 时,前端组件做条件渲染 `agent_scores.length > 1 ? <Detailed /> : <Single />`,后端 schema 不动。
+
+### 升级路径(M2 / M2+)
+
+- **M2:** 接基本面 Agent + 数据源(财报字段)· `agent_scores.length = 2`(技术 + 基本)· AggregatorNode 重新接入做加权
+- **M2+:** 接消息面 / 价值面 / 链上 / 衍生品 / 舆情 · 完整 4 Agent
+
+### 实装拆分调整(Checkpoint Y 减少 ~2h)
+
+| Sub | M1 二波(单 Agent)| 原 4 Agent 估时 |
+|---|---|---|
+| Y4 | 1 个技术面 Agent system prompt · 分市场 3 个(A 股 / 美股 / 加密)| 4 个 Agent × 2 市场组 = 8 个 |
+| Y5 | 6 节点 LangGraph(不含 Aggregator 并行 fan-out)| 7 节点 |
+| **总变化** | **~12h**(原 ~14h 减 ~2h) | |
+
+### 不变的部分
+
+- 应用层缓存 / TTL 策略 / 视觉系统 / disclaimer 双层兜底 / ValidatorNode 祈使句改写 /
+  ai_usage_log / DeepSeek ¥200 月度上限 / czsc 买卖点提取 全部按原计划做。
+- czsc 买卖点 6 类 B1-3 / S1-3 在 M1 二波就上线 · UI 在卡片里**多加一栏**显示近期买卖点摘要。
