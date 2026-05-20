@@ -8,6 +8,7 @@
 
 import { KlineChart } from '@/components/chart/kline-chart'
 import { IndicatorPanel } from '@/components/workbench/indicator-panel'
+import { KlineContextMenu } from '@/components/workbench/kline-context-menu'
 import { PeriodSwitcher } from '@/components/workbench/period-switcher'
 import { SymbolSwitcher } from '@/components/workbench/symbol-switcher'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
@@ -38,15 +39,17 @@ export function ChartArea() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-hidden rounded-lg border border-paper">
-          <KlineChart
-            symbol={symbol}
-            market={market}
-            period={period}
-            indicators={indicators}
-            onSwitchToDaily={() => setPeriod('1d')}
-          />
-        </div>
+        <KlineContextMenu>
+          <div className="flex-1 overflow-hidden rounded-lg border border-paper">
+            <KlineChart
+              symbol={symbol}
+              market={market}
+              period={period}
+              indicators={indicators}
+              onSwitchToDaily={() => setPeriod('1d')}
+            />
+          </div>
+        </KlineContextMenu>
       </div>
     </section>
   )
