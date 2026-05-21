@@ -73,7 +73,7 @@ function TopNav() {
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
         <Link href="/" className="flex items-center gap-2">
           <Image
-            src="/brand/seal.svg"
+            src="/brand/seal.png"
             alt="点金 Midas 印章"
             width={36}
             height={36}
@@ -127,57 +127,70 @@ function TopNav() {
 
 function Hero() {
   return (
-    <section className="relative mx-auto flex w-full max-w-6xl flex-col-reverse items-center gap-10 px-6 py-16 lg:flex-row lg:gap-12 lg:py-24">
-      <div className="flex-1">
-        <p className="mb-3 text-xs uppercase tracking-[0.3em] text-midas-red">
-          AI 原生金融分析终端
-        </p>
-        <h1 className="font-serif text-5xl font-bold leading-tight tracking-tight lg:text-6xl">
-          三市通览
-          <span className="mx-2 text-midas-red">·</span>
-          <span className="text-midas-red">点石成金</span>
-        </h1>
-        <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground lg:text-lg">
-          覆盖 A 股、美股与加密货币三大市场,以虚拟资金零风险磨练交易直觉,让 AI 辅助你的每一次决策。
-        </p>
-        <div className="mt-8 flex flex-wrap items-center gap-3">
-          <Link
-            href="/workbench"
-            className="inline-flex items-center gap-2 rounded-md bg-midas-red px-6 py-3 text-base font-medium text-white shadow-md transition-all hover:bg-midas-red-deep hover:shadow-lg"
-          >
-            开始分析
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-          <a
-            href="#features"
-            className="inline-flex items-center gap-2 rounded-md border border-midas-red bg-background px-6 py-3 text-base font-medium text-midas-red transition-colors hover:bg-midas-red-glow/40"
-          >
-            查看功能
-          </a>
-        </div>
-        <div className="mt-8 flex items-center gap-5 text-xs text-muted-foreground/80">
-          <Stat icon={<Trophy className="h-4 w-4 text-gold" />} label="缠论自动标注" />
-          <Stat icon={<Bot className="h-4 w-4 text-midas-red" />} label="AI 决策卡" />
-          <Stat icon={<Wallet className="h-4 w-4 text-gold" />} label="虚拟资金 0 风险" />
-        </div>
-      </div>
+    <section className="relative isolate overflow-hidden">
+      {/*
+        全幅水墨背景 · 产品负责人 2026-05-21 v3 调整。
+        - hero-bg.png 用 next/image fill 模式 · object-cover 铺满 · 焦点偏右(水墨主体在右下)
+        - 不裁切变形 · 仅 cover · 手机上 object-position 偏右下保证文字区干净
+      */}
+      <Image
+        src="/brand/hero-bg.png"
+        alt=""
+        fill
+        priority
+        className="object-cover object-right md:object-right-bottom"
+        sizes="100vw"
+        aria-hidden
+      />
 
       {/*
-        右侧视觉 · 产品负责人 2026-05-21 提供的真实水墨素材 hero-bg.png
-        - 1287×816 · ~1.58:1 横向比例
-        - 米白 wash + 朱红 K 线 + 帝王金 sparkles · 已包含完整视觉信息
-        - 移除原 SVG 几何"假山"+ 不再叠加额外 K 线(素材里已经有了 · 双层 K 线反而冲突)
-        - 圆角 + 轻阴影 · 边缘融入米白页面背景
+        左→右 渐变遮罩 · 米白半透明渐变到完全透明
+        · 文字所在左侧 75% 透明度高(对比度足) · 右侧让水墨自然露出
       */}
-      <div className="relative flex items-center justify-center lg:w-[520px] lg:shrink-0">
-        <Image
-          src="/brand/hero-bg.png"
-          alt="水墨山水 + 朱红 K 线主视觉"
-          width={1287}
-          height={816}
-          className="h-auto w-full max-w-[520px] rounded-xl"
-          priority
-        />
+      <div
+        aria-hidden
+        className="absolute inset-0 bg-gradient-to-r from-background via-background/85 to-transparent"
+      />
+      {/* 底部柔和过渡到下一区(showcase 的 cream 背景)· 避免硬切 */}
+      <div
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-cream/40"
+      />
+
+      <div className="relative mx-auto flex min-h-[560px] max-w-6xl items-center px-6 py-20 lg:min-h-[640px] lg:py-28">
+        <div className="max-w-2xl">
+          <p className="mb-3 text-xs uppercase tracking-[0.3em] text-midas-red">
+            AI 原生金融分析终端
+          </p>
+          <h1 className="font-serif text-5xl font-bold leading-tight tracking-tight text-foreground lg:text-6xl">
+            三市通览
+            <span className="mx-2 text-midas-red">·</span>
+            <span className="text-midas-red">点石成金</span>
+          </h1>
+          <p className="mt-5 max-w-xl text-base leading-relaxed text-foreground/80 lg:text-lg">
+            覆盖 A 股、美股与加密货币三大市场,以虚拟资金零风险磨练交易直觉,让 AI 辅助你的每一次决策。
+          </p>
+          <div className="mt-8 flex flex-wrap items-center gap-3">
+            <Link
+              href="/workbench"
+              className="inline-flex items-center gap-2 rounded-md bg-midas-red px-6 py-3 text-base font-medium text-white shadow-md transition-all hover:bg-midas-red-deep hover:shadow-lg"
+            >
+              开始分析
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+            <a
+              href="#features"
+              className="inline-flex items-center gap-2 rounded-md border border-midas-red bg-background/80 px-6 py-3 text-base font-medium text-midas-red backdrop-blur transition-colors hover:bg-midas-red-glow/40"
+            >
+              查看功能
+            </a>
+          </div>
+          <div className="mt-8 flex items-center gap-5 text-xs text-foreground/70">
+            <Stat icon={<Trophy className="h-4 w-4 text-gold" />} label="缠论自动标注" />
+            <Stat icon={<Bot className="h-4 w-4 text-midas-red" />} label="AI 决策卡" />
+            <Stat icon={<Wallet className="h-4 w-4 text-gold" />} label="虚拟资金 0 风险" />
+          </div>
+        </div>
       </div>
     </section>
   )
@@ -404,7 +417,11 @@ function AiChan() {
           </div>
         </div>
 
-        {/* 右侧 · AI 决策卡 · 同一 aspect-[4/3] 容器 · object-cover object-top 保留头部信息 */}
+        {/*
+          右侧 · AI 决策卡 · v3 调整:拆成 2 列子图 ·
+          上半(评分/标签/置信度)+ 下半(关键位/分析/买卖点)各自独立 ·
+          各自完整清晰 · 不再硬塞长截图。
+        */}
         <div className="flex flex-col">
           <div className="mb-3 flex items-center gap-2">
             <Bot className="h-5 w-5 text-midas-red" />
@@ -413,14 +430,38 @@ function AiChan() {
           <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
             LangGraph workflow 把 K 线 + 缠论结构 + 4 项指标喂给 DeepSeek · 输出结构化评分(强多/弱多/中性/弱空/强空)+ 关键支撑阻力位 + 中文解读。缓存命中 35× 提速,百用户月费仅 ¥1.7。
           </p>
-          <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-paper bg-background shadow-lg">
-            <Image
-              src="/marketing/ai-card.png"
-              alt="AI 决策卡 · 综合评分 + 缠论买卖点"
-              fill
-              className="object-cover object-top"
-              sizes="(max-width: 1024px) 100vw, 50vw"
-            />
+          <div className="grid flex-1 grid-cols-2 gap-3">
+            {/* 上半 · 综合评分 + 标签 + 置信度 */}
+            <figure className="flex flex-col">
+              <div className="relative aspect-[5/6] overflow-hidden rounded-xl border border-paper bg-background shadow-lg">
+                <Image
+                  src="/marketing/ai-card-top.png"
+                  alt="AI 决策卡上半 · 综合评分 + 弱空标签 + 置信度"
+                  fill
+                  className="object-cover object-top"
+                  sizes="(max-width: 1024px) 50vw, 25vw"
+                />
+              </div>
+              <figcaption className="mt-2 text-center text-[11px] text-muted-foreground/70">
+                评分 · 标签 · 置信度
+              </figcaption>
+            </figure>
+
+            {/* 下半 · 关键位 + AI 分析 + 缠论买卖点 */}
+            <figure className="flex flex-col">
+              <div className="relative aspect-[5/6] overflow-hidden rounded-xl border border-paper bg-background shadow-lg">
+                <Image
+                  src="/marketing/ai-card-bottom.png"
+                  alt="AI 决策卡下半 · 关键位 + AI 分析 + 缠论买卖点"
+                  fill
+                  className="object-cover object-top"
+                  sizes="(max-width: 1024px) 50vw, 25vw"
+                />
+              </div>
+              <figcaption className="mt-2 text-center text-[11px] text-muted-foreground/70">
+                关键位 · 分析 · 买卖点
+              </figcaption>
+            </figure>
           </div>
         </div>
       </div>
@@ -514,7 +555,7 @@ function Footer() {
           <div className="md:col-span-2">
             <div className="flex items-center gap-2">
               <Image
-                src="/brand/seal.svg"
+                src="/brand/seal.png"
                 alt="点金 Midas 印章"
                 width={32}
                 height={32}

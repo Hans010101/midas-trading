@@ -68,13 +68,26 @@ async function main() {
   })
   console.log('  ✓ chan.png')
 
-  // ③ ai-card · 右栏(280px 宽)裁切露 AI 决策卡 + 完整 header
-  // 决策卡顶部约 y=400(含 header + VIRTUAL badge)· 取 500px 高 · 露评分+关键位+narrative
+  // ③ ai-card · 右栏(280px 宽)整张完整 AI 决策卡 · 保留兼容
   await page.screenshot({
     path: path.join(OUT_DIR, 'ai-card.png'),
     clip: { x: 1160, y: 400, width: 280, height: 500 },
   })
   console.log('  ✓ ai-card.png')
+
+  // ④ ai-card-top · 上半:header(VIRTUAL · 模拟)+ 综合评分圈 + 弱空标签 + 置信度
+  await page.screenshot({
+    path: path.join(OUT_DIR, 'ai-card-top.png'),
+    clip: { x: 1160, y: 400, width: 280, height: 200 },
+  })
+  console.log('  ✓ ai-card-top.png')
+
+  // ⑤ ai-card-bottom · 下半:关键位 + 技术面分析文字 + 缠论买卖点 + disclaimer
+  await page.screenshot({
+    path: path.join(OUT_DIR, 'ai-card-bottom.png'),
+    clip: { x: 1160, y: 600, width: 280, height: 300 },
+  })
+  console.log('  ✓ ai-card-bottom.png')
 
   await ctx.close()
   await browser.close()
