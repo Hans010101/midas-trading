@@ -1,0 +1,78 @@
+# 点金 Midas · 生产 Caddyfile · 模式 B(VPS 全栈)
+# 2026-05-21 · 服务器 8.210.156.91 · 域名 midastrade.asia
+#
+# 三块:
+#   api.midastrade.asia  →  反代到 midas-api(127.0.0.1:8000)
+#   midastrade.asia      →  反代到 midas-web(127.0.0.1:3000)
+#   www.midastrade.asia  →  301 永久重定向到主域
+#
+# HTTPS:Let's Encrypt 自动签证书 + 自动续期(Caddy 默认行为)
+# HSTS max-age=31536000(1 年)· 上线后回退到 HTTP 需要等浏览器 HSTS 过期
+
+# ═════════════════════════════════════════════════════════════════
+# 后端 API
+# ═════════════════════════════════════════════════════════════════
+api.midastrade.asia {
+    reverse_proxy 127.0.0.1:8000 {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-Proto https
+    }
+    encode gzip
+
+    header {
+        # HSTS · 强制 HTTPS · 1 年
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        # 防 MIME 嗅探
+        X-Content-Type-Options nosniff
+        # 防 clickjacking
+        X-Frame-Options DENY
+        # Referrer 仅同源时带完整 URL
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+
+    # 上游 502/503 时给可读的错误页(不暴露内部细节)
+    handle_errors {
+        respond "Upstream error: {http.error.status_code}" {http.error.status_code}
+    }
+
+    # 简要日志(stdout · journalctl 看)
+    log {
+        output stdout
+        format console
+        level INFO
+    }
+}
+
+# ═════════════════════════════════════════════════════════════════
+# 前端主站 · Next.js
+# ═════════════════════════════════════════════════════════════════
+midastrade.asia {
+    reverse_proxy 127.0.0.1:3000 {
+        # Next.js SSR 需要正确的 Host + scheme 来生成 absolute URL / canonical link
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-Proto https
+        header_up X-Forwarded-For {remote_host}
+    }
+    encode gzip
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+        # Next.js 自己控制 X-Frame-Options · 这里不强制
+    }
+
+    log {
+        output stdout
+        format console
+        level INFO
+    }
+}
+
+# ═════════════════════════════════════════════════════════════════
+# www 永久重定向到主域(SEO 一致性)
+# ═════════════════════════════════════════════════════════════════
+www.midastrade.asia {
+    redir https://midastrade.asia{uri} permanent
+}
