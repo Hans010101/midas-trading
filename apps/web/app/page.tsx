@@ -162,15 +162,20 @@ function Hero() {
         </div>
       </div>
 
-      {/* 右侧视觉 · 等比正方且垂直居中 · A4 修右上空白 */}
-      <div className="relative flex items-center justify-center lg:w-[440px] lg:shrink-0">
-        <div className="absolute inset-0 -z-10 rounded-full bg-gradient-to-br from-midas-red-glow/40 via-transparent to-gold/10 blur-3xl" />
+      {/*
+        右侧视觉 · 产品负责人 2026-05-21 提供的真实水墨素材 hero-bg.png
+        - 1287×816 · ~1.58:1 横向比例
+        - 米白 wash + 朱红 K 线 + 帝王金 sparkles · 已包含完整视觉信息
+        - 移除原 SVG 几何"假山"+ 不再叠加额外 K 线(素材里已经有了 · 双层 K 线反而冲突)
+        - 圆角 + 轻阴影 · 边缘融入米白页面背景
+      */}
+      <div className="relative flex items-center justify-center lg:w-[520px] lg:shrink-0">
         <Image
-          src="/brand/hero-ink.svg"
-          alt="水墨山形 + 朱红 K 线 + 帝王金脉络"
-          width={440}
-          height={440}
-          className="h-auto w-full max-w-[420px]"
+          src="/brand/hero-bg.png"
+          alt="水墨山水 + 朱红 K 线主视觉"
+          width={1287}
+          height={816}
+          className="h-auto w-full max-w-[520px] rounded-xl"
           priority
         />
       </div>
