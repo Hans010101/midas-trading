@@ -1,12 +1,26 @@
 # M2 · Crypto Pro · 分支状态(feature/m2-crypto-pro)
 
-**更新:** 2026-05-21 夜
+**更新:** 2026-05-21 深夜
 **分支:** `feature/m2-crypto-pro`(独立分支 · main 不动 · 部署中的 M1 零影响)
-**Checkpoint:** M2-A · 数据层 · 工程骨架完成 · 待白天联调验证
+**Checkpoint:** M2-A 工程骨架完成 + M2-A-verify 脚本就绪 + **M2-B 后端 REST 完整化已落 5 个 commit**
+
+> **M2-A 验证(白天值守 1 小时):**
+> ```
+> cd /opt/midas
+> git fetch origin
+> git checkout feature/m2-crypto-pro
+> git pull
+> bash update.sh                                ← 拉镜像 + alembic + reload caddy
+> bash scripts/m2a-verify.sh 2>&1 | tee /tmp/m2a-verify.log
+> ```
+> M2-A 通过后 · 进 M2-C(产品方触发)· M2-B 已写完不需要再 build。
+> **回滚 main 必做:** `git checkout main && bash update.sh`
 
 ---
 
-## 🎯 完成清单(11 个 commit 落在分支)
+## 🎯 完成清单(M2-A 12 commit + M2-A-verify + M2-B 5 commit · 共 18 commit)
+
+### M2-A · 数据层工程骨架(12 commit)
 
 | Commit | 范围 | 文件 |
 |---|---|---|
@@ -17,10 +31,21 @@
 | `M2-A-5,6` | CoinGecko + alternative.me adapter | `apps/api/app/services/data_sources/coingecko_source.py` + `alternative_me_source.py` |
 | `M2-A-7` | ClickHouse insert/select helper · 5 张表 | `apps/api/app/services/clickhouse_crypto.py` |
 | `M2-A-8` | REST `/api/v1/crypto/*` · 7 个端点 + 路由注册 | `apps/api/app/api/v1/crypto.py` + `__init__.py` |
-| `M2-A-9` | Celery 任务 · 7 个数据采集 | `apps/worker/tasks/crypto_metrics_ingest.py` |
+| `M2-A-9` | Celery 任务 · 7 个数据采集 · perp K stub | `apps/worker/tasks/crypto_metrics_ingest.py` |
 | `M2-A-10` | 虚拟合约账户 · 4 张表 model + alembic migration | `apps/api/app/models/virtual_futures.py` + `alembic/versions/a2b3c4d5e6f7_*.py` |
-| `M2-A-11` | pytest 骨架 · 3 个测试文件 · 不打外网 | `apps/api/tests/services/test_binance_futures_source.py` + 2 个 |
+| `M2-A-11` | pytest 骨架 · 3 个测试文件 · 不打外网 | `apps/api/tests/services/test_*` |
 | `M2-A-12` | 分支 README(本文件) | `docs/m2-crypto-pro-status.md` |
+| `M2-A-verify` | **服务器实测脚本** · 8 阶段端到端验证 | `scripts/m2a-verify.sh` |
+
+### M2-B · 后端 REST 完整化 + 缠论联动(5 commit · 不依赖服务器实测)
+
+| Commit | 范围 | 文件 |
+|---|---|---|
+| `M2-B-1` | ClickHouseClient.insert/select/count_kline 加 `instrument` 参数 · 默认 spot 兼容 | `apps/api/app/services/clickhouse_client.py` |
+| `M2-B-2/3` | `/api/v1/market/kline` 加 `?instrument` · perp 走 BinanceFuturesSource · lifespan 注册 | `apps/api/app/main.py` + `app/api/deps.py` + `app/api/v1/market.py` |
+| `M2-B-4` | **`tasks.crypto.perp_kline_incremental` Celery 任务 · 替换 M2-A stub** · top 30 perp × 3 周期增量 | `apps/worker/tasks/crypto_metrics_ingest.py` |
+| `M2-B-5` | `/api/v1/analysis/chan` + `/decision-card` 加 `?instrument` · 缠论引擎透明支持 perp K | `apps/api/app/api/v1/analysis.py` |
+| `M2-B-6` | M2-B 收尾 README(本次更新) | `docs/m2-crypto-pro-status.md` |
 
 ---
 
@@ -137,16 +162,30 @@ ALTER TABLE kline ADD COLUMN IF NOT EXISTS instrument
 
 ---
 
-## ⛔ M2-A 没做(明确边界)
+## ✅ M2-B 已做(并行夜间推进 · 不依赖服务器实测)
 
-- **回源逻辑**(`/api/v1/crypto/*` 端点缺数据时回源 Binance) · 留 M2-B
-- **缠论联动 perp K 线**(kline 表 instrument='perp' 入缠论引擎) · 留 M2-B
-- **虚拟合约撮合**(开仓 / 平仓 / 加减仓 / 杠杆调整) · 留 M2-C
-- **资金费率结算 worker**(8h 触发 · 扫所有持仓 × funding) · 留 M2-C
-- **mark price 定期更新 worker**(用于 unrealized_pnl + 强平检查) · 留 M2-C
-- **强平 worker**(margin_balance < maintenance_margin → 强平) · 留 M2-C
-- **前端 UI 全部**(landing page / 详情页合约 tab / 一键下单) · 留 M2-D
-- **perp K 线增量 Celery 任务**(M2-A-9 留 stub) · 留 M2-B
+- **`/api/v1/market/kline?instrument=spot|perp`** · 加参数 · perp 自动走 BinanceFuturesSource
+- **`/api/v1/analysis/chan?instrument=...`** + **`/decision-card?instrument=...`** · 缠论引擎透明支持 perp(K 线对引擎是透明数据)
+- **ClickHouseClient · insert/select/count_kline 加 `instrument` 参数** · 默认 'spot' 兼容旧调用方
+- **Celery `tasks.crypto.perp_kline_incremental` 实装** · 替换 M2-A stub · top 30 perp × 3 周期(15m/1h/1d)增量
+- **lifespan 注册 `binance_futures_source`** · httpx 单例 · 复用连接池
+
+## ⛔ M2-B 仍然没做(明确边界 · 留 M2-D 联调时一起)
+
+- **`/api/v1/crypto/*` 端点回源** · 当前只读 ClickHouse · 数据缺时走 Celery 任务覆盖 · M2-D 联调如发现某 endpoint 总返空再做回源
+- **4h 周期 K 线** · `Period` Literal 当前不含 4h · M2-D 改 schema 加 4h
+- **decision-card cache key 加 instrument** · 当前 spot/perp 共用 cache key · 串扰风险 · M2-D 实测发现再改
+
+## ⛔ M2-C 不做(等 M2-A 验证通过后再开)
+
+- **虚拟合约撮合**(开仓 / 平仓 / 加减仓 / 杠杆调整) · 依赖 M2-A 表结构定稿
+- **资金费率结算 worker**(8h 触发 · 扫所有持仓 × funding) · 同上
+- **mark price 定期更新 worker**(用于 unrealized_pnl + 强平检查) · 同上
+- **强平 worker**(margin_balance < maintenance_margin → 强平) · 同上
+
+## ⛔ M2-D 不做(等 M2-C 撮合就绪)
+
+- **前端 UI 全部**(landing page / 详情页合约 tab / 一键下单) · 依赖 M2-C REST 接口稳定
 
 ---
 
