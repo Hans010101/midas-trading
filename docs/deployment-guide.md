@@ -2,7 +2,12 @@
 
 **产品负责人 2026-05-21 决策:** 前端 Vercel + 后端阿里云香港 VPS · 香港不备案 · 每日 pg_dump → 阿里云 OSS 香港。
 
-本文档不包含部署操作执行 · 仅描述步骤 + 必要凭证清单 · 等产品负责人凭证齐备后,按本文档逐步操作。
+> **2026-05-21 更新:** 服务器已就位 · IP `8.210.156.91` · 域名 `midastrade.asia` · Ubuntu 24.04 · 4 vCPU / 8GB。
+>
+> **三份文档分工:**
+> - **本文档** · 架构 + 设计决策(读一次知全貌)
+> - [`deployment-prerequisites.md`](deployment-prerequisites.md) · 凭证清单(产品负责人按这个准备)
+> - [`deployment-runbook.md`](deployment-runbook.md) · 17 步执行手册(实际部署照这个跑)
 
 ---
 
@@ -11,7 +16,7 @@
 ```
 ┌────────────────────────────┐         ┌─────────────────────────────┐
 │  浏览器 / App               │ HTTPS  │   Vercel(静态官网 + Next.js) │
-│  app.midas.example.com    │ ←────→ │   midas-web.vercel.app       │
+│  midastrade.asia    │ ←────→ │   midas-web.vercel.app       │
 └────────────────────────────┘         └─────────────────────────────┘
                                                   │ SSR / API 反代
                                                   ↓
@@ -69,13 +74,13 @@ openssl rand -hex 32
 | 变量 | 生产值 | 备注 |
 |---|---|---|
 | `RESEND_API_KEY` | 真实 key | 邮箱验证用 · 0006 ADR |
-| `EMAIL_FROM` | `noreply@<your-domain>` | 必须配 DNS SPF · 否则进垃圾箱 |
-| `PUBLIC_WEB_URL` | `https://app.midas.example.com` | 邮件验证链接 base URL |
-| `NEXT_PUBLIC_API_URL` | `https://api.midas.example.com` | 浏览器侧 API URL |
+| `EMAIL_FROM` | `noreply@midastrade.asia` | 必须配 DNS SPF · 否则进垃圾箱 |
+| `PUBLIC_WEB_URL` | `https://midastrade.asia` | 邮件验证链接 base URL |
+| `NEXT_PUBLIC_API_URL` | `https://api.midastrade.asia` | 浏览器侧 API URL |
 | `API_INTERNAL_URL` | 不需要(Vercel 走公网)| 或后端反代域名 |
 | `AUTH_TRUST_HOST` | `"true"` | NextAuth v5 在容器后 必备 |
 | `AUTH_SECRET` | 跟 SECRET_KEY 同一个值 | NextAuth v5 重命名了 |
-| `CORS_ORIGINS` | `["https://app.midas.example.com"]` | 严格匹配 · 不要 `*` |
+| `CORS_ORIGINS` | `["https://midastrade.asia"]` | 严格匹配 · 不要 `*` |
 
 ### 2.4 备份凭证(放在 VPS 上 `/etc/midas/backup.env`)
 
@@ -97,7 +102,7 @@ OSS_ACCESS_KEY_SECRET=...
 
 | 步骤 | 内容 | 估时 |
 |---|---|---|
-| ① | 阿里云购买香港 ECS · 4 vCPU / 8GB RAM / 100GB ESSD · Ubuntu 22.04 | 5 min |
+| ① | 阿里云轻量 香港 · 4 vCPU / 8GB RAM / 70GB SSD · Ubuntu 24.04 ✅ 已就位 | — |
 | ② | 阿里云开 OSS bucket(香港 region)· 名称 `midas-backup-hk` | 3 min |
 | ③ | 阿里云 RAM 子账号 + AccessKey · 只授权 `oss:PutObject` / `oss:ListObjects` / `oss:DeleteObject` on `midas-backup-hk` | 5 min |
 | ④ | 域名解析:`api.<domain>` A 记录指向 VPS 公网 IP | 5 min |
@@ -134,7 +139,7 @@ sudo mv ossutil64 /usr/local/bin/ossutil
 sudo mkdir -p /opt/midas
 sudo chown $USER:$USER /opt/midas
 cd /opt/midas
-git clone https://github.com/<your-org>/midas.git .
+git clone https://github.com/your-github-username/midas.git .
 
 # 复制 .env 模板 · 改成生产值(详见 § 2)
 cp .env.example .env
@@ -176,7 +181,7 @@ docker exec midas-api alembic upgrade head
 
 ```caddyfile
 # 后端 API 反代
-api.midas.example.com {
+api.midastrade.asia {
     reverse_proxy 127.0.0.1:8000
     encode gzip
 
@@ -187,7 +192,7 @@ api.midas.example.com {
 }
 
 # 如果选择 self-hosted Web(不走 Vercel)
-# app.midas.example.com {
+# midastrade.asia {
 #     reverse_proxy 127.0.0.1:3000
 #     encode gzip
 # }
@@ -196,7 +201,7 @@ api.midas.example.com {
 ```bash
 sudo systemctl reload caddy
 # Caddy 自动申请 LE 证书 · 几秒钟搞定
-curl https://api.midas.example.com/health   # → {"status":"ok"}
+curl https://api.midastrade.asia/health   # → {"status":"ok"}
 ```
 
 ### 3.7 配 cron · 每日 3 点备份
@@ -235,7 +240,7 @@ sudo /opt/midas/scripts/backup_postgres.sh
 |---|---|
 | ① | Vercel 账号(产品负责人已确认) |
 | ② | GitHub repo 公开 / Vercel 拿到访问权限 |
-| ③ | DNS:`app.midas.example.com` CNAME → `<vercel-project>.vercel.app`(Vercel 引导时给) |
+| ③ | DNS:`midastrade.asia` CNAME → `<vercel-project>.vercel.app`(Vercel 引导时给) |
 
 ### 4.2 创建 Vercel 项目
 
@@ -250,24 +255,24 @@ sudo /opt/midas/scripts/backup_postgres.sh
 
 | Key | Value | 备注 |
 |---|---|---|
-| `NEXT_PUBLIC_API_URL` | `https://api.midas.example.com` | 浏览器调后端 |
-| `API_INTERNAL_URL` | `https://api.midas.example.com` | Vercel SSR 调后端(Vercel 不在 VPS 同内网,只能走公网域名)|
+| `NEXT_PUBLIC_API_URL` | `https://api.midastrade.asia` | 浏览器调后端 |
+| `API_INTERNAL_URL` | `https://api.midastrade.asia` | Vercel SSR 调后端(Vercel 不在 VPS 同内网,只能走公网域名)|
 | `AUTH_SECRET` | 跟 VPS 的 SECRET_KEY 一致 | NextAuth cookie 签名 |
 | `AUTH_TRUST_HOST` | `true` | Vercel 在反代后必备 |
 
 ### 4.4 自定义域名
 
-Vercel → 项目设置 → Domains → 添加 `app.midas.example.com` · 按 Vercel 指引在 DNS 加 CNAME。
+Vercel → 项目设置 → Domains → 添加 `midastrade.asia` · 按 Vercel 指引在 DNS 加 CNAME。
 
 ### 4.5 部署后自验
 
 ```bash
-curl https://app.midas.example.com/                # Vercel 首页
-curl https://app.midas.example.com/workbench       # /workbench 匿名可访问(M1-B)
-curl https://api.midas.example.com/health          # 后端 healthy
+curl https://midastrade.asia/                # Vercel 首页
+curl https://midastrade.asia/workbench       # /workbench 匿名可访问(M1-B)
+curl https://api.midastrade.asia/health          # 后端 healthy
 ```
 
-注册流程:打开 `https://app.midas.example.com/register` → 真实邮箱 → 收 Resend 邮件 → 验证 → 登录。
+注册流程:打开 `https://midastrade.asia/register` → 真实邮箱 → 收 Resend 邮件 → 验证 → 登录。
 
 ---
 
@@ -342,9 +347,9 @@ cd /Users/hans.pan/点金Midas
 
 部署完成后跑一遍:
 
-- [ ] `curl https://api.midas.example.com/health` → 200 OK
-- [ ] `curl https://app.midas.example.com/` → Vercel 首页(M1 后续视觉)
-- [ ] `https://app.midas.example.com/workbench` → 匿名可看 K 线(M1-B)
+- [ ] `curl https://api.midastrade.asia/health` → 200 OK
+- [ ] `curl https://midastrade.asia/` → Vercel 首页(M1 后续视觉)
+- [ ] `https://midastrade.asia/workbench` → 匿名可看 K 线(M1-B)
 - [ ] 点 watchlist「添加」/ 顶部「买入」→ 跳 /login(M1-B)
 - [ ] 注册 → 收 Resend 邮件 → 点链接 → /workbench(完整链路)
 - [ ] 登录后 /workbench/sell 触发下单 → 200(M1-A session 工作)

@@ -1,19 +1,19 @@
-# 点金 Midas 生产环境 overlay
+# 点金 Midas 生产环境 overlay · 阿里云香港 4 vCPU / 8GB RAM
 # 跟 docker-compose.yaml 合用:
 #   docker compose -f docker-compose.yaml -f docker-compose.prod.yaml up -d
 #
 # 跟 dev 的区别:
 #   - 不暴露 postgres / clickhouse / redis 到主机(只走 docker 内部 DNS)
-#   - web 容器只对 127.0.0.1 暴露 3000(配合 Caddy / Nginx 反代)
-#   - api 同上 8000
-#   - 各服务加 logging driver 限制 + restart policy: always
-#   - 关闭 debug 日志(SQLAlchemy echo)
+#   - api 只对 127.0.0.1:8000 暴露(配合 Caddy 反代)
+#   - 各服务 memory 限制 · 全栈控制在 ~5.5GB 内 · 留 2.5GB 给系统 + 突发
+#   - ClickHouse 调优:max_memory_usage / mark_cache_size 全面降级
+#   - 关闭 debug 日志 · json-file driver rotate
 
 name: midas
 
 services:
   postgres:
-    ports: !reset []                    # 不对外暴露 5432 · 内部 DNS 即可
+    ports: !reset []
     restart: always
     logging:
       driver: json-file
@@ -23,10 +23,23 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 768M
+    command:
+      # 4 核 8G 单 VPS · postgres 中等负载调优
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=512MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - max_connections=80
 
   clickhouse:
-    ports: !reset []                    # 不对外暴露 8123 / 9000
+    ports: !reset []
     restart: always
     logging:
       driver: json-file
@@ -36,10 +49,25 @@ services:
     deploy:
       resources:
         limits:
-          memory: 4G
+          memory: 2G
+    # ClickHouse 默认假设独占机器 · 单 VPS 共享必须显式降级避免 OOM
+    environment:
+      CLICKHOUSE_DB: "${CLICKHOUSE_DATABASE:-default}"
+      # max_server_memory_usage:用户查询 + 后台合并总上限 1.5GB
+      CLICKHOUSE_MAX_SERVER_MEMORY_USAGE: "1610612736"
+      # 单查询上限 1GB
+      CLICKHOUSE_MAX_MEMORY_USAGE: "1073741824"
+      # 标记缓存 128MB(默认 5GB)
+      CLICKHOUSE_MARK_CACHE_SIZE: "134217728"
+      # 未压缩缓存 64MB(默认 8GB)
+      CLICKHOUSE_UNCOMPRESSED_CACHE_SIZE: "67108864"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
 
   redis:
-    ports: !reset []                    # 不对外暴露 6380
+    ports: !reset []
     restart: always
     logging:
       driver: json-file
@@ -49,7 +77,13 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 256M
+    command: >
+      redis-server
+      --maxmemory 200mb
+      --maxmemory-policy allkeys-lru
+      --save 60 100
+      --appendonly no
 
   api:
     # 只对 localhost(Caddy 反代) · 不直接面向公网
@@ -66,7 +100,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 1G
 
   worker:
     restart: always
@@ -80,11 +114,11 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 512M
 
   web:
-    # 阿里云 VPS 上前端走 Vercel · 这个 service 仅在「自托管全栈」模式启用 ·
-    # Vercel 模式下 docker compose --profile self-hosted up 可单独启 web
+    # Vercel 模式下不启动这个 service ·
+    # 自托管全栈模式才用:`docker compose --profile self-hosted up`
     profiles:
       - self-hosted
     ports:
@@ -92,3 +126,7 @@ services:
     restart: always
     environment:
       NODE_ENV: production
+    deploy:
+      resources:
+        limits:
+          memory: 768M

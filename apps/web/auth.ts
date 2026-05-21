@@ -1,17 +1,24 @@
 /**
  * NextAuth v5(Auth.js)配置。
  *
- * 用 CredentialsProvider 调后端 /api/v1/auth/login,JWT session strategy(NextAuth 自己的 cookie · 不是后端 JWT)。
+ * Providers:
+ *   1. Credentials · 邮箱密码登录 · 调后端 POST /api/v1/auth/login(0006 ADR · M1)
+ *   2. Google · OAuth · 调后端 POST /api/v1/auth/oauth/google(M1 第三波)
  *
- * 0006 ADR 2026-05-21 回归后:
- *   - 后端 /login 返回 `access_token` 字段仍是这个名字,但内容已从 JWT 改成
- *     **opaque DB session token**(7 天滚动 TTL + 单用户 5 设备上限)。
- *   - 前端 NextAuth 把它当 opaque 字符串塞进自己的 cookie · 调用方无感。
- *   - Authorization: Bearer <token> 给后端 · 后端走 verify_session 查 DB · 现有 JWT 用户自然失效需要重登。
+ * 0006 ADR 2026-05-21 回归后,后端 access_token 字段仍是这个名字,
+ * 内容是 **opaque DB session token**(7 天滚动 TTL + 单用户 5 设备上限)。
+ * 前端 NextAuth 把它当 opaque 字符串塞进自己的 cookie · 调用方无感。
+ *
+ * Google OAuth 桥接:
+ *   - NextAuth Google provider 在浏览器侧完成 Google 同意页 + 回调
+ *   - signIn callback 拿到 google account.id_token · POST 给后端 /oauth/google
+ *   - 后端验签 + find_or_create user · 返回 session token
+ *   - signIn callback 把 token 塞到 user 对象 · 后续 jwt callback 写进 NextAuth cookie
  */
 
 import NextAuth, { type DefaultSession, type User } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
+import Google from 'next-auth/providers/google'
 
 const API_BASE = process.env.API_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -73,6 +80,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return user
       },
     }),
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+      // 防止用户首次登录被 PKCE flow 阻断;NextAuth v5 默认就是 PKCE,这里显式声明
+      authorization: {
+        params: {
+          scope: 'openid email profile',
+          prompt: 'select_account',
+        },
+      },
+    }),
   ],
   events: {
     // 用户主动登出时,顺便通知后端 revoke DB session(0006 ADR 2026-05-21 回归)
@@ -91,8 +109,45 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
   callbacks: {
-    async jwt({ token, user }) {
-      // 第一次登录:把后端 JWT + user_id + email 塞进 NextAuth JWT
+    async signIn({ account }) {
+      // Google OAuth 流程:拿到 Google id_token · 转发给后端换 session token
+      if (account?.provider === 'google') {
+        const idToken = account.id_token as string | undefined
+        if (!idToken) return false
+        try {
+          const r = await fetch(`${API_BASE}/api/v1/auth/oauth/google`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id_token: idToken }),
+          })
+          if (!r.ok) {
+            console.warn(
+              '[auth.google] backend rejected · status=%d',
+              r.status,
+            )
+            return false
+          }
+          const data = (await r.json()) as {
+            access_token: string
+            user_id: string
+            email: string
+          }
+          // 把后端 session token + user_id 塞进 account 临时字段 ·
+          // jwt() callback 会读这些字段写到 NextAuth JWT。
+          // Account 类型 readonly · 强制写入用 cast 到 mutable bag
+          const bag = account as unknown as Record<string, unknown>
+          bag.midas_access_token = data.access_token
+          bag.midas_user_id = data.user_id
+          bag.midas_email = data.email
+        } catch (e) {
+          console.warn('[auth.google] backend call failed:', e)
+          return false
+        }
+      }
+      return true
+    },
+    async jwt({ token, user, account }) {
+      // 第一次登录(Credentials):把后端 session token + user_id + email 塞进 NextAuth JWT
       if (user) {
         const u = user as User & { accessToken?: string }
         return {
@@ -100,6 +155,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           accessToken: u.accessToken,
           userId: u.id,
           email: u.email,
+        } as typeof token & AugmentedToken
+      }
+      // Google OAuth · signIn callback 已经把 backend session 塞到 account 里
+      if (account?.midas_access_token) {
+        return {
+          ...token,
+          accessToken: account.midas_access_token as string,
+          userId: account.midas_user_id as string,
+          email: account.midas_email as string,
         } as typeof token & AugmentedToken
       }
       return token

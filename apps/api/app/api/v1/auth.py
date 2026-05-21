@@ -17,6 +17,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUserDep
@@ -25,6 +26,7 @@ from app.models.user import User
 from app.services.auth import (
     consume_verification_token,
     create_verification_token,
+    find_or_create_oauth_user,
     find_user_by_email,
     hash_password,
     issue_session,
@@ -192,6 +194,146 @@ async def logout(
         await revoke_session(db, token=token)
         await db.commit()
     return LogoutOut()
+
+
+# ============ Google OAuth · M1 第三波 ============
+
+
+class OAuthGoogleIn(BaseModel):
+    """前端 NextAuth Google provider 拿到 id_token / userinfo 后转发到这里。
+
+    前端在 NextAuth `signIn` callback 里调本端点 · 用 backend service
+    secret 头部认证 · 拿到 session token 后存 NextAuth cookie。
+    """
+    id_token: str = Field(min_length=10)  # Google ID Token JWT
+
+
+class OAuthGoogleOut(BaseModel):
+    access_token: str  # opaque DB session token · 名字保留兼容前端
+    token_type: str = "bearer"
+    user_id: str
+    email: str
+    is_new_user: bool = False
+
+
+@router.post("/oauth/google", response_model=OAuthGoogleOut)
+async def oauth_google(
+    payload: OAuthGoogleIn, db: DbDep, request: Request,
+) -> OAuthGoogleOut:
+    """Google OAuth 登录 / 注册。
+
+    流程:
+    1. 验证 id_token(Google 公钥签名 · jose 解析)
+    2. 提取 sub / email / email_verified
+    3. find_or_create_oauth_user(google_sub, email) → User
+    4. issue_session() → opaque DB session token
+    5. 返回 access_token(跟密码登录一样的格式 · NextAuth 一视同仁)
+
+    安全:
+    - id_token 是 Google 签发的 JWT · 必须验签 + 验 aud(client_id 匹配)
+    - 如果 client_id 不在 env 配置 · 返回 503(开关未开)
+    """
+    google_client_id = os.getenv("GOOGLE_CLIENT_ID", "")
+    if not google_client_id:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google OAuth 未启用(GOOGLE_CLIENT_ID 未配置)",
+        )
+
+    # 验签 + 解析 · Google 公钥 JWKS · 用 google-auth 库(已经在依赖里?)
+    # 简化版:用 jose 解析 + 远端拉公钥(M2+ 改 cache)
+    try:
+        claims = await _verify_google_id_token(payload.id_token, google_client_id)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Google id_token 验证失败:{e}",
+        ) from e
+
+    google_sub = claims["sub"]
+    email = claims["email"]
+    if not claims.get("email_verified", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Google 账号邮箱未验证",
+        )
+
+    # find_or_create
+    existed_before = (
+        await db.execute(
+            select(User).where(User.google_sub == google_sub),
+        )
+    ).scalar_one_or_none() is not None
+
+    user = await find_or_create_oauth_user(
+        db, google_sub=google_sub, email=email,
+    )
+
+    # 发 session
+    ua = request.headers.get("user-agent")
+    ip = request.client.host if request.client else None
+    session_token = await issue_session(
+        db, user_id=user.id, user_agent=ua, ip_address=ip,
+    )
+    await db.commit()
+
+    return OAuthGoogleOut(
+        access_token=session_token,
+        user_id=str(user.id),
+        email=user.email,
+        is_new_user=not existed_before,
+    )
+
+
+# === Google id_token 验证 helper ===
+# 用 httpx 拉 JWKS · jose 验签 · M1 第三波最小化 · M2+ 加缓存
+
+_GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs"
+_GOOGLE_ISSUERS = ("https://accounts.google.com", "accounts.google.com")
+
+
+async def _verify_google_id_token(
+    token: str, expected_aud: str,
+) -> dict[str, object]:
+    """验签 Google id_token · 失败抛 ValueError。"""
+    from jose import jwt as jose_jwt  # noqa: PLC0415
+    from jose.exceptions import JWTError  # noqa: PLC0415
+    import httpx  # noqa: PLC0415
+
+    # 拉 Google 公钥(M1 不缓存 · 每次拉 · M2+ 改 LRU)
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.get(_GOOGLE_JWKS_URL)
+        r.raise_for_status()
+        jwks = r.json()
+
+    try:
+        # 不带签名解 header 拿 kid
+        unverified_header = jose_jwt.get_unverified_header(token)
+    except JWTError as e:
+        raise ValueError(f"无法解析 token header: {e}") from e
+
+    kid = unverified_header.get("kid")
+    if not kid:
+        raise ValueError("token 缺 kid")
+
+    key = next((k for k in jwks["keys"] if k.get("kid") == kid), None)
+    if key is None:
+        raise ValueError(f"未找到 kid={kid} 对应的 Google 公钥")
+
+    try:
+        claims = jose_jwt.decode(
+            token,
+            key,
+            algorithms=["RS256"],
+            audience=expected_aud,
+            issuer=_GOOGLE_ISSUERS,  # type: ignore[arg-type]
+        )
+    except JWTError as e:
+        raise ValueError(str(e)) from e
+
+    if "sub" not in claims or "email" not in claims:
+        raise ValueError("token 缺 sub / email claim")
+    return claims  # type: ignore[no-any-return]
 
 
 @router.post("/verify", response_model=VerifyOut)

@@ -48,7 +48,10 @@ def hash_password(plain: str) -> str:
     return _pwd_context.hash(plain)  # type: ignore[no-any-return]
 
 
-def verify_password(plain: str, hashed: str) -> bool:
+def verify_password(plain: str, hashed: str | None) -> bool:
+    # OAuth-only 用户 hashed=None · 不能用密码登录
+    if hashed is None:
+        return False
     return _pwd_context.verify(plain, hashed)  # type: ignore[no-any-return]
 
 
@@ -135,6 +138,57 @@ async def find_user_by_email(db: AsyncSession, email: str) -> User | None:
 async def find_user_by_id(db: AsyncSession, user_id: UUID) -> User | None:
     stmt = select(User).where(User.id == user_id)
     return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def find_user_by_google_sub(db: AsyncSession, google_sub: str) -> User | None:
+    stmt = select(User).where(User.google_sub == google_sub)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def find_or_create_oauth_user(
+    db: AsyncSession,
+    *,
+    google_sub: str,
+    email: str,
+) -> User:
+    """Google OAuth 登录入口 · 0006 ADR M1 第三波。
+
+    匹配优先级:
+      1. google_sub 命中 → 直接返回(老用户多次登录)
+      2. email 命中 + 无 google_sub → 把 google_sub 写到现有 user(account linking)
+      3. 都没命中 → 新建 user · 密码空 · email_verified_at = now(Google 已验邮箱)
+    """
+    # 1. google_sub 命中
+    user = await find_user_by_google_sub(db, google_sub)
+    if user is not None:
+        return user
+
+    email_norm = email.lower()
+
+    # 2. email 命中 + 无 google_sub · account linking
+    existing = await find_user_by_email(db, email_norm)
+    if existing is not None:
+        if existing.google_sub is None:
+            existing.google_sub = google_sub
+            # 顺手把 email_verified 写上(Google 已验)
+            if existing.email_verified_at is None:
+                existing.email_verified_at = datetime.now(tz=UTC)
+            await db.flush()
+        return existing
+
+    # 3. 新建用户
+    now = datetime.now(tz=UTC)
+    user = User(
+        email=email_norm,
+        password_hash=None,           # OAuth-only · 无密码
+        google_sub=google_sub,
+        email_verified_at=now,        # Google 已验邮箱
+        age_confirmed=True,           # OAuth 流程默认确认(后续可在 settings 让用户撤回)
+    )
+    db.add(user)
+    await db.flush()
+    logger.info("[oauth.google] created user_id=%s email=%s", user.id, email_norm)
+    return user
 
 
 # =====================
