@@ -84,11 +84,10 @@ async def ainvoke(
     if is_mock_mode():
         return _mock_invoke(prompt, system, response_format_json)
 
-    # ============ 真实 LiteLLM 调用路径 ============
-    # TODO(填 key 后启用):产品负责人在 .env 配置 DEEPSEEK_API_KEY 后,
-    #   is_mock_mode() 自动返回 False,执行流走到这里。
-    #   接口签名跟 mock 版完全一致,无需改调用方。
-    # 详见 docs/decisions/0012-ai-decision-card.md § LiteLLM 接入
+    # ============ 真实 LiteLLM 调用路径 · 生产主路径 ============
+    # 当 DEEPSEEK_API_KEY 已配置 · is_mock_mode() 返回 False · 走这里。
+    # mock 分支(上方 `if is_mock_mode()`)仅作为 key 缺失时的兜底,确保 UI 仍可运行。
+    # 详见 docs/decisions/0012-ai-decision-card.md § M1 二波验收记录
     from litellm import acompletion  # noqa: PLC0415
 
     messages: list[dict[str, str]] = []
