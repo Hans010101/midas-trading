@@ -6,15 +6,20 @@ GET /chan?symbol=&market=&period=&limit= · 缠论分析(笔 + 分型 + 中枢)
 from __future__ import annotations
 
 import logging
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.deps import (
+    BinanceFuturesSourceDep,
     ClickHouseDep,
     CnSourceDep,
     CryptoSourceDep,
     UsSourceDep,
 )
+
+# M2-B(0017 ADR)· 缠论 + 决策卡都加 instrument 参数 · perp K 线分析
+Instrument = Literal["spot", "perp"]
 from app.schemas.ai_decision import DecisionCardResponse
 from app.schemas.chan import (
     BiResponse,
@@ -49,26 +54,49 @@ async def get_chan_analysis(
     cn: CnSourceDep,
     us: UsSourceDep,
     crypto: CryptoSourceDep,
-    symbol: str = Query(..., min_length=1, examples=["BTC/USDT", "NVDA", "600519"]),
+    binance_futures: BinanceFuturesSourceDep,
+    symbol: str = Query(..., min_length=1, examples=["BTC/USDT", "NVDA", "600519", "BTCUSDT"]),
     market: Market = Query(...),
     period: Period = Query("1d"),
     limit: int = Query(300, ge=30, le=1000),
+    instrument: Annotated[
+        Instrument,
+        Query(description="'spot' 现货(默认)· 'perp' USDT-M 永续合约 · 只 crypto 支持"),
+    ] = "spot",
 ) -> ChanAnalysisResponse:
+    # M2-B 校验:perp 只允许 crypto
+    if instrument == "perp" and market != "crypto":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"instrument=perp 只支持 market=crypto · 当前 market={market}",
+        )
+
     # 拿 K 线 · 复用 market 路由的 cache-aside 路径(直查 CH)
     klines = await ch.select_kline(
-        symbol=symbol, market=market, period=period, limit=limit,
+        symbol=symbol, market=market, period=period, limit=limit, instrument=instrument,
     )
 
     if len(klines) < 30:
         # CH 不够 · 回源拉(跟 /kline 路由同源)
-        source = _source_for(market, cn=cn, us=us, crypto=crypto)
-        try:
-            klines = await source.fetch_kline(symbol, period, limit=limit)
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"K 线数据不足 30 根 · 无法做缠论分析:{e}",
-            ) from e
+        # M2-B · perp 走 BinanceFuturesSource · spot 走原 _source_for
+        if instrument == "perp":
+            fetch_symbol = symbol.replace("/", "") if "/" in symbol else symbol
+            try:
+                klines = await binance_futures.fetch_kline(fetch_symbol, period, limit=limit)
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"perp K 线数据不足 30 根 · 无法做缠论分析:{e}",
+                ) from e
+        else:
+            source = _source_for(market, cn=cn, us=us, crypto=crypto)
+            try:
+                klines = await source.fetch_kline(symbol, period, limit=limit)
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"K 线数据不足 30 根 · 无法做缠论分析:{e}",
+                ) from e
 
     result = await analyze_chan(klines, period, symbol)
 
@@ -145,33 +173,56 @@ async def get_decision_card(
     cn: CnSourceDep,
     us: UsSourceDep,
     crypto: CryptoSourceDep,
-    symbol: str = Query(..., min_length=1, examples=["BTC/USDT", "NVDA", "600519"]),
+    binance_futures: BinanceFuturesSourceDep,
+    symbol: str = Query(..., min_length=1, examples=["BTC/USDT", "NVDA", "600519", "BTCUSDT"]),
     market: Market = Query(...),
     period: Period = Query("1d"),
     limit: int = Query(300, ge=30, le=1000),
+    instrument: Annotated[
+        Instrument,
+        Query(description="'spot' 现货(默认)· 'perp' USDT-M 永续合约 · 只 crypto 支持"),
+    ] = "spot",
 ) -> DecisionCardResponse:
-    # 1. 缓存命中检查
+    # M2-B 校验
+    if instrument == "perp" and market != "crypto":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"instrument=perp 只支持 market=crypto · 当前 market={market}",
+        )
+
+    # 1. 缓存命中检查 · 注:cache key 暂用 (market, symbol, period) · M2-D 加 instrument
+    # WIP:M2-D 联调时如果发现 spot/perp 缓存串扰 · 改 set_cached_card 接口加 instrument
     cached = await get_cached_card(market, symbol, period)
     if cached is not None:
         logger.info(
-            "[decision-card] CACHE HIT symbol=%s market=%s period=%s",
-            symbol, market, period,
+            "[decision-card] CACHE HIT symbol=%s market=%s instrument=%s period=%s",
+            symbol, market, instrument, period,
         )
         return cached
 
     # 2. 拿 K 线(跟 /chan 同源,先 CH 后回源)
     klines = await ch.select_kline(
-        symbol=symbol, market=market, period=period, limit=limit,
+        symbol=symbol, market=market, period=period, limit=limit, instrument=instrument,
     )
     if len(klines) < 30:
-        source = _source_for(market, cn=cn, us=us, crypto=crypto)
-        try:
-            klines = await source.fetch_kline(symbol, period, limit=limit)
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"K 线数据不足 30 根 · 无法生成决策卡:{e}",
-            ) from e
+        if instrument == "perp":
+            fetch_symbol = symbol.replace("/", "") if "/" in symbol else symbol
+            try:
+                klines = await binance_futures.fetch_kline(fetch_symbol, period, limit=limit)
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"perp K 线数据不足 30 根 · 无法生成决策卡:{e}",
+                ) from e
+        else:
+            source = _source_for(market, cn=cn, us=us, crypto=crypto)
+            try:
+                klines = await source.fetch_kline(symbol, period, limit=limit)
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"K 线数据不足 30 根 · 无法生成决策卡:{e}",
+                ) from e
 
     # 3. 跑 LangGraph workflow(mock 或 real,workflow 不关心)
     card = await run_decision_workflow(symbol, market, period, klines)
