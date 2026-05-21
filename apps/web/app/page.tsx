@@ -129,32 +129,29 @@ function Hero() {
   return (
     <section className="relative isolate overflow-hidden">
       {/*
-        全幅水墨背景 · 产品负责人 2026-05-21 v3 调整。
-        - hero-bg.png 用 next/image fill 模式 · object-cover 铺满 · 焦点偏右(水墨主体在右下)
-        - 不裁切变形 · 仅 cover · 手机上 object-position 偏右下保证文字区干净
+        全幅水墨背景 · 产品负责人 2026-05-21 v4 调整(参考 Manus 原版)。
+        关键三点:
+        - absolute inset-0 + bg-cover + bg-center · 图片等比铺满 + 居中(不偏右)
+        - opacity-60 · 背景图整体半透明 · 文字浮上去天然可读 · 不靠遮罩
+        - 米白页面背景透过半透明水墨 · 像"宣纸上的淡墨"均匀铺在 Hero
       */}
       <Image
         src="/brand/hero-bg.png"
         alt=""
         fill
         priority
-        className="object-cover object-right md:object-right-bottom"
+        className="object-cover object-center opacity-60"
         sizes="100vw"
         aria-hidden
       />
 
       {/*
-        左→右 渐变遮罩 · 米白半透明渐变到完全透明
-        · 文字所在左侧 75% 透明度高(对比度足) · 右侧让水墨自然露出
+        底部柔和过渡到下一区(showcase 的 cream 背景)· 避免硬切 · 保留
+        · 左侧米白遮罩已去掉 · 用 opacity 解决对比度问题
       */}
       <div
         aria-hidden
-        className="absolute inset-0 bg-gradient-to-r from-background via-background/85 to-transparent"
-      />
-      {/* 底部柔和过渡到下一区(showcase 的 cream 背景)· 避免硬切 */}
-      <div
-        aria-hidden
-        className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-cream/40"
+        className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-cream/40"
       />
 
       <div className="relative mx-auto flex min-h-[560px] max-w-6xl items-center px-6 py-20 lg:min-h-[640px] lg:py-28">
