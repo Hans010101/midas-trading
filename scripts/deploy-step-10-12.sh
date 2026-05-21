@@ -101,15 +101,32 @@ banner "3/10 · 验证 compose config · 决定性检查 'midas_dev'"
 # ============================================================
 CFG=$($COMPOSE config 2>&1)
 
-# 3a: ports MERGE 修复验证(0013)
-API_PORTS=$(echo "$CFG" | awk '/container_name: midas-api/,/^[^ ]/' | grep -c "^      - target:" || true)
-WEB_PORTS=$(echo "$CFG" | awk '/container_name: midas-web/,/^[^ ]/' | grep -c "^      - target:" || true)
-echo "  API ports 数 = ${API_PORTS} · WEB ports 数 = ${WEB_PORTS}"
+# 3a: ports MERGE 修复验证(0013)· 用 --format json + jq 避免靠 YAML 缩进数行
+# 历史踩坑(deploy run #1):靠 grep "^      - target:" 数 YAML 行 ·
+# 实际 compose config YAML 输出的 ports 缩进格式不是「6 空格 + dash」·
+# 数到 0 误判 fix 未生效。改用结构化 JSON 解析。
+CFG_JSON=$($COMPOSE config --format json 2>/dev/null || echo "{}")
+API_PORTS=$(echo "$CFG_JSON" | jq -r '.services.api.ports | length' 2>/dev/null || echo "ERR")
+WEB_PORTS=$(echo "$CFG_JSON" | jq -r '.services.web.ports | length' 2>/dev/null || echo "ERR")
+# 顺手抽 host_ip(应该是 127.0.0.1)· 任一不是就是 0013 没生效
+API_HOST_IP=$(echo "$CFG_JSON" | jq -r '.services.api.ports[0].host_ip // "<missing>"' 2>/dev/null || echo "ERR")
+WEB_HOST_IP=$(echo "$CFG_JSON" | jq -r '.services.web.ports[0].host_ip // "<missing>"' 2>/dev/null || echo "ERR")
+
+echo "  API ports 数 = ${API_PORTS} · host_ip = ${API_HOST_IP}"
+echo "  WEB ports 数 = ${WEB_PORTS} · host_ip = ${WEB_HOST_IP}"
+
 if [ "$API_PORTS" != "1" ] || [ "$WEB_PORTS" != "1" ]; then
   echo "${RED}  ❌ ports 数不对(应该都是 1)· 0013 fix 未生效${NC}"
+  echo "${YELLOW}  --- compose config 里 api/web 的 ports 段落 ---${NC}"
+  echo "$CFG_JSON" | jq '.services.api.ports, .services.web.ports' 2>/dev/null || echo "$CFG" | awk '/container_name: midas-(api|web)/,/^  [a-z]/' | head -30
   exit 1
 fi
-ok "0013 ports merge 修复在位"
+
+if [ "$API_HOST_IP" != "127.0.0.1" ] || [ "$WEB_HOST_IP" != "127.0.0.1" ]; then
+  echo "${RED}  ❌ host_ip 不是 127.0.0.1 · 端口对外暴露 · 0013 修复异常${NC}"
+  exit 1
+fi
+ok "0013 ports merge 修复在位 · api/web 各 1 条 ports · 都绑 127.0.0.1"
 
 # 3b: 决定性检查 · 全文件搜 midas_dev · 必须 0 处
 echo ""
