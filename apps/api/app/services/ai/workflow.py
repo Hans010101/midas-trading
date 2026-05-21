@@ -135,7 +135,9 @@ async def _node_technical_agent(state: DecisionState) -> dict[str, Any]:
     """技术面 Agent · 跑 LLM(mock 或 real)· 输出 AgentScore。"""
     snapshot = state["snapshot"]
     market = state["market"]
-    score, total_tokens = await analyze_technical(snapshot, market)
+    score, prompt_tokens, completion_tokens, total_tokens = await analyze_technical(
+        snapshot, market,
+    )
 
     # 真实调用时记 ai_usage_log · mock 不记(避免污染统计)
     if not is_mock_mode():
@@ -144,8 +146,8 @@ async def _node_technical_agent(state: DecisionState) -> dict[str, Any]:
             symbol=state["symbol"],
             period=state["period"],
             model=settings.llm_model,
-            prompt_tokens=0,            # 单次 invoke 没有细分 · 用 total
-            completion_tokens=0,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
             total_tokens=total_tokens,
             node="technical_agent",
             status="success",

@@ -89,8 +89,8 @@ def _format_snapshot(snapshot: TechnicalSnapshot) -> str:
 
 async def analyze_technical(
     snapshot: TechnicalSnapshot, market: Market,
-) -> tuple[AgentScore, int]:
-    """跑技术面 Agent · 返回 AgentScore + 总 token 数。
+) -> tuple[AgentScore, int, int, int]:
+    """跑技术面 Agent · 返回 (AgentScore, prompt_tokens, completion_tokens, total_tokens)。
 
     mock 模式时 llm.ainvoke 返回随机化假 JSON · 接口签名不变。
     解析失败时降级为中性评分 + 解释 · 永远不抛异常(0012 § 失败回退)。
@@ -115,6 +115,8 @@ async def analyze_technical(
             rationale=rationale,
             key_levels=key_levels,
         ),
+        resp.prompt_tokens,
+        resp.completion_tokens,
         resp.total_tokens,
     )
 
