@@ -5,17 +5,45 @@
 
 ---
 
+## 0 · 部署模式(开 runbook 前先拍)
+
+两种模式选一,影响 DNS 配法 + 是否要 Vercel 账号:
+
+| 维度 | 模式 A · Vercel + VPS(推荐) | 模式 B · VPS 全栈 |
+|---|---|---|
+| 前端 CDN | ✅ Vercel 全球边缘 | ❌ 单点香港 |
+| 自动构建 / PR preview | ✅ git push 即部署 | ❌ 手动 docker rebuild |
+| VPS 资源 | ~5.5GB | ~6.3GB(留 1.7GB 余量) |
+| 依赖外部 | Vercel(免费档) | 完全自主 |
+| 国内访问体验 | 优 | 仍可接受(香港直连) |
+| DNS 配法 | `api` → VPS · `@/www` → Vercel | `api / @ / www` 全 → VPS |
+
+**默认推荐模式 A** · 部署时告诉 Claude 「模式 A」或「模式 B」 · runbook 会按你选的分叉走。
+切换无锁:模式 A 出问题随时可切 B(`docker compose --profile self-hosted up` 即可),反之亦然。
+
+---
+
 ## 1 · DNS 子域名方案
 
 **域名:** `midastrade.asia` · 你已注册。
 
-**3 条解析必配:**
+**3 条解析必配(按 § 0 模式选择分两种配法):**
+
+### 模式 A · Vercel + VPS
 
 | 类型 | 主机记录 | 指向 | 用途 |
 |---|---|---|---|
 | `A` | `api` | `8.210.156.91` | 后端 API · Caddy 反代到 VPS |
-| `A` 或 `CNAME` | `@`(根域名)| Vercel 提供的值 | 首页 / Web 端 · 走 Vercel |
+| `A` 或 `CNAME` | `@`(根域名)| Vercel 提供的值(通常 `76.76.21.21`) | 首页 / Web 端 · 走 Vercel |
 | `CNAME` | `www` | `cname.vercel-dns.com.` | 兼容 `www.midastrade.asia` 也能访问 |
+
+### 模式 B · VPS 全栈
+
+| 类型 | 主机记录 | 指向 | 用途 |
+|---|---|---|---|
+| `A` | `api` | `8.210.156.91` | 后端 API · Caddy 反代到 VPS |
+| `A` | `@`(根域名)| `8.210.156.91` | 首页 / Web 端 · 同一台 VPS 上 Next.js |
+| `A` 或 `CNAME` | `www` | `8.210.156.91`(或 CNAME `midastrade.asia.`)| Caddy 301 重定向到主域 |
 
 **操作步骤(在域名注册商后台):**
 
@@ -237,7 +265,32 @@ OSS_ACCESS_KEY_SECRET=<AccessKey Secret>
 
 ---
 
-## 8 · 启动信号
+## 8 · M1-G 预登记(部署完成后立刻启动)
+
+**2026-05-21 拍板:** 推送当前是「用户自带 bot」模式(每个用户自己去 @BotFather 建 bot · 自己填 token + chat_id)· 上线先用此模式 · 部署完立刻改造为标准 SaaS 「统一 bot + /start 绑定」模式。
+
+**M1-G Checkpoint 范围:**
+
+- ① 用 @BotFather 建 `@MidasTradeBot` (或类似名) · 拿全局 token
+- ② `settings.TG_BOT_TOKEN` 改全局 env
+- ③ alembic migration:`notification_config` 删 `tg_bot_token` 列 + 新增 `tg_binding_code`(临时绑定码)
+- ④ `POST /api/v1/notifications/telegram/bind/start` · 生成 6 位 code 入 Redis(TTL 10min)+ 返 deep link `https://t.me/MidasTradeBot?start=<code>`
+- ⑤ `POST /api/v1/notifications/telegram/webhook` · 接 TG `/start` command · 提取 `chat.id` · 用 binding_code 找到 user · 写 `tg_chat_id` · 回 「绑定成功 ✓」
+- ⑥ Dispatcher 简化 · 用全局 token + 用户 chat_id
+- ⑦ 前端 `/settings` Telegram section 重写 · 「绑定 Telegram」按钮 + 已绑定状态 + 解绑
+- ⑧ 飞书清理:后端 client/dispatcher/templates 删 feishu 分支 · 前端删 feishu section · `feishu_webhook_url` 字段保留(下兼容)
+- ⑨ ADR 0009 v2 追加 「2026-05-21 飞书移除 + 统一 bot 模式」 节
+- ⑩ pytest + 真机绑定测试一次
+
+**估时:** 7-8h · webhook 路线 · 依赖 HTTPS 已就绪(STEP 13 装完 Caddy 后即可 `setWebhook`)
+
+**飞书结论:** 飞书自定义机器人只能推群 · 不能私聊 C 端用户 · 企业自建应用又强制组织内成员 · **不适合 C 端 SaaS 用户级推送** · M1-G 彻底移除。
+
+**M1 上线只保留 Telegram 推送通道。**
+
+---
+
+## 9 · 启动信号
 
 凭证齐了告诉 Claude 「**runbook 可以开跑**」· 我会:
 1. 跟你过一遍 STEP 1 SSH

@@ -4,13 +4,20 @@
 
 **协作模式:** Claude Code 不直接 SSH。每一步,Claude 给出命令,你在服务器粘贴执行,把输出贴回。任何报错由 Claude 诊断。
 
-**总览:**
+**服务器规格:** 阿里云轻量 香港 · 4 vCPU · 8GB RAM · 70GB SSD · Ubuntu 24.04 · IP `8.210.156.91`
+
+---
+
+## ⭐ STEP 0 · 部署模式选择(开 runbook 前先拍)
+
+两种模式 · 后续步骤会按你选的分叉:
+
+### 模式 A · Vercel + VPS(推荐)
+
 ```
-浏览器 ──HTTPS──>  Vercel(midastrade.asia / www.)
+浏览器 ──HTTPS──> Vercel(midastrade.asia / www.)        ← 前端 · 走 Vercel CDN
                    │
-                   ├── 静态 / 首页 / SSR
-                   │
-                   └── 同源 API 调用 ──HTTPS──> Caddy(api.midastrade.asia)
+                   └── 同源 API 调用 ──HTTPS──> Caddy(api.midastrade.asia)  ← VPS
                                                   │
                                                   └── 反代 127.0.0.1:8000(midas-api)
                                                                           │
@@ -20,7 +27,39 @@
                                                                           └── midas-worker
 ```
 
-**服务器规格:** 阿里云轻量 香港 · 4 vCPU · 8GB RAM · 70GB SSD · Ubuntu 24.04 · IP `8.210.156.91`
+### 模式 B · VPS 自托管全栈
+
+```
+浏览器 ──HTTPS──> Caddy(midastrade.asia / www.) ──> 127.0.0.1:3000(midas-web)    ← VPS · 前端
+              ──> Caddy(api.midastrade.asia)    ──> 127.0.0.1:8000(midas-api)    ← VPS · 后端
+                                                       │
+                                                       ├── midas-postgres
+                                                       ├── midas-clickhouse
+                                                       ├── midas-redis
+                                                       └── midas-worker
+```
+
+### 选型对比
+
+| 维度 | 模式 A · Vercel + VPS | 模式 B · VPS 全栈 |
+|---|---|---|
+| **前端 CDN** | ✅ Vercel 全球边缘 · 国内访问由 Vercel 路由 | ❌ 单点香港 · 国内 ~80-150ms |
+| **自动构建 / 预览** | ✅ git push 自动 build · PR preview | ❌ 手动 `docker compose up --build` |
+| **资源占用(VPS)** | ~5.5GB(5 服务) | ~6.3GB(6 服务 · web 占 ~768MB)|
+| **运维复杂度** | 低 · 前端零运维 | 中 · 一台机管所有 |
+| **依赖外部服务** | 依赖 Vercel(免费档够用) | 完全自主 · 仅依赖 OSS 备份 |
+| **DNS 记录** | `api` 指 VPS · `@/www` 指 Vercel | `api` / `@` / `www` 全指 VPS |
+| **首屏延迟** | Vercel edge 优 | 直连香港 · 仍可接受 |
+| **成本** | $0(Vercel Hobby)+ VPS | 仅 VPS |
+| **何时选 B** | Vercel 在国内被墙 / 想保留所有数据自主 / 上线后 Vercel 限流 | |
+
+**默认推荐 A** · 资源富余 + 国内访问体验更好 + Vercel 在国内目前可用。**M1 上线选 A** · 后续 Vercel 出问题可无缝切 B(代码里 `web` service 已经准备好)。
+
+### 拍板信号
+
+告诉 Claude 「**模式 A**」或「**模式 B**」 · runbook 后续每个步骤会按这个分叉。
+
+---
 
 ---
 
@@ -28,8 +67,8 @@
 
 | 项 | 状态 | 说明 |
 |---|---|---|
-| DNS A 记录 `api.midastrade.asia` → `8.210.156.91` | 你去注册商配 | TTL 设 600s 便于排错 |
-| DNS A / CNAME `midastrade.asia` → Vercel | 你去注册商配 | Vercel 后台导入项目时会给你具体值 |
+| DNS A 记录 `api.midastrade.asia` → `8.210.156.91` | 你去注册商配 | TTL 设 600s 便于排错 · 两种模式都要 |
+| DNS `midastrade.asia` + `www` → Vercel(模式 A)或 → `8.210.156.91`(模式 B) | 你去注册商配 | 按 STEP 0 选的模式配 |
 | 阿里云 OSS 香港 region bucket `midas-backup-hk` | 你创建 | 用于 pg_dump 每日备份 |
 | 阿里云 RAM 子账号 + AccessKey(权限:OSS PutObject/ListObjects/DeleteObject)| 你创建 | 不能用主账号 key |
 | GitHub repo 私有 / 可访问 | 你确认 | runbook 会用 git clone |
@@ -210,12 +249,14 @@ CELERY_RESULT_BACKEND=redis://redis:6379/2
 SECRET_KEY=<STEP 8 的 openssl 输出 · 64 字符 hex>
 ACCESS_TOKEN_EXPIRE_MINUTES=10080
 
-# === CORS · 严格匹配 Vercel 域名 ===
+# === CORS · 严格匹配前端域名(两种模式相同)===
 CORS_ORIGINS=["https://midastrade.asia","https://www.midastrade.asia"]
 
 # === 公开 URL(给前端 SSR + 邮件链接)===
 PUBLIC_WEB_URL=https://midastrade.asia
 NEXT_PUBLIC_API_URL=https://api.midastrade.asia
+# 模式 B 额外:web 容器 SSR 内部调 API 用 docker 内部 DNS
+# API_INTERNAL_URL=http://api:8000   ← 模式 B 才需要 · 模式 A 不要这行
 
 # === Resend 邮件验证 ===
 RESEND_API_KEY=<你的 Resend key>
@@ -284,7 +325,8 @@ docker compose \
 
 **期望:** Postgres / ClickHouse / Redis 镜像拉完(自有 build 的 api/worker 此步跳过)。
 
-**你跑(build + up):**
+### [模式 A] build + up · 5 服务
+
 ```bash
 docker compose \
   -f docker/docker-compose.yaml \
@@ -292,14 +334,25 @@ docker compose \
   up -d --build
 ```
 
-**预计耗时:** 4-8 分钟(主要在 api 的 pip install + web 不在生产 profile 跳过)。
+**预计耗时:** 4-8 分钟。**期望:** 5 服务 `healthy`(postgres / clickhouse / redis / api / worker)。
 
-**你跑(验证):**
+### [模式 B] build + up · 6 服务(含 web)
+
+```bash
+docker compose \
+  -f docker/docker-compose.yaml \
+  -f docker/docker-compose.prod.yaml \
+  --profile self-hosted \
+  up -d --build
+```
+
+**预计耗时:** 10-18 分钟(web 多了 pnpm install + Next build · Next 镜像层第一次构建较慢)。**期望:** 6 服务 `healthy`(postgres / clickhouse / redis / api / worker / web)。
+
+### 验证(两模式相同)
+
 ```bash
 docker compose -f docker/docker-compose.yaml -f docker/docker-compose.prod.yaml ps
 ```
-
-**期望:** 5 服务全部 `healthy`(postgres / clickhouse / redis / api / worker)。
 
 **❌ 如果 ClickHouse 起不来 / OOM:**
 ```bash
@@ -357,14 +410,17 @@ curl -s "http://localhost:8000/api/v1/market/kline?symbol=NVDA&market=us&period=
 
 ## STEP 13 · 配置 Caddy 反向代理(HTTPS 自动证书)
 
-⚠ **前置:** STEP 6 确认 `api.midastrade.asia` A 记录已生效(在本机 `dig api.midastrade.asia +short` 看到 `8.210.156.91`)。
+⚠ **前置:**
+- 两种模式都要:`dig api.midastrade.asia +short` 返回 `8.210.156.91`
+- 模式 B 额外:`dig midastrade.asia +short` + `dig www.midastrade.asia +short` 都返回 `8.210.156.91`
 
 **你跑:**
 ```bash
 vim /etc/caddy/Caddyfile
 ```
 
-**填入:**
+### [模式 A] 只代理 API 子域
+
 ```caddyfile
 api.midastrade.asia {
     reverse_proxy 127.0.0.1:8000
@@ -384,6 +440,44 @@ api.midastrade.asia {
     handle_errors {
         respond "Upstream error: {http.error.status_code}" {http.error.status_code}
     }
+}
+```
+
+### [模式 B] 代理 API 子域 + 主站 + www
+
+```caddyfile
+# API 后端
+api.midastrade.asia {
+    reverse_proxy 127.0.0.1:8000
+    encode gzip
+    header_up X-Real-IP {remote_host}
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+    handle_errors {
+        respond "Upstream error: {http.error.status_code}" {http.error.status_code}
+    }
+}
+
+# 主站 · Next.js web 容器
+midastrade.asia {
+    reverse_proxy 127.0.0.1:3000
+    encode gzip
+    header_up X-Real-IP {remote_host}
+    header_up X-Forwarded-Proto https
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+}
+
+# www 重定向到主站(SEO 一致性)
+www.midastrade.asia {
+    redir https://midastrade.asia{uri} permanent
 }
 ```
 
@@ -407,10 +501,15 @@ journalctl -u caddy --no-pager | tail -20
 
 **验证(本机命令)**:
 ```bash
+# 两种模式都要
 curl -i https://api.midastrade.asia/health
+
+# 模式 B 额外
+curl -I https://midastrade.asia/
+curl -I https://www.midastrade.asia/   # 应见 301 → midastrade.asia
 ```
 
-**期望:** `HTTP/2 200` + `{"status":"ok","service":"midas-api"}`
+**期望:** `api.midastrade.asia/health` 返 `HTTP/2 200` + `{"status":"ok","service":"midas-api"}` · 模式 B 主站返 200 + Next.js HTML。
 
 ---
 
@@ -447,7 +546,9 @@ crontab -e
 
 ---
 
-## STEP 15 · Vercel 前端部署
+## STEP 15 · 前端部署
+
+### [模式 A] Vercel
 
 **你做(在 Vercel 后台):**
 1. New Project → Import Git Repository
@@ -469,9 +570,27 @@ crontab -e
 
 **自定义域名:**
 - Vercel → Domains → Add `midastrade.asia` + `www.midastrade.asia`
-- 按 Vercel 指引去 DNS 配 CNAME
+- 按 Vercel 指引去 DNS 配 CNAME / A 记录
 
 **点 Deploy · 等 build 完成。**
+
+### [模式 B] VPS web 容器(STEP 10 已起 · STEP 13 Caddy 已代理)
+
+模式 B 跳过 Vercel · STEP 10 的 `--profile self-hosted` 已经把 web 容器跑起来 · STEP 13 的 Caddy 已经把 `midastrade.asia` 反代到 `127.0.0.1:3000`。
+
+**验证 web 容器在跑:**
+```bash
+docker logs midas-web 2>&1 | tail -20
+docker exec midas-web wget -qO- http://localhost:3000/ | head -20
+```
+
+**期望:** Next.js 启动日志 `▲ Next.js 15.x.x ready in Xms` + 首页 HTML(`<!DOCTYPE html>` 开头)。
+
+**❌ 如果 web 容器没起:**
+- STEP 10 命令漏了 `--profile self-hosted` → 重跑 STEP 10 模式 B 命令
+- Next build 失败 OOM(8G 可能不够双构建):`docker logs midas-web 2>&1 | grep -i heap` · 临时把 prod.yaml 里 web 内存限制提到 1.5G 再 build,build 完降回 768M
+
+**模式 B 不需要 Vercel · 也不需要在 Vercel 配 env vars(env 全在服务器 .env 里 · `docker-compose.prod.yaml` 把 .env 注入 web 容器)。**
 
 ---
 
@@ -496,7 +615,8 @@ crontab -e
 ```bash
 # 资源占用
 docker stats --no-stream
-# 期望: clickhouse < 2G, postgres < 800M, redis < 300M, api < 1G, 总和 < 5.5G
+# 模式 A 期望: clickhouse < 2G, postgres < 800M, redis < 300M, api < 1G, 总和 < 5.5G
+# 模式 B 期望: 上述 + web < 800M, 总和 < 6.3G
 
 # 日志检查
 docker logs midas-api 2>&1 | tail -20
