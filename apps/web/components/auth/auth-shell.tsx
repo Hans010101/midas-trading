@@ -8,6 +8,7 @@
  * 不用垂直居中(避免 footer 之下出现一段视觉空白)。
  */
 
+import Image from 'next/image'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
@@ -23,7 +24,15 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
   return (
     <main className="min-h-screen bg-background">
       <div className="mx-auto w-full max-w-md px-6 pt-16 pb-10">
-        <Link href="/" className="mb-8 block text-center">
+        {/* 印章 SVG + 衬线字 · 跟首页 TopNav 一致 · 全站统一品牌 */}
+        <Link href="/" className="mb-8 flex items-center justify-center gap-3">
+          <Image
+            src="/brand/seal.png"
+            alt="点金 Midas 印章"
+            width={48}
+            height={48}
+            priority
+          />
           <h1 className="font-serif text-3xl font-bold text-foreground">
             点金 <span className="text-midas-red">Midas</span>
           </h1>

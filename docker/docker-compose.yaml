@@ -143,15 +143,22 @@ services:
     build:
       context: ..
       dockerfile: apps/web/Dockerfile
+      # NEXT_PUBLIC_* 是 build-time inline · 必须通过 build args 传给 Dockerfile ARG
+      # 否则 Next build 看到的是 fallback(localhost:8000)· 0016 ADR
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     container_name: midas-web
     restart: unless-stopped
     env_file:
       - path: ../.env
         required: true
     environment:
+      # runtime env(给 server-side Next.js 用 · 不影响已 inline 到 bundle 的 NEXT_PUBLIC_*)
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
       # NextAuth v5 在容器内 server-side 调后端走 docker 内部 DNS
       API_INTERNAL_URL: http://api:8000
+      # NextAuth v5 显式锁定 base URL · 不靠 Host 头反推(避免 redirect_uri_mismatch)
+      AUTH_URL: ${PUBLIC_WEB_URL:-https://midastrade.asia}
       # NextAuth v5 用 AUTH_SECRET(原 NEXTAUTH_SECRET 是 v4)· 跟后端 JWT 共用
       AUTH_SECRET: ${SECRET_KEY:-fallback-dev-only}
       AUTH_TRUST_HOST: "true"

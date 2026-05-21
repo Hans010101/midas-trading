@@ -43,6 +43,11 @@ export default function RegisterPage() {
         return
       }
       setSuccess('注册成功!验证邮件已发送到你的邮箱,点击邮件中链接完成验证后即可登录。')
+    } catch (err) {
+      // 网络错 / CORS / DNS / 证书 — fetch 直接 throw · 之前没 catch 就静默了(0016 教训)
+      const msg = err instanceof Error ? err.message : String(err)
+      setError(`网络异常 · 请重试或联系管理员(${msg})`)
+      console.error('[register] fetch failed:', err, 'API_BASE=', API_BASE)
     } finally {
       setBusy(false)
     }

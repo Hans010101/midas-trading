@@ -6,6 +6,11 @@
 FROM node:20-alpine AS builder
 WORKDIR /repo
 
+# Next.js NEXT_PUBLIC_* 是 build-time inline · 必须在 build 前注入到 env ·
+# runtime env_file 没用(Next 已经把值编译进 JS bundle)· 0016 ADR
+ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 RUN corepack enable && corepack prepare pnpm@10.32.1 --activate
 
 # 先拷 manifest 利用 Docker 层缓存
@@ -19,6 +24,8 @@ RUN pnpm install --frozen-lockfile
 COPY apps/web ./apps/web
 COPY packages/shared ./packages/shared
 
+# build 前 echo 确认 NEXT_PUBLIC_API_URL 被注入(部署排错用 · 看不到就是 args 没传)
+RUN echo "[build] NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL"
 RUN cd apps/web && pnpm build
 
 # === Stage 2: runner ===
