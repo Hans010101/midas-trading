@@ -260,21 +260,73 @@ async def _fear_greed_refresh_async() -> dict[str, Any]:
 
 
 # ============================================================================
-# 7 · Perp K 线增量 · 跟周期(M2-A 留 stub · M2-B 联调时实装)
+# 7 · Perp K 线增量(M2-B-4 实装 · 替换 M2-A stub)
 # ============================================================================
+
+
+# top 30 perp × 3 周期 · 每周期取最近 N 根 · 覆盖任何短停机窗口
+# 4h 周期暂不发(Period Literal 不含)· M2-D 改 Period 加 4h 时一起加
+_PERP_PERIODS_M2B: tuple[tuple[str, int], ...] = (
+    ("15m", 5),
+    ("1h", 5),
+    ("1d", 3),
+)
 
 
 @shared_task(name="tasks.crypto.perp_kline_incremental")
 def perp_kline_incremental() -> dict[str, Any]:
-    """top 30 perp × 4 周期(15m / 1h / 4h / 1d)各 1 根最新。
+    """top 30 perp × 3 周期(15m / 1h / 1d)各最近几根 · M2-B-4 实装。
 
-    M2-A 阶段先留 stub · M2-B 联调时:
-    - 实际拉 perp K 线 · 写 kline 表 instrument='perp'
-    - 这部分依赖现有 ClickHouseClient.insert_kline · 但要扩支持 instrument 列
-    - 暂时直接绕过 ClickHouseClient · 用 raw SQL 写
+    走 BinanceFuturesSource → ClickHouseClient.insert_kline(instrument='perp')。
+    幂等 · 重复 ts 自动 skip(ClickHouseClient 内部去重)。
     """
-    logger.info("[crypto.perp_kline_incremental] WIP · M2-A 留 stub · M2-B 实装")
-    return {"stub": True, "note": "M2-B 联调时实装"}
+    return asyncio.run(_perp_kline_incremental_async())
+
+
+async def _perp_kline_incremental_async() -> dict[str, Any]:
+    # 延迟 import · 避免 worker 启动时把整个 app.services 都拉起来
+    from app.services.clickhouse_client import ClickHouseClient
+    from app.services.data_sources.binance_futures_source import (
+        BinanceFuturesSource,
+        _to_ccxt_symbol,
+    )
+
+    source = BinanceFuturesSource()
+    ch = await ClickHouseClient.create()
+    total_written = 0
+    ok_count = 0
+    fail_count = 0
+    try:
+        for symbol in _TOP_30_PERP:
+            # symbol 在 CH 用 ccxt 风格 BTC/USDT(跟 spot 表对齐 · 0017 ADR § 2)
+            ccxt_symbol = _to_ccxt_symbol(symbol)
+            for period, limit in _PERP_PERIODS_M2B:
+                try:
+                    klines = await source.fetch_kline(symbol, period, limit=limit)  # type: ignore[arg-type]
+                    if not klines:
+                        continue
+                    n = await ch.insert_kline(
+                        klines,
+                        symbol=ccxt_symbol,
+                        market="crypto",
+                        period=period,  # type: ignore[arg-type]
+                        instrument="perp",
+                    )
+                    total_written += n
+                    ok_count += 1
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "[crypto.perp_kline] %s/%s 失败: %s", symbol, period, exc,
+                    )
+                    fail_count += 1
+        logger.info(
+            "[crypto.perp_kline_incremental] written=%d ok=%d fail=%d",
+            total_written, ok_count, fail_count,
+        )
+        return {"written": total_written, "ok": ok_count, "fail": fail_count}
+    finally:
+        await source.close()
+        await ch.close()
 
 
 # ============================================================================
