@@ -9,6 +9,7 @@
  * - /settings    → 设置
  */
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
@@ -33,9 +34,10 @@ export function TopNav() {
   return (
     <header className="h-12 shrink-0 border-b border-paper bg-background">
       <div className="flex h-full items-center justify-between px-6">
-        <Link href="/workbench" className="flex items-center">
-          <span className="font-serif text-lg font-bold text-foreground">
-            点金 <span className="text-midas-red">Midas</span>
+        <Link href="/workbench" className="flex items-center gap-2">
+          <Image src="/brand/seal.png" alt="Midas 印章" width={24} height={24} priority />
+          <span className="font-serif text-lg font-bold text-midas-red">
+            Midas
           </span>
         </Link>
 

@@ -113,7 +113,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // Google OAuth 流程:拿到 Google id_token · 转发给后端换 session token
       if (account?.provider === 'google') {
         const idToken = account.id_token as string | undefined
-        if (!idToken) return false
+        if (!idToken) {
+          console.error('[auth.google] account.id_token 缺失 · 无法换 session · 检查 scope 是否含 openid')
+          return false
+        }
+        console.info('[auth.google] 拿到 id_token · POST 后端换 session · API_BASE=%s', API_BASE)
         try {
           const r = await fetch(`${API_BASE}/api/v1/auth/oauth/google`, {
             method: 'POST',
@@ -121,9 +125,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             body: JSON.stringify({ id_token: idToken }),
           })
           if (!r.ok) {
-            console.warn(
-              '[auth.google] backend rejected · status=%d',
+            // 把后端返回的 detail 打出来 · 定位是验签 / DB / 网络 哪一环
+            const body = await r.text().catch(() => '<no body>')
+            console.error(
+              '[auth.google] backend rejected · status=%d · body=%s',
               r.status,
+              body.slice(0, 500),
             )
             return false
           }

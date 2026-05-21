@@ -235,16 +235,19 @@ async def oauth_google(
     """
     google_client_id = os.getenv("GOOGLE_CLIENT_ID", "")
     if not google_client_id:
+        logger.error("[oauth.google] GOOGLE_CLIENT_ID 未配置 · 返回 503")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Google OAuth 未启用(GOOGLE_CLIENT_ID 未配置)",
         )
+    logger.info("[oauth.google] 收到 id_token · client_id 前 12 字符=%s", google_client_id[:12])
 
-    # 验签 + 解析 · Google 公钥 JWKS · 用 google-auth 库(已经在依赖里?)
-    # 简化版:用 jose 解析 + 远端拉公钥(M2+ 改 cache)
+    # 验签 + 解析 · Google 公钥 JWKS
+    # 注:_verify_google_id_token 会把 httpx / jose 错误都归类成 ValueError
     try:
         claims = await _verify_google_id_token(payload.id_token, google_client_id)
     except ValueError as e:
+        logger.warning("[oauth.google] id_token 验证失败:%s", e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Google id_token 验证失败:{e}",
@@ -252,31 +255,45 @@ async def oauth_google(
 
     google_sub = claims["sub"]
     email = claims["email"]
+    logger.info("[oauth.google] id_token 验签通过 · sub=%s email=%s", google_sub, email)
+
     if not claims.get("email_verified", False):
+        logger.warning("[oauth.google] email_verified=false · 拒绝 · email=%s", email)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Google 账号邮箱未验证",
         )
 
-    # find_or_create
-    existed_before = (
-        await db.execute(
-            select(User).where(User.google_sub == google_sub),
+    # find_or_create + 发 session · DB 错误单独 catch · 暴露明细(常见:google_sub 列缺失)
+    try:
+        existed_before = (
+            await db.execute(
+                select(User).where(User.google_sub == google_sub),
+            )
+        ).scalar_one_or_none() is not None
+
+        user = await find_or_create_oauth_user(
+            db, google_sub=google_sub, email=email,
         )
-    ).scalar_one_or_none() is not None
 
-    user = await find_or_create_oauth_user(
-        db, google_sub=google_sub, email=email,
+        ua = request.headers.get("user-agent")
+        ip = request.client.host if request.client else None
+        session_token = await issue_session(
+            db, user_id=user.id, user_agent=ua, ip_address=ip,
+        )
+        await db.commit()
+    except Exception as e:  # noqa: BLE001
+        await db.rollback()
+        logger.exception("[oauth.google] DB 写入失败(find_or_create / issue_session)")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Google 登录建用户 / 发 session 失败:{type(e).__name__}: {e}",
+        ) from e
+
+    logger.info(
+        "[oauth.google] 登录成功 · user_id=%s email=%s is_new=%s",
+        user.id, user.email, not existed_before,
     )
-
-    # 发 session
-    ua = request.headers.get("user-agent")
-    ip = request.client.host if request.client else None
-    session_token = await issue_session(
-        db, user_id=user.id, user_agent=ua, ip_address=ip,
-    )
-    await db.commit()
-
     return OAuthGoogleOut(
         access_token=session_token,
         user_id=str(user.id),
@@ -301,10 +318,16 @@ async def _verify_google_id_token(
     import httpx  # noqa: PLC0415
 
     # 拉 Google 公钥(M1 不缓存 · 每次拉 · M2+ 改 LRU)
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        r = await client.get(_GOOGLE_JWKS_URL)
-        r.raise_for_status()
-        jwks = r.json()
+    # 网络错 / 非 2xx 都归类成 ValueError · 让上层返 401 带明细而不是裸 500
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(_GOOGLE_JWKS_URL)
+            r.raise_for_status()
+            jwks = r.json()
+    except httpx.HTTPError as e:
+        raise ValueError(
+            f"拉 Google JWKS 失败({_GOOGLE_JWKS_URL}): {type(e).__name__}: {e}",
+        ) from e
 
     try:
         # 不带签名解 header 拿 kid

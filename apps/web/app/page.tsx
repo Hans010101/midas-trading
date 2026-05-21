@@ -79,8 +79,8 @@ function TopNav() {
             height={36}
             priority
           />
-          <span className="font-serif text-xl font-bold tracking-wide">
-            点金 <span className="text-midas-red">Midas</span>
+          <span className="font-serif text-xl font-bold tracking-wide text-midas-red">
+            Midas
           </span>
         </Link>
 
@@ -557,8 +557,8 @@ function Footer() {
                 width={32}
                 height={32}
               />
-              <span className="font-serif text-lg font-bold">
-                点金 <span className="text-midas-red">Midas</span>
+              <span className="font-serif text-lg font-bold text-midas-red">
+                Midas
               </span>
             </div>
             <p className="mt-3 max-w-md text-sm text-muted-foreground">

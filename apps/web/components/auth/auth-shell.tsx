@@ -33,8 +33,8 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
             height={48}
             priority
           />
-          <h1 className="font-serif text-3xl font-bold text-foreground">
-            点金 <span className="text-midas-red">Midas</span>
+          <h1 className="font-serif text-3xl font-bold text-midas-red">
+            Midas
           </h1>
         </Link>
 
