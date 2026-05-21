@@ -106,6 +106,17 @@ services:
 
   worker:
     restart: always
+    # Dockerfile 默认 --concurrency=4 · 4 prefork × 重库(akshare/ccxt/langchain/
+    # yfinance/langgraph)每进程 ~300M · 4 × 300M = 1.2G 远超 512M · 一启动就
+    # OOM(exit 137)· 0015 ADR · 降到 --concurrency=2 + 提到 1G · M1 流量绰绰有余
+    command:
+      - celery
+      - -A
+      - celery_app
+      - worker
+      - --beat
+      - --loglevel=info
+      - --concurrency=2
     environment:
       DEBUG: "false"
     logging:
@@ -116,7 +127,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 1G
 
   web:
     # Vercel 模式下不启动这个 service ·
