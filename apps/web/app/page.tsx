@@ -127,9 +127,9 @@ function TopNav() {
 
 function Hero() {
   return (
-    <section className="relative mx-auto flex w-full max-w-7xl flex-col-reverse items-center gap-10 px-6 py-20 lg:flex-row lg:gap-16 lg:py-32">
+    <section className="relative mx-auto flex w-full max-w-6xl flex-col-reverse items-center gap-10 px-6 py-16 lg:flex-row lg:gap-12 lg:py-24">
       <div className="flex-1">
-        <p className="mb-4 text-sm uppercase tracking-[0.3em] text-midas-red">
+        <p className="mb-3 text-xs uppercase tracking-[0.3em] text-midas-red">
           AI 原生金融分析终端
         </p>
         <h1 className="font-serif text-5xl font-bold leading-tight tracking-tight lg:text-6xl">
@@ -137,10 +137,10 @@ function Hero() {
           <span className="mx-2 text-midas-red">·</span>
           <span className="text-midas-red">点石成金</span>
         </h1>
-        <p className="mt-6 max-w-xl text-base leading-relaxed text-muted-foreground lg:text-lg">
+        <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground lg:text-lg">
           覆盖 A 股、美股与加密货币三大市场,以虚拟资金零风险磨练交易直觉,让 AI 辅助你的每一次决策。
         </p>
-        <div className="mt-10 flex flex-wrap items-center gap-4">
+        <div className="mt-8 flex flex-wrap items-center gap-3">
           <Link
             href="/workbench"
             className="inline-flex items-center gap-2 rounded-md bg-midas-red px-6 py-3 text-base font-medium text-white shadow-md transition-all hover:bg-midas-red-deep hover:shadow-lg"
@@ -155,21 +155,22 @@ function Hero() {
             查看功能
           </a>
         </div>
-        <div className="mt-12 flex items-center gap-6 text-xs text-muted-foreground/80">
+        <div className="mt-8 flex items-center gap-5 text-xs text-muted-foreground/80">
           <Stat icon={<Trophy className="h-4 w-4 text-gold" />} label="缠论自动标注" />
           <Stat icon={<Bot className="h-4 w-4 text-midas-red" />} label="AI 决策卡" />
           <Stat icon={<Wallet className="h-4 w-4 text-gold" />} label="虚拟资金 0 风险" />
         </div>
       </div>
 
-      <div className="relative flex flex-1 items-center justify-center">
+      {/* 右侧视觉 · 等比正方且垂直居中 · A4 修右上空白 */}
+      <div className="relative flex items-center justify-center lg:w-[440px] lg:shrink-0">
         <div className="absolute inset-0 -z-10 rounded-full bg-gradient-to-br from-midas-red-glow/40 via-transparent to-gold/10 blur-3xl" />
         <Image
           src="/brand/hero-ink.svg"
           alt="水墨山形 + 朱红 K 线 + 帝王金脉络"
-          width={600}
-          height={600}
-          className="h-auto w-full max-w-[520px]"
+          width={440}
+          height={440}
+          className="h-auto w-full max-w-[420px]"
           priority
         />
       </div>
@@ -195,15 +196,15 @@ function Stat({ icon, label }: { icon: React.ReactNode; label: string }) {
 
 function Showcase() {
   return (
-    <section id="showcase" className="border-y border-paper/60 bg-cream/40 py-20">
-      <div className="mx-auto max-w-7xl px-6 text-center">
+    <section id="showcase" className="border-y border-paper/60 bg-cream/40 py-16">
+      <div className="mx-auto max-w-6xl px-6 text-center">
         <h2 className="font-serif text-3xl font-bold lg:text-4xl">
           打开即是专业终端
         </h2>
-        <p className="mt-3 text-muted-foreground">
+        <p className="mt-3 text-sm text-muted-foreground">
           K 线 · 缠论标注 · AI 决策卡 · 三市场切换 · 虚拟交易 · 一屏到位
         </p>
-        <div className="relative mt-10">
+        <div className="relative mt-8">
           <div className="overflow-hidden rounded-xl border border-paper bg-background shadow-2xl">
             <Image
               src="/marketing/workbench.png"
@@ -231,16 +232,16 @@ function Showcase() {
 
 function Markets() {
   return (
-    <section className="mx-auto max-w-7xl px-6 py-20">
+    <section className="mx-auto max-w-6xl px-6 py-16">
       <div className="text-center">
         <h2 className="font-serif text-3xl font-bold lg:text-4xl">
           三市场统一体验
         </h2>
-        <p className="mt-3 text-muted-foreground">
+        <p className="mt-3 text-sm text-muted-foreground">
           一个终端,覆盖全球主流交易市场
         </p>
       </div>
-      <div className="mt-12 grid gap-6 md:grid-cols-3">
+      <div className="mt-10 grid gap-5 md:grid-cols-3">
         <MarketCard
           icon={<BarChart3 className="h-6 w-6 text-midas-red" />}
           name="A 股"
@@ -297,16 +298,16 @@ function Features() {
   return (
     <section
       id="features"
-      className="border-y border-paper/60 bg-cream/40 py-20"
+      className="border-y border-paper/60 bg-cream/40 py-16"
     >
-      <div className="mx-auto max-w-7xl px-6">
+      <div className="mx-auto max-w-6xl px-6">
         <div className="text-center">
           <h2 className="font-serif text-3xl font-bold lg:text-4xl">核心功能</h2>
-          <p className="mt-3 text-muted-foreground">
+          <p className="mt-3 text-sm text-muted-foreground">
             为认真对待投资的你而设计
           </p>
         </div>
-        <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
           <FeatureCard
             icon={<CandlestickChart className="h-6 w-6 text-midas-red" />}
             title="K 线工作台"
@@ -360,65 +361,67 @@ function FeatureCard({ icon, title, desc }: FeatureCardProps) {
 
 function AiChan() {
   return (
-    <section id="ai-chan" className="mx-auto max-w-7xl px-6 py-24">
+    <section id="ai-chan" className="mx-auto max-w-6xl px-6 py-20">
       <div className="text-center">
-        <p className="mb-3 text-sm uppercase tracking-[0.3em] text-gold">
+        <p className="mb-2 text-xs uppercase tracking-[0.3em] text-gold">
           差异化能力
         </p>
         <h2 className="font-serif text-3xl font-bold lg:text-4xl">
           不只是看图,更懂走势
         </h2>
-        <p className="mt-3 text-muted-foreground">
+        <p className="mt-3 text-sm text-muted-foreground">
           czsc 缠论自动标注 + DeepSeek AI 多维研判 · 数据 + 模型双驱动
         </p>
       </div>
 
-      <div className="mt-14 grid gap-10 lg:grid-cols-2">
+      {/*
+        A2 修:左右两张图严格等高对齐 ·
+        每个 figure 用固定 aspect-[4/3] + object-cover · 不同源比例统一显示尺寸。
+      */}
+      <div className="mt-10 grid items-stretch gap-6 lg:grid-cols-2">
         {/* 左侧 · 缠论自动标注 */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col">
+          <div className="mb-3 flex items-center gap-2">
             <ScrollText className="h-5 w-5 text-gold" />
             <h3 className="font-serif text-xl font-bold">缠论自动标注</h3>
           </div>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            基于 czsc 库识别:笔(帝王金连线)· 顶分型(墨绿▽)· 底分型(朱红△)· 中枢(淡灰蓝矩形)· 一/二/三类买卖点。
-            画在你熟悉的 K 线上,不打扰主图阅读。
+          <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
+            基于 czsc 库识别:笔(帝王金连线)· 顶分型(墨绿▽)· 底分型(朱红△)· 中枢(淡灰蓝矩形)· 一/二/三类买卖点。画在你熟悉的 K 线上,不打扰主图阅读。
           </p>
-          <div className="overflow-hidden rounded-xl border border-paper bg-background shadow-lg">
+          <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-paper bg-background shadow-lg">
             <Image
               src="/marketing/chan.png"
               alt="缠论自动标注 · 笔/分型/中枢"
-              width={1440}
-              height={900}
-              className="h-auto w-full"
+              fill
+              className="object-cover object-center"
+              sizes="(max-width: 1024px) 100vw, 50vw"
             />
           </div>
         </div>
 
-        {/* 右侧 · AI 决策卡 */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
+        {/* 右侧 · AI 决策卡 · 同一 aspect-[4/3] 容器 · object-cover object-top 保留头部信息 */}
+        <div className="flex flex-col">
+          <div className="mb-3 flex items-center gap-2">
             <Bot className="h-5 w-5 text-midas-red" />
             <h3 className="font-serif text-xl font-bold">AI 决策卡</h3>
           </div>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            LangGraph workflow 把 K 线 + 缠论结构 + 4 项指标喂给 DeepSeek · 输出结构化评分(强多/弱多/中性/弱空/强空)+ 关键支撑阻力位 + 中文解读。
-            缓存命中 35× 提速,百用户月费仅 ¥1.7。
+          <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
+            LangGraph workflow 把 K 线 + 缠论结构 + 4 项指标喂给 DeepSeek · 输出结构化评分(强多/弱多/中性/弱空/强空)+ 关键支撑阻力位 + 中文解读。缓存命中 35× 提速,百用户月费仅 ¥1.7。
           </p>
-          <div className="overflow-hidden rounded-xl border border-paper bg-background shadow-lg">
+          <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-paper bg-background shadow-lg">
             <Image
               src="/marketing/ai-card.png"
               alt="AI 决策卡 · 综合评分 + 缠论买卖点"
-              width={600}
-              height={900}
-              className="h-auto w-full"
+              fill
+              className="object-cover object-top"
+              sizes="(max-width: 1024px) 100vw, 50vw"
             />
           </div>
         </div>
       </div>
 
       {/* 强制 disclaimer · 跟 0011 / 0012 ADR 红线一致 */}
-      <div className="mx-auto mt-10 max-w-3xl rounded-lg border border-paper bg-cream/60 px-5 py-3 text-center">
+      <div className="mx-auto mt-8 max-w-3xl rounded-lg border border-paper bg-cream/60 px-5 py-3 text-center">
         <p className="font-mono text-xs text-muted-foreground/80">
           ⚠ 分析仅供参考,不构成投资建议。所有交易均为虚拟资金模拟。
         </p>
@@ -437,23 +440,23 @@ function Pricing() {
   return (
     <section
       id="pricing"
-      className="border-y border-paper/60 bg-cream/40 py-20"
+      className="border-y border-paper/60 bg-cream/40 py-16"
     >
       <div className="mx-auto max-w-3xl px-6 text-center">
         <h2 className="font-serif text-3xl font-bold lg:text-4xl">定价</h2>
-        <div className="mt-10 rounded-2xl border-2 border-gold/40 bg-background p-10 shadow-md">
-          <div className="mb-4 inline-block rounded-full border border-gold bg-gold/10 px-4 py-1.5 font-mono text-xs text-gold">
+        <div className="mt-8 rounded-2xl border-2 border-gold/40 bg-background p-8 shadow-md">
+          <div className="mb-3 inline-block rounded-full border border-gold bg-gold/10 px-4 py-1.5 font-mono text-xs text-gold">
             限时免费 · 内测中
           </div>
           <h3 className="mt-2 font-serif text-2xl font-bold">
             点金 Midas 正在内测
           </h3>
-          <p className="mt-4 text-base leading-relaxed text-muted-foreground">
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
             当前所有功能免费开放。会员方案规划中,敬请期待。
           </p>
           <Link
             href="/workbench"
-            className="mt-8 inline-flex items-center gap-2 rounded-md bg-midas-red px-6 py-3 text-base font-medium text-white shadow-sm transition-colors hover:bg-midas-red-deep"
+            className="mt-6 inline-flex items-center gap-2 rounded-md bg-midas-red px-6 py-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-midas-red-deep"
           >
             立即体验
             <ArrowRight className="h-4 w-4" />
@@ -472,20 +475,20 @@ function Pricing() {
 
 function BottomCTA() {
   return (
-    <section className="mx-auto max-w-7xl px-6 py-24 text-center">
+    <section className="mx-auto max-w-6xl px-6 py-16 text-center">
       <h2 className="font-serif text-3xl font-bold lg:text-4xl">
         开始你的第一笔虚拟交易
       </h2>
-      <p className="mt-4 text-muted-foreground">
+      <p className="mt-3 text-sm text-muted-foreground">
         0 风险 · 0 成本 · 不需要真金白银,只磨练你的判断
       </p>
-      <div className="mt-8">
+      <div className="mt-6">
         <Link
           href="/workbench"
-          className="inline-flex items-center gap-2 rounded-md bg-midas-red px-8 py-4 text-lg font-medium text-white shadow-lg transition-all hover:bg-midas-red-deep hover:shadow-xl"
+          className="inline-flex items-center gap-2 rounded-md bg-midas-red px-8 py-3.5 text-base font-medium text-white shadow-lg transition-all hover:bg-midas-red-deep hover:shadow-xl"
         >
           进入终端
-          <ArrowRight className="h-5 w-5" />
+          <ArrowRight className="h-4 w-4" />
         </Link>
       </div>
     </section>
@@ -501,8 +504,8 @@ function BottomCTA() {
 function Footer() {
   return (
     <footer className="border-t border-paper bg-cream/60">
-      <div className="mx-auto max-w-7xl px-6 py-12">
-        <div className="grid gap-10 md:grid-cols-4">
+      <div className="mx-auto max-w-6xl px-6 py-10">
+        <div className="grid gap-8 md:grid-cols-4">
           <div className="md:col-span-2">
             <div className="flex items-center gap-2">
               <Image
@@ -539,7 +542,7 @@ function Footer() {
             ]}
           />
         </div>
-        <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-paper pt-6 text-xs text-muted-foreground md:flex-row">
+        <div className="mt-8 flex flex-col items-center justify-between gap-2 border-t border-paper pt-5 text-xs text-muted-foreground md:flex-row">
           <p>© 2026 点金 Midas. All rights reserved.</p>
           <p className="font-mono">仅供模拟交易,不构成投资建议</p>
         </div>
