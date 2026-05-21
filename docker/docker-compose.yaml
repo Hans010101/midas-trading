@@ -87,8 +87,10 @@ services:
       - path: ../.env
         required: true
     environment:
-      # 容器内部域名覆盖
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-midas}:${POSTGRES_PASSWORD:-midas_dev}@postgres:5432/${POSTGRES_DB:-midas}
+      # 容器内部域名覆盖(以下值都不带 ${VAR} 插值 · 避免 Compose 找不到 .env 时回退到默认值)
+      # DATABASE_URL 不在这里设 · 由 env_file ../.env 提供(包含真实 POSTGRES_PASSWORD)·
+      # 历史踩坑:0014 ADR 2026-05-21 · YAML interpolation ${POSTGRES_PASSWORD:-midas_dev}
+      # 在 compose 找不到 .env 时回退到 midas_dev · 覆盖了 env_file 的正确值
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: "8123"
       REDIS_URL: redis://redis:6379/0
@@ -123,7 +125,7 @@ services:
       - path: ../.env
         required: true
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-midas}:${POSTGRES_PASSWORD:-midas_dev}@postgres:5432/${POSTGRES_DB:-midas}
+      # DATABASE_URL 见 api · 由 env_file 提供 · 不在 YAML 里拼装(0014 ADR)
       CLICKHOUSE_HOST: clickhouse
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
