@@ -1,7 +1,7 @@
 ## 0006 · 鉴权策略
 
 ### 状态
-Approved (2026-05-19)
+Approved (2026-05-19) · **回归 (2026-05-21 · 后端 DB session)**:JWT → opaque DB session token,见末尾 § 回归 1。
 
 ### 上下文
 M0 验收第 2 步「陌生人能注册 → 邮箱验证 → 登录」必须打通。Task 3.5 (Checkpoint N) 落地。
@@ -105,6 +105,60 @@ M0 验收第 2 步「陌生人能注册 → 邮箱验证 → 登录」必须打�
 
 **保留 JWT 路径:**
 即便切到 DB session,前端调 FastAPI 时仍用短期 JWT(NextAuth `getToken` 派发),后端验签不变。DB session 只管 NextAuth 自己的 cookie。
+
+---
+
+### 回归 1 · 后端 JWT → DB session(2026-05-21 · M1 第三波 Task A)
+
+**触发原因:**
+M1 上线前置 · 产品负责人指令直接切 DB session(等不到 100 用户阈值)· 配合
+Google OAuth 上线 + Task 7.1 部署 · 安全基线统一抬高。
+
+**实际落地方案(跟原计划简化):**
+
+不引 Drizzle / 第二 ORM · 直接用 SQLAlchemy + Postgres 自建 `session` 表 ·
+NextAuth 仍保留 JWT cookie 策略(NextAuth 自己的 cookie · 仅前端 UI 状态用),
+**后端 FastAPI 改成查 DB session(取代 JWT 验签)**。
+
+| 维度 | 改动 |
+|---|---|
+| 新表 | `session(token_hash, user_id, user_agent, ip_address, created_at, last_used_at, expires_at)` |
+| Token 形态 | `secrets.token_urlsafe(32)` 明文 ↔ DB 存 sha256 hex 哈希(64 字符)|
+| TTL | **7 天滚动** · 每次 verify 续 7 天 · `last_used_at` 写时间戳 |
+| 多设备 | **单用户上限 5** · `issue_session` 时 evict 最旧的(按 last_used_at desc 排序) |
+| 旧 JWT 兼容 | 不兼容 · 老 JWT 不在 session 表 · 自然 401 · 用户被迫重登(产品负责人指令)|
+| Logout | 新增 `POST /api/v1/auth/logout` · revoke 当前 session · NextAuth signOut event 自动调 |
+| 过期清理 | `cleanup_expired_sessions()` 函数已就位 · Celery beat 接入 M2+ |
+
+**实装路径:**
+- `app/models/session.py` · SQLAlchemy model
+- `alembic/versions/9f3e2a17b8c4_session_table.py` · migration
+- `app/services/auth.py` · `issue_session` / `verify_session` / `revoke_session` /
+  `revoke_all_user_sessions` / `cleanup_expired_sessions` 5 个 helper
+- `app/api/deps.py` · `get_current_user` 改成 `verify_session` 查 DB
+- `app/api/v1/auth.py` · login 返回 session token · 新增 `/logout` 路由
+- `apps/web/auth.ts` · 注释更新 + signOut event 调后端 revoke
+- `tests/api/test_auth.py` · 5 新增 session 用例 · 现有 test_watchlist /
+  test_notifications 切到 `issue_session`
+
+**为什么响应字段仍叫 `access_token`:**
+不改字段名让 NextAuth Credentials provider / 前端代码完全无感 ·
+里面装的是 opaque token 不再是 JWT · 前端不需要关心。
+
+**已达成的能力(原 ADR § 3 决议的):**
+- ✅ 可主动失效会话(logout / revoke_all_user_sessions)
+- ✅ 可查活跃会话列表(`SELECT * FROM session WHERE user_id = X`,UI 实装 M2+)
+- ✅ 可审计单次登录(user_agent + ip_address 已记录)
+- ✅ 滑动过期(7 天滚动 · 每次 verify 续期)
+
+**未达成 / 推后:**
+- 「管理员强制踢人」UI(M2+ · `revoke_all_user_sessions` 已有 service)
+- 「我的设备」列表 UI(M2+ · DB 已有数据 · 前端组件未实装)
+- IP 异常检测(M2+ 安全增强)
+
+**保留的偏离 1 内容:**
+NextAuth 自己的 session strategy 仍是 JWT(只管浏览器 cookie · 不与后端 auth 耦合)·
+没引入 Drizzle ORM 的代价 · 兑现了「不引第二 ORM」的承诺。
 
 ## OAuth 计划
 

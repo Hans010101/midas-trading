@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.models.watchlist import WatchlistItem
-from app.services.auth import issue_access_token
+from app.services.auth import issue_session
 from tests.factories import (
     make_unverified_user,
     make_user,
@@ -24,8 +24,10 @@ from tests.factories import (
 )
 
 
-async def _auth_headers(user: User) -> dict[str, str]:
-    return {"Authorization": f"Bearer {issue_access_token(user.id)}"}
+async def _auth_headers(user: User, db: AsyncSession) -> dict[str, str]:
+    token = await issue_session(db, user_id=user.id)
+    await db.commit()
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.mark.asyncio
@@ -36,7 +38,7 @@ async def test_list_unverified_user_no_lazy_fill(
     user = await make_unverified_user(db_session)
     await db_session.commit()
 
-    r = await client.get("/api/v1/watchlist", headers=await _auth_headers(user))
+    r = await client.get("/api/v1/watchlist", headers=await _auth_headers(user, db_session))
     assert r.status_code == 200
     assert r.json() == []
 
@@ -53,7 +55,7 @@ async def test_list_verified_user_triggers_lazy_fill_3_demo(
     user = await make_user(db_session, demo_prefilled=False)
     await db_session.commit()
 
-    r = await client.get("/api/v1/watchlist", headers=await _auth_headers(user))
+    r = await client.get("/api/v1/watchlist", headers=await _auth_headers(user, db_session))
     assert r.status_code == 200
     items = r.json()
     assert len(items) == 3
@@ -79,7 +81,7 @@ async def test_list_prefilled_flag_true_empty_returns_empty(
     user = await make_user(db_session, demo_prefilled=True)
     await db_session.commit()
 
-    r = await client.get("/api/v1/watchlist", headers=await _auth_headers(user))
+    r = await client.get("/api/v1/watchlist", headers=await _auth_headers(user, db_session))
     assert r.status_code == 200
     assert r.json() == []
 
@@ -91,7 +93,7 @@ async def test_add_then_duplicate_returns_409(
     user = await make_user(db_session, demo_prefilled=True)
     await db_session.commit()
 
-    headers = await _auth_headers(user)
+    headers = await _auth_headers(user, db_session)
 
     # 第一次 add
     r1 = await client.post(
@@ -125,7 +127,7 @@ async def test_delete_own_item_returns_204(
     await db_session.commit()
 
     r = await client.delete(
-        f"/api/v1/watchlist/{item.id}", headers=await _auth_headers(user),
+        f"/api/v1/watchlist/{item.id}", headers=await _auth_headers(user, db_session),
     )
     assert r.status_code == 204
 
@@ -150,7 +152,7 @@ async def test_delete_other_users_item_returns_404(
 
     # user_a 试图删 user_b 的 item
     r = await client.delete(
-        f"/api/v1/watchlist/{item_b.id}", headers=await _auth_headers(user_a),
+        f"/api/v1/watchlist/{item_b.id}", headers=await _auth_headers(user_a, db_session),
     )
     assert r.status_code == 404
 
@@ -181,7 +183,7 @@ async def test_reorder_success_rewrites_sort_order(
     r = await client.put(
         "/api/v1/watchlist/reorder",
         json={"item_ids": [it3.id, it2.id, it1.id]},
-        headers=await _auth_headers(user),
+        headers=await _auth_headers(user, db_session),
     )
     assert r.status_code == 200
     assert r.json() == {"status": "ok", "reordered": 3}
@@ -214,7 +216,7 @@ async def test_reorder_with_invalid_id_404_rollback(
     r = await client.put(
         "/api/v1/watchlist/reorder",
         json={"item_ids": [own.id, foreign.id]},
-        headers=await _auth_headers(user),
+        headers=await _auth_headers(user, db_session),
     )
     assert r.status_code == 404
 

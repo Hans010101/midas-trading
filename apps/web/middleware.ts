@@ -1,15 +1,19 @@
 /**
  * Next.js middleware · 路由保护。
  *
- * 0006 ADR § 8:
- *  - 未登录访问受保护路径(/workbench, /dashboard) → /login?next=...
+ * 0006 ADR § 8 + M1 第三波(2026-05-21 产品负责人指令):
+ *  - /workbench 改匿名可访问(未登录看 K 线 / 缠论 / AI 决策卡)·
+ *    具体「需登录」操作(下单 / 加自选 / 设虚拟资金 / 保存绘图)
+ *    由前端组件用 useRequireAuth() 弹登录引导,不在 middleware 拦截
+ *  - /account / /settings / /portfolio 仍强制登录
  *  - 已登录访问 /login or /register → /workbench
  */
 
 import { auth } from '@/auth'
 import { NextResponse } from 'next/server'
 
-const PROTECTED = ['/workbench', '/dashboard', '/account', '/settings']
+// /workbench 不在保护列表 · 匿名可访问看图
+const PROTECTED = ['/account', '/settings', '/portfolio', '/dashboard']
 const AUTH_PAGES = ['/login', '/register']
 
 export default auth((req) => {

@@ -14,7 +14,8 @@ import os
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,10 +27,14 @@ from app.services.auth import (
     create_verification_token,
     find_user_by_email,
     hash_password,
-    issue_access_token,
+    issue_session,
+    revoke_session,
     verify_password,
 )
 from app.services.email import send_verification_email
+
+# 复用同一个 scheme · auto_error=False 让未携带时也能进路由(我们自己处理)
+_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +147,12 @@ async def register(payload: RegisterIn, db: DbDep) -> RegisterOut:
 
 
 @router.post("/login", response_model=LoginOut)
-async def login(payload: LoginIn, db: DbDep) -> LoginOut:
+async def login(payload: LoginIn, db: DbDep, request: Request) -> LoginOut:
+    """邮箱密码登录 · 0006 ADR 2026-05-21 回归后返回 DB session token。
+
+    响应字段名 access_token 保持不变(NextAuth 前端代码兼容)·
+    实际是 opaque session token,不再是 JWT。
+    """
     email = payload.email.lower()
     user = await find_user_by_email(db, email)
     if user is None or not verify_password(payload.password, user.password_hash):
@@ -155,11 +165,33 @@ async def login(payload: LoginIn, db: DbDep) -> LoginOut:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="邮箱未验证 · 请查收注册邮件或调用 /resend-verification",
         )
+    ua = request.headers.get("user-agent")
+    ip = request.client.host if request.client else None
+    session_token = await issue_session(
+        db, user_id=user.id, user_agent=ua, ip_address=ip,
+    )
+    await db.commit()
     return LoginOut(
-        access_token=issue_access_token(user.id),
+        access_token=session_token,
         user_id=str(user.id),
         email=user.email,
     )
+
+
+class LogoutOut(BaseModel):
+    ok: bool = True
+
+
+@router.post("/logout", response_model=LogoutOut)
+async def logout(
+    db: DbDep,
+    token: Annotated[str | None, Depends(_oauth2_scheme)],
+) -> LogoutOut:
+    """注销当前 session(失败也返回 ok=True · 客户端无感)。"""
+    if token:
+        await revoke_session(db, token=token)
+        await db.commit()
+    return LogoutOut()
 
 
 @router.post("/verify", response_model=VerifyOut)

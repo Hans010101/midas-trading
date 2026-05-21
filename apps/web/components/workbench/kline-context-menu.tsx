@@ -17,6 +17,7 @@ import { ShoppingCart, TrendingDown } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { OrderConfirmDialog } from '@/components/workbench/order-confirm-dialog'
+import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useAccount } from '@/hooks/use-virtual'
 import { MARKET_LABEL } from '@/lib/format-money'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
@@ -36,6 +37,7 @@ export function KlineContextMenu({ children }: Props) {
   const symbol = useWorkbenchStore((s) => s.symbol)
   const market = useWorkbenchStore((s) => s.market)
   const { data: account } = useAccount(market)
+  const { requireAuth, isAuthenticated } = useRequireAuth()
   const isActivated = account !== null && account !== undefined
 
   const [menu, setMenu] = useState<MenuState>({ open: false, x: 0, y: 0 })
@@ -80,11 +82,13 @@ export function KlineContextMenu({ children }: Props) {
 
   function pickBuy() {
     close()
+    if (!requireAuth('下单')) return
     setDialog({ open: true, side: 'buy' })
   }
 
   function pickSell() {
     close()
+    if (!requireAuth('下单')) return
     setDialog({ open: true, side: 'sell' })
   }
 
@@ -105,19 +109,25 @@ export function KlineContextMenu({ children }: Props) {
           <div className="border-b border-paper px-3 py-2 font-mono text-xs text-muted-foreground">
             {symbol} · {MARKET_LABEL[market]}
           </div>
-          {!isActivated && (
+          {!isAuthenticated && (
+            <div className="border-b border-paper bg-cream/60 px-3 py-2 text-[10px] text-warn">
+              ⚠ 未登录 · 点击下单将引导登录
+            </div>
+          )}
+          {isAuthenticated && !isActivated && (
             <div className="border-b border-paper bg-cream/60 px-3 py-2 text-[10px] text-warn">
               ⚠ 未设置 {MARKET_LABEL[market]} 虚拟资金 · 去 /account 激活
             </div>
           )}
           <MenuItem
-            disabled={!isActivated}
+            // 未登录 · 让用户能点 · 触发引导 / 已登录但未激活 · 禁用
+            disabled={isAuthenticated && !isActivated}
             onClick={pickBuy}
             icon={<ShoppingCart className="h-3.5 w-3.5" />}
             label={`买入 ${symbol}`}
           />
           <MenuItem
-            disabled={!isActivated}
+            disabled={isAuthenticated && !isActivated}
             onClick={pickSell}
             icon={<TrendingDown className="h-3.5 w-3.5" />}
             label={`卖出 ${symbol}`}

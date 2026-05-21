@@ -1,0 +1,94 @@
+# 点金 Midas 生产环境 overlay
+# 跟 docker-compose.yaml 合用:
+#   docker compose -f docker-compose.yaml -f docker-compose.prod.yaml up -d
+#
+# 跟 dev 的区别:
+#   - 不暴露 postgres / clickhouse / redis 到主机(只走 docker 内部 DNS)
+#   - web 容器只对 127.0.0.1 暴露 3000(配合 Caddy / Nginx 反代)
+#   - api 同上 8000
+#   - 各服务加 logging driver 限制 + restart policy: always
+#   - 关闭 debug 日志(SQLAlchemy echo)
+
+name: midas
+
+services:
+  postgres:
+    ports: !reset []                    # 不对外暴露 5432 · 内部 DNS 即可
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  clickhouse:
+    ports: !reset []                    # 不对外暴露 8123 / 9000
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  redis:
+    ports: !reset []                    # 不对外暴露 6380
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  api:
+    # 只对 localhost(Caddy 反代) · 不直接面向公网
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: always
+    environment:
+      DEBUG: "false"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "10"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  worker:
+    restart: always
+    environment:
+      DEBUG: "false"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  web:
+    # 阿里云 VPS 上前端走 Vercel · 这个 service 仅在「自托管全栈」模式启用 ·
+    # Vercel 模式下 docker compose --profile self-hosted up 可单独启 web
+    profiles:
+      - self-hosted
+    ports:
+      - "127.0.0.1:3000:3000"
+    restart: always
+    environment:
+      NODE_ENV: production

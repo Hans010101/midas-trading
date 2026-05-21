@@ -1,10 +1,11 @@
-"""N7 回补:auth 路由 pytest · 8 个场景。
+"""N7 回补:auth 路由 pytest · 8 个场景 + 2026-05-21 Session 回归覆盖。
 
 涵盖:
 - register: 成功 / 重复邮箱 409 / 未确认 18+ 400
 - verify: 有效 token / 无效 token
-- login: 成功 / 未验证邮箱 403
-- me: 有 JWT 返回用户信息
+- login: 成功(返回 session token)/ 未验证邮箱 403
+- me: 有 session token 返回用户信息 · 旧 JWT 被拒
+- session: 7 天滚动 · 5 设备上限 · logout · 过期清理
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.models.verification_token import VerificationToken
-from app.services.auth import issue_access_token
+from app.services.auth import issue_session
 from tests.factories import (
     make_unverified_user,
     make_user,
@@ -148,18 +149,139 @@ async def test_login_unverified_email_403(
 
 
 @pytest.mark.asyncio
-async def test_me_with_jwt_returns_current_user(
+async def test_me_with_session_returns_current_user(
     client: AsyncClient, db_session: AsyncSession,
 ):
     user = await make_user(db_session)
+    token = await issue_session(db_session, user_id=user.id)
     await db_session.commit()
 
-    jwt = issue_access_token(user.id)
     r = await client.get(
-        "/api/v1/auth/me", headers={"Authorization": f"Bearer {jwt}"},
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"},
     )
     assert r.status_code == 200
     body = r.json()
     assert body["user_id"] == str(user.id)
     assert body["email"] == user.email
     assert body["email_verified"] is True
+
+
+@pytest.mark.asyncio
+async def test_old_jwt_token_rejected_post_session_migration(
+    client: AsyncClient, db_session: AsyncSession,
+):
+    """0006 ADR 2026-05-21 回归:旧 JWT 用户强制重登 · 任意非 session token 401。"""
+    user = await make_user(db_session)
+    await db_session.commit()
+
+    # 模拟旧 JWT(或任何不在 session 表里的字符串)
+    fake_jwt = "eyJhbGciOiJIUzI1NiJ9.fakefake.fakefake"
+    r = await client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {fake_jwt}"},
+    )
+    assert r.status_code == 401
+    _ = user  # silence unused
+
+
+@pytest.mark.asyncio
+async def test_logout_revokes_session(
+    client: AsyncClient, db_session: AsyncSession,
+):
+    user = await make_user(db_session)
+    token = await issue_session(db_session, user_id=user.id)
+    await db_session.commit()
+
+    # 登出前 me 能用
+    r1 = await client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r1.status_code == 200
+
+    # 登出
+    r2 = await client.post(
+        "/api/v1/auth/logout", headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r2.status_code == 200
+    assert r2.json()["ok"] is True
+
+    # 登出后 me 401
+    r3 = await client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r3.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_session_max_5_devices_evicts_oldest(
+    client: AsyncClient, db_session: AsyncSession,
+):
+    """单用户最多 5 设备 · 第 6 次登录时最早的失效。"""
+    from app.models.session import Session as AuthSession
+    from sqlalchemy import select as sqla_select
+
+    user = await make_user(db_session)
+    tokens = []
+    for i in range(6):
+        tokens.append(
+            await issue_session(
+                db_session, user_id=user.id,
+                user_agent=f"device-{i}",
+            ),
+        )
+    await db_session.commit()
+
+    # 应有 5 个 session(第 6 次登录 evict 了最早的)
+    rows = (
+        await db_session.execute(
+            sqla_select(AuthSession).where(AuthSession.user_id == user.id),
+        )
+    ).scalars().all()
+    assert len(rows) == 5
+
+    # 第 0 个 token 应该已失效(被 evict)
+    r0 = await client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {tokens[0]}"},
+    )
+    assert r0.status_code == 401
+
+    # 最新的 token(tokens[5])仍然能用
+    r5 = await client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {tokens[5]}"},
+    )
+    assert r5.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_session_rolling_ttl(
+    client: AsyncClient, db_session: AsyncSession,
+):
+    """每次 verify 续 7 天 · last_used_at 更新。"""
+    from datetime import UTC, datetime, timedelta
+
+    from app.models.session import Session as AuthSession
+    from sqlalchemy import select as sqla_select
+
+    user = await make_user(db_session)
+    token = await issue_session(db_session, user_id=user.id)
+    await db_session.commit()
+
+    # 手动把 expires_at 拨回到「快过期」(还有 1 小时)
+    sess = (
+        await db_session.execute(
+            sqla_select(AuthSession).where(AuthSession.user_id == user.id),
+        )
+    ).scalar_one()
+    near_expiry = datetime.now(tz=UTC) + timedelta(hours=1)
+    sess.expires_at = near_expiry
+    await db_session.commit()
+
+    # 调一次 me,触发 verify_session 续期
+    r = await client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 200
+
+    # 重读 · expires_at 应该被续到 ~7 天后
+    await db_session.refresh(sess)
+    days_left = (sess.expires_at - datetime.now(tz=UTC)).days
+    assert days_left >= 6, f"expected 7d rolling but got {days_left}"

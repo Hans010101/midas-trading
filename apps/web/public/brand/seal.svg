@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  点金 Midas · 朱文方印(SVG 代码尽力还原版)
+
+  设计还原:
+    - 方形 240×240 viewBox
+    - 朱砂红 #C8102E
+    - 双线边框(外粗线 + 内细线 · 朱文典型形制)
+    - 中央上下两字「点」「金」· 字号大、字距紧
+    - 印泥磨损质感:turbulence noise + displacement 模拟纸边纤维 + 红墨缺漏
+
+  局限(产品负责人 2026-05-21 已知):
+    - **真正的篆书字形需要矢量字体或手绘 path** · 单纯 SVG <text> 默认渲染
+      系统的 Noto Serif SC / Hei 字体,看上去是楷/宋而非篆。
+    - 本 SVG 用 Noto Serif SC Bold · 在 web 端有 fallback 顺序;
+      Cangjie / 思源宋体 在 macOS / Win / Linux 都常驻,显示稳定。
+    - 若需要真正的篆书外观:① 用 Adobe 篆书字体导出 SVG path,
+      ② 或找设计师手绘 path 替换本文件中的 <text> 节点。
+
+  视觉系统对齐:
+    - 主色 中国红 #C8102E(印泥色)
+    - 不引入新色 · 没有黑色 / 灰色
+    - 严守 CLAUDE.md 视觉系统
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="240"
+  height="240"
+  viewBox="0 0 240 240"
+  role="img"
+  aria-label="点金 Midas 印章"
+>
+  <defs>
+    <!-- 印泥磨损质感:turbulence noise · 用 displacement 让边缘破碎 -->
+    <filter id="ink-distress" x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence
+        type="fractalNoise"
+        baseFrequency="0.85"
+        numOctaves="2"
+        seed="7"
+        result="noise"
+      />
+      <feDisplacementMap
+        in="SourceGraphic"
+        in2="noise"
+        scale="2.0"
+        xChannelSelector="R"
+        yChannelSelector="G"
+      />
+    </filter>
+
+    <!-- 印泥缺墨 mask:用 noise 当 alpha mask 砍掉一点点红色 -->
+    <filter id="ink-fade" x="-2%" y="-2%" width="104%" height="104%">
+      <feTurbulence
+        type="fractalNoise"
+        baseFrequency="0.4"
+        numOctaves="3"
+        seed="3"
+      />
+      <feColorMatrix
+        type="matrix"
+        values="0 0 0 0 0
+                0 0 0 0 0
+                0 0 0 0 0
+                0 0 0 0.4 0.85"
+      />
+      <feComposite in="SourceGraphic" in2="" operator="in" />
+    </filter>
+  </defs>
+
+  <!-- 印章主组(应用 ink-distress 滤镜) -->
+  <g filter="url(#ink-distress)">
+    <!-- 外粗线方框 -->
+    <rect
+      x="14"
+      y="14"
+      width="212"
+      height="212"
+      fill="none"
+      stroke="#C8102E"
+      stroke-width="6"
+      rx="3"
+      ry="3"
+    />
+    <!-- 内细线方框 -->
+    <rect
+      x="26"
+      y="26"
+      width="188"
+      height="188"
+      fill="none"
+      stroke="#C8102E"
+      stroke-width="2"
+      rx="2"
+      ry="2"
+    />
+
+    <!-- 中央分隔细线(可选 · 朱文印常见竖向分字) -->
+    <line
+      x1="120"
+      y1="36"
+      x2="120"
+      y2="204"
+      stroke="#C8102E"
+      stroke-width="1"
+      stroke-opacity="0.35"
+    />
+
+    <!--
+      篆书「点 金」二字(右起读法 · 中文古印朱文典型)
+      右半 = 点 · 左半 = 金
+      字体回退栈尽量找有篆书风格的系统字体,大多数环境会降级到 Songti/Serif。
+    -->
+    <text
+      x="178"
+      y="148"
+      text-anchor="middle"
+      font-family="'STKaiti', 'KaiTi', 'STSong', 'Songti SC', 'Noto Serif SC', 'Source Han Serif SC', serif"
+      font-size="100"
+      font-weight="900"
+      fill="#C8102E"
+    >点</text>
+    <text
+      x="62"
+      y="148"
+      text-anchor="middle"
+      font-family="'STKaiti', 'KaiTi', 'STSong', 'Songti SC', 'Noto Serif SC', 'Source Han Serif SC', serif"
+      font-size="100"
+      font-weight="900"
+      fill="#C8102E"
+    >金</text>
+  </g>
+
+  <!-- 印泥缺墨 · 在主图上叠一层半透明白色噪声破坏纯红 -->
+  <rect
+    x="0"
+    y="0"
+    width="240"
+    height="240"
+    fill="white"
+    filter="url(#ink-fade)"
+    opacity="0.6"
+    pointer-events="none"
+  />
+</svg>

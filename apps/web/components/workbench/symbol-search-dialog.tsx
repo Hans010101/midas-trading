@@ -18,6 +18,7 @@ import {
   CommandList,
 } from '@/components/ui/command'
 import { useSymbolSearch } from '@/hooks/use-symbol-search'
+import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useAddToWatchlist } from '@/hooks/use-watchlist'
 import { WatchlistApiError } from '@/lib/api/watchlist'
 import { cn } from '@/lib/utils'
@@ -46,12 +47,18 @@ export function SymbolSearchDialog({ open, onOpenChange }: Props) {
   const [query, setQuery] = useState('')
   const { data: results = [], isFetching } = useSymbolSearch(query)
   const addMutation = useAddToWatchlist()
+  const { requireAuth } = useRequireAuth()
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   const grouped = groupByMarket(results)
   const trimmedQ = query.trim()
 
   async function handleSelect(item: SymbolMeta) {
+    // 未登录 · 关闭弹窗 + 跳登录(M1 第三波 · 匿名 /workbench)
+    if (!requireAuth('加自选股')) {
+      onOpenChange(false)
+      return
+    }
     setErrorMsg(null)
     try {
       await addMutation.mutateAsync({ symbol: item.symbol, market: item.market })

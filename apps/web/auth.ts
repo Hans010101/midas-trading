@@ -1,8 +1,13 @@
 /**
  * NextAuth v5(Auth.js)配置。
  *
- * 用 CredentialsProvider 调后端 /api/v1/auth/login,JWT session strategy(0006 ADR)。
- * Backend 已经在 Bearer JWT 里携带 user_id,前端只 cookie 这一层 NextAuth 来管。
+ * 用 CredentialsProvider 调后端 /api/v1/auth/login,JWT session strategy(NextAuth 自己的 cookie · 不是后端 JWT)。
+ *
+ * 0006 ADR 2026-05-21 回归后:
+ *   - 后端 /login 返回 `access_token` 字段仍是这个名字,但内容已从 JWT 改成
+ *     **opaque DB session token**(7 天滚动 TTL + 单用户 5 设备上限)。
+ *   - 前端 NextAuth 把它当 opaque 字符串塞进自己的 cookie · 调用方无感。
+ *   - Authorization: Bearer <token> 给后端 · 后端走 verify_session 查 DB · 现有 JWT 用户自然失效需要重登。
  */
 
 import NextAuth, { type DefaultSession, type User } from 'next-auth'
@@ -69,6 +74,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
+  events: {
+    // 用户主动登出时,顺便通知后端 revoke DB session(0006 ADR 2026-05-21 回归)
+    async signOut(message) {
+      const tk = (message as { token?: { accessToken?: string } } | null)?.token
+      const accessToken = tk?.accessToken
+      if (!accessToken) return
+      try {
+        await fetch(`${API_BASE}/api/v1/auth/logout`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+      } catch {
+        // 失败仅记 · 不阻塞 NextAuth 清 cookie
+      }
+    },
+  },
   callbacks: {
     async jwt({ token, user }) {
       // 第一次登录:把后端 JWT + user_id + email 塞进 NextAuth JWT

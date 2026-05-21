@@ -14,6 +14,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
 import { OrderConfirmDialog } from '@/components/workbench/order-confirm-dialog'
+import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useAccount, usePortfolio } from '@/hooks/use-virtual'
 import { currencyOf, formatMoney, MARKET_LABEL } from '@/lib/format-money'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
@@ -25,6 +26,7 @@ export function Header() {
   const symbol = useWorkbenchStore((s) => s.symbol)
   const setMarket = useWorkbenchStore((s) => s.setMarket)
 
+  const { requireAuth, isAuthenticated } = useRequireAuth()
   const { data: account } = useAccount(market)
   const { data: portfolio } = usePortfolio()
   const summary = portfolio?.find((s) => s.market === market)
@@ -37,23 +39,22 @@ export function Header() {
   const isActivated = account !== null && account !== undefined
 
   // Cmd+B 买 / Cmd+S 卖 全局快捷键(老手入口 · 0008 v2 § 8.4 第 3 种入口)
+  // 未登录时也响应快捷键 · 触发登录引导
   useEffect(() => {
-    if (!isActivated) return
     function onKey(e: KeyboardEvent) {
-      // 跳过输入框内按键
       const tag = (e.target as HTMLElement)?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA') return
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
-        e.preventDefault()
-        setOrderDialog({ open: true, side: 'buy' })
-      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault()
-        setOrderDialog({ open: true, side: 'sell' })
-      }
+      const isBuy = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b'
+      const isSell = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's'
+      if (!isBuy && !isSell) return
+      e.preventDefault()
+      if (!requireAuth('下单')) return
+      if (!isActivated) return            // 已登录但未激活 · DisabledTradeButtons 已提示
+      setOrderDialog({ open: true, side: isBuy ? 'buy' : 'sell' })
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [isActivated])
+  }, [isActivated, requireAuth])
 
   return (
     <header className="h-14 shrink-0 border-b border-midas-red bg-background">
@@ -78,11 +79,34 @@ export function Header() {
         </nav>
 
         {/* 中间:钱包指示(随 market 切换)*/}
-        <WalletIndicator market={market} isActivated={isActivated} summary={summary} />
+        <WalletIndicator
+          market={market}
+          isActivated={isActivated}
+          isAuthenticated={isAuthenticated}
+          summary={summary}
+        />
 
         {/* 右侧:买卖按钮 */}
         <div className="flex items-center gap-2">
-          {isActivated ? (
+          {!isAuthenticated ? (
+            // 未登录 · 按钮可点击 · 触发登录引导(M1 第三波 · 匿名 /workbench)
+            <>
+              <button
+                type="button"
+                onClick={() => requireAuth('下单')}
+                className="rounded-md bg-midas-red px-4 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-midas-red-deep"
+              >
+                买入
+              </button>
+              <button
+                type="button"
+                onClick={() => requireAuth('下单')}
+                className="rounded-md border border-midas-red bg-background px-4 py-1.5 text-sm font-medium text-midas-red transition-colors hover:bg-midas-red-glow"
+              >
+                卖出
+              </button>
+            </>
+          ) : isActivated ? (
             <>
               <button
                 type="button"
@@ -119,13 +143,27 @@ export function Header() {
 interface WalletIndicatorProps {
   market: Market
   isActivated: boolean
+  isAuthenticated: boolean
   summary?: { cash_balance: string; positions_value: string; realized_pnl: string }
 }
 
 function WalletIndicator({
-  market, isActivated, summary,
+  market, isActivated, isAuthenticated, summary,
 }: WalletIndicatorProps) {
   const currency = currencyOf(market)
+  if (!isAuthenticated) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground/70">
+        <span>未登录 · 仅看图模式</span>
+        <Link
+          href="/login"
+          className="text-midas-red hover:underline"
+        >
+          [登录 / 注册]
+        </Link>
+      </div>
+    )
+  }
   if (!isActivated) {
     return (
       <div className="flex items-center gap-2 text-xs">

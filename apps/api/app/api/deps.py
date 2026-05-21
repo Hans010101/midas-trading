@@ -6,19 +6,19 @@
 `app.state` 在 Starlette 里是动态属性 bag(类型 Any),
 所以 getter 里用 `cast` 让 mypy strict 满意。
 
-`CurrentUserDep` 用于受保护路由 · 从 Bearer JWT 提取并验证。
+`CurrentUserDep` 用于受保护路由 · 从 Bearer session token 查 DB session。
+(0006 ADR 2026-05-21 回归 · JWT → DB session)。
 """
 
 from typing import Annotated, cast
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.user import User
-from app.services.auth import decode_access_token, find_user_by_id
+from app.services.auth import verify_session
 from app.services.clickhouse_client import ClickHouseClient
 from app.services.data_sources.cn_source import AKShareCnSource
 from app.services.data_sources.crypto_source import CcxtBinanceCryptoSource
@@ -48,25 +48,24 @@ async def get_current_user(
     token: Annotated[str | None, Depends(_oauth2_scheme)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
+    """从 Bearer session token 查 DB session · 0006 ADR 2026-05-21 回归。
+
+    旧 JWT token 已不在 session 表 · 查询不到 · 用户被迫重新登录(产品负责人指令)。
+    成功路径副作用:verify_session 续 7 天 TTL + 写 last_used_at。
+    """
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="未携带 Bearer JWT",
+            detail="未携带 Bearer session token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    try:
-        user_id = decode_access_token(token)
-    except JWTError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"JWT 无效:{e}",
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from e
-    user = await find_user_by_id(db, user_id)
+    user = await verify_session(db, token=token)
     if user is None:
+        # session 不存在 / 已过期 / 用户已删除 · 也涵盖旧 JWT 迁移场景
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="用户不存在或已删除",
+            detail="session 无效或已过期 · 请重新登录",
+            headers={"WWW-Authenticate": "Bearer"},
         )
     return user
 

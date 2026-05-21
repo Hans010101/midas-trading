@@ -18,12 +18,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.notification import NotificationConfig
-from app.services.auth import issue_access_token
+from app.services.auth import issue_session
 from tests.factories import make_user
 
 
-async def _auth(user) -> dict[str, str]:  # type: ignore[no-untyped-def]
-    return {"Authorization": f"Bearer {issue_access_token(user.id)}"}
+async def _auth(user, db: AsyncSession) -> dict[str, str]:  # type: ignore[no-untyped-def]
+    token = await issue_session(db, user_id=user.id)
+    await db.commit()
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.mark.asyncio
@@ -34,7 +36,7 @@ async def test_get_config_unconfigured_returns_default(
     await db_session.commit()
 
     r = await client.get(
-        "/api/v1/notifications/config", headers=await _auth(user),
+        "/api/v1/notifications/config", headers=await _auth(user, db_session),
     )
     assert r.status_code == 200
     body = r.json()
@@ -60,7 +62,7 @@ async def test_get_config_truncates_tg_token(
     await db_session.commit()
 
     r = await client.get(
-        "/api/v1/notifications/config", headers=await _auth(user),
+        "/api/v1/notifications/config", headers=await _auth(user, db_session),
     )
     body = r.json()
     # 前 10 + ... + 后 4
@@ -79,7 +81,7 @@ async def test_put_config_first_time_lazy_create(
     r = await client.put(
         "/api/v1/notifications/config",
         json={"feishu_webhook_url": "https://feishu.example/webhook/abc"},
-        headers=await _auth(user),
+        headers=await _auth(user, db_session),
     )
     assert r.status_code == 200
     body = r.json()
@@ -113,7 +115,7 @@ async def test_put_config_partial_update_keeps_other_fields(
     r = await client.put(
         "/api/v1/notifications/config",
         json={"tg_chat_id": "new_chat"},
-        headers=await _auth(user),
+        headers=await _auth(user, db_session),
     )
     assert r.status_code == 200
     body = r.json()
@@ -136,7 +138,7 @@ async def test_put_config_empty_string_clears_field(
     r = await client.put(
         "/api/v1/notifications/config",
         json={"feishu_webhook_url": ""},
-        headers=await _auth(user),
+        headers=await _auth(user, db_session),
     )
     assert r.status_code == 200
     body = r.json()
@@ -153,7 +155,7 @@ async def test_post_test_unconfigured_400(
 
     r = await client.post(
         "/api/v1/notifications/test?channel=feishu",
-        headers=await _auth(user),
+        headers=await _auth(user, db_session),
     )
     assert r.status_code == 400
     assert "未配置" in r.json()["detail"]
@@ -175,7 +177,7 @@ async def test_post_test_channel_unconfigured_returns_error_payload(
     # tg 未配置
     r = await client.post(
         "/api/v1/notifications/test?channel=telegram",
-        headers=await _auth(user),
+        headers=await _auth(user, db_session),
     )
     assert r.status_code == 200
     body = r.json()
