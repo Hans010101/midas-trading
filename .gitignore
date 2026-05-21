@@ -137,3 +137,14 @@ tmp/
 *.key
 !*.example.pem
 !*.example.key
+
+# =====================
+# 产品负责人原始素材(根目录素材文件 · 不进 git)
+# 设计素材请走 apps/web/public/ 经过处理后入库
+# =====================
+/midas logo.png
+/点金logo .png
+/首页背景图.png
+/*.psd
+/*.ai
+/*.sketch
