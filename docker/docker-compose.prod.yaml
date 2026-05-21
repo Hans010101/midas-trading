@@ -87,7 +87,9 @@ services:
 
   api:
     # 只对 localhost(Caddy 反代) · 不直接面向公网
-    ports:
+    # !override 替换 base 的 0.0.0.0:8000(否则 compose 会 MERGE 两条 port 映射 ·
+    # 导致 bind address already in use · 见 docs/decisions/0013 · 2026-05-21 翻车)
+    ports: !override
       - "127.0.0.1:8000:8000"
     restart: always
     environment:
@@ -121,7 +123,8 @@ services:
     # 自托管全栈模式才用:`docker compose --profile self-hosted up`
     profiles:
       - self-hosted
-    ports:
+    # !override 替换 base 的 0.0.0.0:3000(同 api · 见 docs/decisions/0013)
+    ports: !override
       - "127.0.0.1:3000:3000"
     restart: always
     environment:
