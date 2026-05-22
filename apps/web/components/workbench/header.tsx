@@ -13,18 +13,18 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
+import { MarketSwitcher } from '@/components/layout/market-switcher'
 import { OrderConfirmDialog } from '@/components/workbench/order-confirm-dialog'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useAccount, usePortfolio } from '@/hooks/use-virtual'
 import { currencyOf, formatMoney, MARKET_LABEL } from '@/lib/format-money'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
 import { cn } from '@/lib/utils'
-import { MARKETS, type Market } from '@midas/shared'
+import type { Market } from '@midas/shared'
 
 export function Header() {
   const market = useWorkbenchStore((s) => s.market)
   const symbol = useWorkbenchStore((s) => s.symbol)
-  const setMarket = useWorkbenchStore((s) => s.setMarket)
 
   const { requireAuth, isAuthenticated } = useRequireAuth()
   const { data: account } = useAccount(market)
@@ -59,24 +59,8 @@ export function Header() {
   return (
     <header className="h-14 shrink-0 border-b border-midas-red bg-background">
       <div className="flex h-full items-center justify-between gap-4 px-6">
-        {/* 左侧:市场 Tab */}
-        <nav className="flex items-center gap-1" aria-label="市场切换">
-          {MARKETS.map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setMarket(m)}
-              className={cn(
-                'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
-                m === market
-                  ? 'bg-midas-red text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-midas-red-glow hover:text-foreground',
-              )}
-            >
-              {MARKET_LABEL[m]}
-            </button>
-          ))}
-        </nav>
+        {/* 左侧:市场 Tab(抽成全站共用 MarketSwitcher · 行为/样式不变)*/}
+        <MarketSwitcher />
 
         {/* 中间:钱包指示(随 market 切换)*/}
         <WalletIndicator
