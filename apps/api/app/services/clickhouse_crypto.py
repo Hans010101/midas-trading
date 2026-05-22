@@ -3,9 +3,12 @@
 跟 clickhouse_client.py 互补 · 不污染原 ClickHouseClient 类。
 将来 M2-E 性能优化时可考虑合并到 ClickHouseClient,目前独立模块更清晰。
 
-时区铁律(继承 0002 教训):
-- 写入前 ts 必须去 tz(变 naive UTC)
-- 读出后 ts 必须补 UTC tz
+时区铁律(继承 0002 教训 · 跟能正常写的 kline 路径对齐):
+- 写入前 ts 必须是 **tz-aware UTC**(_aware_utc)· 绝不传 naive
+  (clickhouse-connect 对 naive 会按 OS 本地时区误转 · 8h 偏移)
+- 读出后 ts 补 UTC tz(_attach_utc)
+- 配套:用本模块 helper 的 client 必须设 session_timezone='UTC'
+  (worker _get_ch_client / verify 临时 client 都已加)
 
 ORDER BY DESC + Python reverse 模式(继承 0010 教训):
 - 任何「取最新 N 条」语义必须 SQL 端 DESC LIMIT N · Python reverse 还原 ASC
@@ -58,11 +61,18 @@ _OVERVIEW_COLUMNS = (
 )
 
 
-def _strip_tz(dt: datetime) -> datetime:
-    """tz-aware UTC datetime → naive(去 tz)· 给 clickhouse-connect 写入用。"""
+def _aware_utc(dt: datetime) -> datetime:
+    """归一为 tz-aware UTC · 给 clickhouse-connect 写入用。
+
+    跟 ClickHouseClient._to_aware_utc(能正常写的 kline 路径)一致。
+    0002 教训第 3 条:**绝不传 naive datetime** 给 clickhouse-connect —
+    它会用 OS 本地时区(Asia/Shanghai 等)做 astimezone(),naive 被当本地
+    时间转 UTC,导致 8 小时偏移。M2-A 这几张表原先用 _strip_tz 传 naive,
+    正好踩这个坑(funding ts 错位会直接污染 M2-C 资金费率结算)。
+    """
     if dt.tzinfo is None:
-        return dt  # 已经是 naive · 兜底
-    return dt.astimezone(UTC).replace(tzinfo=None)
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 def _attach_utc(dt: datetime) -> datetime:
@@ -84,7 +94,7 @@ async def insert_funding_rates(
     if not items:
         return 0
     data = [
-        [it.symbol, _strip_tz(it.ts), it.rate, it.mark_price]
+        [it.symbol, _aware_utc(it.ts), it.rate, it.mark_price]
         for it in items
     ]
     await client.insert("crypto_funding_rate", data, column_names=list(_FUNDING_COLUMNS))
@@ -121,7 +131,7 @@ async def insert_open_interest(
     if not items:
         return 0
     data = [
-        [it.symbol, _strip_tz(it.ts), it.oi_coin, it.oi_usd]
+        [it.symbol, _aware_utc(it.ts), it.oi_coin, it.oi_usd]
         for it in items
     ]
     await client.insert("crypto_open_interest", data, column_names=list(_OI_COLUMNS))
@@ -158,7 +168,7 @@ async def insert_long_short(
         return 0
     data = [
         [
-            it.symbol, _strip_tz(it.ts),
+            it.symbol, _aware_utc(it.ts),
             it.top_account_long, it.top_account_short, it.top_account_ratio,
             it.top_position_long, it.top_position_short, it.top_position_ratio,
             it.taker_buy_vol, it.taker_sell_vol, it.taker_ratio,
@@ -206,7 +216,7 @@ async def insert_tickers_24h(
         return 0
     data = [
         [
-            it.symbol, it.instrument, _strip_tz(it.ts),
+            it.symbol, it.instrument, _aware_utc(it.ts),
             it.last_price, it.change_pct_24h, it.high_24h, it.low_24h,
             it.volume_24h, it.quote_volume_24h, it.count_24h,
         ]
@@ -277,7 +287,7 @@ async def insert_market_overview(
 ) -> int:
     """单行写 · ReplacingMergeTree 按 ts 去重。"""
     data = [[
-        _strip_tz(ov.ts),
+        _aware_utc(ov.ts),
         ov.total_market_cap_usd, ov.total_volume_24h_usd,
         ov.btc_dominance, ov.eth_dominance,
         ov.fear_greed_value, ov.fear_greed_classification,

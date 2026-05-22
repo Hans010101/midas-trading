@@ -226,7 +226,7 @@ def fresh_sync_client():
     return clickhouse_connect.get_client(
         host=settings.clickhouse_host, port=settings.clickhouse_port,
         username=settings.clickhouse_user, password=settings.clickhouse_password,
-        database=DB,
+        database=DB, settings={"session_timezone": "UTC"},
     )
 
 
@@ -234,7 +234,7 @@ async def write_via_helper():
     wch = await clickhouse_connect.get_async_client(
         host=settings.clickhouse_host, port=settings.clickhouse_port,
         username=settings.clickhouse_user, password=settings.clickhouse_password,
-        database=DB,
+        database=DB, settings={"session_timezone": "UTC"},
     )
     bf = BinanceFuturesSource()
     try:

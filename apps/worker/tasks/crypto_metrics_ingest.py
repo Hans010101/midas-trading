@@ -68,6 +68,9 @@ async def _get_ch_client() -> Any:
         username=settings.clickhouse_user,
         password=settings.clickhouse_password,
         database=settings.clickhouse_database,
+        # 跟 ClickHouseClient.create()(能正常写的 kline 路径)对齐 ·
+        # 否则 tz 写读按 server 本地时区误转 · 0002 教训
+        settings={"session_timezone": "UTC"},
     )
 
 
