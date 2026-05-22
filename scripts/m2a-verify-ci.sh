@@ -34,16 +34,18 @@ mark_fail() { FAILED=1; fail "$1"; }
 # ============================================================
 banner "0/8 · 自检 · 隔离工作目录在 feature 分支"
 # ============================================================
-if [ ! -d "$VERIFY_DIR/.git" ]; then
-  mark_fail "$VERIFY_DIR 不存在 · workflow 应已 clone · 中止"
-  exit 1
+# 注:workflow 用 git worktree 把本目录 detached checkout 到 origin/feature ·
+# worktree 里 .git 是文件不是目录(gitdir: 指针)· 所以这里只校验目录 + M2 代码在位,
+# 不再 git fetch/checkout/reset(worktree 已被 workflow 摆到正确 commit · 也不能再切分支)。
+if [ ! -d "$VERIFY_DIR" ]; then
+  mark_fail "$VERIFY_DIR 不存在 · workflow worktree add 失败 · 中止"; exit 1
 fi
 cd "$VERIFY_DIR"
-git fetch origin "$BRANCH" 2>&1 | tail -2
-git checkout -f "$BRANCH" 2>&1 | tail -1
-git reset --hard "origin/$BRANCH" 2>&1 | tail -1
-HEAD_HASH=$(git rev-parse --short HEAD)
-ok "工作目录 $VERIFY_DIR · 分支 $BRANCH · HEAD $HEAD_HASH"
+if [ ! -f apps/api/app/api/v1/crypto.py ] || [ ! -f scripts/m2a-verify-ci.sh ]; then
+  mark_fail "$VERIFY_DIR 里没找到 M2 代码(crypto.py)· worktree checkout 异常 · 中止"; exit 1
+fi
+HEAD_HASH=$(git -C "$VERIFY_DIR" rev-parse --short HEAD 2>/dev/null || echo '?')
+ok "worktree 目录 $VERIFY_DIR · HEAD $HEAD_HASH · M2 代码在位(crypto.py ✓)"
 
 # 生产 .env 必须在(只读取 · 不修改)
 if [ ! -f "$PROD_ENV" ]; then
