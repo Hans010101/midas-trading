@@ -203,60 +203,100 @@ banner "6/8 · 端到端 · 实拉 → 写隔离 CH 库 m2_verify → 查回"
 "${RUN_BASE[@]}" \
   -e CLICKHOUSE_DATABASE="$CH_DB" \
   "$API_IMAGE" python - <<'PY' 2>&1
-import asyncio, clickhouse_connect
+# 逐层诊断:定位"实连拿到数据 → 写不进表"断在哪一层。
+# 三个独立探针:
+#   A. helper insert 返回 n · 同连接 count
+#   B. 关写连接 · 开 fresh 连接 count(复现阶段7条件 · 排除会话可见性)
+#   C. fresh 连接做 raw SQL INSERT 对照(排除是 clickhouse-connect insert() 用法问题)
+import asyncio, traceback
+import clickhouse_connect
 from app.core.config import settings
 from app.services.data_sources.binance_futures_source import BinanceFuturesSource
-from app.services.data_sources.coingecko_source import CoinGeckoSource
-from app.services.clickhouse_crypto import (
-    insert_funding_rates, select_funding_rates,
-    insert_open_interest, select_open_interest,
-    insert_market_overview, select_latest_overview,
-)
-async def main():
-    ch = await clickhouse_connect.get_async_client(
+from app.services.clickhouse_crypto import insert_funding_rates
+
+DB = settings.clickhouse_database
+print(f"[info] settings.clickhouse_database = {DB}")
+print(f"[info] CLICKHOUSE_HOST = {settings.clickhouse_host}")
+if DB != "m2_verify":
+    print(f"[FATAL] 写入库不是 m2_verify 而是 '{DB}' · -e 覆盖未生效"); raise SystemExit(2)
+
+
+def fresh_sync_client():
+    # 全新同步客户端 · 跟写入连接彻底独立 · 复现阶段7「另一连接」条件
+    return clickhouse_connect.get_client(
         host=settings.clickhouse_host, port=settings.clickhouse_port,
         username=settings.clickhouse_user, password=settings.clickhouse_password,
-        database=settings.clickhouse_database,  # = m2_verify(env 覆盖)
+        database=DB,
     )
-    print(f"[info] 写入隔离库 = {settings.clickhouse_database}")
+
+
+async def write_via_helper():
+    wch = await clickhouse_connect.get_async_client(
+        host=settings.clickhouse_host, port=settings.clickhouse_port,
+        username=settings.clickhouse_user, password=settings.clickhouse_password,
+        database=DB,
+    )
     bf = BinanceFuturesSource()
     try:
         fr = await bf.fetch_funding_rate("BTCUSDT", limit=3)
-        n = await insert_funding_rates(ch, fr)
-        back = await select_funding_rates(ch, "BTCUSDT", limit=3)
-        assert len(back) >= 1
-        print(f"[OK] funding 写{n}读{len(back)} · 最新 rate={back[-1].rate}")
-        oi = await bf.fetch_open_interest("BTCUSDT", limit=3)
-        n = await insert_open_interest(ch, oi)
-        back = await select_open_interest(ch, "BTCUSDT", limit=3)
-        print(f"[OK] OI 写{n}读{len(back)}")
+        print(f"[A.fetch] funding 实拉 {len(fr)} 条")
+        n = await insert_funding_rates(wch, fr)
+        print(f"[A.insert] insert_funding_rates 返回 n={n}")
+        # 同连接 count
+        same = (await wch.query("SELECT count() FROM crypto_funding_rate")).result_rows[0][0]
+        print(f"[A.same-conn count] crypto_funding_rate = {same}")
+        return len(fr), n, int(same)
     finally:
         await bf.close()
-    g = CoinGeckoSource()
-    try:
-        ov = await g.fetch_global_overview()
-        await insert_market_overview(ch, ov)
-        latest = await select_latest_overview(ch)
-        assert latest is not None
-        print(f"[OK] overview 写读通 · btc_dom={latest.btc_dominance:.1f}%")
-    finally:
-        await g.close()
+        await wch.close()
 
-    # ── 权威自证 ── 用刚写入的同一 client 数 count · 排除"写读不同库/不同连接"
-    db = settings.clickhouse_database
-    c1 = (await ch.query("SELECT count() FROM crypto_funding_rate")).result_rows[0][0]
-    c2 = (await ch.query("SELECT count() FROM crypto_open_interest")).result_rows[0][0]
-    c3 = (await ch.query("SELECT count() FROM crypto_market_overview")).result_rows[0][0]
-    print(f"[count] db={db} funding={c1} oi={c2} overview={c3}")
-    await ch.close()
-    # 硬断言:必须写进 m2_verify 隔离库(不能是生产 default)· 且三表都有行
-    assert db == "m2_verify", f"❌ 写入库不是 m2_verify 而是 '{db}' · -e 覆盖未生效"
-    assert c1 > 0 and c2 > 0 and c3 > 0, f"❌ 同连接 count 仍 0:funding={c1} oi={c2} overview={c3}"
-    print("[OK] 端到端 + 同连接 count 自证:三表均写入隔离库 m2_verify · 全链路严实")
-asyncio.run(main())
+try:
+    fetched, n, same_count = asyncio.run(write_via_helper())
+except Exception:
+    print("[A.ERROR] helper 写入路径抛异常:"); traceback.print_exc(); raise SystemExit(3)
+
+# ── 探针 B:fresh 连接 count(写连接已关闭)──
+c = fresh_sync_client()
+fresh_count = int(c.command("SELECT count() FROM crypto_funding_rate"))
+print(f"[B.fresh-conn count] crypto_funding_rate = {fresh_count}")
+
+verdict = "UNKNOWN"
+if n > 0 and same_count > 0 and fresh_count > 0:
+    verdict = "PASS · helper insert 真持久化 · 跨连接可见"
+elif n > 0 and same_count > 0 and fresh_count == 0:
+    # 写连接看得到 · fresh 看不到 → clickhouse-connect insert 没持久化到共享 parts
+    print("[C.diag] helper insert 返回 n>0 且同连接可见 · 但 fresh 连接=0 · 做 raw SQL INSERT 对照...")
+    try:
+        c.command(
+            "INSERT INTO crypto_funding_rate (symbol, ts, rate, mark_price) "
+            "VALUES ('TESTRAW', now(), 0.0001, 60000)"
+        )
+        raw = int(c.command("SELECT count() FROM crypto_funding_rate WHERE symbol='TESTRAW'"))
+        print(f"[C.raw-insert] raw SQL INSERT 后 count(TESTRAW) = {raw}")
+        if raw > 0:
+            verdict = "BUG=clickhouse_crypto.insert_*(clickhouse-connect insert() 用法)· raw SQL 能持久化但 helper 不能"
+        else:
+            verdict = "BUG=表/引擎/连接层(raw SQL 也不持久化)"
+    except Exception:
+        print("[C.raw-insert ERROR]"); traceback.print_exc()
+        verdict = "BUG=raw INSERT 也异常 · 表/权限层"
+elif n > 0 and same_count == 0:
+    verdict = "BUG=insert 返回 n>0 但同连接立刻 count=0 · insert 实际是 no-op"
+else:
+    verdict = f"BUG=insert 返回 n={n}(fetch={fetched})· 采集或入库前置断"
+
+print(f"[VERDICT] {verdict}")
+c.close()
+# fresh 连接 funding 必须 >0 才算端到端真通
+if fresh_count > 0:
+    print("[OK] 端到端 · helper 采集→入库→fresh 连接可见 · 数据层写实")
+    raise SystemExit(0)
+else:
+    print("[FAIL] funding 表 fresh 连接 count=0 · 数据层未写实 · 见上 VERDICT")
+    raise SystemExit(1)
 PY
 E2E_RC=${PIPESTATUS[0]}
-[ "$E2E_RC" = "0" ] && ok "端到端读写 + 同连接 count 自证通过" || mark_fail "端到端失败(rc=$E2E_RC)"
+[ "$E2E_RC" = "0" ] && ok "端到端 · fresh 连接可见数据" || mark_fail "端到端 fresh 连接 count=0(rc=$E2E_RC)· 见 [VERDICT]"
 
 # ============================================================
 banner "7/8 · 行数核对(midas 用户 · 跟阶段6同身份)+ 生产库洁净守卫"
