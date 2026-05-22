@@ -1,0 +1,50 @@
+name: M2-A 隔离验证(手动触发)
+
+# 手动触发:Actions 页面点 "Run workflow" · 不自动跑(验证是按需的)
+# SSH 到服务器 · 在独立目录 /opt/midas-m2-verify 跑隔离验证 ·
+# 绝不碰 /opt/midas 生产 · 绝不调 update.sh · 用隔离测试库
+on:
+  workflow_dispatch:
+
+# 跟生产部署互斥(同一服务器 · 避免 verify 跟 deploy 抢资源)
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: M2-A 隔离验证 · feature 分支
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: 写入部署 SSH 私钥(复用生产 CI 的 Secret)
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: SSH · 独立目录 clone feature + 跑隔离验证脚本
+        run: |
+          set -e
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=accept-new \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=120 \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'set -e
+             # 独立工作目录 · 跟 /opt/midas 生产完全隔离
+             if [ ! -d /opt/midas-m2-verify/.git ]; then
+               git clone https://github.com/Hans010101/midas.git /opt/midas-m2-verify
+             fi
+             cd /opt/midas-m2-verify
+             git fetch origin feature/m2-crypto-pro
+             git checkout -f feature/m2-crypto-pro
+             git reset --hard origin/feature/m2-crypto-pro
+             bash scripts/m2a-verify-ci.sh'
+
+      - name: 清理私钥(无论成败)
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
