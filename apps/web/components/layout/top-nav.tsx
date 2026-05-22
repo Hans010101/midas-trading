@@ -12,6 +12,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { signOut, useSession } from 'next-auth/react'
 
 import { cn } from '@/lib/utils'
 
@@ -30,6 +31,7 @@ const NAV_ITEMS: NavItem[] = [
 
 export function TopNav() {
   const pathname = usePathname()
+  const { data: session, status } = useSession()
 
   return (
     <header className="h-12 shrink-0 border-b border-paper bg-background">
@@ -63,7 +65,40 @@ export function TopNav() {
           })}
         </nav>
 
-        <div className="text-xs text-muted-foreground/70">用户菜单 · M0 占位</div>
+        {/* 用户菜单 · 登录态显示邮箱 + 退出登录 · 未登录显示登录入口 */}
+        <div className="flex items-center gap-3">
+          {status === 'authenticated' && session?.user ? (
+            <>
+              <span
+                className="hidden max-w-[180px] truncate text-xs text-muted-foreground sm:inline"
+                title={session.user.email ?? ''}
+              >
+                {session.user.email}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  // signOut 触发 NextAuth 清 cookie + auth.ts events.signOut
+                  // 回调后端 /api/v1/auth/logout revoke DB session · callbackUrl 回首页
+                  void signOut({ callbackUrl: '/' })
+                }}
+                className="rounded-md border border-paper px-3 py-1 text-sm text-muted-foreground transition-colors hover:border-midas-red hover:text-midas-red"
+              >
+                退出登录
+              </button>
+            </>
+          ) : status === 'unauthenticated' ? (
+            <Link
+              href="/login"
+              className="rounded-md bg-midas-red px-3 py-1 text-sm text-white transition-colors hover:bg-midas-red/90"
+            >
+              登录
+            </Link>
+          ) : (
+            // loading · 占位避免布局跳动
+            <span className="text-xs text-muted-foreground/50">…</span>
+          )}
+        </div>
       </div>
     </header>
   )

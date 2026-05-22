@@ -350,6 +350,14 @@ async def _verify_google_id_token(
             algorithms=["RS256"],
             audience=expected_aud,
             issuer=_GOOGLE_ISSUERS,  # type: ignore[arg-type]
+            # NextAuth 走 id_token 流程 · 只把 id_token 转给后端 · 没有 access_token。
+            # jose 默认 verify_at_hash=True · 检测到 id_token 里有 at_hash claim 但
+            # 没传 access_token 就抛 "No access_token provided to compare against
+            # at_hash claim" → 401。
+            # at_hash 是「id_token 跟 access_token 绑定」的可选校验 · OIDC 规范里
+            # 客户端可选做。我们后端只验签名 + aud + iss + exp(这些才是安全核心)·
+            # 显式关掉 at_hash 校验。
+            options={"verify_at_hash": False},
         )
     except JWTError as e:
         raise ValueError(str(e)) from e
