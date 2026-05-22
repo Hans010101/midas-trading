@@ -183,9 +183,43 @@ ALTER TABLE kline ADD COLUMN IF NOT EXISTS instrument
 - **mark price 定期更新 worker**(用于 unrealized_pnl + 强平检查) · 同上
 - **强平 worker**(margin_balance < maintenance_margin → 强平) · 同上
 
-## ⛔ M2-D 不做(等 M2-C 撮合就绪)
+## ⛔ M2-D 不做(等 M2-C 撮合就绪)· 但范围已登记
 
 - **前端 UI 全部**(landing page / 详情页合约 tab / 一键下单) · 依赖 M2-C REST 接口稳定
+
+### M2-D 加密币种详情页 · 产品方确定需求(2026-05-22 登记)
+
+**布局:左主区 + 右侧栏**
+
+**左主区:1 主图 + 6 个合约维度图**
+
+| # | 图 | 数据源 | 当前状态 |
+|---|---|---|---|
+| 主图 | K 线 + 缠论标注 | `kline(instrument=perp)` + 缠论引擎 | ✅ M2-A/M2-B 已通 |
+| 1 | 持仓量(Open Interest) | `crypto_open_interest` | ✅ M2-A 已采 |
+| 2 | 大户多空比 · 账户数 | `crypto_long_short_ratio.top_account_*` | ✅ M2-A 已采 |
+| 3 | 大户多空比 · 持仓量 | `crypto_long_short_ratio.top_position_*` | ✅ M2-A 已采 |
+| 4 | 多空人数比(全市场散户) | Binance `globalLongShortAccountRatio` | ❌ **M2-B 补采**(M2-A 只采了 top trader,没采全市场)|
+| 5 | 合约主动买卖量 | `crypto_long_short_ratio.taker_*` | ✅ M2-A 已采 |
+| 6 | 基差(basis) | mark_price − index_price 时间序列 | ❌ **M2-B 补采**(当前只存 funding 时点 mark,没存 basis 序列)|
+
+**右侧栏:**
+- 下单指导 + 实战策略清单
+- **多空研判并入点金现有 AI 决策卡 ——【合并成一张,不并列两张】**
+  · AI 决策卡 workflow 要把合约情绪(多空比 / 资金费率 / OI 变化 / basis)
+    作为额外输入,产出一张融合卡(技术面 + 合约面)· 不是在卡旁边再挂一张多空卡
+  · 这块涉及 M2-B/M2-C 后端(workflow 加合约输入)+ M2-D 前端(单卡渲染)
+
+### M2-D 触发前需 M2-B 补的 2 个数据缺口
+
+1. **`globalLongShortAccountRatio`**(多空人数比)· Binance `/futures/data/globalLongShortAccountRatio`
+   · 建议:`crypto_long_short_ratio` 表加 2 列 `global_account_long` / `global_account_short`
+     · adapter `fetch_long_short_ratio` 加第 4 个 endpoint · Celery 任务一并拉
+2. **basis(基差)时间序列** · 需同时拿 perp mark_price + spot/index price
+   · 建议:新表 `crypto_basis(symbol, ts, mark_price, index_price, basis, basis_pct)`
+     · 或复用 · Celery 5min 一次从 `/fapi/v1/premiumIndex`(含 markPrice + indexPrice)拉
+
+这 2 个缺口归 M2-B(M2-A 验证通过 + M2-C 之后,或 M2-B 收尾时一起补)。
 
 ---
 
