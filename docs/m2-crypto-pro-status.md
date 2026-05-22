@@ -223,6 +223,65 @@ ALTER TABLE kline ADD COLUMN IF NOT EXISTS instrument
 
 ---
 
+## ✅ M2-D 前端 · 详情页接真实数据(2026-05-22 · 骨架→真实数据)
+
+骨架页布局产品方已验收通过 · 本步把占位图升级为接真实数据(全部在 feature 分支 · main 不动)。
+
+**路由:** `/crypto-preview`(匿名可访问)· 固定标的 BTC(`BTC/USDT` 现货 K / `BTCUSDT` 合约维度)
+
+### 真实 / 占位边界(一眼分清)
+
+| 模块 | 状态 | 数据源 |
+|---|---|---|
+| 主图 K 线 + 缠论标注 | ✅ 真实 | `/api/v1/market/kline` + `/api/v1/analysis/chan`(复用工作台组件) |
+| ① 合约持仓量 OI | ✅ 真实 | `/api/v1/crypto/futures/BTCUSDT/open-interest`(面积图) |
+| ② 大户多空比·账户数 | ✅ 真实 | `…/long-short-ratio` → `top_account_ratio`(折线 + 1.0 参考线) |
+| ③ 大户多空比·持仓量 | ✅ 真实 | `…/long-short-ratio` → `top_position_ratio` |
+| ⑤ 合约主动买卖量 | ✅ 真实 | `…/long-short-ratio` → `taker_buy_vol`/`taker_sell_vol`(朱红/墨绿双线) |
+| ④ 多空人数比值 | ⏳ 占位 | M2-B 数据缺口(`globalLongShortAccountRatio` 未采)· 标「数据 M2-B 待补」 |
+| ⑥ 基差 basis | ⏳ 占位 | M2-B 数据缺口(basis 序列未采)· 标「数据 M2-B 待补」 |
+| Header 价/涨跌 | ✅ 真实 | 日 K 末两根(close + 日涨跌) |
+| Header 资金费率/下次结算 | ✅ 真实 | `/api/v1/crypto/futures/BTCUSDT/info` |
+| AI 决策卡 · 技术面综合评分 | ✅ 真实 | `/api/v1/analysis/decision-card`(0012)· 后端无 KEY 时 footer 标 `mock` |
+| AI 决策卡 · 多空研判(合约面) | ✅ 真实指标 | 资金费率/OI 增减/大户多空比 实时值 + 透明规则标签 |
+| 下单指导 / 实战策略清单 | ⏳ 占位 | 依赖 M2-C 虚拟合约撮合 · 标「占位·待虚拟交易模块接入」 |
+
+### 自主决策(产品方可推翻)
+
+1. **标的固定 BTC** · 本步专注接数据 · 多标的切换留后续迭代。
+2. **周期 = 15m / 1h / 1d**(去掉骨架里的 4h)· kline `Period` enum 无 4h(M2-B 待补 4h 重采样)· 默认 `1d`(5 年日 K 确有数据)· 15m/1h 若预览环境未预热会显示「暂无数据」空态卡(正常)。
+3. **合约面不编综合评分** · 「多空研判」只列真实指标 + 简单规则解读(资金费率>0→多头付费 等)· 明确标注「合约面综合评分算法待 M2-B/M2-C 定义」· 不硬编假公式(铁律)。
+4. **6 维度图用 recharts**(已在依赖)· 单图 8h 窗口(96 点 · 5min 栅格)· OI 面积图 / 多空比折线 / taker 双线。
+5. **缠论标注默认开** · 让产品方一眼看到笔/中枢/分型效果 · 页面内可关。
+6. **接不上一律「—」/ 空态卡** · 不伪造任何数值。
+
+### 改动文件
+```
+apps/web/app/crypto-preview/page.tsx           (骨架 → 渲染 CryptoDetail)
+apps/web/components/crypto-preview/            (新增)
+  crypto-detail.tsx        · 编排 + 下单指导/策略清单占位
+  crypto-header.tsx        · 价/涨跌/资金费率/周期切换
+  crypto-main-chart.tsx    · KlineChart + ChanOverlay(props 驱动)
+  crypto-ai-card.tsx       · 技术面综合评分 + 合约面多空研判
+  dimension-section.tsx    · 6 维度图(recharts · 4 真实 2 占位)
+apps/web/lib/api/crypto.ts                      (新增 · /crypto/* client)
+apps/web/hooks/use-crypto.ts                    (新增 · TanStack Query hooks)
+apps/web/components/chart/chan-overlay.tsx      (改 · 加可选 props · 向后兼容工作台)
+```
+
+### 自验
+- `pnpm type-check` ✓ · `pnpm lint` ✓(0 warning)· `pnpm build` ✓
+- `/crypto-preview` 仍为 `○ (Static)` 预渲染(客户端 island 运行时取数)· SSG 11 页全过 · 工作台不受 chan-overlay 改动影响
+- 真实数据正确性依赖预览环境后端已预热(M2-A 采集任务跑过)· 未热则各图显示空态(非报错)
+
+### 仍未做(明确边界)
+- 多标的切换 / 现货-合约 tab 真切换(本页 spot 现货 tab 占位)
+- ④多空人数比值、⑥基差 接真实数据(等 M2-B 补采)
+- 下单指导 / 实战策略清单 接真实逻辑(等 M2-C 撮合)
+- 4h 周期(等 M2-B 加 schema)
+
+---
+
 ## 🔴 红线再确认
 
 | 检查项 | 现状 |

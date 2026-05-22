@@ -36,6 +36,14 @@ import { useWorkbenchStore } from '@/lib/store/workbench-store'
 
 interface Props {
   chart: Chart | null
+  /**
+   * 可选 override · 不传则从 useWorkbenchStore 读(工作台原行为不变)。
+   * crypto-preview 详情页用 props 驱动 · 不污染全局 workbench 状态。
+   */
+  symbol?: string
+  market?: import('@midas/shared').Market
+  period?: import('@midas/shared').Period
+  enabled?: boolean
 }
 
 const CHAN_GROUP_ID = 'midas-chan-overlay'
@@ -53,11 +61,23 @@ const COLOR_BSP_SELL = '#0F6E5F'                    // S1/S2/S3
 // 自定义 overlay 注册位于 lib/klinecharts-extensions.ts(midas-rect + midas-fractal)·
 // 任何需要的组件 import 即触发注册副作用,幂等。
 
-export function ChanOverlay({ chart }: Props) {
-  const symbol = useWorkbenchStore((s) => s.symbol)
-  const market = useWorkbenchStore((s) => s.market)
-  const period = useWorkbenchStore((s) => s.period)
-  const chanEnabled = useWorkbenchStore((s) => s.chanEnabled)
+export function ChanOverlay({
+  chart,
+  symbol: symbolProp,
+  market: marketProp,
+  period: periodProp,
+  enabled: enabledProp,
+}: Props) {
+  const storeSymbol = useWorkbenchStore((s) => s.symbol)
+  const storeMarket = useWorkbenchStore((s) => s.market)
+  const storePeriod = useWorkbenchStore((s) => s.period)
+  const storeChanEnabled = useWorkbenchStore((s) => s.chanEnabled)
+
+  // props override 优先 · 不传则用 store(工作台原行为)
+  const symbol = symbolProp ?? storeSymbol
+  const market = marketProp ?? storeMarket
+  const period = periodProp ?? storePeriod
+  const chanEnabled = enabledProp ?? storeChanEnabled
 
   const { data } = useChan({
     symbol, market, period,
