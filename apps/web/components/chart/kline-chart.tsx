@@ -158,16 +158,20 @@ export function KlineChart({
     if (!indicators) return
     // 先清空所有指标(暴力但简单 · M0 demo 4 个指标切换不频繁,无性能压力)
     chart.removeIndicator()
-    // 有 styles 覆盖时用 IndicatorCreate 对象,否则用 name 字符串(走内置默认样式)
-    const make = (name: IndicatorName, isStack: boolean) => {
+    // 有 styles 覆盖时用 IndicatorCreate 对象,否则用 name 字符串(走内置默认样式)。
+    // overlayOnCandle=true → 叠到主图 candle_pane(MA/BOLL,跟 K 线重叠,TradingView 式)。
+    //   必须显式传 paneOptions.id='candle_pane'(+ isStack=true 不顶替 K 线),
+    //   否则 klinecharts 默认会新建一个独立副图 pane → 布林带被画进独立小窗(= 之前的 bug)。
+    // overlayOnCandle=false → 独立副图 pane(MACD/RSI),保持原行为。
+    const make = (name: IndicatorName, overlayOnCandle: boolean) => {
       const styles = indicatorStyles?.[name]
-      if (styles) {
-        chart.createIndicator({ name, styles } as never, isStack)
+      const value = (styles ? { name, styles } : name) as never
+      if (overlayOnCandle) {
+        chart.createIndicator(value, true, { id: 'candle_pane' })
       } else {
-        chart.createIndicator(name, isStack)
+        chart.createIndicator(value, false)
       }
     }
-    // 按状态重建:MA / BOLL 主图叠加(isStack=true);MACD / RSI 副图独立 pane
     if (indicators.MA) make('MA', true)
     if (indicators.BOLL) make('BOLL', true)
     if (indicators.MACD) make('MACD', false)

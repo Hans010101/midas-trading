@@ -185,8 +185,19 @@ async def _long_short_scan_async() -> dict[str, Any]:
     try:
         for symbol in _TOP_30_PERP:
             try:
-                items = await source.fetch_long_short_ratio(symbol, limit=1)
+                # limit 必须 >1:fetch_long_short_ratio 把 3 个上游 endpoint
+                # (account / position / taker)按 timestamp **交集** 合并;limit=1 时
+                # 三者各自最新的 5min 桶 ts 常常错位 → 交集为空 → 合并出 0 行
+                # → ok+1 但 written+0(数据拉到了没落库)。拉一段窗口保证有重叠 ts,
+                # 同时一次把详情页要展示的窗口(96 点 ≈ 8h)灌满。
+                items = await source.fetch_long_short_ratio(symbol, limit=96)
                 n = await insert_long_short(ch, items)
+                if n == 0:
+                    # 合并后仍 0 行 = 三个上游 ts 完全无交集(异常)· 显式记日志,
+                    # 不再让 written=0 静默(本次 written=0 排查就卡在这)。
+                    logger.warning(
+                        "[crypto.long_short] %s 合并后 0 行 · 三上游 ts 无交集", symbol,
+                    )
                 total += n
                 ok += 1
             except Exception as exc:  # noqa: BLE001
