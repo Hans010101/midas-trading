@@ -45,4 +45,40 @@ beat_schedule = {
         # 0009 § 4 · 每 1 分钟扫所有自选股 · 涨跌 ±5% 触发 · Redis 5 分钟去重
         "schedule": crontab(minute="*"),
     },
+    # ── M2-A · Crypto Pro 数据采集(0017 ADR)· 常驻定时刷新 ────────────────────
+    # 错峰原则:Binance 三个采集(oi/longshort/funding)分钟数互不重叠,避免
+    #   同一刻对 Binance 合约接口集中打请求(IP 权重限流)。oi 落在 5 的倍数;
+    #   longshort 落在 2,12,22…;funding 落在 3,18,33,48 —— 三者无交集。
+    # CoinGecko / alternative.me 是不同上游主机且数据慢变,频率更低。
+    # expires:本轮没被 worker 及时领走就丢弃(宕机/积压时不堆任务,避免补跑风暴)。
+    "crypto-open-interest-scan": {
+        "task": "tasks.crypto.open_interest_scan",
+        # OI 是 5min 栅格 · 详情页最需要新鲜的维度 · 每 5 分钟 · 30 标的轻量 GET
+        "schedule": crontab(minute="*/5"),
+        "options": {"expires": 240},
+    },
+    "crypto-long-short-scan": {
+        "task": "tasks.crypto.long_short_scan",
+        # 5min 栅格 · 但单轮 3 上游×30 标的×96 行较重 · 每 10 分钟(错峰 2,12,22…)
+        "schedule": crontab(minute="2-59/10"),
+        "options": {"expires": 540},
+    },
+    "crypto-funding-rate-refresh": {
+        "task": "tasks.crypto.funding_rate_refresh",
+        # 资金费率 8h 结算(慢变)· 顺带刷标记价 · 每 15 分钟足够(错峰 3,18,33,48)
+        "schedule": crontab(minute="3-59/15"),
+        "options": {"expires": 840},
+    },
+    "crypto-global-overview-refresh": {
+        "task": "tasks.crypto.global_overview_refresh",
+        # CoinGecko /global · 总市值/dominance 慢变 + 免费档限流严 · 每 30 分钟(错峰 7,37)
+        "schedule": crontab(minute="7-59/30"),
+        "options": {"expires": 1500},
+    },
+    "crypto-fear-greed-refresh": {
+        "task": "tasks.crypto.fear_greed_refresh",
+        # alternative.me FGI 每日更新一次 · 每 6 小时一轮即可保证当日值及时合并入 overview
+        "schedule": crontab(minute="47", hour="*/6"),
+        "options": {"expires": 3000},
+    },
 }

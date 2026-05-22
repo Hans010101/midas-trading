@@ -9,6 +9,7 @@ app.config_from_object("config.celery_config")
 # 不用 autodiscover_tasks(那是为 Django-style "<app>/tasks.py" 设计的,
 # 我们的布局 `tasks/<feature>.py` 用不上)。
 from tasks import (  # noqa: E402, F401
+    crypto_metrics_ingest,
     data_ingest,
     equity_snapshot,
     incremental,
