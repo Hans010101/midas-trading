@@ -44,6 +44,12 @@ interface KlineChartProps {
   onSwitchToDaily?: () => void
   /** chart 实例就绪回调 · 缠论 overlay / 绘图工具栏需要 chart instance */
   onChartReady?: (chart: Chart) => void
+  /**
+   * 可选 · 给指定指标传 klinecharts 样式覆盖(DeepPartial<IndicatorStyle>)。
+   * 不传则用 klinecharts 内置默认样式(工作台原行为不变)。
+   * crypto-preview 用它把 MACD 柱改成「红涨绿跌」(A 股传统 · CLAUDE.md 视觉系统)。
+   */
+  indicatorStyles?: Partial<Record<IndicatorName, Record<string, unknown>>>
 }
 
 export function KlineChart({
@@ -53,6 +59,7 @@ export function KlineChart({
   indicators,
   onSwitchToDaily,
   onChartReady,
+  indicatorStyles,
 }: KlineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<Chart | null>(null)
@@ -151,12 +158,21 @@ export function KlineChart({
     if (!indicators) return
     // 先清空所有指标(暴力但简单 · M0 demo 4 个指标切换不频繁,无性能压力)
     chart.removeIndicator()
+    // 有 styles 覆盖时用 IndicatorCreate 对象,否则用 name 字符串(走内置默认样式)
+    const make = (name: IndicatorName, isStack: boolean) => {
+      const styles = indicatorStyles?.[name]
+      if (styles) {
+        chart.createIndicator({ name, styles } as never, isStack)
+      } else {
+        chart.createIndicator(name, isStack)
+      }
+    }
     // 按状态重建:MA / BOLL 主图叠加(isStack=true);MACD / RSI 副图独立 pane
-    if (indicators.MA) chart.createIndicator('MA', true)
-    if (indicators.BOLL) chart.createIndicator('BOLL', true)
-    if (indicators.MACD) chart.createIndicator('MACD')
-    if (indicators.RSI) chart.createIndicator('RSI')
-  }, [indicators])
+    if (indicators.MA) make('MA', true)
+    if (indicators.BOLL) make('BOLL', true)
+    if (indicators.MACD) make('MACD', false)
+    if (indicators.RSI) make('RSI', false)
+  }, [indicators, indicatorStyles])
 
   // ========== Empty / Error states ==========
   if (query.status === 'error') {
