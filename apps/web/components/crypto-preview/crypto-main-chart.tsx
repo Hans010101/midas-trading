@@ -33,6 +33,17 @@ const MACD_STYLES = {
   lines: [{ color: '#B8860B' }, { color: '#C8102E' }], // DIF 帝王金 / DEA 中国红
 }
 
+// 布林带叠在主图 K 线上 · 跟缠论标注(笔=金 / 中枢=淡灰蓝 / 分型=红绿三角)同框,
+// 刻意避开缠论用色:不用帝王金(=笔)· 不用 #6482A0 蓝灰(=中枢保留色)· 不用红绿(=分型/涨跌)。
+// 三条线统一中性灰 + 细线宽 1 · 呈「包裹 K 线的通道」观感 · 清晰但不抢眼,不跟缠论抢视觉。
+const BOLL_STYLES = {
+  lines: [
+    { color: '#8C8C8C', size: 1 },
+    { color: '#8C8C8C', size: 1 },
+    { color: '#8C8C8C', size: 1 },
+  ],
+}
+
 interface CryptoMainChartProps {
   /** ccxt 风格 symbol · 'BTC/USDT' */
   symbol: string
@@ -51,7 +62,10 @@ export function CryptoMainChart({ symbol, period }: CryptoMainChartProps) {
     [bollEnabled, macdEnabled],
   )
   const indicatorStyles = useMemo(
-    () => ({ MACD: MACD_STYLES as Record<string, unknown> }),
+    () => ({
+      MACD: MACD_STYLES as Record<string, unknown>,
+      BOLL: BOLL_STYLES as Record<string, unknown>,
+    }),
     [],
   )
 
