@@ -1,0 +1,3 @@
+# CI/CD push 自动触发验证标记
+# 2026-05-22 · 验证 GitHub Actions push→main 自动部署链路
+# 此文件无害 · 不触发任何容器 rebuild(不在 apps/docker/deploy 路径)
