@@ -241,21 +241,58 @@ async def main():
         print(f"[OK] overview 写读通 · btc_dom={latest.btc_dominance:.1f}%")
     finally:
         await g.close()
+
+    # ── 权威自证 ── 用刚写入的同一 client 数 count · 排除"写读不同库/不同连接"
+    db = settings.clickhouse_database
+    c1 = (await ch.query("SELECT count() FROM crypto_funding_rate")).result_rows[0][0]
+    c2 = (await ch.query("SELECT count() FROM crypto_open_interest")).result_rows[0][0]
+    c3 = (await ch.query("SELECT count() FROM crypto_market_overview")).result_rows[0][0]
+    print(f"[count] db={db} funding={c1} oi={c2} overview={c3}")
     await ch.close()
-    print("[OK] 端到端 5 表 + 3 adapter + clickhouse_crypto helper 全链路通")
+    # 硬断言:必须写进 m2_verify 隔离库(不能是生产 default)· 且三表都有行
+    assert db == "m2_verify", f"❌ 写入库不是 m2_verify 而是 '{db}' · -e 覆盖未生效"
+    assert c1 > 0 and c2 > 0 and c3 > 0, f"❌ 同连接 count 仍 0:funding={c1} oi={c2} overview={c3}"
+    print("[OK] 端到端 + 同连接 count 自证:三表均写入隔离库 m2_verify · 全链路严实")
 asyncio.run(main())
 PY
 E2E_RC=${PIPESTATUS[0]}
-[ "$E2E_RC" = "0" ] && ok "端到端读写通" || mark_fail "端到端失败(rc=$E2E_RC)"
+[ "$E2E_RC" = "0" ] && ok "端到端读写 + 同连接 count 自证通过" || mark_fail "端到端失败(rc=$E2E_RC)"
 
 # ============================================================
-banner "7/8 · 隔离库行数快照"
+banner "7/8 · 行数核对(midas 用户 · 跟阶段6同身份)+ 生产库洁净守卫"
 # ============================================================
+# 之前 #2 跑出 funding/oi/overview=0 的诡异:阶段7 用「本地 default 用户」
+# docker exec 查 · 跟阶段6「networked midas 用户」写入的连接身份不同。
+# 现在改用 midas 用户复核(跟写入同身份)· 排除连接/RBAC 差异。
+
+echo "── m2_verify 隔离库行数(本地 default 用户视角 · 仅参考)──"
 docker exec midas-clickhouse clickhouse-client --database "$CH_DB" --query "
 SELECT 'funding' t, count() n FROM crypto_funding_rate UNION ALL
 SELECT 'oi', count() FROM crypto_open_interest UNION ALL
 SELECT 'overview', count() FROM crypto_market_overview
 FORMAT PrettyCompactMonoBlock" 2>&1 | head -10
+
+echo ""
+echo "── m2_verify 隔离库行数(midas 用户视角 · 跟阶段6写入同身份 · 权威)──"
+F=$(docker exec midas-clickhouse clickhouse-client --user midas --password "$CLICKHOUSE_PASSWORD" --database "$CH_DB" --query "SELECT count() FROM crypto_funding_rate" 2>/dev/null | tr -d '[:space:]')
+O=$(docker exec midas-clickhouse clickhouse-client --user midas --password "$CLICKHOUSE_PASSWORD" --database "$CH_DB" --query "SELECT count() FROM crypto_open_interest" 2>/dev/null | tr -d '[:space:]')
+V=$(docker exec midas-clickhouse clickhouse-client --user midas --password "$CLICKHOUSE_PASSWORD" --database "$CH_DB" --query "SELECT count() FROM crypto_market_overview" 2>/dev/null | tr -d '[:space:]')
+echo "  funding=${F:-?} oi=${O:-?} overview=${V:-?}"
+if [ "${F:-0}" -gt 0 ] 2>/dev/null && [ "${O:-0}" -gt 0 ] 2>/dev/null && [ "${V:-0}" -gt 0 ] 2>/dev/null; then
+  ok "三张表都有数据(midas 用户视角)· 数据层写入确认严实"
+else
+  mark_fail "三张表行数异常 funding=$F oi=$O overview=$V · 数据层未写实"
+fi
+
+echo ""
+echo "── 红线守卫:生产 default 库不应有任何 crypto_* 表 ──"
+PROD_CRYPTO=$(docker exec midas-clickhouse clickhouse-client --database default --query "
+SELECT count() FROM system.tables WHERE database='default' AND name LIKE 'crypto_%'" 2>/dev/null | tr -d '[:space:]')
+if [ "${PROD_CRYPTO:-0}" = "0" ]; then
+  ok "生产 default 库无 crypto_* 表 · 验证零污染生产 ✓"
+else
+  mark_fail "⚠ 生产 default 库出现 $PROD_CRYPTO 张 crypto_* 表 · 疑似污染 · 需排查"
+fi
 
 # ============================================================
 banner "8/8 · 总结"
