@@ -1,0 +1,65 @@
+name: 部署到生产(香港 VPS)
+
+# 触发:
+#   · push 到 main 分支 → 自动部署
+#   · 手动触发(Actions 页面 "Run workflow" 按钮)· 用于回滚 / 重跑
+on:
+  push:
+    branches: [main]
+    # 只改 docs / 这个 workflow 自己时不触发(省一次部署)· 按需可删
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+  workflow_dispatch:
+
+# 同一时间只允许一个部署在跑 · 后到的排队(部署不能并发,会互相打架)
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: SSH 部署 + 健康检查
+    runs-on: ubuntu-latest
+    timeout-minutes: 30   # update.sh rebuild 最长 ~15min · 留余量
+
+    steps:
+      # ────────────────────────────────────────────────
+      - name: 写入部署 SSH 私钥(来自 GitHub Secrets)
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          # 私钥从 Secret 注入 · 引号保留换行 · 600 权限
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # 把服务器主机公钥加进 known_hosts · 避免首连交互提示
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      # ────────────────────────────────────────────────
+      - name: SSH 到服务器 · git checkout main + update.sh
+        run: |
+          set -e
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=accept-new \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=120 \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'cd /opt/midas && git fetch origin && git checkout -f main && bash update.sh'
+
+      # ────────────────────────────────────────────────
+      # update.sh 内部已做容器健康检查 · 这里再从 GitHub runner(外网)
+      # 打一次公网 HTTPS 端点 · 验证 DNS + Caddy + api 整条链路对外可用
+      - name: 外部健康检查 · 公网 HTTPS 端点
+        run: |
+          echo "等 5s 让服务稳定..."
+          sleep 5
+          echo "── api.midastrade.asia/health ──"
+          curl -fsS --max-time 20 https://api.midastrade.asia/health
+          echo ""
+          echo "── midastrade.asia 首页 ──"
+          curl -fsS -o /dev/null -w "web HTTP %{http_code} · %{time_total}s\n" --max-time 20 https://midastrade.asia/
+
+      # ────────────────────────────────────────────────
+      - name: 清理私钥(无论成败都跑)
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
