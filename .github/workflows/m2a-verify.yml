@@ -26,7 +26,7 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: SSH · 独立目录 clone feature + 跑隔离验证脚本
+      - name: SSH · git worktree 独立目录 + 跑隔离验证脚本
         run: |
           set -e
           ssh -i ~/.ssh/deploy_key \
@@ -35,14 +35,18 @@ jobs:
             -o ServerAliveCountMax=120 \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
             'set -e
-             # 独立工作目录 · 跟 /opt/midas 生产完全隔离
-             if [ ! -d /opt/midas-m2-verify/.git ]; then
-               git clone https://github.com/Hans010101/midas.git /opt/midas-m2-verify
-             fi
-             cd /opt/midas-m2-verify
+             # 用 git worktree 从 /opt/midas 拉独立工作目录:
+             #   · 共享 /opt/midas/.git(含 remote + credential.helper · 不用额外凭证)
+             #   · detached checkout feature commit · 完全不碰 /opt/midas 的 main 工作区
+             #   · 不重新 clone(避开 credential 不继承问题)
+             cd /opt/midas
              git fetch origin feature/m2-crypto-pro
-             git checkout -f feature/m2-crypto-pro
-             git reset --hard origin/feature/m2-crypto-pro
+             # 清理上次的 worktree(幂等)· 再重建
+             git worktree remove --force /opt/midas-m2-verify 2>/dev/null || true
+             rm -rf /opt/midas-m2-verify
+             git worktree prune
+             git worktree add --force --detach /opt/midas-m2-verify origin/feature/m2-crypto-pro
+             cd /opt/midas-m2-verify
              bash scripts/m2a-verify-ci.sh'
 
       - name: 清理私钥(无论成败)
