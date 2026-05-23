@@ -463,3 +463,60 @@ async def merge_fear_greed_into_latest_overview(
         derivatives_volume_24h_usd=latest.derivatives_volume_24h_usd,
     )
     return await insert_market_overview(client, updated)
+
+
+# ============================================================================
+# 6 · 榜单级合约指标批量(M2-数据打磨·任务3)· 给列表页 3 列用
+# ============================================================================
+
+
+async def select_futures_metrics_batch(
+    client: AsyncClient, *, symbols: list[str],
+) -> dict[str, dict[str, float]]:
+    """一次性取多个 symbol 的合约指标 · 给加密列表页「资金费率/账户多空比/OI 24H变化」3 列。
+
+    symbol 用 Binance 风格(无斜杠 · 'BTCUSDT')· 跟 3 张合约表存储一致。
+    返回 {symbol: {funding_rate, account_long_short_ratio, oi_change_pct_24h}}。
+    不在采集名单(top100)里的 symbol 不会出现在结果里 → 前端显示「—」(不造假)。
+
+    三张表分别 GROUP BY symbol 取最新值,Python 端合并。OI 24H 变化用近 24h 窗口的
+    最新值 vs 最早值估算((now-then)/then)。
+    """
+    if not symbols:
+        return {}
+    out: dict[str, dict[str, float]] = {}
+
+    # 1) 资金费率 · 每 symbol 最新 rate
+    fr = await client.query(
+        "SELECT symbol, argMax(rate, ts) FROM crypto_funding_rate FINAL "
+        "WHERE symbol IN %(syms)s GROUP BY symbol",
+        parameters={"syms": symbols},
+    )
+    for r in fr.result_rows:
+        out.setdefault(str(r[0]), {})["funding_rate"] = float(r[1])
+
+    # 2) 账户多空比 · 每 symbol 最新 top_account_ratio
+    ls = await client.query(
+        "SELECT symbol, argMax(top_account_ratio, ts) FROM crypto_long_short_ratio FINAL "
+        "WHERE symbol IN %(syms)s GROUP BY symbol",
+        parameters={"syms": symbols},
+    )
+    for r in ls.result_rows:
+        out.setdefault(str(r[0]), {})["account_long_short_ratio"] = float(r[1])
+
+    # 3) OI 24H 变化% · 近 24h 窗口内最新 vs 最早
+    oi = await client.query(
+        "SELECT symbol, argMax(oi_usd, ts) AS now_oi, argMin(oi_usd, ts) AS then_oi "
+        "FROM crypto_open_interest FINAL "
+        "WHERE symbol IN %(syms)s AND ts >= now() - INTERVAL 24 HOUR "
+        "GROUP BY symbol",
+        parameters={"syms": symbols},
+    )
+    for r in oi.result_rows:
+        now_oi = float(r[1])
+        then_oi = float(r[2])
+        if then_oi > 0:
+            out.setdefault(str(r[0]), {})["oi_change_pct_24h"] = (
+                (now_oi - then_oi) / then_oi * 100
+            )
+    return out

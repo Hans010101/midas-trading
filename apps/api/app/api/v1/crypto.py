@@ -35,6 +35,8 @@ from app.schemas.crypto import (
     CryptoOverviewResponse,
     FearGreedResponse,
     FundingRateResponse,
+    FuturesMetricItem,
+    FuturesMetricsBatchResponse,
     FuturesSymbolInfo,
     LongShortRatioResponse,
     MarketOverview,
@@ -45,6 +47,7 @@ from app.schemas.crypto import (
 from app.services.clickhouse_crypto import (
     select_fear_greed_series,
     select_funding_rates,
+    select_futures_metrics_batch,
     select_latest_overview,
     select_latest_tickers,
     select_long_short,
@@ -186,6 +189,49 @@ async def get_tickers_24h(
     return Tickers24hResponse(
         instrument=instrument, sort_by=sort_by, order=order, items=items,
     )
+
+
+# ============================================================================
+# 2.5 · GET /futures/metrics-batch · 榜单级合约指标批量(任务3)
+# ============================================================================
+
+
+@router.get(
+    "/futures/metrics-batch",
+    response_model=FuturesMetricsBatchResponse,
+    summary="榜单级合约指标批量(资金费率/账户多空比/OI 24H变化)",
+    description=(
+        "一次性返回多个 symbol 的合约指标 · 给加密列表页 3 列用 · "
+        "symbols 逗号分隔 Binance 风格(如 BTCUSDT,ETHUSDT)· 最多 200 个。"
+        "不在采集名单(top100)里的 symbol 不返回 → 前端显示「—」。"
+    ),
+)
+async def get_futures_metrics_batch(
+    ch: ClickHouseDep,
+    symbols: Annotated[str, Query(description="逗号分隔 · Binance 风格 · 如 BTCUSDT,ETHUSDT")],
+) -> FuturesMetricsBatchResponse:
+    syms = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    if not syms:
+        return FuturesMetricsBatchResponse(items=[])
+    if len(syms) > 200:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"symbols 最多 200 个 · 当前 {len(syms)}",
+        )
+    metrics = await select_futures_metrics_batch(
+        ch._client,  # type: ignore[attr-defined]
+        symbols=syms,
+    )
+    items = [
+        FuturesMetricItem(
+            symbol=sym,
+            funding_rate=m.get("funding_rate"),
+            account_long_short_ratio=m.get("account_long_short_ratio"),
+            oi_change_pct_24h=m.get("oi_change_pct_24h"),
+        )
+        for sym, m in metrics.items()
+    ]
+    return FuturesMetricsBatchResponse(items=items)
 
 
 # ============================================================================

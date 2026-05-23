@@ -27,6 +27,7 @@ import { MarketSwitcher } from '@/components/layout/market-switcher'
 import { TopNav } from '@/components/layout/top-nav'
 import {
   fetchCryptoOverview,
+  fetchFuturesMetricsBatch,
   fetchTickers24h,
   type Instrument,
 } from '@/lib/api/crypto-market'
@@ -74,6 +75,25 @@ export default function CryptoMarketPage() {
   })
 
   const allItems = useMemo(() => tickersQ.data?.items ?? [], [tickersQ.data])
+
+  // 榜单级合约指标(资金费率/账户多空比/OI 24H变化)· 一次批量取当前已加载榜单的所有 symbol。
+  // 仅 perp 有合约指标;现货 tab 这 3 列恒为「—」。不在采集名单(top100)的币也回「—」。
+  const binanceSymbols = useMemo(
+    () => allItems.map((it) => toBinanceSymbol(it.symbol)),
+    [allItems],
+  )
+  const metricsQ = useQuery({
+    queryKey: ['crypto-futures-metrics', tab, binanceSymbols],
+    queryFn: ({ signal }) => fetchFuturesMetricsBatch(binanceSymbols, signal),
+    enabled: tab === 'perp' && binanceSymbols.length > 0,
+    retry: 0,
+    staleTime: 60_000,
+  })
+  const metricsMap = useMemo(() => {
+    const m = new Map<string, { funding_rate: number | null; account_long_short_ratio: number | null; oi_change_pct_24h: number | null }>()
+    for (const it of metricsQ.data?.items ?? []) m.set(it.symbol, it)
+    return m
+  }, [metricsQ.data])
 
   // 搜索(前端过滤)+ 排序(前端,仅真实列)
   const viewRows = useMemo(() => {
@@ -194,9 +214,9 @@ export default function CryptoMarketPage() {
                   <SortTh label="24H 涨跌%" col="chgPct" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <th className="px-3 py-2 text-right font-medium">24H 最高</th>
                   <th className="px-3 py-2 text-right font-medium">24H 最低</th>
-                  <th className="px-3 py-2 text-right font-medium" title="无榜单级接口 · 待补">资金费率</th>
-                  <th className="px-3 py-2 text-right font-medium" title="无榜单级接口 · 待补">账户多空比</th>
-                  <th className="px-3 py-2 text-right font-medium" title="无榜单级接口 · 待补">OI 24H 变化</th>
+                  <th className="px-3 py-2 text-right font-medium" title="合约 · top100 采集范围内为真实,范围外显示「—」">资金费率</th>
+                  <th className="px-3 py-2 text-right font-medium" title="合约 · 账户多空比 long/short">账户多空比</th>
+                  <th className="px-3 py-2 text-right font-medium" title="合约 · OI 近 24H 变化%">OI 24H 变化</th>
                   <SortTh label="24H 成交额" col="turnover" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <th className="w-8" />
                 </tr>
@@ -218,9 +238,25 @@ export default function CryptoMarketPage() {
                       <Td className={r.change_pct_24h >= 0 ? 'text-bull' : 'text-bear'}>{fmtPct(r.change_pct_24h)}</Td>
                       <Td className="text-muted-foreground/80">{fmtPrice(r.high_24h)}</Td>
                       <Td className="text-muted-foreground/80">{fmtPrice(r.low_24h)}</Td>
-                      <Td className="text-muted-foreground/40">—</Td>
-                      <Td className="text-muted-foreground/40">—</Td>
-                      <Td className="text-muted-foreground/40">—</Td>
+                      {(() => {
+                        const fm = metricsMap.get(toBinanceSymbol(r.symbol))
+                        const fr = fm?.funding_rate
+                        const ls = fm?.account_long_short_ratio
+                        const oi = fm?.oi_change_pct_24h
+                        return (
+                          <>
+                            <Td className={fr == null ? 'text-muted-foreground/40' : fr >= 0 ? 'text-bull' : 'text-bear'}>
+                              {fr == null ? '—' : `${fr >= 0 ? '+' : ''}${(fr * 100).toFixed(4)}%`}
+                            </Td>
+                            <Td className={ls == null ? 'text-muted-foreground/40' : 'text-muted-foreground/80'}>
+                              {ls == null ? '—' : ls.toFixed(2)}
+                            </Td>
+                            <Td className={oi == null ? 'text-muted-foreground/40' : oi >= 0 ? 'text-bull' : 'text-bear'}>
+                              {oi == null ? '—' : `${oi >= 0 ? '+' : ''}${oi.toFixed(2)}%`}
+                            </Td>
+                          </>
+                        )
+                      })()}
                       <Td className="text-muted-foreground/80">{fmtUsd(r.quote_volume_24h)}</Td>
                       <td className="px-2 text-center text-muted-foreground/30 transition-colors group-hover:text-midas-red">›</td>
                     </tr>
@@ -239,7 +275,7 @@ export default function CryptoMarketPage() {
           </div>
 
           <p className="mt-3 text-[11px] text-muted-foreground/60">
-            交易对/价格/涨跌/高低/成交额 = 真实(M2-A ticker)· 资金费率/多空比/OI = 暂无榜单级接口显示「—」·
+            交易对/价格/涨跌/高低/成交额 = 真实(M2-A ticker)· 资金费率/账户多空比/OI 24H变化 = 合约 top100 采集范围内真实,范围外「—」·
             点行新标签打开详情页 · 仅供参考,不构成投资建议
           </p>
         </div>

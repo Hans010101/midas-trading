@@ -148,6 +148,25 @@ class Tickers24hResponse(BaseModel):
     items: list[Ticker24h]
 
 
+class FuturesMetricItem(BaseModel):
+    """榜单级合约指标单条 · 字段缺采集时为 None(前端显示「—」· 不造假)。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    symbol: str = Field(description="Binance 风格 · 'BTCUSDT'")
+    funding_rate: float | None = Field(default=None, description="最新资金费率 · decimal")
+    account_long_short_ratio: float | None = Field(default=None, description="账户多空比 long/short")
+    oi_change_pct_24h: float | None = Field(default=None, description="OI 近 24H 变化%")
+
+
+class FuturesMetricsBatchResponse(BaseModel):
+    """`/api/v1/crypto/futures/metrics-batch` 响应 · 给列表页 3 列批量取数。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    items: list[FuturesMetricItem]
+
+
 # ============================================================================
 # 5 · 全市场 Overview + Fear & Greed Index
 # ============================================================================
