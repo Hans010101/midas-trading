@@ -150,9 +150,8 @@ export default function CryptoMarketPage() {
         </div>
 
         <div className="mx-auto max-w-[1600px] px-6 py-5">
-          <div className="mb-4 flex items-baseline gap-3">
+          <div className="mb-4">
             <h1 className="font-serif text-2xl font-bold text-midas-red">加密市场</h1>
-            <span className="text-sm text-muted-foreground">合约 / 现货 · 24H 行情榜</span>
           </div>
 
           {/* 顶部 4 指标卡 */}
