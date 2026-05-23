@@ -15,8 +15,15 @@
  * 红线:点金永远只用虚拟资金 · 绝不接真实交易通道。
  */
 
+import { Suspense } from 'react'
+
 import { CryptoDetail } from '@/components/crypto-preview/crypto-detail'
 
 export default function CryptoPreviewPage() {
-  return <CryptoDetail />
+  // CryptoDetail 用 useSearchParams 读 ?symbol= · App Router 要求包 Suspense 边界
+  return (
+    <Suspense fallback={<main className="min-h-screen bg-background" />}>
+      <CryptoDetail />
+    </Suspense>
+  )
 }
