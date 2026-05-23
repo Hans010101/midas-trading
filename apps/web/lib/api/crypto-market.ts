@@ -50,6 +50,9 @@ export interface CryptoOverviewResponse {
   top_gainers: Ticker24h[]
   top_losers: Ticker24h[]
   top_volume: Ticker24h[]
+  // BTC/ETH 价格卡专用 · 后端按 symbol 精确取(不在涨跌幅榜上也能拿到)· 无则 null
+  btc_ticker: Ticker24h | null
+  eth_ticker: Ticker24h | null
 }
 
 export class CryptoMarketApiError extends Error {
@@ -95,4 +98,28 @@ export function fetchTickers24h(
 /** 全市场总览(总市值 / dominance / 合约成交额 / FGI)。 */
 export function fetchCryptoOverview(signal?: AbortSignal): Promise<CryptoOverviewResponse> {
   return getJson<CryptoOverviewResponse>('/api/v1/crypto/overview', signal)
+}
+
+// ── 榜单级合约指标批量(任务3)· 列表页 3 列(资金费率/账户多空比/OI 24H变化)──────
+export interface FuturesMetricItem {
+  symbol: string // Binance 风格 'BTCUSDT'
+  funding_rate: number | null
+  account_long_short_ratio: number | null
+  oi_change_pct_24h: number | null
+}
+export interface FuturesMetricsBatchResponse {
+  items: FuturesMetricItem[]
+}
+
+/** 批量取多个 symbol 的合约指标 · symbols 用 Binance 风格(无斜杠)· 不在采集名单的不返回。 */
+export function fetchFuturesMetricsBatch(
+  binanceSymbols: string[],
+  signal?: AbortSignal,
+): Promise<FuturesMetricsBatchResponse> {
+  if (binanceSymbols.length === 0) return Promise.resolve({ items: [] })
+  const params = new URLSearchParams({ symbols: binanceSymbols.join(',') })
+  return getJson<FuturesMetricsBatchResponse>(
+    `/api/v1/crypto/futures/metrics-batch?${params.toString()}`,
+    signal,
+  )
 }

@@ -61,10 +61,17 @@ function fmtCompact(n: number): string {
   if (abs >= 1e3) return `${(n / 1e3).toFixed(1)}K`
   return n.toFixed(2)
 }
-// X 轴只显示约 5 个刻度
+// X 轴约 6 个刻度(数据点变密后仍保持清爽)· 配合 minTickGap 防重叠
 function xInterval(len: number): number {
-  return Math.max(0, Math.ceil(len / 5) - 1)
+  return Math.max(0, Math.ceil(len / 6) - 1)
 }
+
+// 紧凑自适应 Y 量程(任务4):上下各留 ~0.3% 余量,让曲线占满图高、不被压成一条平线。
+// 函数式 domain · recharts 对 min/max 两端分别回调。
+const padMin = (m: number): number => (m >= 0 ? m * 0.997 : m * 1.003)
+const padMax = (m: number): number => (m >= 0 ? m * 1.003 : m * 0.997)
+// 给 recharts domain 用的函数对(成熟终端式紧凑量程)
+const TIGHT_DOMAIN: [typeof padMin, typeof padMax] = [padMin, padMax]
 
 const tooltipStyle = {
   fontSize: 11,
@@ -80,8 +87,9 @@ interface DimensionSectionProps {
 }
 
 export function DimensionSection({ futuresSymbol }: DimensionSectionProps) {
-  const oi = useOpenInterest(futuresSymbol, 96)
-  const lsr = useLongShortRatio(futuresSymbol, 96)
+  // 288 点 = 24h @ 5min(任务4:数据点加密,曲线更细腻;采集 top100 扩容后历史变密)
+  const oi = useOpenInterest(futuresSymbol, 288)
+  const lsr = useLongShortRatio(futuresSymbol, 288)
 
   const oiData = (oi.data?.items ?? []).map((p) => ({
     t: hhmm(p.ts), full: mmddhhmm(p.ts), oi_coin: p.oi_coin, oi_usd: p.oi_usd,
@@ -161,17 +169,17 @@ function OiChart({ data }: { data: { t: string; full: string; oi_coin: number; o
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
         <CartesianGrid stroke={C_GRID} vertical={false} />
-        <XAxis dataKey="t" tick={{ fontSize: 9, fill: C_AXIS }} interval={xInterval(data.length)} tickLine={false} />
-        <YAxis yAxisId="coin" width={42} tick={{ fontSize: 9, fill: C_AXIS }} tickFormatter={fmtCompact} domain={['auto', 'auto']} />
-        <YAxis yAxisId="usd" orientation="right" width={42} tick={{ fontSize: 9, fill: C_AXIS }} tickFormatter={fmtCompact} domain={['auto', 'auto']} />
+        <XAxis dataKey="t" tick={{ fontSize: 9, fill: C_AXIS }} interval={xInterval(data.length)} minTickGap={36} tickLine={false} />
+        <YAxis yAxisId="coin" width={42} tick={{ fontSize: 9, fill: C_AXIS }} tickFormatter={fmtCompact} domain={TIGHT_DOMAIN} />
+        <YAxis yAxisId="usd" orientation="right" width={42} tick={{ fontSize: 9, fill: C_AXIS }} tickFormatter={fmtCompact} domain={TIGHT_DOMAIN} />
         <Tooltip
           contentStyle={tooltipStyle}
           labelFormatter={(_l, p) => (p?.[0]?.payload?.full ?? '')}
           formatter={(v, name) => [name === '持仓量(币)' ? fmtCompact(Number(v)) : `$${fmtCompact(Number(v))}`, name]}
         />
         <Legend wrapperStyle={legendStyle} iconSize={8} />
-        <Line yAxisId="coin" type="monotone" dataKey="oi_coin" name="持仓量(币)" stroke={C_GOLD} strokeWidth={1.6} dot={false} />
-        <Line yAxisId="usd" type="monotone" dataKey="oi_usd" name="持仓价值(USD)" stroke={C_RED} strokeWidth={1.4} strokeDasharray="4 3" dot={false} />
+        <Line yAxisId="coin" type="monotone" dataKey="oi_coin" name="持仓量(币)" stroke={C_GOLD} strokeWidth={1.2} dot={false} />
+        <Line yAxisId="usd" type="monotone" dataKey="oi_usd" name="持仓价值(USD)" stroke={C_RED} strokeWidth={1} strokeDasharray="4 3" dot={false} />
       </ComposedChart>
     </ResponsiveContainer>
   )
@@ -183,9 +191,9 @@ function RatioStackChart({ data }: { data: { t: string; full: string; long: numb
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }} barCategoryGap={0}>
         <CartesianGrid stroke={C_GRID} vertical={false} />
-        <XAxis dataKey="t" tick={{ fontSize: 9, fill: C_AXIS }} interval={xInterval(data.length)} tickLine={false} />
+        <XAxis dataKey="t" tick={{ fontSize: 9, fill: C_AXIS }} interval={xInterval(data.length)} minTickGap={36} tickLine={false} />
         <YAxis yAxisId="pct" width={32} tick={{ fontSize: 9, fill: C_AXIS }} domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} />
-        <YAxis yAxisId="ratio" orientation="right" width={34} tick={{ fontSize: 9, fill: C_AXIS }} domain={['auto', 'auto']} tickFormatter={(v: number) => v.toFixed(2)} />
+        <YAxis yAxisId="ratio" orientation="right" width={34} tick={{ fontSize: 9, fill: C_AXIS }} domain={TIGHT_DOMAIN} tickFormatter={(v: number) => v.toFixed(2)} />
         <Tooltip
           contentStyle={tooltipStyle}
           labelFormatter={(_l, p) => (p?.[0]?.payload?.full ?? '')}
@@ -195,7 +203,7 @@ function RatioStackChart({ data }: { data: { t: string; full: string; long: numb
         <ReferenceLine yAxisId="ratio" y={1} stroke={C_AXIS} strokeDasharray="3 3" />
         <Bar yAxisId="pct" dataKey="long" name="多" stackId="ls" fill={C_LONG} />
         <Bar yAxisId="pct" dataKey="short" name="空" stackId="ls" fill={C_SHORT} />
-        <Line yAxisId="ratio" type="monotone" dataKey="ratio" name="比值" stroke={C_RATIO} strokeWidth={1.4} dot={false} />
+        <Line yAxisId="ratio" type="monotone" dataKey="ratio" name="比值" stroke={C_RATIO} strokeWidth={1} dot={false} />
       </ComposedChart>
     </ResponsiveContainer>
   )
@@ -207,8 +215,8 @@ function TakerChart({ data }: { data: { t: string; full: string; buy: number; se
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }} barCategoryGap={0} stackOffset="sign">
         <CartesianGrid stroke={C_GRID} vertical={false} />
-        <XAxis dataKey="t" tick={{ fontSize: 9, fill: C_AXIS }} interval={xInterval(data.length)} tickLine={false} />
-        <YAxis width={42} tick={{ fontSize: 9, fill: C_AXIS }} tickFormatter={(v: number) => fmtCompact(Math.abs(v))} domain={['auto', 'auto']} />
+        <XAxis dataKey="t" tick={{ fontSize: 9, fill: C_AXIS }} interval={xInterval(data.length)} minTickGap={36} tickLine={false} />
+        <YAxis width={42} tick={{ fontSize: 9, fill: C_AXIS }} tickFormatter={(v: number) => fmtCompact(Math.abs(v))} domain={TIGHT_DOMAIN} />
         <Tooltip
           contentStyle={tooltipStyle}
           labelFormatter={(_l, p) => (p?.[0]?.payload?.full ?? '')}
@@ -229,13 +237,13 @@ function BasisChart({ data }: { data: { t: string; full: string; mark: number; i
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
         <CartesianGrid stroke={C_GRID} vertical={false} />
-        <XAxis dataKey="t" tick={{ fontSize: 9, fill: C_AXIS }} interval={xInterval(data.length)} tickLine={false} />
-        <YAxis yAxisId="price" width={44} tick={{ fontSize: 9, fill: C_AXIS }} domain={['auto', 'auto']} tickFormatter={fmtCompact} />
-        <YAxis yAxisId="pct" orientation="right" width={36} tick={{ fontSize: 9, fill: C_AXIS }} domain={['auto', 'auto']} tickFormatter={(v: number) => `${v.toFixed(2)}%`} />
+        <XAxis dataKey="t" tick={{ fontSize: 9, fill: C_AXIS }} interval={xInterval(data.length)} minTickGap={36} tickLine={false} />
+        <YAxis yAxisId="price" width={44} tick={{ fontSize: 9, fill: C_AXIS }} domain={TIGHT_DOMAIN} tickFormatter={fmtCompact} />
+        <YAxis yAxisId="pct" orientation="right" width={36} tick={{ fontSize: 9, fill: C_AXIS }} domain={TIGHT_DOMAIN} tickFormatter={(v: number) => `${v.toFixed(2)}%`} />
         <Legend wrapperStyle={legendStyle} iconSize={8} />
-        <Line yAxisId="price" type="monotone" dataKey="mark" name="合约价" stroke={C_GOLD} strokeWidth={1.6} dot={false} />
-        <Line yAxisId="price" type="monotone" dataKey="index" name="指数价" stroke={C_RED} strokeWidth={1.4} strokeDasharray="4 3" dot={false} />
-        <Line yAxisId="pct" type="monotone" dataKey="basisPct" name="基差率" stroke={C_ORANGE} strokeWidth={1.4} dot={false} />
+        <Line yAxisId="price" type="monotone" dataKey="mark" name="合约价" stroke={C_GOLD} strokeWidth={1.2} dot={false} />
+        <Line yAxisId="price" type="monotone" dataKey="index" name="指数价" stroke={C_RED} strokeWidth={1} strokeDasharray="4 3" dot={false} />
+        <Line yAxisId="pct" type="monotone" dataKey="basisPct" name="基差率" stroke={C_ORANGE} strokeWidth={1} dot={false} />
       </ComposedChart>
     </ResponsiveContainer>
   )

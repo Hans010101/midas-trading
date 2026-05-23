@@ -35,19 +35,25 @@ from app.schemas.crypto import (
     CryptoOverviewResponse,
     FearGreedResponse,
     FundingRateResponse,
+    FuturesMetricItem,
+    FuturesMetricsBatchResponse,
     FuturesSymbolInfo,
     LongShortRatioResponse,
     MarketOverview,
     OpenInterestResponse,
+    Ticker24h,
     Tickers24hResponse,
 )
 from app.services.clickhouse_crypto import (
     select_fear_greed_series,
     select_funding_rates,
+    select_futures_metrics_batch,
     select_latest_overview,
     select_latest_tickers,
     select_long_short,
     select_open_interest,
+    select_perp_total_quote_volume,
+    select_tickers_by_symbols,
 )
 
 logger = logging.getLogger(__name__)
@@ -115,11 +121,35 @@ async def get_overview(ch: ClickHouseDep) -> CryptoOverviewResponse:
         top_losers = []
         top_volume = []
 
+    # 24H 合约总成交额:CoinGecko 免费档拿不到 derivatives_volume(硬编码 0),
+    # 这里用已采集的全 perp ticker 的 quote_volume_24h 求和兜底(真实数据)。
+    btc_ticker = None
+    eth_ticker = None
+    try:
+        if overview.derivatives_volume_24h_usd <= 0:
+            perp_total = await select_perp_total_quote_volume(ch._client)  # type: ignore[attr-defined]
+            if perp_total > 0:
+                overview = overview.model_copy(
+                    update={"derivatives_volume_24h_usd": perp_total},
+                )
+        # BTC/ETH 价格卡:按 symbol 精确取 perp ticker(不依赖涨跌幅榜)
+        by_sym = await select_tickers_by_symbols(
+            ch._client,  # type: ignore[attr-defined]
+            instrument="perp",
+            symbols=["BTC/USDT", "ETH/USDT"],
+        )
+        btc_ticker = by_sym.get("BTC/USDT")
+        eth_ticker = by_sym.get("ETH/USDT")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[crypto.overview] 合约成交额/BTC-ETH ticker 拉取失败: %s", exc)
+
     return CryptoOverviewResponse(
         market_overview=overview,
         top_gainers=top_gainers,
         top_losers=top_losers,
         top_volume=top_volume,
+        btc_ticker=btc_ticker,
+        eth_ticker=eth_ticker,
     )
 
 
@@ -159,6 +189,49 @@ async def get_tickers_24h(
     return Tickers24hResponse(
         instrument=instrument, sort_by=sort_by, order=order, items=items,
     )
+
+
+# ============================================================================
+# 2.5 · GET /futures/metrics-batch · 榜单级合约指标批量(任务3)
+# ============================================================================
+
+
+@router.get(
+    "/futures/metrics-batch",
+    response_model=FuturesMetricsBatchResponse,
+    summary="榜单级合约指标批量(资金费率/账户多空比/OI 24H变化)",
+    description=(
+        "一次性返回多个 symbol 的合约指标 · 给加密列表页 3 列用 · "
+        "symbols 逗号分隔 Binance 风格(如 BTCUSDT,ETHUSDT)· 最多 200 个。"
+        "不在采集名单(top100)里的 symbol 不返回 → 前端显示「—」。"
+    ),
+)
+async def get_futures_metrics_batch(
+    ch: ClickHouseDep,
+    symbols: Annotated[str, Query(description="逗号分隔 · Binance 风格 · 如 BTCUSDT,ETHUSDT")],
+) -> FuturesMetricsBatchResponse:
+    syms = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    if not syms:
+        return FuturesMetricsBatchResponse(items=[])
+    if len(syms) > 200:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"symbols 最多 200 个 · 当前 {len(syms)}",
+        )
+    metrics = await select_futures_metrics_batch(
+        ch._client,  # type: ignore[attr-defined]
+        symbols=syms,
+    )
+    items = [
+        FuturesMetricItem(
+            symbol=sym,
+            funding_rate=m.get("funding_rate"),
+            account_long_short_ratio=m.get("account_long_short_ratio"),
+            oi_change_pct_24h=m.get("oi_change_pct_24h"),
+        )
+        for sym, m in metrics.items()
+    ]
+    return FuturesMetricsBatchResponse(items=items)
 
 
 # ============================================================================

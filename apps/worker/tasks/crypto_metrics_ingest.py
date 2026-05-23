@@ -44,8 +44,9 @@ from app.services.data_sources.coingecko_source import CoinGeckoSource
 logger = logging.getLogger(__name__)
 
 
-# Hard-coded top 30 perp symbols(Binance Futures 风格 · 无斜杠)
-# M2-B 改成动态从 symbol_meta 表读 · 现在 hard-code 简单
+# 冷启动种子名单(Binance Futures 风格 · 无斜杠)。
+# M2-数据打磨·任务2 起,常态用 _top_perp_symbols() 从 crypto_ticker_24h 动态取 top100;
+# 仅当 ticker 表还空(首轮 ticker_24h_scan 未跑)时回退到本种子,保证名单永不为空。
 _TOP_30_PERP: tuple[str, ...] = (
     "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT",
     "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "TRXUSDT", "LINKUSDT",
@@ -73,6 +74,43 @@ async def _get_ch_client() -> Any:
         # 否则 tz 写读按 server 本地时区误转 · 0002 教训
         settings={"session_timezone": "UTC"},
     )
+
+
+# 采集名单上限(M2-数据打磨·任务2:top30 → top100)
+_TOP_N_PERP = 100
+
+
+async def _top_perp_symbols(ch: Any, *, limit: int = _TOP_N_PERP) -> list[str]:
+    """动态取「按 24H 成交额降序」前 N 个 perp 合约 · 返回 Binance 风格(无斜杠)。
+
+    数据来自 ticker_24h_scan 已落库的 crypto_ticker_24h(全市场 ~600 perp)·
+    不再硬编码 _TOP_30_PERP。冷启动(ticker 表还空)时回退到 _TOP_30_PERP 种子,
+    保证名单永不为空。crypto_ticker_24h 里 symbol 是 ccxt 风格 'BTC/USDT',
+    这里转成 Binance 风格 'BTCUSDT'(futures 端点要求)。
+    """
+    try:
+        result = await ch.query(
+            """
+            SELECT symbol FROM (
+                SELECT symbol, quote_volume_24h,
+                       ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY ts DESC) AS rn
+                FROM crypto_ticker_24h FINAL
+                WHERE instrument = 'perp'
+            )
+            WHERE rn = 1
+            ORDER BY quote_volume_24h DESC
+            LIMIT %(n)s
+            """,
+            parameters={"n": limit},
+        )
+        symbols = [str(r[0]).replace("/", "") for r in result.result_rows]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[crypto] 动态取 top%d 名单失败 · 回退 _TOP_30_PERP:%s", limit, exc)
+        return list(_TOP_30_PERP)
+    if not symbols:
+        logger.info("[crypto] ticker 表暂空 · 采集名单回退 _TOP_30_PERP 种子")
+        return list(_TOP_30_PERP)
+    return symbols
 
 
 # ============================================================================
@@ -117,7 +155,8 @@ async def _funding_rate_refresh_async() -> dict[str, Any]:
     ok = 0
     fail = 0
     try:
-        for symbol in _TOP_30_PERP:
+        symbols = await _top_perp_symbols(ch)
+        for symbol in symbols:
             try:
                 items = await source.fetch_funding_rate(symbol, limit=1)
                 n = await insert_funding_rates(ch, items)
@@ -150,7 +189,8 @@ async def _open_interest_scan_async() -> dict[str, Any]:
     ok = 0
     fail = 0
     try:
-        for symbol in _TOP_30_PERP:
+        symbols = await _top_perp_symbols(ch)
+        for symbol in symbols:
             try:
                 # 拉最近 1 条(5min 一次的 task · 每次只补一根新数据)
                 items = await source.fetch_open_interest(symbol, limit=1)
@@ -184,7 +224,8 @@ async def _long_short_scan_async() -> dict[str, Any]:
     ok = 0
     fail = 0
     try:
-        for symbol in _TOP_30_PERP:
+        symbols = await _top_perp_symbols(ch)
+        for symbol in symbols:
             try:
                 # limit 必须 >1:fetch_long_short_ratio 把 3 个上游 endpoint
                 # (account / position / taker)按 timestamp **交集** 合并;limit=1 时

@@ -27,6 +27,7 @@ import { MarketSwitcher } from '@/components/layout/market-switcher'
 import { TopNav } from '@/components/layout/top-nav'
 import {
   fetchCryptoOverview,
+  fetchFuturesMetricsBatch,
   fetchTickers24h,
   type Instrument,
 } from '@/lib/api/crypto-market'
@@ -75,6 +76,25 @@ export default function CryptoMarketPage() {
 
   const allItems = useMemo(() => tickersQ.data?.items ?? [], [tickersQ.data])
 
+  // 榜单级合约指标(资金费率/账户多空比/OI 24H变化)· 一次批量取当前已加载榜单的所有 symbol。
+  // 仅 perp 有合约指标;现货 tab 这 3 列恒为「—」。不在采集名单(top100)的币也回「—」。
+  const binanceSymbols = useMemo(
+    () => allItems.map((it) => toBinanceSymbol(it.symbol)),
+    [allItems],
+  )
+  const metricsQ = useQuery({
+    queryKey: ['crypto-futures-metrics', tab, binanceSymbols],
+    queryFn: ({ signal }) => fetchFuturesMetricsBatch(binanceSymbols, signal),
+    enabled: tab === 'perp' && binanceSymbols.length > 0,
+    retry: 0,
+    staleTime: 60_000,
+  })
+  const metricsMap = useMemo(() => {
+    const m = new Map<string, { funding_rate: number | null; account_long_short_ratio: number | null; oi_change_pct_24h: number | null }>()
+    for (const it of metricsQ.data?.items ?? []) m.set(it.symbol, it)
+    return m
+  }, [metricsQ.data])
+
   // 搜索(前端过滤)+ 排序(前端,仅真实列)
   const viewRows = useMemo(() => {
     const q = query.trim().toUpperCase()
@@ -91,9 +111,10 @@ export default function CryptoMarketPage() {
 
   // 指标卡数据(真实;缺失 → null → 显示「—」)
   const ov = overviewQ.data?.market_overview
-  const findPx = (sym: string) => allItems.find((it) => it.symbol === sym) ?? null
-  const btc = findPx('BTC/USDT')
-  const eth = findPx('ETH/USDT')
+  // BTC/ETH 价格卡:从 overview 的 btc_ticker/eth_ticker 取(后端按 symbol 精确查),
+  // 不再用 findPx 在「按涨跌幅 top100」榜单里找 —— 大盘币基本不在涨幅榜,会导致卡空。
+  const btc = overviewQ.data?.btc_ticker ?? null
+  const eth = overviewQ.data?.eth_ticker ?? null
   const fgiOk = !!ov && ov.fear_greed_value > 0 && ov.fear_greed_classification !== '' && ov.fear_greed_classification !== 'N/A'
 
   function toggleSort(key: SortKey) {
@@ -121,14 +142,17 @@ export default function CryptoMarketPage() {
         </div>
 
         <div className="mx-auto max-w-[1600px] px-6 py-5">
-          {/* H1「加密市场」已删 · 顶部市场切换 Tab 已有「加密」· 标题冗余。
-              容器 py-5 顶距维持自然间距,直接以指标卡起首;卡片 mb-5 下距保留。 */}
+          <div className="mb-4">
+            <h1 className="font-serif text-2xl font-bold text-midas-red">加密市场</h1>
+          </div>
+
           {/* 顶部 4 指标卡 */}
           <div className="mb-5 grid grid-cols-2 gap-4 md:grid-cols-4">
             <MetricCard
               label="24H 合约总成交额"
               loading={overviewQ.isPending}
               value={ov && ov.derivatives_volume_24h_usd > 0 ? fmtUsd(ov.derivatives_volume_24h_usd) : '—'}
+              sub="Binance 永续口径"
             />
             <MetricCard
               label="恐慌贪婪指数"
@@ -139,14 +163,14 @@ export default function CryptoMarketPage() {
             />
             <MetricCard
               label="BTC 价格"
-              loading={tickersQ.isPending}
+              loading={overviewQ.isPending}
               value={btc ? `$${fmtPrice(btc.last_price)}` : '—'}
               sub={btc ? fmtPct(btc.change_pct_24h) : '暂无数据'}
               tone={btc ? (btc.change_pct_24h >= 0 ? 'bull' : 'bear') : undefined}
             />
             <MetricCard
               label="ETH 价格"
-              loading={tickersQ.isPending}
+              loading={overviewQ.isPending}
               value={eth ? `$${fmtPrice(eth.last_price)}` : '—'}
               sub={eth ? fmtPct(eth.change_pct_24h) : '暂无数据'}
               tone={eth ? (eth.change_pct_24h >= 0 ? 'bull' : 'bear') : undefined}
@@ -191,9 +215,9 @@ export default function CryptoMarketPage() {
                   <SortTh label="24H 涨跌%" col="chgPct" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <th className="px-3 py-2 text-right font-medium">24H 最高</th>
                   <th className="px-3 py-2 text-right font-medium">24H 最低</th>
-                  <th className="px-3 py-2 text-right font-medium" title="无榜单级接口 · 待补">资金费率</th>
-                  <th className="px-3 py-2 text-right font-medium" title="无榜单级接口 · 待补">账户多空比</th>
-                  <th className="px-3 py-2 text-right font-medium" title="无榜单级接口 · 待补">OI 24H 变化</th>
+                  <th className="px-3 py-2 text-right font-medium" title="合约 · top100 采集范围内为真实,范围外显示「—」">资金费率</th>
+                  <th className="px-3 py-2 text-right font-medium" title="合约 · 账户多空比 long/short">账户多空比</th>
+                  <th className="px-3 py-2 text-right font-medium" title="合约 · OI 近 24H 变化%">OI 24H 变化</th>
                   <SortTh label="24H 成交额" col="turnover" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <th className="w-8" />
                 </tr>
@@ -215,9 +239,25 @@ export default function CryptoMarketPage() {
                       <Td className={r.change_pct_24h >= 0 ? 'text-bull' : 'text-bear'}>{fmtPct(r.change_pct_24h)}</Td>
                       <Td className="text-muted-foreground/80">{fmtPrice(r.high_24h)}</Td>
                       <Td className="text-muted-foreground/80">{fmtPrice(r.low_24h)}</Td>
-                      <Td className="text-muted-foreground/40">—</Td>
-                      <Td className="text-muted-foreground/40">—</Td>
-                      <Td className="text-muted-foreground/40">—</Td>
+                      {(() => {
+                        const fm = metricsMap.get(toBinanceSymbol(r.symbol))
+                        const fr = fm?.funding_rate
+                        const ls = fm?.account_long_short_ratio
+                        const oi = fm?.oi_change_pct_24h
+                        return (
+                          <>
+                            <Td className={fr == null ? 'text-muted-foreground/40' : fr >= 0 ? 'text-bull' : 'text-bear'}>
+                              {fr == null ? '—' : `${fr >= 0 ? '+' : ''}${(fr * 100).toFixed(4)}%`}
+                            </Td>
+                            <Td className={ls == null ? 'text-muted-foreground/40' : 'text-muted-foreground/80'}>
+                              {ls == null ? '—' : ls.toFixed(2)}
+                            </Td>
+                            <Td className={oi == null ? 'text-muted-foreground/40' : oi >= 0 ? 'text-bull' : 'text-bear'}>
+                              {oi == null ? '—' : `${oi >= 0 ? '+' : ''}${oi.toFixed(2)}%`}
+                            </Td>
+                          </>
+                        )
+                      })()}
                       <Td className="text-muted-foreground/80">{fmtUsd(r.quote_volume_24h)}</Td>
                       <td className="px-2 text-center text-muted-foreground/30 transition-colors group-hover:text-midas-red">›</td>
                     </tr>
@@ -236,7 +276,7 @@ export default function CryptoMarketPage() {
           </div>
 
           <p className="mt-3 text-[11px] text-muted-foreground/60">
-            交易对/价格/涨跌/高低/成交额 = 真实(M2-A ticker)· 资金费率/多空比/OI = 暂无榜单级接口显示「—」·
+            交易对/价格/涨跌/高低/成交额 = 真实(M2-A ticker)· 资金费率/账户多空比/OI 24H变化 = 合约 top100 采集范围内真实,范围外「—」·
             点行新标签打开详情页 · 仅供参考,不构成投资建议
           </p>
         </div>
