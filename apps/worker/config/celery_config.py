@@ -46,11 +46,18 @@ beat_schedule = {
         "schedule": crontab(minute="*"),
     },
     # ── M2-A · Crypto Pro 数据采集(0017 ADR)· 常驻定时刷新 ────────────────────
-    # 错峰原则:Binance 三个采集(oi/longshort/funding)分钟数互不重叠,避免
+    # 错峰原则:Binance 四个采集(ticker/oi/longshort/funding)分钟数互不重叠,避免
     #   同一刻对 Binance 合约接口集中打请求(IP 权重限流)。oi 落在 5 的倍数;
-    #   longshort 落在 2,12,22…;funding 落在 3,18,33,48 —— 三者无交集。
+    #   longshort 落在 2,12,22…;funding 落在 3,18,33,48;ticker 落在 6,16,26… —— 四者无交集。
     # CoinGecko / alternative.me 是不同上游主机且数据慢变,频率更低。
     # expires:本轮没被 worker 及时领走就丢弃(宕机/积压时不堆任务,避免补跑风暴)。
+    "crypto-ticker-24h-scan": {
+        "task": "tasks.crypto.ticker_24h_scan",
+        # 24H 滚动行情(慢变)· 单次 1 个 /fapi/v1/ticker/24hr 请求拉全市场 perp(~300)· 极轻
+        # 加密市场列表页 + BTC/ETH 价格卡的数据源 · 每 10 分钟(错峰 6,16,26,36,46,56)
+        "schedule": crontab(minute="6-59/10"),
+        "options": {"expires": 540},
+    },
     "crypto-open-interest-scan": {
         "task": "tasks.crypto.open_interest_scan",
         # OI 是 5min 栅格 · 详情页最需要新鲜的维度 · 每 5 分钟 · 30 标的轻量 GET
