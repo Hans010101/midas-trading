@@ -124,6 +124,11 @@ export default function CryptoMarketPage() {
     inFlightRef.current = new Set()
   }, [tab])
 
+  // 注意:这里【不】用 cancelled 标志取消在飞批次。metricsMap 是按 symbol 幂等累积的,
+  // 取消批次只会丢结果、不会带来正确性收益。曾因「在飞批次被 visibleRows 抖动取代 → 早退
+  // 丢结果 + inFlight 去重挡住补发」导致首屏前 20 行资金费率/多空比/OI 永久空(生产复现)。
+  // 修法:① 发请求时就乐观标 fetched(被取代也不悬空、不重复请求)· ② 返回一律 merge ·
+  //       ③ 仅失败时回滚 fetched 以便重试。
   useEffect(() => {
     if (tab !== 'perp') return // 现货 tab:3 列恒「—」,不请求 metrics
     const want = visibleRows
@@ -131,15 +136,15 @@ export default function CryptoMarketPage() {
       .filter((s) => !fetchedRef.current.has(s) && !inFlightRef.current.has(s))
     if (want.length === 0) return
 
-    let cancelled = false
     for (let i = 0; i < want.length; i += METRICS_CHUNK) {
       const chunk = want.slice(i, i + METRICS_CHUNK)
-      chunk.forEach((s) => inFlightRef.current.add(s))
+      // 乐观标记:发请求时就标 fetched + inFlight。即使本轮 effect 随后被 visibleRows 抖动
+      // (无限滚动 20→40 / 切排序搜索)取代,这批 symbol 也不会悬空、不会被重复请求。
+      chunk.forEach((s) => { fetchedRef.current.add(s); inFlightRef.current.add(s) })
       fetchFuturesMetricsBatch(chunk)
         .then((res) => {
-          if (cancelled) return
-          // 成功:无论该 symbol 有没有返回数据,都标记 fetched(避免无数据币每帧重复请求)
-          chunk.forEach((s) => fetchedRef.current.add(s))
+          // 按 symbol 幂等 merge —— 不因 effect 被取代而丢结果(前 20 行空 bug 的根因修复)。
+          // 返回里没有的 symbol 保持「—」(采集范围外),已乐观标 fetched 不再重复请求。
           setMetricsMap((prev) => {
             const next = new Map(prev)
             for (const it of res.items) {
@@ -152,10 +157,9 @@ export default function CryptoMarketPage() {
             return next
           })
         })
-        .catch(() => { /* 失败不标 fetched · 下次滚动可重试 */ })
+        .catch(() => { chunk.forEach((s) => fetchedRef.current.delete(s)) }) // 失败回滚 fetched · 下次滚动可重试
         .finally(() => { chunk.forEach((s) => inFlightRef.current.delete(s)) })
     }
-    return () => { cancelled = true }
   }, [visibleRows, tab])
 
   // ── 无限滚动:sentinel 进视口 → 续加载 20 ──────────────────────────────────
