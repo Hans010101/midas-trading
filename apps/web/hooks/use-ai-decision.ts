@@ -20,6 +20,8 @@ export interface UseAiDecisionArgs {
   market: Market
   period: Period
   limit?: number
+  /** 'spot'(默认)· 'perp' 合约。并入 queryKey 防 spot/perp 缓存串台。 */
+  instrument?: 'spot' | 'perp'
   enabled?: boolean
 }
 
@@ -27,6 +29,7 @@ export function useAiDecision(args: UseAiDecisionArgs) {
   return useQuery<DecisionCard>({
     queryKey: [
       'ai-decision', args.market, args.symbol, args.period, args.limit ?? 300,
+      args.instrument ?? 'spot',
     ],
     queryFn: ({ signal }) =>
       fetchDecisionCard({
@@ -34,6 +37,7 @@ export function useAiDecision(args: UseAiDecisionArgs) {
         market: args.market,
         period: args.period,
         limit: args.limit,
+        instrument: args.instrument,
         signal,
       }),
     enabled: args.enabled ?? true,

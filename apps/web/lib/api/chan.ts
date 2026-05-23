@@ -68,6 +68,8 @@ export interface FetchChanArgs {
   market: Market
   period: Period
   limit?: number
+  /** 'spot'(默认)· 'perp' USDT-M 永续合约 · 只 crypto 支持。不传 → 后端默认 spot。 */
+  instrument?: 'spot' | 'perp'
   signal?: AbortSignal
 }
 
@@ -78,6 +80,7 @@ export async function fetchChanAnalysis(args: FetchChanArgs): Promise<ChanAnalys
     period: args.period,
     limit: String(args.limit ?? 300),
   })
+  if (args.instrument) params.set('instrument', args.instrument)
   const r = await fetch(
     `${API_BASE}/api/v1/analysis/chan?${params.toString()}`,
     { signal: args.signal },

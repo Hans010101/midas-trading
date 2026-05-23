@@ -89,6 +89,7 @@ export function CryptoMainChart({ symbol, period }: CryptoMainChartProps) {
         <KlineChart
           symbol={symbol}
           market="crypto"
+          instrument="perp"
           period={period}
           indicators={indicators}
           indicatorStyles={indicatorStyles}
@@ -96,11 +97,12 @@ export function CryptoMainChart({ symbol, period }: CryptoMainChartProps) {
         />
       </div>
 
-      {/* 缠论标注层 · props 驱动(不读 workbench store)· 跟布林带同层共存 */}
+      {/* 缠论标注层 · props 驱动(不读 workbench store)· 跟布林带同层共存 · 合约 K 线缠论 */}
       <ChanOverlay
         chart={chart}
         symbol={symbol}
         market="crypto"
+        instrument="perp"
         period={period}
         enabled={chanEnabled}
       />

@@ -46,6 +46,8 @@ export interface FetchKlineOptions {
   market: Market
   period: Period
   limit?: number
+  /** 'spot'(默认)现货 · 'perp' USDT-M 永续合约 · 只 crypto 支持。不传 → 后端默认 spot,行为与改前完全一致。 */
+  instrument?: 'spot' | 'perp'
   signal?: AbortSignal
 }
 
@@ -56,6 +58,8 @@ export async function fetchKline(opts: FetchKlineOptions): Promise<KlineResponse
     period: opts.period,
     limit: String(opts.limit ?? 500),
   })
+  // 仅在显式传 instrument 时附带 · spot 调用方(A股/美股/现货)URL 与改前逐字节一致
+  if (opts.instrument) params.set('instrument', opts.instrument)
   const r = await fetch(`${API_BASE}/api/v1/market/kline?${params.toString()}`, {
     signal: opts.signal,
   })

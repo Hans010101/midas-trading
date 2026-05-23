@@ -37,7 +37,8 @@ interface CryptoAiCardProps {
 }
 
 export function CryptoAiCard({ klineSymbol, futuresSymbol, period }: CryptoAiCardProps) {
-  const decision = useAiDecision({ symbol: klineSymbol, market: 'crypto', period })
+  // 合约(perp)技术面 · 跟主图/缠论/Header 同源,保证全链路一致
+  const decision = useAiDecision({ symbol: klineSymbol, market: 'crypto', period, instrument: 'perp' })
 
   return (
     <div className="rounded-lg border border-paper bg-cream p-4 shadow-sm">
