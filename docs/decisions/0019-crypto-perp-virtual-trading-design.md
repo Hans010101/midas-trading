@@ -2,9 +2,9 @@
 
 ## 状态
 
-**Proposed**(2026-05-23)· 待产品负责人审定 **§11「待拍板决策」** 后转 Approved,再按本 ADR 写实现代码。
+**Approved**(2026-05-23)· §11 十二条决策已由产品负责人审定锁定(见该节「最终结论」)。M2-C.1 可据此开写;M2-C.2(策略 + 资金费)开写前有一项数据采集前置(见 §4.8.1)。
 
-> 本文档**只做设计**,不含任何已落地的实现代码。文中的表结构 / 函数 / 公式均为「建议」,等审定后才写。
+> 本文档是设计契约。表结构 / 函数 / 公式为实现蓝本,允许实现期小步细化(细化落 commit / 后续 ADR 修订),但 §11 的产品决策与顶部「红线」不得擅改。
 
 ---
 
@@ -54,7 +54,7 @@ perp 撮合 / 强平 / 策略所需的实时数据,M2-A/M2-D 已全部采集并�
 | `GET /api/v1/crypto/futures/{symbol}/open-interest` · `/long-short-ratio` | OI / 大户多空比 时序 | 策略 + 详情页维度图(已接) |
 | `GET /api/v1/market/kline?instrument=perp` | perp K 线 | 主图 / 缠论 / 最新价兜底 |
 
-**关键点:`futures/{symbol}/info.mark_price` 是 perp 撮合与强平的正确价源**(标记价,非最新成交价 —— 防插针),而且该响应自带 `max_leverage`(交易所真实上限,1–125),杠杆上限可直接取真值。
+**关键点(含现状修正):** perp 撮合 / 强平要的标记价 / 下次结算 / 杠杆上限,虽有端点但**当前多为 M2-A stub**(见 §4.1、§4.8.1)—— `mark_price`/`index_price`/`max_leverage`(125)/`next_funding_time`(+8h)都不是真值。M2-C.1 撮合改用 **perp ticker `last_price`**(分钟级,最新),真 mark price / 真结算时间随 M2-C.2 接入。而**资金费率 / OI / 多空比时序是真实采集**(驱动策略清单,见 §5.2)。
 
 ---
 
@@ -99,7 +99,7 @@ perp 撮合 / 强平 / 策略所需的实时数据,M2-A/M2-D 已全部采集并�
 - **复用**:`VirtualAccount`(crypto/USDT)、`VirtualEquitySnapshot`(perp 浮盈并入 crypto 权益)、`fees.py` 的滑点思路、`futures/{sym}/info` 价源、确认模态/徽章/toast 等前端组件。
 - **新增**:`VirtualPerpPosition` / `VirtualPerpOrder` 两张表、`services/virtual_trading/perp_engine.py`、perp REST 路由、强平监控 worker(若选实时方案)、详情页两块面板的真实实现。
 
-> **D1 待拍板:** perp 与现货是否**共用** crypto 的 `cash_balance`(统一 USDT 钱包,贴近 Binance 统一账户),还是 perp 用**独立保证金子账户**。推荐共用(简单、真实、用户只填一次 USDT),代价是现货持仓与合约保证金抢同一池子。
+> **D1(已定:共用)**:perp 与现货**共用** crypto 的 `cash_balance`(统一 USDT 钱包,贴近 Binance 统一账户)。代价是现货持仓与合约保证金抢同一池子 —— UI 要把「可用 USDT / 已用保证金 / 现货占用」拆清(见 §8 风险 3)。
 
 ---
 
@@ -138,8 +138,8 @@ class VirtualPerpPosition(Base):
     maintenance_margin_rate: Decimal  # MMR 快照(开仓时记,默认 0.005)
     liquidation_price: Decimal        # 强平价(每次加/减仓后重算,见 §4.5)
     realized_pnl:  Decimal | None     # 已实现盈亏(平仓累计,USDT)
-    fee_paid:      Decimal            # 累计手续费(USDT)
-    funding_paid:  Decimal            # 累计资金费(USDT,+付出 / −收到;D5 决定是否启用)
+    fee_paid:      Decimal            # 累计手续费(USDT)· M2-C.1 启用(D8:开/平按成交额 0.05% 计入盈亏)
+    funding_paid:  Decimal            # 累计资金费(USDT,+付出 / −收到)· 字段预留 · M2-C.2 才写入(D5:资金费二期)
     opened_at:     datetime
     closed_at:     datetime | None    # 软删:NULL=活仓
     close_reason:  PerpCloseReason | None
@@ -195,11 +195,13 @@ crypto 账户的一条权益曲线 = `cash_balance` + 现货持仓市值 + **Σ(
 
 > 全部 USDT 本位线性合约(linear / USDT-margined)。币本位反向合约不做。
 
-### 4.1 价源 · mark price
+### 4.1 价源 · mark price(⚠️ 含数据现状修正)
 
-- 撮合价 / 浮盈 / 强平**统一用 `futures/{symbol}/info.mark_price`**(标记价,抗插针),不用最新成交价。
-- 注入式 `PerpMarkPriceFetcher(symbol) -> Decimal | None`(对齐 0008 的注入式 `PriceFetcher`,便于 mock 测试)。
-- 取不到 mark price(标的下架/数据未到)→ **拒单**(`reject_reason="无标记价 · 标的可能下架或数据未到达"`),绝不用 0 或猜测价(CLAUDE.md 红线 + 0010 数据精度教训)。
+- **意图(D7)**:撮合 / 浮盈 / 强平统一用「标记价」语义(抗插针),不用最新成交价。
+- **数据现状(实测 · 务必知道)**:`GET /futures/{symbol}/info` 目前是 **M2-A stub** —— `mark_price` 取自 `crypto_funding_rate` 最近一行,**只在资金费结算时刷新(1–8h 一次),不是实时**;`index_price`(=mark)、`max_leverage`(硬编码 125)、`next_funding_time`(硬编码 +8h)同为 stub,端点未回源 premiumIndex/exchangeInfo。**因此不能拿 `futures/info.mark_price` 单独当实时撮合价。**
+- **M2-C.1 取价**:用**最新 perp ticker** —— `crypto_ticker_24h`(instrument=perp)的 `last_price`(ticker 采集分钟级刷新,远新于 funding 节奏)作为撮合 / 强平的「现价」代理。注入式 `PerpPriceFetcher(symbol) -> Decimal | None`(对齐 0008 `PriceFetcher`,便于 mock;**注意走 perp instrument,不能复用 0008 那个默认 spot 的 fetcher**)。
+- **真·实时标记价(premiumIndex)接入**列为数据层改进,**与 M2-C.2 资金费一起做**(两者都要 premiumIndex):届时撮合/强平价升级为真 mark price,并修掉 `futures/info` 的 stub。
+- 取不到价(下架/数据未到)→ **拒单**(`reject_reason="无报价 · 标的可能下架或数据未到达"`),绝不用 0 / 猜测价(CLAUDE.md 红线 + 0010 数据精度教训)。
 
 ### 4.2 开仓(开多 / 开空)· 市价
 
@@ -207,7 +209,7 @@ crypto 账户的一条权益曲线 = `cash_balance` + 现货持仓市值 + **Σ(
 > 前端两种输入模式二选一(D8):按「币数量」开 或 按「保证金 USDT」开。建议 UI 用**保证金 + 杠杆**输入(更贴近用户「我想投入 X USDT」),后端换算 `quantity = margin × leverage / mark_price`。
 
 ```
-1. 校验:leverage ∈ [1, info.max_leverage 上限封顶到 §11 D3 的产品上限]
+1. 校验:leverage ∈ [1, 20](D3 固定上限;不依赖 info.max_leverage —— 当前 125 stub)
 2. mark = fetch_mark_price(symbol);取不到 → reject
 3. fill_price = apply_slippage(mark, side)        # 开多上浮 / 开空下浮,bps 见 §4.9
 4. notional = quantity × fill_price               # USDT
@@ -291,7 +293,7 @@ equity_crypto = cash_balance
               + Σperp活仓(initial_margin + unrealized_pnl)
 ```
 
-### 4.7 强平触发(谁监控 mark price)· **核心待拍板 D4**
+### 4.7 强平触发(谁监控 mark price)· D4 已定:混合(60s worker + 交互兜底)
 
 三种方案:
 
@@ -303,16 +305,48 @@ equity_crypto = cash_balance
 
 强平执行:`mark` 触及 `liq_price` → 按 `mark`(或更差的 `liq_price`)市价全平,`cash_balance += 剩余权益(≈0 或维持保证金残值)`,`close_reason=liquidated`,写 `is_liquidation=true` 流水,**emit 强平通知**(0009 推送复用),前端 toast「⚠️ 虚拟仓位已强平」。
 
-### 4.8 资金费结算(perp 专属)· **待拍板 D5**
+### 4.8 资金费结算(perp 专属)· M2-C.2(D5 已定:做,放二期)
 
-真实 perp 每 8h(UTC 00/08/16)按 `funding_rate × notional` 在多空间转移:
+> **D5 结论**:资金费**要做**(极端费率对持有成本影响大,有教学价值),但工程量大于手续费(定时 + 遍历活仓逐个计费 + 计入余额 + 可能触发强平),**排到 M2-C.2**;M2-C.1 先不计资金费,UI 标注「资金费(教学)二期接入」。
+
+线性合约资金费(对单个活仓,**在该 symbol 各自的结算时刻**):
 ```
-funding_payment = funding_rate × mark × qty
+funding_payment = funding_rate × mark × qty       # USDT
   rate > 0:多付空收;rate < 0:空付多收
 对持仓:cash_balance -= sign × funding_payment(long sign=+1, short sign=−1)
-       funding_paid 累加
+       funding_paid 累加;扣到资不抵债 → 触发强平(§4.7)
 ```
-- **建议**:M2-C.1 **先不做**资金费(UI 标注「资金费教学版暂不计入盈亏」),M2-C.2 再加一个 8h Celery beat job 遍历活仓结算。理由:资金费要额外 worker + 改变「持有成本」叙事,先把开/平/强平主链路跑通更重要。
+
+#### 🔴 关键修正(实现 M2-C.2 必守):结算周期【按币种不同】,不是统一 8h
+
+币安永续资金费结算周期**因币而异**,有 **1h / 2h / 4h / 8h** 多种。**实测本项目数据**:
+
+- `BTCUSDT` 相邻结算 ts 间隔 = **8h**(00:00 → 08:00)
+- `BSBUSDT` 相邻结算 ts 间隔 = **4h**(04:00 → 08:00 → 12:00)
+
+**绝不能用固定 8h 结算**:1h 结算的币一天结算 **24 次**,8h 的只 **3 次**,差 **8 倍** —— 周期错 = 资金费直接算错 N 倍。M2-C.2 的结算 worker 必须**按每个币各自周期**在其结算时刻计费。
+
+### 4.8.1 结算周期 / 下次结算时间 —— 数据采集现状调查结论(M2-C.2 前置)
+
+> 产品负责人要求的「如实查清楚」结论。**当前结算周期既没显式采集、也没存储;现有「下次结算时间」用了错误的固定 +8h。**
+
+逐条现状(代码 + 实测):
+
+| 项 | 现状 | 影响 |
+|---|---|---|
+| `crypto_funding_rate` 表 | 列 `symbol/ts/rate/mark_price`,**无 interval/period 列**;`ts` 是真实结算时间(upstream `fundingTime`) | 周期没直接存;但 `ts` 真实 → 理论可从相邻 ts 差反推 |
+| 反推可行性(实测) | 多数 symbol 当前仅 1–2 个 ts 历史点(采集任务每轮 `fetch_funding_rate(limit=1)` 只存最新一条,不 backfill)| 历史太稀,**现在还不够稳地反推**,需先攒密度 |
+| `/fapi/v1/fundingInfo`(币安给非8h币的 `fundingIntervalHours`)| **当前完全没调用**(全代码 grep 零命中)| 显式周期源没接 |
+| `futures/{sym}/info.next_funding_time` | = `最近ts + 8h`(**硬编码 stub**,crypto.py:346)| 对非8h币(如 BSB 4h)**算错** |
+| `futures/{sym}/info` 其余 | `mark_price`≈funding行、`index_price`=mark、`max_leverage`=125 全 stub,未回源 | 都非真值 |
+| 上游能力 | `premiumIndex` 有真实 `nextFundingTime`(`fetch_symbol_info` stub 里拉了但没用);`fundingInfo` 有 `fundingIntervalHours` | 能力在,没接 |
+
+**结论 → M2-C.2 做资金费前必须先补采集 / 补真值。** 三选一(M2-C.2 设计时定,推荐 ①+③):
+
+- **①(推荐)显式采集周期**:加 `/fapi/v1/fundingInfo` 采集,拿每个非8h币的 `fundingIntervalHours`(其余默认 8h),存 symbol→interval(`crypto_funding_rate` 加列或建小映射表);顺手把 `futures/info.next_funding_time` 改回源 `premiumIndex` 真值(**修掉 +8h bug**)。
+- **② 零新增采集 · 从历史反推**:用 `crypto_funding_rate` 相邻 `ts` 最小正差当周期。前提:采集频率 ≤ 最短周期(1h 币要 beat ≤1h 才能捕获每次结算)+ 攒够历史。
+- **③ 结算触发用 premiumIndex**:结算 worker 逐 symbol 实时拉 `premiumIndex.nextFundingTime` 决定「精确何时结」。
+- 推荐 **①(定周期)+ ③(定时刻)** 组合。
 
 ### 4.9 手续费 + 滑点
 
@@ -343,7 +377,7 @@ PERP_SLIPPAGE_BPS = 10                  # 10 bps,沿用 0008 crypto 滑点
 ```
 ┌─ 下单指导  [VIRTUAL·模拟] ──────────────┐
 │  [ 开多(虚拟) ]   [ 开空(虚拟) ]        │  ← 中国红填充 / 中国红 outline(不用涨跌色)
-│  杠杆   [—●———————] 10x   (1 .. max_lev) │  ← slider,上限取 info.max_leverage∧产品上限
+│  杠杆   [—●———————] 10x   (1 .. 20)      │  ← 固定 1–20x(D3)· 不依赖 info.max_leverage(当前 125 stub)
 │  保证金 [ 1,000 ] USDT                   │  ← 输入;或切「按数量」
 │  ───────────────────────                │
 │  预估开仓量   0.0102 BTC                 │  ← margin×lev/mark 实时算
@@ -370,7 +404,9 @@ PERP_SLIPPAGE_BPS = 10                  # 10 bps,沿用 0008 crypto 滑点
 | ④ | 强平价距现价 < 5% → 降杠杆提示 | 当前**活仓**:`强平距离% < 5` | 🔴「强平距离仅 a% · 建议降杠杆 / 加保证金」(只对已有活仓) |
 
 - 每条带「仅供参考,不构成投资建议」。规则是**展示层逻辑**,可纯前端用已取的 metrics/info 算,也可后端出一个 `GET /perp/strategy-signals?symbol=` 聚合(建议前端算,少一个端点,见 §6)。
-- **③ 的降级(D10)**:基差(basis)数据 M2-B 未采集(详情页⑥基差是占位示意)。所以规则③要么**降级为「只看缠论卖点」**,要么标注「基差待补」。建议 M2-C 降级为只看缠论卖点 + 标注。
+- **③ 的降级(D10)**:基差(basis)数据 M2-B 未采集(详情页⑥基差是占位示意)。所以规则③**降级为「只看缠论卖点」** + 标注「基差待补」。
+
+> **资金费率作「行情指标」始终保留**:加密列表「资金费率」列、详情页 Header 资金费率、策略①里的资金费率展示 —— 全部照常展示使用,**与「虚拟交易扣资金费」(§4.8,M2-C.2)是两回事**。前者只读展示(一直在),后者结算扣费(二期接)。
 
 ---
 
@@ -402,7 +438,7 @@ PERP_SLIPPAGE_BPS = 10                  # 10 bps,沿用 0008 crypto 滑点
 
 ### 6.3 衔接点(零新增采集)
 
-- mark price / funding / max_leverage ← `futures/{sym}/info`(详情页 Header 已在用)。
+- 现价(撮合/强平)← **perp ticker `last_price`**(`crypto_ticker_24h`,最新);`futures/{sym}/info` 现为 stub(mark/index/max_leverage/next_funding 非真值,见 §4.1),真 mark 随 M2-C.2 接入。
 - 策略指标 ← `metrics-batch` / OI / LSR(详情页维度图已在用)。
 - 缠论卖点 ← `/api/v1/analysis/*`(0011/0012,AI 卡已在用)。
 - 钱包 ← `VirtualAccount` crypto(0008 设置页已能填 USDT)。
@@ -413,8 +449,8 @@ PERP_SLIPPAGE_BPS = 10                  # 10 bps,沿用 0008 crypto 滑点
 
 | 期 | 范围 | 产出 |
 |---|---|---|
-| **M2-C.1**(核心闭环) | 2 表 + migration · perp_engine 开/平/反手 + 逐仓保证金 + 强平价 · 强平 worker(D4-C)· REST(orders/positions/orders 列表)· 下单指导接真实(开多/开空/杠杆/保证金/强平价预估)· pytest(撮合数值/保证金/强平/并发) | 用户能在详情页开/平虚拟合约单,看浮盈、强平价、被强平 |
-| **M2-C.2**(策略 + 资金费) | 实战策略清单接真实(4 规则 · ③降级)· 资金费 8h 结算(D5)· 详情页活仓卡 + 强平 toast | 策略提示 + 资金费教学 |
+| **M2-C.1**(核心闭环) | 2 表 + migration · perp_engine 开/平/反手 + 逐仓保证金 + 强平价 · **手续费 0.05%(D8)计入盈亏** · 价源用 perp ticker(§4.1)· 强平 worker(D4-C)· REST(orders/positions/列表)· 下单指导接真实(开多/开空/杠杆 1–20x/保证金/强平价预估)· pytest(撮合数值/保证金/强平/并发)| 用户能在详情页开/平虚拟合约单,看浮盈、强平价、被强平(暂不计资金费)|
+| **M2-C.2**(策略 + 资金费) | 实战策略清单接真实(4 规则 · ③降级)· **资金费结算【按币种各自周期】(§4.8)** · **前置:补 funding interval 采集 + 修 next_funding_time(§4.8.1)** · 真实时 mark price(premiumIndex)接入 · 详情页活仓卡 + 强平 toast | 策略提示 + 资金费教学(周期正确)|
 | **M2-C.3**(组合 + 进阶单) | `/portfolio` 加合约区块(活仓/历史/强平记录/曲线并入)· 止盈止损单(可选) | 复盘 + 风控单 |
 
 **建议至少把 M2-C.1 当作一个不可分的闭环**(没强平的合约不成立)。
@@ -428,7 +464,7 @@ PERP_SLIPPAGE_BPS = 10                  # 10 bps,沿用 0008 crypto 滑点
 3. **共用钱包的耦合(D1)**:现货持仓占用 USDT 会减少可开合约保证金,反之亦然;用户可能困惑。需 UI 把「可用 USDT / 已用保证金 / 现货占用」拆清。
 4. **杠杆放大导致瞬间爆负**:必须保证 `cash_balance` 不会因强平滞后被打成负数 —— 逐仓下亏损上限 = initial_margin,强平及时即可;worker 滞后极端情况要兜底「最多亏光保证金,不倒扣钱包」(穿仓由平台虚拟承担,符合逐仓语义)。
 5. **Decimal 精度 / 量纲**:quantity `Numeric(20,8)`、价格高低跨度大(BTC 11万 vs 某些币 0.000001),强平价/保证金计算要全程 Decimal + 统一 quantize,避免浮点误差(0002 教训)。
-6. **「做杠杆」与产品红线的观感**:虽不接真实下单,但「125x 合约」对一个「教用户练交易直觉」的产品是否合适?→ 这是 D0/D3,产品要拍。
+6. **「做杠杆」与产品红线的观感**:已定(D0=做 · D3=1–20x):定位「实战级虚拟教学」、杠杆封顶 20x 防爆;全程虚拟、绝不接真实通道(红线),实现期保持「VIRTUAL·模拟」徽章 + 风险提示到位。
 7. **反手 / 加仓的均价与强平价重算**:边界 case 多(加仓不同杠杆、反手跨越、部分平后强平价),测试要覆盖。
 
 ---
@@ -453,31 +489,31 @@ PERP_SLIPPAGE_BPS = 10                  # 10 bps,沿用 0008 crypto 滑点
 |---|---|
 | 全仓保证金(cross) | 加 `margin_mode=cross`,强平价改为账户级(所有 cross 仓共享 cash);保证金计算改账户维度 |
 | 止盈止损 / 限价单 | `virtual_perp_order` 加 `order_type`+`trigger_price`,挂单进 worker 监控触发 |
-| 资金费 | 加 8h beat job(D5);`funding_paid` 字段已预留 |
+| 资金费 | 加结算 beat job(D5 · M2-C.2)· **按币种各自周期**(§4.8)· 前置补 interval 采集(§4.8.1);`funding_paid` 字段已预留 |
 | 双向持仓(hedge) | 改 partial unique 为 `(account_id, symbol, side)`,允许同 symbol 多+空并存 |
 | 币本位反向合约 | 新增 inverse 计算分支(PnL 量纲不同);M2-C 不做 |
 | 下线现货 crypto 只留 perp | 加密频道只暴露 perp 入口,0008 现货 crypto 保留后端不暴露前端(D11) |
 
 ---
 
-## 11. 待产品负责人拍板的设计决策(最重要 · 逐条)
+## 11. 设计决策 —— 最终结论(产品负责人 2026-05-23 已审定锁定)
 
-> 这部分定了才动代码。每条给出推荐,但请产品确认。
+> 12 条已定。实现以本表为准,不再以「推荐」对待。
 
-| # | 决策 | 选项 | 推荐 |
-|---|---|---|---|
-| **D0** | **要不要做合约杠杆玩法?**(红线观感:虽是虚拟,但「杠杆/做空/强平」是否符合「教用户练交易直觉、不诱导高风险」的产品调性?) | A 做(本 ADR)· B 不做,加密也只做现货 0008 那套 | **请先拍 D0** —— 这是前提,其余决策都依赖它 |
-| **D1** | perp 保证金钱包 | A 与现货**共用** crypto `cash_balance`(统一 USDT)· B perp 独立保证金子账户 | **A**(简单、真实、只填一次 USDT) |
-| **D2** | 保证金模式 | A 仅逐仓 isolated · B 逐仓+全仓 cross | **A**(M2-C 只逐仓,cross 留后续) |
-| **D3** | 杠杆上限 | A 1–20x(教学防爆)· B 1–50x · C 取交易所 max(1–125x) | **A 1–20x**(教学定位;UI 仍读 info.max_leverage 再 ∧ 20) |
-| **D4** | 强平监控 | A 实时 worker · B 惰性检查 · C 混合(60s worker+交互兜底) | **C** |
-| **D5** | 资金费结算 | A M2-C.1 就做 · B M2-C.2 再做 · C 永不(只展示费率不计入盈亏) | **B**(先把开/平/强平跑通) |
-| **D6** | 持仓方向模式 | A 单向净持仓(同 symbol 一个活仓,反向先减仓/反手)· B 双向对锁(多空并存) | **A**(简单直观) |
-| **D7** | 撮合/强平价源 | A `mark_price`(抗插针)· B perp 最新成交价 | **A** |
-| **D8** | 费率 / 滑点 / 下单输入 | taker 0.05% + 滑点 10bps;UI 用「保证金+杠杆」还是「币数量」输入 | taker 0.05% + 10bps;**保证金+杠杆**输入 |
-| **D9** | 浮盈/强平距离刷新频率(前端) | 5s / 10s / 30s 轮询 `futures/info` | **5–10s**(详情页已有轮询,复用节奏) |
-| **D10** | 策略③(缠论一卖+基差走弱) | A 降级为只看缠论卖点 · B 等基差数据(M2-B)采集后再做 | **A 降级 + 标注「基差待补」** |
-| **D11** | 现有 workbench 的「crypto 现货买卖」去留 | A 保留(现货+合约并存)· B 加密频道只做 perp,现货 crypto 前端下线 | 倾向 **A 保留**,但请确认产品对「加密频道现货入口」的取舍 |
+| # | 决策 | ✅ 最终结论 |
+|---|---|---|
+| **D0** | 要不要做合约杠杆玩法 | **做。** 定位「实战级虚拟教学」· 全程虚拟资金、绝不接真实交易通道(红线) |
+| **D1** | perp 保证金钱包 | **共用** crypto `VirtualAccount` 的 USDT 钱包 |
+| **D2** | 保证金模式 | **仅逐仓** isolated(cross 留后续) |
+| **D3** | 虚拟杠杆上限 | **1–20x**(固定;不依赖 info.max_leverage stub) |
+| **D4** | 强平监控 | **混合**:60s worker(只扫有活仓 symbol)+ 交互兜底 |
+| **D5** | 资金费结算 | **做,放 M2-C.2**(一期不计)· **按币种各自周期**(§4.8 修正)· 前置补采集见 §4.8.1 |
+| **D6** | 持仓方向 | **单向净持仓**(同 symbol 一活仓,反向先减仓/反手) |
+| **D7** | 撮合 / 强平价源 | **mark price** 语义;M2-C.1 用 perp ticker 代理,真 mark(premiumIndex)随 M2-C.2 接入(§4.1) |
+| **D8** | 手续费 / 滑点 / 下单输入 | **手续费做,放 M2-C.1**:开/平按成交额 **0.05%** 计入盈亏 · 滑点 10bps · 输入用「保证金 + 杠杆」 |
+| **D9** | 浮盈 / 强平距离刷新 | **5–10s** 轮询 |
+| **D10** | 策略③(缠论 + 基差) | **降级为只看缠论卖点** + 标注「基差待补」 |
+| **D11** | workbench crypto 现货买卖 | **保留**(现货 + 合约并存) |
 
 ---
 
@@ -495,3 +531,14 @@ PERP_SLIPPAGE_BPS = 10                  # 10 bps,沿用 0008 crypto 滑点
 ### v1 (2026-05-23) · 初稿 Proposed
 
 接 ADR-0008(现货虚拟交易,长期上线)之后,展开其当年标注为「M2+ 或永不」的「杠杆/做空」分支,落到加密永续合约虚拟交易(M2-C)。复用 crypto USDT 钱包 + 详情页已有数据端点,新增 perp 专用表/引擎/强平。待 §11 十二条决策审定后转 Approved。
+
+### v2 (2026-05-23) · Approved + 资金费周期修正
+
+产品负责人审定 §11 十二条决策(见该节「最终结论」),状态转 **Approved**。关键变更:
+
+- **D8 手续费纳入 M2-C.1**(开/平按成交额 0.05% 计入盈亏);**D5 资金费确认做、放 M2-C.2**。
+- **🔴 资金费结算周期【按币种不同】(1h/2h/4h/8h),不是固定 8h**(§4.8 + 实测 `BSBUSDT`=4h / `BTCUSDT`=8h);M2-C.2 结算 worker 必须按各币周期计费。
+- **补「结算周期数据采集现状」调查(§4.8.1)**:当前**未采集、未存储**周期;`futures/info.next_funding_time` 是错误的硬编码 +8h(crypto.py:346);`/fapi/v1/fundingInfo` 从未调用。→ M2-C.2 前需补采集(推荐 ① fundingInfo + ③ premiumIndex)。
+- **价源现状修正(§4.1)**:`futures/info` 全是 M2-A stub(`mark_price`/`index_price`/`max_leverage=125`/`next_funding_time` 均非真值);**M2-C.1 撮合/强平改用 perp ticker `last_price`**(分钟级,最新),真 mark price(premiumIndex)随 M2-C.2 接入。
+- **资金费率作「行情指标」始终保留**(列表列 / Header / 策略①),与「虚拟交易扣资金费」是两回事(§5.2)。
+- 同步修正 §3(fee_paid→M2-C.1 / funding_paid→M2-C.2)· §5.1(杠杆固定 1–20x,不读 stub)· §7 分期 · §8 风险 · §10 演进。
