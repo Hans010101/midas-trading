@@ -1,0 +1,247 @@
+"""加密永续合约虚拟交易路由 · /api/v1/virtual/perp/* · ADR-0019 v2 · M2-C.1。
+
+🔴 红线:全程【虚拟资金】· 绝不接任何真实交易 / 下单通道。撮合走 perp_engine。
+
+3 个端点(全部 CurrentUserDep · 复用 0008 crypto USDT 子账户做钱包):
+- POST /orders     · 开多 / 开空 / 平仓 · 200 + status=filled/rejected
+- GET  /positions  · 合约持仓(默认活仓 · 含实时浮盈 / 强平距离 / ROE)
+- GET  /orders     · 合约流水 · cursor 翻页
+
+价源(D7 / §4.1):perp ticker 最新价(crypto_ticker_24h · instrument=perp)·
+  分钟级,最新;真实时标记价(premiumIndex)随 M2-C.2 接入。
+"""
+
+from __future__ import annotations
+
+import logging
+from decimal import Decimal
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import desc, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import ClickHouseDep, CurrentUserDep
+from app.core.database import get_db
+from app.models.perp import PerpSide, VirtualPerpOrder, VirtualPerpPosition
+from app.models.virtual import VirtualAccount
+from app.schemas.perp import (
+    PerpOrderPlaceIn,
+    PerpOrderResponse,
+    PerpPositionResponse,
+)
+from app.services.clickhouse_client import ClickHouseClient
+from app.services.clickhouse_crypto import select_tickers_by_symbols
+from app.services.virtual_trading.perp_engine import (
+    ClosePerpRequest,
+    OpenPerpRequest,
+    PerpPriceFetcher,
+    close_perp_position,
+    open_perp_position,
+)
+from app.services.virtual_trading.perp_fees import (
+    liquidation_distance_pct,
+    q_money,
+    unrealized_pnl,
+)
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/virtual/perp", tags=["virtual-perp"])
+
+DbDep = Annotated[AsyncSession, Depends(get_db)]
+
+_QUOTES = ("USDT", "USDC", "BUSD", "FDUSD")
+
+
+# ===== 价格 fetcher · 注入式(perp ticker 最新价)=====
+
+
+def _to_ccxt(binance_symbol: str) -> str:
+    """'BTCUSDT' → 'BTC/USDT'(perp ticker 表是 ccxt 风格)。"""
+    for q in _QUOTES:
+        if binance_symbol.endswith(q) and len(binance_symbol) > len(q):
+            return f"{binance_symbol[: -len(q)]}/{q}"
+    return binance_symbol
+
+
+def make_perp_mark_price_fetcher(ch: ClickHouseClient) -> PerpPriceFetcher:
+    """走 ClickHouse crypto_ticker_24h(instrument=perp)取该 symbol 最新价。"""
+
+    async def fetcher(symbol: str) -> Decimal | None:
+        ccxt_symbol = _to_ccxt(symbol)
+        tickers = await select_tickers_by_symbols(
+            ch._client,  # noqa: SLF001
+            instrument="perp",
+            symbols=[ccxt_symbol],
+        )
+        t = tickers.get(ccxt_symbol)
+        if t is None or t.last_price <= 0:
+            return None
+        return Decimal(str(t.last_price))
+
+    return fetcher
+
+
+# ===== POST /orders =====
+
+
+@router.post(
+    "/orders",
+    response_model=PerpOrderResponse,
+    summary="合约下单(开多/开空/平仓)· 市价 · 200 + filled/rejected",
+)
+async def place_perp_order(
+    payload: PerpOrderPlaceIn,
+    ch: ClickHouseDep,
+    current_user: CurrentUserDep,
+    db: DbDep,
+) -> PerpOrderResponse:
+    fetcher = make_perp_mark_price_fetcher(ch)
+
+    if payload.intent in ("open_long", "open_short"):
+        side = PerpSide.LONG if payload.intent == "open_long" else PerpSide.SHORT
+        assert payload.leverage is not None  # noqa: S101 · schema 已校验
+        order = await open_perp_position(
+            db,
+            OpenPerpRequest(
+                user_id=current_user.id,
+                symbol=payload.symbol,
+                side=side,
+                leverage=payload.leverage,
+                margin=payload.margin,
+                quantity=payload.quantity,
+            ),
+            fetcher,
+        )
+    else:  # close
+        order = await close_perp_position(
+            db,
+            ClosePerpRequest(
+                user_id=current_user.id,
+                symbol=payload.symbol,
+                quantity=payload.quantity,
+                close_all=payload.close_all,
+            ),
+            fetcher,
+        )
+
+    await db.commit()
+    logger.info(
+        "[perp.order] user=%s symbol=%s intent=%s status=%s",
+        current_user.id, payload.symbol, payload.intent, order.status,
+    )
+    return _serialize_order(order)
+
+
+# ===== GET /positions =====
+
+
+@router.get(
+    "/positions",
+    response_model=list[PerpPositionResponse],
+    summary="合约持仓(默认活仓 · include_closed=true 含历史)· 含实时浮盈/强平距离",
+)
+async def list_perp_positions(
+    ch: ClickHouseDep,
+    current_user: CurrentUserDep,
+    db: DbDep,
+    include_closed: bool = Query(False),
+) -> list[PerpPositionResponse]:
+    stmt = (
+        select(VirtualPerpPosition)
+        .join(VirtualAccount, VirtualAccount.id == VirtualPerpPosition.account_id)
+        .where(VirtualAccount.user_id == current_user.id)
+        .order_by(
+            VirtualPerpPosition.closed_at.is_(None).desc(),
+            desc(VirtualPerpPosition.opened_at),
+        )
+    )
+    if not include_closed:
+        stmt = stmt.where(VirtualPerpPosition.closed_at.is_(None))
+    positions = (await db.scalars(stmt)).all()
+
+    fetcher = make_perp_mark_price_fetcher(ch)
+    out: list[PerpPositionResponse] = []
+    for p in positions:
+        mark = await fetcher(p.symbol) if p.closed_at is None else None
+        upnl: Decimal | None = None
+        dist: Decimal | None = None
+        roe: Decimal | None = None
+        if mark is not None:
+            upnl = unrealized_pnl(p.side, p.entry_price, mark, p.quantity)
+            dist = liquidation_distance_pct(mark, p.liquidation_price)
+            roe = (
+                q_money(upnl / p.initial_margin * Decimal("100"))
+                if p.initial_margin > 0
+                else None
+            )
+        out.append(
+            PerpPositionResponse(
+                id=p.id, symbol=p.symbol, side=p.side, leverage=p.leverage,
+                quantity=p.quantity, entry_price=p.entry_price,
+                initial_margin=p.initial_margin, liquidation_price=p.liquidation_price,
+                realized_pnl=p.realized_pnl, fee_paid=p.fee_paid,
+                opened_at=p.opened_at, closed_at=p.closed_at,
+                close_reason=p.close_reason,
+                mark_price=mark, unrealized_pnl=upnl,
+                liquidation_distance_pct=dist, roe_pct=roe,
+            ),
+        )
+    return out
+
+
+# ===== GET /orders =====
+
+
+@router.get(
+    "/orders",
+    response_model=list[PerpOrderResponse],
+    summary="合约订单流水 · cursor 翻页",
+)
+async def list_perp_orders(
+    current_user: CurrentUserDep,
+    db: DbDep,
+    symbol: str | None = Query(None),
+    limit: int = Query(20, ge=1, le=200),
+    before_id: int | None = Query(None, description="cursor · 拿小于此 id 的"),
+) -> list[PerpOrderResponse]:
+    stmt = (
+        select(VirtualPerpOrder)
+        .join(VirtualAccount, VirtualAccount.id == VirtualPerpOrder.account_id)
+        .where(VirtualAccount.user_id == current_user.id)
+        .order_by(desc(VirtualPerpOrder.id))
+        .limit(limit)
+    )
+    if symbol is not None:
+        stmt = stmt.where(VirtualPerpOrder.symbol == symbol)
+    if before_id is not None:
+        stmt = stmt.where(VirtualPerpOrder.id < before_id)
+    orders = (await db.scalars(stmt)).all()
+    return [_serialize_order(o) for o in orders]
+
+
+# ===== 内部 =====
+
+
+def _serialize_order(o: VirtualPerpOrder) -> PerpOrderResponse:
+    """统一序列化 · 处理未激活拒单的临时 sentinel(id / account_id 为 0/None)。"""
+    return PerpOrderResponse(
+        id=o.id if o.id else None,
+        account_id=o.account_id if o.account_id else None,
+        position_id=o.position_id,
+        symbol=o.symbol,
+        action=o.action,
+        leverage=o.leverage,
+        quantity=o.quantity,
+        price=o.price,
+        notional=o.notional,
+        margin_delta=o.margin_delta,
+        fee=o.fee,
+        realized_pnl=o.realized_pnl,
+        status=o.status,
+        reject_reason=o.reject_reason,
+        is_liquidation=o.is_liquidation,
+        placed_at=o.placed_at if o.id else None,
+        filled_at=o.filled_at,
+    )
