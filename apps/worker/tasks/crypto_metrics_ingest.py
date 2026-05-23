@@ -1,18 +1,18 @@
 """Crypto Pro · 数据采集 Celery 任务(0017 ADR · M2-A-9)。
 
-6 个 M2-A 采集任务 · 分层节奏:
-- crypto.ticker_24h_scan         · 1 min   · 全 spot+perp · 600+ symbols
-- crypto.funding_rate_refresh    · 8 h     · top 30 perp · 各 1 条最新
-- crypto.open_interest_scan      · 5 min   · top 30 perp · 各 1 条最新
-- crypto.long_short_scan         · 5 min   · top 30 perp · 各 1 条最新
-- crypto.global_overview_refresh · 5 min   · CoinGecko /global
-- crypto.fear_greed_refresh      · 1 day   · alternative.me · 合并到 overview
+6 个采集任务 · 分层节奏(ADR-0018 起合约维度全量覆盖 USDT 永续 ~527):
+- crypto.ticker_24h_scan         · 全 perp · 单请求拉全市场
+- crypto.funding_rate_refresh    · 全量 USDT 永续 · 各 1 条最新
+- crypto.open_interest_scan      · 全量 USDT 永续 · 各 1 条最新
+- crypto.long_short_scan         · 全量 USDT 永续 · 各取最近 4 点(覆盖 15min 轮间隔)
+- crypto.global_overview_refresh · CoinGecko /global
+- crypto.fear_greed_refresh      · alternative.me · 合并到 overview
 
 注:M2-B 的 perp K 线增量任务(crypto.perp_kline_incremental)不在本文件 ·
-留在 feature/m2-crypto-pro 分支 · M2-B 正式验收时再合入 main。
+留在 feature/m2-crypto-pro 分支 · A1 纯实时回源,暂不接入。
 
-WIP(M2-A 阶段):
-- top 30 perp 暂用 hard-code · M2-B 改成读 symbol_meta + watchlist 联动
+采集名单:_all_usdt_perp_symbols() 从 crypto_ticker_24h 全量取 USDT 永续(不截断);
+冷启动回退 _TOP_30_PERP 种子。
 - 错误处理:每标的 try/except 独立 · 一个失败不影响其他
 - 写入 ClickHouse 走 clickhouse_crypto.py 的 insert_* helper
 
@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 
 # 冷启动种子名单(Binance Futures 风格 · 无斜杠)。
-# M2-数据打磨·任务2 起,常态用 _top_perp_symbols() 从 crypto_ticker_24h 动态取 top100;
+# ADR-0018 起,常态用 _all_usdt_perp_symbols() 从 crypto_ticker_24h 全量取 USDT 永续;
 # 仅当 ticker 表还空(首轮 ticker_24h_scan 未跑)时回退到本种子,保证名单永不为空。
 _TOP_30_PERP: tuple[str, ...] = (
     "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT",
@@ -76,17 +76,18 @@ async def _get_ch_client() -> Any:
     )
 
 
-# 采集名单上限(M2-数据打磨·任务2:top30 → top100)
-_TOP_N_PERP = 100
+async def _all_usdt_perp_symbols(ch: Any) -> list[str]:
+    """全量取 Binance USDT 本位永续合约 · 返回 Binance 风格(无斜杠)。
 
+    ADR-0018:采集层全量覆盖(~527 个 USDT 永续),展示层任意排序/筛选解耦——
+    不再用「成交额 top100」截断(否则跌幅榜 / 按资金费率·OI 排序时,需要的币
+    不在 top100 里 → 无数据)。
 
-async def _top_perp_symbols(ch: Any, *, limit: int = _TOP_N_PERP) -> list[str]:
-    """动态取「按 24H 成交额降序」前 N 个 perp 合约 · 返回 Binance 风格(无斜杠)。
-
-    数据来自 ticker_24h_scan 已落库的 crypto_ticker_24h(全市场 ~600 perp)·
-    不再硬编码 _TOP_30_PERP。冷启动(ticker 表还空)时回退到 _TOP_30_PERP 种子,
-    保证名单永不为空。crypto_ticker_24h 里 symbol 是 ccxt 风格 'BTC/USDT',
-    这里转成 Binance 风格 'BTCUSDT'(futures 端点要求)。
+    数据来自 ticker_24h_scan 已落库的 crypto_ticker_24h(全市场 perp,~600+)·
+    只取 quote=USDT(ccxt 风格以 '/USDT' 结尾)· 仍按成交额降序返回(只影响采集
+    顺序、不截断,热门币先采)。冷启动(ticker 表还空)时回退 _TOP_30_PERP 种子,
+    名单永不为空。crypto_ticker_24h 里 symbol 是 ccxt 风格 'BTC/USDT',这里转成
+    Binance 风格 'BTCUSDT'(futures 端点要求)。
     """
     try:
         result = await ch.query(
@@ -95,17 +96,15 @@ async def _top_perp_symbols(ch: Any, *, limit: int = _TOP_N_PERP) -> list[str]:
                 SELECT symbol, quote_volume_24h,
                        ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY ts DESC) AS rn
                 FROM crypto_ticker_24h FINAL
-                WHERE instrument = 'perp'
+                WHERE instrument = 'perp' AND endsWith(symbol, '/USDT')
             )
             WHERE rn = 1
             ORDER BY quote_volume_24h DESC
-            LIMIT %(n)s
             """,
-            parameters={"n": limit},
         )
         symbols = [str(r[0]).replace("/", "") for r in result.result_rows]
     except Exception as exc:  # noqa: BLE001
-        logger.warning("[crypto] 动态取 top%d 名单失败 · 回退 _TOP_30_PERP:%s", limit, exc)
+        logger.warning("[crypto] 全量取 USDT 永续名单失败 · 回退 _TOP_30_PERP 种子:%s", exc)
         return list(_TOP_30_PERP)
     if not symbols:
         logger.info("[crypto] ticker 表暂空 · 采集名单回退 _TOP_30_PERP 种子")
@@ -155,7 +154,7 @@ async def _funding_rate_refresh_async() -> dict[str, Any]:
     ok = 0
     fail = 0
     try:
-        symbols = await _top_perp_symbols(ch)
+        symbols = await _all_usdt_perp_symbols(ch)
         for symbol in symbols:
             try:
                 items = await source.fetch_funding_rate(symbol, limit=1)
@@ -189,7 +188,7 @@ async def _open_interest_scan_async() -> dict[str, Any]:
     ok = 0
     fail = 0
     try:
-        symbols = await _top_perp_symbols(ch)
+        symbols = await _all_usdt_perp_symbols(ch)
         for symbol in symbols:
             try:
                 # 拉最近 1 条(5min 一次的 task · 每次只补一根新数据)
@@ -224,15 +223,17 @@ async def _long_short_scan_async() -> dict[str, Any]:
     ok = 0
     fail = 0
     try:
-        symbols = await _top_perp_symbols(ch)
+        symbols = await _all_usdt_perp_symbols(ch)
         for symbol in symbols:
             try:
                 # limit 必须 >1:fetch_long_short_ratio 把 3 个上游 endpoint
                 # (account / position / taker)按 timestamp **交集** 合并;limit=1 时
-                # 三者各自最新的 5min 桶 ts 常常错位 → 交集为空 → 合并出 0 行
-                # → ok+1 但 written+0(数据拉到了没落库)。拉一段窗口保证有重叠 ts,
-                # 同时一次把详情页要展示的窗口(96 点 ≈ 8h)灌满。
-                items = await source.fetch_long_short_ratio(symbol, limit=96)
+                # 三者各自最新的 5min 桶 ts 常常错位 → 交集为空 → 合并出 0 行。
+                # ADR-0018 配套①:96 → 4。多空比 5min 栅格、本 task 15min 一轮,只需补
+                # ~3 个新点;limit=4 已覆盖 20min 窗口、保证三上游有重叠 ts。砍掉 ~24×
+                # 写放大(全量 ~527 币 × 96 行 = 巨量 insert + CH merge 压力)+ 大幅缩短
+                # 单轮耗时(消除超 expires 风险)。详情页历史窗口由 CH 累积提供,不靠单轮灌满。
+                items = await source.fetch_long_short_ratio(symbol, limit=4)
                 n = await insert_long_short(ch, items)
                 if n == 0:
                     # 合并后仍 0 行 = 三个上游 ts 完全无交集(异常)· 显式记日志,

@@ -57,6 +57,9 @@ CREATE TABLE IF NOT EXISTS crypto_funding_rate (
 ) ENGINE = ReplacingMergeTree(ingested_at)
 PARTITION BY toYYYYMM(ts)
 ORDER BY (symbol, ts)
+-- ADR-0018:全量采集后无限累积 · 留 60 天滚动窗口(对齐 ticker 表的 TTL 思路;
+--          合约维度图算 OI 24H/历史趋势够用)· 超期数据后台 merge 自动清,磁盘稳态封顶。
+TTL ingested_at + INTERVAL 60 DAY
 SETTINGS index_granularity = 8192;
 
 -- ============================================================================
@@ -74,6 +77,9 @@ CREATE TABLE IF NOT EXISTS crypto_open_interest (
 ) ENGINE = ReplacingMergeTree(ingested_at)
 PARTITION BY toYYYYMM(ts)
 ORDER BY (symbol, ts)
+-- ADR-0018:全量采集后无限累积 · 留 60 天滚动窗口(对齐 ticker 表的 TTL 思路;
+--          合约维度图算 OI 24H/历史趋势够用)· 超期数据后台 merge 自动清,磁盘稳态封顶。
+TTL ingested_at + INTERVAL 60 DAY
 SETTINGS index_granularity = 8192;
 
 -- ============================================================================
@@ -105,6 +111,9 @@ CREATE TABLE IF NOT EXISTS crypto_long_short_ratio (
 ) ENGINE = ReplacingMergeTree(ingested_at)
 PARTITION BY toYYYYMM(ts)
 ORDER BY (symbol, ts)
+-- ADR-0018:全量采集后无限累积 · 留 60 天滚动窗口(对齐 ticker 表的 TTL 思路;
+--          合约维度图算 OI 24H/历史趋势够用)· 超期数据后台 merge 自动清,磁盘稳态封顶。
+TTL ingested_at + INTERVAL 60 DAY
 SETTINGS index_granularity = 8192;
 
 -- ============================================================================

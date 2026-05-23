@@ -66,9 +66,12 @@ beat_schedule = {
     },
     "crypto-long-short-scan": {
         "task": "tasks.crypto.long_short_scan",
-        # 5min 栅格 · 但单轮 3 上游×30 标的×96 行较重 · 每 10 分钟(错峰 2,12,22…)
-        "schedule": crontab(minute="2-59/10"),
-        "options": {"expires": 540},
+        # ADR-0018 配套③:全量(~527)后单轮 3 上游×全量较重 · 10min → 15min 降频。
+        # 错峰 9,24,39,54 —— 避开 OI(*/5 的 :0/:5 栅格)、funding(3,18,33,48)、
+        # ticker(6,16,26,36,46,56),防 concurrency=4 下同分钟叠加打爆 Binance 限流。
+        # 配套①(limit 96→4)已大幅缩短单轮耗时,15min 间隔 + 840s expires 充裕。
+        "schedule": crontab(minute="9-59/15"),
+        "options": {"expires": 840},
     },
     "crypto-funding-rate-refresh": {
         "task": "tasks.crypto.funding_rate_refresh",
