@@ -142,10 +142,9 @@ export default function CryptoMarketPage() {
         </div>
 
         <div className="mx-auto max-w-[1600px] px-6 py-5">
-          <div className="mb-4">
-            <h1 className="font-serif text-2xl font-bold text-midas-red">加密市场</h1>
-          </div>
-
+          {/* H1「加密市场」已删 · 顶部市场切换 Tab 已有「加密」· 标题冗余。
+              容器 py-5 顶距维持自然间距,直接以指标卡起首;卡片 mb-5 下距保留。
+              注:本删除曾在 main(2c9fec4)做过,feature 未同步导致 b3b537e 挑取时回退,这里在 feature 补删。 */}
           {/* 顶部 4 指标卡 */}
           <div className="mb-5 grid grid-cols-2 gap-4 md:grid-cols-4">
             <MetricCard
