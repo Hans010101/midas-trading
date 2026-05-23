@@ -21,7 +21,7 @@ import { CryptoAiCard } from '@/components/crypto-preview/crypto-ai-card'
 import { CryptoHeader } from '@/components/crypto-preview/crypto-header'
 import { CryptoMainChart } from '@/components/crypto-preview/crypto-main-chart'
 import { DimensionSection } from '@/components/crypto-preview/dimension-section'
-import { VirtualBadge } from '@/components/ui/virtual-badge'
+import { PerpOrderGuidance } from '@/components/crypto-preview/perp-order-guidance'
 import type { Period } from '@midas/shared'
 
 // 常见 quote · 用于把 Binance 风格 'BEATUSDT' 切回 ccxt 风格 'BEAT/USDT'
@@ -84,7 +84,7 @@ export function CryptoDetail() {
             futuresSymbol={futuresSymbol}
             period={period}
           />
-          <OrderGuidance />
+          <PerpOrderGuidance futuresSymbol={futuresSymbol} klineSymbol={klineSymbol} />
           <StrategyChecklist />
         </aside>
       </div>
@@ -93,45 +93,12 @@ export function CryptoDetail() {
 }
 
 // ============================================================
-// 右栏 2 · 下单指导(占位 · 待虚拟交易模块接入 M2-C)· 全程虚拟资金
+// 右栏 2 · 下单指导 → 已接真实(PerpOrderGuidance · M2-C.1 · ADR-0019)
 // ============================================================
-function OrderGuidance() {
-  return (
-    <div className="rounded-lg border border-dashed border-gold/60 bg-gold/5 p-4">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="font-serif text-base font-bold">下单指导</span>
-        <VirtualBadge size="sm" />
-      </div>
-      <p className="mb-3 rounded bg-gold/15 px-2 py-1 text-[11px] text-gold">
-        【占位 · 待虚拟交易模块接入(M2-C)】
-      </p>
-      <div className="space-y-2 text-sm opacity-60">
-        <div className="flex gap-2">
-          <span className="flex-1 rounded bg-bull/15 py-1.5 text-center text-bull">开多(虚拟)</span>
-          <span className="flex-1 rounded bg-bear/15 py-1.5 text-center text-bear">开空(虚拟)</span>
-        </div>
-        <div className="flex items-center justify-between rounded border border-paper px-2 py-1.5 text-xs text-muted-foreground">
-          <span>杠杆</span>
-          <span className="font-mono">— (待接)</span>
-        </div>
-        <div className="flex items-center justify-between rounded border border-paper px-2 py-1.5 text-xs text-muted-foreground">
-          <span>保证金(虚拟 USDT)</span>
-          <span className="font-mono">— (待接)</span>
-        </div>
-        <div className="flex items-center justify-between rounded border border-paper px-2 py-1.5 text-xs text-muted-foreground">
-          <span>预估强平价</span>
-          <span className="font-mono">— (待接)</span>
-        </div>
-      </div>
-      <p className="mt-3 text-[10px] text-muted-foreground/70">
-        全程虚拟资金 · 绝不接真实交易所下单 · 所有动作走点金虚拟撮合(M2-C)
-      </p>
-    </div>
-  )
-}
+// (占位组件已删 · 替换为 components/crypto-preview/perp-order-guidance.tsx)
 
 // ============================================================
-// 右栏 3 · 实战策略清单(占位 · 待虚拟交易模块接入 M2-C)
+// 右栏 3 · 实战策略清单(占位 · 待虚拟交易模块接入 M2-C.2)
 // ============================================================
 function StrategyChecklist() {
   return (

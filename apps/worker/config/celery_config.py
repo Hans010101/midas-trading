@@ -45,6 +45,13 @@ beat_schedule = {
         # 0009 § 4 · 每 1 分钟扫所有自选股 · 涨跌 ±5% 触发 · Redis 5 分钟去重
         "schedule": crontab(minute="*"),
     },
+    "perp-liquidation-scan": {
+        "task": "tasks.perp.scan_liquidations",
+        # ADR-0019 §4.7 / D4 · 混合方案的 60s 强平监控 · 只在有 perp 活仓时才有实际工作
+        # expires 50:本轮没被及时领走就丢(下一分钟还会再扫,不堆任务)
+        "schedule": crontab(minute="*"),
+        "options": {"expires": 50},
+    },
     # ── M2-A · Crypto Pro 数据采集(0017 ADR)· 常驻定时刷新 ────────────────────
     # 错峰原则:Binance 四个采集(ticker/oi/longshort/funding)分钟数互不重叠,避免
     #   同一刻对 Binance 合约接口集中打请求(IP 权重限流)。oi 落在 5 的倍数;

@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import secrets
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -144,5 +145,16 @@ def make_static_price_fetcher(
 
     async def fetcher(symbol: str, market: str) -> Decimal | None:
         return prices.get((symbol, market))
+
+    return fetcher
+
+
+def make_perp_price_fetcher(
+    prices: dict[str, Decimal | None],
+) -> Callable[[str], Awaitable[Decimal | None]]:
+    """造一个固定价 perp fetcher · 给 perp_engine 测试用 · key 是 symbol(Binance 风格)。"""
+
+    async def fetcher(symbol: str) -> Decimal | None:
+        return prices.get(symbol)
 
     return fetcher

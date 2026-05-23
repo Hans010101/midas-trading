@@ -14,5 +14,6 @@ from tasks import (  # noqa: E402, F401
     equity_snapshot,
     incremental,
     notifications,
+    perp_liquidation,
     price_alerts,
 )
