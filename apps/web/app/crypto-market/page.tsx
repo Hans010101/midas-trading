@@ -1,97 +1,41 @@
 'use client'
 
 /**
- * 加密频道 · 列表页(币种列表 / 涨幅榜)· 静态布局骨架(v2)。
+ * 加密频道 · 列表页(币种列表 / 涨幅榜)· 接真实数据(M2-D)。
  *
- * ⚠ 仍是【布局骨架】· 不接真实数据:所有指标卡 / 表格行 = 占位示意值。
- *   · 顶部全站导航栏 = 复用现有 <TopNav />(本页"住进"全站布局,不新写导航)
- *   · 分页:每页 20 · 占位铺到 100 个(5 页)· 真实「前 100 币种」由采集端后续扩容
- *   · 排序:5 列可点(24H涨跌% / 资金费率 / 账户多空比 / OI 24H变化 / 24H成交额)·
- *           默认 24H涨跌% 降序(= 涨幅榜)
- *   · 搜索 / 刷新 = 纯视觉 · 行可点视觉示意进详情页(/crypto-preview · 跳转下一步接)
+ * 数据走 M2-A 已有的只读端点(lib/api/crypto-market.ts):
+ *   · GET /api/v1/crypto/overview      → 合约总成交额 + 恐慌贪婪指数
+ *   · GET /api/v1/crypto/tickers/24h   → 榜单(交易对/最新价/涨跌/高低/成交额)+ BTC/ETH 价
  *
- * 视觉:点金视觉系统 · 帝王金主色 · 涨红(#DC143C)/ 跌绿(#0F6E5F)·
- *       多空占比小色条 多=青绿 / 空=浅红(沿用详情页 6 维度图配色)。
- * 预览:本地 pnpm dev → /crypto-market
+ * 红线 · 真实 vs 待补(逐列):
+ *   ✅ 真实(ticker):交易对 / 最新价 / 24H 涨跌% / 24H 最高 / 24H 最低 / 24H 成交额
+ *   ⏳ 待补(无榜单级接口,逐 symbol futures 端点才有,显示「—」):
+ *        资金费率 / 账户多空比 / OI 24H 变化
+ *   接不上一律「—」/ 空态,绝不伪造。M2-A 采集币种有限,有多少真实币种显示多少。
+ *
+ * 交互:
+ *   · 行点击 → 新标签打开 /crypto-preview?symbol=<BTCUSDT>(详情页本步不改)
+ *   · Tab 合约/现货 → 切 instrument 重新拉真实 ticker
+ *   · 排序 → 仅对有真实数据的列(24H 涨跌% / 24H 成交额)· 前端排序
+ *   · 搜索 → 后端无搜索接口,前端对已加载列表按交易对过滤
  */
 
+import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 
 import { MarketSwitcher } from '@/components/layout/market-switcher'
 import { TopNav } from '@/components/layout/top-nav'
+import {
+  fetchCryptoOverview,
+  fetchTickers24h,
+  type Instrument,
+} from '@/lib/api/crypto-market'
 import { cn } from '@/lib/utils'
-
-// ── 占位示意数据(纯静态 · 非真实)· 确定性生成 100 条 ─────────────────────────
-interface Row {
-  symbol: string
-  price: number
-  chgPct: number // 24H 涨跌 %
-  high: number
-  low: number
-  funding: number // 资金费率 %
-  longPct: number // 账户多空 · 多方占比 0..100
-  oiChg: number // OI 24H 变化 %
-  turnover: number // 24H 成交额(USD)
-}
-
-// 伪随机(确定性 · 仅占位)
-function rng(seed: number): number {
-  const x = Math.sin(seed * 127.1) * 43758.5453
-  return x - Math.floor(x)
-}
-
-const BASES = [
-  'BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA', 'AVAX', 'LINK', 'TON',
-  'TRX', 'LTC', 'DOT', 'MATIC', 'SHIB', 'UNI', 'BCH', 'ATOM', 'ETC', 'XLM',
-  'NEAR', 'APT', 'ARB', 'OP', 'FIL', 'INJ', 'SUI', 'SEI', 'TIA', 'STX',
-  'PEPE', 'WIF', 'BONK', 'FTM', 'RUNE', 'AAVE', 'MKR', 'LDO', 'IMX', 'GRT',
-  'SAND', 'AXS', 'EOS', 'EGLD', 'FLOW', 'CHZ', 'GALA', 'ENJ', 'ZIL', 'CRV',
-]
-const BASE_PRICE: Record<string, number> = {
-  BTC: 64820, ETH: 3142, SOL: 148.3, BNB: 592.4, XRP: 0.5218, DOGE: 0.1402,
-  ADA: 0.4471, AVAX: 28.74, LINK: 14.06, TON: 6.812,
-}
-
-const ROWS: Row[] = Array.from({ length: 100 }, (_, i) => {
-  const base = BASES[i] ?? `ALT${i + 1}`
-  const price = BASE_PRICE[base] ?? +(rng(i + 11) * 80 + 0.5).toFixed(rng(i + 11) > 0.5 ? 2 : 4)
-  const chgPct = +(rng(i + 1) * 22 - 9).toFixed(2) // -9 .. +13
-  const funding = +(rng(i + 7) * 0.04 - 0.014).toFixed(3)
-  const longPct = Math.round(35 + rng(i + 3) * 42) // 35 .. 77
-  const oiChg = +(rng(i + 5) * 32 - 13).toFixed(1)
-  const turnover = Math.round(rng(i + 9) * 12_000) * 1e6 // 0 .. 12B
-  const swing = 1 + rng(i + 13) * 0.04
-  return {
-    symbol: `${base}/USDT`,
-    price,
-    chgPct,
-    high: +(price * swing).toPrecision(6),
-    low: +(price / swing).toPrecision(6),
-    funding,
-    longPct,
-    oiChg,
-    turnover,
-  }
-})
-
-const METRICS = [
-  { label: '24H 合约总成交额', value: '$48.6B', sub: '示意' },
-  { label: '恐慌贪婪指数', value: '72', sub: '贪婪 · 示意', tone: 'bull' as const },
-  { label: 'BTC 价格', value: '$64,820', sub: '+2.34%', tone: 'bull' as const },
-  { label: 'ETH 价格', value: '$3,142', sub: '+3.91%', tone: 'bull' as const },
-]
 
 const PAGE_SIZE = 20
 
-// 可排序列 key + 取值函数
-type SortKey = 'chgPct' | 'funding' | 'lsRatio' | 'oiChg' | 'turnover'
-const SORT_VALUE: Record<SortKey, (r: Row) => number> = {
-  chgPct: (r) => r.chgPct,
-  funding: (r) => r.funding,
-  lsRatio: (r) => r.longPct / Math.max(1, 100 - r.longPct), // 多空比值
-  oiChg: (r) => r.oiChg,
-  turnover: (r) => r.turnover,
-}
+// 仅有真实数据的列可排序
+type SortKey = 'chgPct' | 'turnover'
 
 // ── 格式化 ──────────────────────────────────────────────────────────────────
 function fmtPrice(n: number): string {
@@ -104,49 +48,76 @@ function fmtUsd(n: number): string {
   if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`
   return `$${n.toFixed(0)}`
 }
-function ratioText(longPct: number): string {
-  return (longPct / Math.max(1, 100 - longPct)).toFixed(2)
+function toBinanceSymbol(ccxt: string): string {
+  return ccxt.replace('/', '') // 'BTC/USDT' → 'BTCUSDT'
 }
 
 export default function CryptoMarketPage() {
-  const [tab, setTab] = useState<'perp' | 'spot'>('perp')
+  const [tab, setTab] = useState<Instrument>('perp')
   const [sortKey, setSortKey] = useState<SortKey>('chgPct')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [page, setPage] = useState(1)
+  const [query, setQuery] = useState('')
 
-  const sortedRows = useMemo(() => {
-    const get = SORT_VALUE[sortKey]
+  const overviewQ = useQuery({
+    queryKey: ['crypto-overview'],
+    queryFn: ({ signal }) => fetchCryptoOverview(signal),
+    retry: 0,
+    staleTime: 60_000,
+  })
+
+  const tickersQ = useQuery({
+    queryKey: ['crypto-tickers', tab],
+    queryFn: ({ signal }) => fetchTickers24h(tab, 100, signal),
+    retry: 0,
+    staleTime: 60_000,
+  })
+
+  const allItems = useMemo(() => tickersQ.data?.items ?? [], [tickersQ.data])
+
+  // 搜索(前端过滤)+ 排序(前端,仅真实列)
+  const viewRows = useMemo(() => {
+    const q = query.trim().toUpperCase()
+    const filtered = q ? allItems.filter((it) => it.symbol.toUpperCase().includes(q)) : allItems
+    const get = (it: (typeof allItems)[number]) =>
+      sortKey === 'chgPct' ? it.change_pct_24h : it.quote_volume_24h
     const dir = sortDir === 'asc' ? 1 : -1
-    return [...ROWS].sort((a, b) => (get(a) - get(b)) * dir)
-  }, [sortKey, sortDir])
+    return [...filtered].sort((a, b) => (get(a) - get(b)) * dir)
+  }, [allItems, query, sortKey, sortDir])
 
-  const totalPages = Math.ceil(sortedRows.length / PAGE_SIZE)
-  const pageRows = sortedRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const totalPages = Math.max(1, Math.ceil(viewRows.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const pageRows = viewRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+
+  // 指标卡数据(真实;缺失 → null → 显示「—」)
+  const ov = overviewQ.data?.market_overview
+  const findPx = (sym: string) => allItems.find((it) => it.symbol === sym) ?? null
+  const btc = findPx('BTC/USDT')
+  const eth = findPx('ETH/USDT')
+  const fgiOk = !!ov && ov.fear_greed_value > 0 && ov.fear_greed_classification !== '' && ov.fear_greed_classification !== 'N/A'
 
   function toggleSort(key: SortKey) {
-    if (key === sortKey) {
-      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
-    } else {
-      setSortKey(key)
-      setSortDir('desc') // 切到新列默认降序
-    }
-    setPage(1) // 重排回第 1 页
+    if (key === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(key); setSortDir('desc') }
+    setPage(1)
   }
+  function switchTab(t: Instrument) { setTab(t); setPage(1) }
+  function openDetail(ccxtSymbol: string) {
+    window.open(`/crypto-preview?symbol=${toBinanceSymbol(ccxtSymbol)}`, '_blank', 'noopener,noreferrer')
+  }
+
+  const fmtPct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
-      {/* 1 · 全站共用顶部导航栏(复用现有 <TopNav /> · 不新写、不改其本体)*/}
       <TopNav />
-
-      {/* 2 · 市场切换条(A股/美股/加密)· 全站共用 MarketSwitcher · 当前=加密高亮 */}
       <div className="shrink-0 border-b border-paper bg-background px-6 py-2">
         <MarketSwitcher />
       </div>
 
       <main className="flex-1">
-        {/* 骨架标识条 */}
         <div className="border-b border-dashed border-gold/60 bg-gold/10 px-6 py-2 text-center text-xs text-gold">
-          加密市场 · 列表页骨架 · 数值为示意 · 不接真实数据 · 点行进详情页(跳转下一步接)
+          加密市场 · 真实行情(M2-A /api/v1/crypto/*)· 资金费率/多空比/OI 暂无榜单级数据显示「—」· 点行进详情页
         </div>
 
         <div className="mx-auto max-w-[1600px] px-6 py-5">
@@ -156,27 +127,42 @@ export default function CryptoMarketPage() {
 
           {/* 顶部 4 指标卡 */}
           <div className="mb-5 grid grid-cols-2 gap-4 md:grid-cols-4">
-            {METRICS.map((m) => (
-              <div key={m.label} className="rounded-lg border border-paper bg-cream p-4 shadow-sm">
-                <div className="text-xs text-muted-foreground">{m.label}</div>
-                <div className={cn('mt-1 font-mono text-2xl font-bold', m.tone === 'bull' ? 'text-bull' : 'text-foreground')}>
-                  {m.value}
-                </div>
-                <div className={cn('mt-0.5 text-[11px]', m.tone === 'bull' ? 'text-bull' : 'text-muted-foreground/70')}>
-                  {m.sub}
-                </div>
-              </div>
-            ))}
+            <MetricCard
+              label="24H 合约总成交额"
+              loading={overviewQ.isPending}
+              value={ov && ov.derivatives_volume_24h_usd > 0 ? fmtUsd(ov.derivatives_volume_24h_usd) : '—'}
+            />
+            <MetricCard
+              label="恐慌贪婪指数"
+              loading={overviewQ.isPending}
+              value={fgiOk ? String(ov!.fear_greed_value) : '—'}
+              sub={fgiOk ? ov!.fear_greed_classification : '暂无数据'}
+              tone="bull"
+            />
+            <MetricCard
+              label="BTC 价格"
+              loading={tickersQ.isPending}
+              value={btc ? `$${fmtPrice(btc.last_price)}` : '—'}
+              sub={btc ? fmtPct(btc.change_pct_24h) : '暂无数据'}
+              tone={btc ? (btc.change_pct_24h >= 0 ? 'bull' : 'bear') : undefined}
+            />
+            <MetricCard
+              label="ETH 价格"
+              loading={tickersQ.isPending}
+              value={eth ? `$${fmtPrice(eth.last_price)}` : '—'}
+              sub={eth ? fmtPct(eth.change_pct_24h) : '暂无数据'}
+              tone={eth ? (eth.change_pct_24h >= 0 ? 'bull' : 'bear') : undefined}
+            />
           </div>
 
-          {/* 工具条:Tab + 搜索 + 刷新 */}
+          {/* 工具条 */}
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div className="flex overflow-hidden rounded-md border border-paper text-sm">
-              <button type="button" onClick={() => setTab('perp')}
+              <button type="button" onClick={() => switchTab('perp')}
                 className={cn('px-4 py-1.5 transition-colors', tab === 'perp' ? 'bg-midas-red text-white' : 'text-muted-foreground hover:bg-midas-red-glow/50')}>
                 合约 24H 涨幅榜
               </button>
-              <button type="button" onClick={() => setTab('spot')}
+              <button type="button" onClick={() => switchTab('spot')}
                 className={cn('px-4 py-1.5 transition-colors', tab === 'spot' ? 'bg-midas-red text-white' : 'text-muted-foreground hover:bg-midas-red-glow/50')}>
                 现货 24H 涨幅榜
               </button>
@@ -185,17 +171,18 @@ export default function CryptoMarketPage() {
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 rounded-md border border-paper bg-cream/40 px-3 py-1.5 text-sm">
                 <SearchIcon />
-                <input type="text" placeholder="搜索交易对(如 BTC)"
+                <input type="text" value={query} onChange={(e) => { setQuery(e.target.value); setPage(1) }}
+                  placeholder="搜索交易对(前端过滤)"
                   className="w-44 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50" />
               </div>
-              <button type="button" title="刷新(示意)"
+              <button type="button" title="刷新" onClick={() => { void overviewQ.refetch(); void tickersQ.refetch() }}
                 className="flex items-center gap-1.5 rounded-md border border-paper px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-midas-red hover:text-midas-red">
                 <RefreshIcon />刷新
               </button>
             </div>
           </div>
 
-          {/* 币种列表表格 */}
+          {/* 榜单表格 */}
           <div className="overflow-x-auto rounded-lg border border-paper">
             <table className="w-full min-w-[1100px] border-collapse text-sm">
               <thead>
@@ -206,38 +193,34 @@ export default function CryptoMarketPage() {
                   <SortTh label="24H 涨跌%" col="chgPct" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <th className="px-3 py-2 text-right font-medium">24H 最高</th>
                   <th className="px-3 py-2 text-right font-medium">24H 最低</th>
-                  <SortTh label="资金费率" col="funding" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                  <SortTh label="账户多空比" col="lsRatio" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                  <SortTh label="OI 24H 变化" col="oiChg" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <th className="px-3 py-2 text-right font-medium" title="无榜单级接口 · 待补">资金费率</th>
+                  <th className="px-3 py-2 text-right font-medium" title="无榜单级接口 · 待补">账户多空比</th>
+                  <th className="px-3 py-2 text-right font-medium" title="无榜单级接口 · 待补">OI 24H 变化</th>
                   <SortTh label="24H 成交额" col="turnover" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <th className="w-8" />
                 </tr>
               </thead>
               <tbody>
-                {pageRows.map((r, i) => {
-                  const rank = (page - 1) * PAGE_SIZE + i + 1
+                {tickersQ.isPending && <StateRow text="加载中…" />}
+                {tickersQ.isError && <StateRow text="暂时无法读取行情(后端不可达)" />}
+                {tickersQ.isSuccess && viewRows.length === 0 && (
+                  <StateRow text={query ? '无匹配交易对' : '暂无行情数据 · 待采集'} />
+                )}
+                {tickersQ.isSuccess && pageRows.map((r, i) => {
+                  const rank = (safePage - 1) * PAGE_SIZE + i + 1
                   return (
-                    <tr key={r.symbol} title="点击进入详情页(跳转下一步接)"
+                    <tr key={r.symbol} onClick={() => openDetail(r.symbol)} title="点击在新标签打开详情页"
                       className="group cursor-pointer border-b border-paper/60 transition-colors hover:bg-midas-red-glow/30">
                       <td className="px-3 py-2.5 text-center font-mono text-xs text-muted-foreground/70">{rank}</td>
                       <td className="px-3 py-2.5"><span className="font-serif font-bold text-foreground">{r.symbol}</span></td>
-                      <Td>{fmtPrice(r.price)}</Td>
-                      <Td className={r.chgPct >= 0 ? 'text-bull' : 'text-bear'}>{r.chgPct >= 0 ? '+' : ''}{r.chgPct.toFixed(2)}%</Td>
-                      <Td className="text-muted-foreground/80">{fmtPrice(r.high)}</Td>
-                      <Td className="text-muted-foreground/80">{fmtPrice(r.low)}</Td>
-                      <Td className={r.funding >= 0 ? 'text-bull' : 'text-bear'}>{r.funding >= 0 ? '+' : ''}{r.funding.toFixed(3)}%</Td>
-                      {/* 账户多空比 · 右对齐(色条 + 比值靠右,与其它数值列统一)*/}
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center justify-end gap-2">
-                          <div className="flex h-2 w-16 overflow-hidden rounded-full bg-paper">
-                            <div style={{ width: `${r.longPct}%`, backgroundColor: '#1FA383' }} />
-                            <div style={{ width: `${100 - r.longPct}%`, backgroundColor: '#E8918C' }} />
-                          </div>
-                          <span className="w-9 text-right font-mono text-xs tabular-nums text-foreground/80">{ratioText(r.longPct)}</span>
-                        </div>
-                      </td>
-                      <Td className={r.oiChg >= 0 ? 'text-bull' : 'text-bear'}>{r.oiChg >= 0 ? '+' : ''}{r.oiChg.toFixed(1)}%</Td>
-                      <Td className="text-muted-foreground/80">{fmtUsd(r.turnover)}</Td>
+                      <Td>{fmtPrice(r.last_price)}</Td>
+                      <Td className={r.change_pct_24h >= 0 ? 'text-bull' : 'text-bear'}>{fmtPct(r.change_pct_24h)}</Td>
+                      <Td className="text-muted-foreground/80">{fmtPrice(r.high_24h)}</Td>
+                      <Td className="text-muted-foreground/80">{fmtPrice(r.low_24h)}</Td>
+                      <Td className="text-muted-foreground/40">—</Td>
+                      <Td className="text-muted-foreground/40">—</Td>
+                      <Td className="text-muted-foreground/40">—</Td>
+                      <Td className="text-muted-foreground/80">{fmtUsd(r.quote_volume_24h)}</Td>
                       <td className="px-2 text-center text-muted-foreground/30 transition-colors group-hover:text-midas-red">›</td>
                     </tr>
                   )
@@ -246,16 +229,17 @@ export default function CryptoMarketPage() {
             </table>
           </div>
 
-          {/* 分页控件 */}
+          {/* 分页(按实际真实币种数)*/}
           <div className="mt-4 flex items-center justify-between">
             <span className="text-xs text-muted-foreground/70">
-              共 {sortedRows.length} 个 · 第 {page}/{totalPages} 页(每页 {PAGE_SIZE})
+              共 {viewRows.length} 个 · 第 {safePage}/{totalPages} 页(每页 {PAGE_SIZE})
             </span>
-            <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+            {totalPages > 1 && <Pagination page={safePage} totalPages={totalPages} onChange={setPage} />}
           </div>
 
           <p className="mt-3 text-[11px] text-muted-foreground/60">
-            数据为示意占位 · 接真实行情(/api/v1/crypto/*)+ 点行跳转详情页 + 前 100 币种采集扩容为下一步 · 仅供参考,不构成投资建议
+            交易对/价格/涨跌/高低/成交额 = 真实(M2-A ticker)· 资金费率/多空比/OI = 暂无榜单级接口显示「—」·
+            点行新标签打开详情页 · 仅供参考,不构成投资建议
           </p>
         </div>
       </main>
@@ -263,28 +247,30 @@ export default function CryptoMarketPage() {
   )
 }
 
-// ── 可排序表头 ──────────────────────────────────────────────────────────────
+// ── 指标卡 ──────────────────────────────────────────────────────────────────
+function MetricCard({
+  label, value, sub, tone, loading,
+}: { label: string; value: string; sub?: string; tone?: 'bull' | 'bear'; loading?: boolean }) {
+  return (
+    <div className="rounded-lg border border-paper bg-cream p-4 shadow-sm">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className={cn('mt-1 font-mono text-2xl font-bold', tone === 'bull' ? 'text-bull' : tone === 'bear' ? 'text-bear' : 'text-foreground')}>
+        {loading ? '…' : value}
+      </div>
+      {sub && <div className={cn('mt-0.5 text-[11px]', tone === 'bull' ? 'text-bull' : tone === 'bear' ? 'text-bear' : 'text-muted-foreground/70')}>{loading ? '' : sub}</div>}
+    </div>
+  )
+}
+
+// ── 可排序表头(仅真实列)──────────────────────────────────────────────────
 function SortTh({
   label, col, sortKey, sortDir, onSort,
-}: {
-  label: string
-  col: SortKey
-  sortKey: SortKey
-  sortDir: 'asc' | 'desc'
-  onSort: (k: SortKey) => void
-}) {
+}: { label: string; col: SortKey; sortKey: SortKey; sortDir: 'asc' | 'desc'; onSort: (k: SortKey) => void }) {
   const active = sortKey === col
   return (
     <th className="px-3 py-2 text-right font-medium">
-      <button
-        type="button"
-        onClick={() => onSort(col)}
-        className={cn(
-          'inline-flex items-center gap-1 transition-colors hover:text-midas-red',
-          active ? 'font-bold text-midas-red' : 'text-muted-foreground',
-        )}
-        title={`按${label}排序`}
-      >
+      <button type="button" onClick={() => onSort(col)} title={`按${label}排序`}
+        className={cn('inline-flex items-center gap-1 transition-colors hover:text-midas-red', active ? 'font-bold text-midas-red' : 'text-muted-foreground')}>
         {label}
         <span className="flex flex-col leading-[0.5]">
           <span className={cn('text-[8px]', active && sortDir === 'asc' ? 'text-midas-red' : 'text-muted-foreground/35')}>▲</span>
@@ -295,7 +281,6 @@ function SortTh({
   )
 }
 
-// ── 分页控件 ──────────────────────────────────────────────────────────────
 function Pagination({ page, totalPages, onChange }: { page: number; totalPages: number; onChange: (p: number) => void }) {
   const btn = 'flex h-7 min-w-7 items-center justify-center rounded-md border border-paper px-2 text-xs transition-colors'
   return (
@@ -315,6 +300,14 @@ function Pagination({ page, totalPages, onChange }: { page: number; totalPages: 
         下一页
       </button>
     </div>
+  )
+}
+
+function StateRow({ text }: { text: string }) {
+  return (
+    <tr>
+      <td colSpan={11} className="px-3 py-10 text-center text-sm text-muted-foreground/60">{text}</td>
+    </tr>
   )
 }
 

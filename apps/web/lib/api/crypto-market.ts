@@ -1,0 +1,98 @@
+/**
+ * 加密市场列表页 API client(M2-D · /crypto-market)。
+ *
+ * 独立于 lib/api/crypto.ts(详情页用)· 只服务列表页,避免动详情页代码。
+ * 走 M2-A 已有的只读端点:
+ *   GET /api/v1/crypto/overview          · 全市场总览(总市值/合约成交额/FGI)
+ *   GET /api/v1/crypto/tickers/24h?...    · 24h ticker 榜单(分 spot/perp)
+ *
+ * 红线:接不上的字段交给页面显示「—」/ 空态,绝不在此伪造数据。
+ */
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+
+export type Instrument = 'spot' | 'perp'
+
+export interface Ticker24h {
+  symbol: string // ccxt 风格 'BTC/USDT'
+  instrument: Instrument
+  ts: string
+  last_price: number
+  change_pct_24h: number // 已乘 100 · % 单位
+  high_24h: number
+  low_24h: number
+  volume_24h: number
+  quote_volume_24h: number // USDT 计成交额
+  count_24h: number
+}
+
+export interface Tickers24hResponse {
+  instrument: Instrument
+  sort_by: string
+  order: string
+  items: Ticker24h[]
+}
+
+export interface MarketOverview {
+  ts: string
+  total_market_cap_usd: number
+  total_volume_24h_usd: number
+  btc_dominance: number
+  eth_dominance: number
+  fear_greed_value: number
+  fear_greed_classification: string
+  derivatives_oi_usd: number
+  derivatives_volume_24h_usd: number
+}
+
+export interface CryptoOverviewResponse {
+  market_overview: MarketOverview
+  top_gainers: Ticker24h[]
+  top_losers: Ticker24h[]
+  top_volume: Ticker24h[]
+}
+
+export class CryptoMarketApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly detail: string,
+  ) {
+    super(`CryptoMarketApi ${status}: ${detail}`)
+    this.name = 'CryptoMarketApiError'
+  }
+}
+
+async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const r = await fetch(`${API_BASE}${path}`, { signal })
+  if (!r.ok) {
+    let detail = `HTTP ${r.status}`
+    try {
+      const body = (await r.json()) as { detail?: unknown }
+      if (typeof body.detail === 'string') detail = body.detail
+    } catch {
+      /* ignore */
+    }
+    throw new CryptoMarketApiError(r.status, detail)
+  }
+  return (await r.json()) as T
+}
+
+/** 24h ticker 榜单 · 默认按 24H 涨跌降序 · top 取够分页(M2-A 实际可能 < 100)。 */
+export function fetchTickers24h(
+  instrument: Instrument,
+  top = 100,
+  signal?: AbortSignal,
+): Promise<Tickers24hResponse> {
+  const params = new URLSearchParams({
+    instrument,
+    sort_by: 'change_pct_24h',
+    order: 'desc',
+    top: String(top),
+  })
+  return getJson<Tickers24hResponse>(`/api/v1/crypto/tickers/24h?${params.toString()}`, signal)
+}
+
+/** 全市场总览(总市值 / dominance / 合约成交额 / FGI)。 */
+export function fetchCryptoOverview(signal?: AbortSignal): Promise<CryptoOverviewResponse> {
+  return getJson<CryptoOverviewResponse>('/api/v1/crypto/overview', signal)
+}
