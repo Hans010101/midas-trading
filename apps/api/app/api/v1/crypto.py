@@ -170,7 +170,9 @@ async def get_tickers_24h(
         Literal["change_pct_24h", "quote_volume_24h", "last_price"], Query()
     ] = "change_pct_24h",
     order: Annotated[Literal["desc", "asc"], Query()] = "desc",
-    top: Annotated[int, Query(ge=1, le=100)] = 20,
+    # ADR-0018 / 列表全域化:上限 100 → 1000,允许前端一次取全市场 perp(~623)做
+    # 全域排序 + 无限滚动。USDT 永续 ~527、全 quote ~623,1000 留足头部。
+    top: Annotated[int, Query(ge=1, le=1000)] = 20,
 ) -> Tickers24hResponse:
     try:
         items = await select_latest_tickers(
