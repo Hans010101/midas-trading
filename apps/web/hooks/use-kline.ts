@@ -22,18 +22,24 @@ export interface UseKlineArgs {
   market: Market
   period: Period
   limit?: number
+  /** 'spot'(默认)· 'perp' 合约。务必并入 queryKey,否则 spot/perp 同 symbol 缓存串台。 */
+  instrument?: 'spot' | 'perp'
   enabled?: boolean
 }
 
 export function useKline(args: UseKlineArgs): UseQueryResult<KlineResponse> {
   return useQuery({
-    queryKey: ['kline', args.market, args.symbol, args.period, args.limit ?? 500],
+    queryKey: [
+      'kline', args.market, args.symbol, args.period, args.limit ?? 500,
+      args.instrument ?? 'spot',
+    ],
     queryFn: ({ signal }) =>
       fetchKline({
         symbol: args.symbol,
         market: args.market,
         period: args.period,
         limit: args.limit,
+        instrument: args.instrument,
         signal,
       }),
     staleTime: 60 * 1000,

@@ -38,6 +38,8 @@ interface KlineChartProps {
   symbol: string
   market: Market
   period: Period
+  /** 'spot'(默认)现货 · 'perp' USDT-M 永续合约。不传 → spot,工作台原行为不变。 */
+  instrument?: 'spot' | 'perp'
   /** 指标开关 · 父组件从 useWorkbenchStore 读取后传入 */
   indicators?: Record<IndicatorName, boolean>
   /** EmptyKline 触发"切到日 K"时的回调(父组件管 period 状态)*/
@@ -56,6 +58,7 @@ export function KlineChart({
   symbol,
   market,
   period,
+  instrument,
   indicators,
   onSwitchToDaily,
   onChartReady,
@@ -65,7 +68,7 @@ export function KlineChart({
   const chartRef = useRef<Chart | null>(null)
   const dataRef = useRef<KLineData[]>([])
 
-  const query = useKline({ symbol, market, period })
+  const query = useKline({ symbol, market, period, instrument })
 
   // 1. dataRef 始终保持最新查询数据(getBars 用闭包读取)
   useEffect(() => {

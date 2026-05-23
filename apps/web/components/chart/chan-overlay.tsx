@@ -43,6 +43,8 @@ interface Props {
   symbol?: string
   market?: import('@midas/shared').Market
   period?: import('@midas/shared').Period
+  /** 'spot'(默认)· 'perp' 合约 K 线缠论。不传 → spot,工作台原行为不变。 */
+  instrument?: 'spot' | 'perp'
   enabled?: boolean
 }
 
@@ -66,6 +68,7 @@ export function ChanOverlay({
   symbol: symbolProp,
   market: marketProp,
   period: periodProp,
+  instrument,
   enabled: enabledProp,
 }: Props) {
   const storeSymbol = useWorkbenchStore((s) => s.symbol)
@@ -80,7 +83,7 @@ export function ChanOverlay({
   const chanEnabled = enabledProp ?? storeChanEnabled
 
   const { data } = useChan({
-    symbol, market, period,
+    symbol, market, period, instrument,
     enabled: chanEnabled,
   })
 

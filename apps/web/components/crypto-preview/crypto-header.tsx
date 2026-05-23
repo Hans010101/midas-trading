@@ -34,8 +34,8 @@ export function CryptoHeader({
   period,
   onPeriodChange,
 }: CryptoHeaderProps) {
-  // 日 K 取末两根算最新价 + 日涨跌
-  const dailyKline = useKline({ symbol: klineSymbol, market: 'crypto', period: '1d', limit: 2 })
+  // 日 K 取末两根算最新价 + 日涨跌 · 合约(perp)· 跟主图/缠论/AI 同源,JCT 这类无现货对的币也能出价
+  const dailyKline = useKline({ symbol: klineSymbol, market: 'crypto', period: '1d', limit: 2, instrument: 'perp' })
   const info = useFuturesInfo(futuresSymbol)
 
   const items = dailyKline.data?.items ?? []

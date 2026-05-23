@@ -30,12 +30,24 @@ CREATE TABLE IF NOT EXISTS symbol_meta (
 ORDER BY (market, symbol);
 
 -- ============================================================================
--- M2-A · Crypto Pro 数据层(0017 ADR · 仅 crypto-preview 详情页所需的 5 张新表)
+-- M2-A · Crypto Pro 数据层(0017 ADR)
 -- ============================================================================
--- 说明:这 5 张表全部 crypto_ 前缀全新表名 · 全部 CREATE TABLE IF NOT EXISTS ·
---      不碰现有 kline / symbol_meta 表(M2-B 的 kline.instrument 列改动不在本次范围)。
+-- kline 表加 instrument 列 · 用于区分 spot / perp 合约 K 线
+-- 老数据默认 'spot' · 无需 backfill
+-- 注意:容器初次启动时执行此 init.sql · ALTER 用 IF NOT EXISTS column 守卫
+--      (ClickHouse 24+ 支持 ADD COLUMN IF NOT EXISTS)
 
--- Crypto Pro · funding rate 资金费率时间序列(perp 专属 · symbol = "BTCUSDT" 无斜杠)
+ALTER TABLE kline
+    ADD COLUMN IF NOT EXISTS instrument Enum8('spot'=1, 'perp'=2) DEFAULT 'spot'
+    AFTER market;
+
+-- ============================================================================
+-- Crypto Pro · funding rate 资金费率时间序列
+-- ============================================================================
+-- symbol 用 Binance Futures 风格 "BTCUSDT"(无斜杠)· 因 funding 是 perp 专属概念
+-- rate 是 decimal · 0.0001 = 0.01% · 不要乘 100 存
+-- 上游 Binance fapi/v1/fundingRate · 8h 结算一次
+
 CREATE TABLE IF NOT EXISTS crypto_funding_rate (
     symbol String,
     ts DateTime,                            -- 资金费率结算时间(UTC · 8h 整点)
@@ -47,7 +59,12 @@ PARTITION BY toYYYYMM(ts)
 ORDER BY (symbol, ts)
 SETTINGS index_granularity = 8192;
 
--- Crypto Pro · open interest 未平仓量时间序列(5min 栅格)
+-- ============================================================================
+-- Crypto Pro · open interest 未平仓量时间序列
+-- ============================================================================
+-- 上游 Binance futures/data/openInterestHist · 默认 period=5m
+-- oi_coin = 折算到币(BTC etc.)· oi_usd = 折算到美元
+
 CREATE TABLE IF NOT EXISTS crypto_open_interest (
     symbol String,
     ts DateTime,                            -- 5min 采样栅格
@@ -59,7 +76,16 @@ PARTITION BY toYYYYMM(ts)
 ORDER BY (symbol, ts)
 SETTINGS index_granularity = 8192;
 
--- Crypto Pro · long/short 多空比时间序列(三套指标同表:账户/持仓/taker)
+-- ============================================================================
+-- Crypto Pro · long/short 多空比时间序列
+-- ============================================================================
+-- 三套指标同表:top trader 账户多空比 + top trader 持仓多空比 + taker buy/sell
+-- 上游 Binance:
+--   /futures/data/topLongShortAccountRatio
+--   /futures/data/topLongShortPositionRatio
+--   /futures/data/takerlongshortRatio
+-- 一次 Celery 任务并发拉 3 个上游 · 合并写入
+
 CREATE TABLE IF NOT EXISTS crypto_long_short_ratio (
     symbol String,
     ts DateTime,
@@ -81,7 +107,14 @@ PARTITION BY toYYYYMM(ts)
 ORDER BY (symbol, ts)
 SETTINGS index_granularity = 8192;
 
--- Crypto Pro · 24h ticker 全币种行情快照(symbol = "BTC/USDT" ccxt 风格 · TTL 30 天)
+-- ============================================================================
+-- Crypto Pro · 24h ticker 全币种行情快照
+-- ============================================================================
+-- 上游 Binance Spot REST /api/v3/ticker/24hr + Futures /fapi/v1/ticker/24hr
+-- 一次扫全市场 600+ symbols · 每分钟拉一次 · 用于涨幅榜
+-- TTL 30 天 · 长期归档走冷存(M2-E)
+-- symbol 统一 ccxt 风格 "BTC/USDT"(因要跟现有 spot kline 表对齐)
+
 CREATE TABLE IF NOT EXISTS crypto_ticker_24h (
     symbol String,                          -- "BTC/USDT" ccxt 风格
     instrument Enum8('spot'=1, 'perp'=2),
@@ -100,7 +133,14 @@ ORDER BY (instrument, symbol, ts)
 TTL ingested_at + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192;
 
--- Crypto Pro · 全市场 overview + Fear & Greed Index(全市场单点快照)
+-- ============================================================================
+-- Crypto Pro · 全市场 overview + Fear & Greed Index
+-- ============================================================================
+-- 上游:
+--   CoinGecko /api/v3/global · 5min 拉一次 · 提供 total_market_cap / dominance
+--   alternative.me /fng · 1day · 提供 fear_greed_value + classification
+-- 同表存因都是「全市场单点快照」· 节省一张表
+
 CREATE TABLE IF NOT EXISTS crypto_market_overview (
     ts DateTime,
     -- CoinGecko /global

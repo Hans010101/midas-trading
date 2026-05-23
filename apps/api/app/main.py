@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.logging import configure_logging
 from app.core.redis_client import close_redis
 from app.services.clickhouse_client import ClickHouseClient
+from app.services.data_sources.binance_futures_source import BinanceFuturesSource
 from app.services.data_sources.cn_source import AKShareCnSource
 from app.services.data_sources.crypto_source import CcxtBinanceCryptoSource
 from app.services.data_sources.us_source import YFinanceUsSource
@@ -31,11 +32,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.cn_source = AKShareCnSource()
     app.state.us_source = YFinanceUsSource()
     app.state.crypto_source = CcxtBinanceCryptoSource(exchange=app.state.ccxt_binance)
-    logger.info("Lifespan startup: ClickHouse + ccxt exchange + 3 sources 就绪")
+    # M2-B(0017 ADR)· Binance Futures source · perp K + funding + OI + long-short
+    app.state.binance_futures_source = BinanceFuturesSource()
+    logger.info(
+        "Lifespan startup: ClickHouse + ccxt exchange + 4 sources 就绪"
+        "(cn / us / crypto-spot / crypto-perp)"
+    )
 
     try:
         yield
     finally:
+        await app.state.binance_futures_source.close()
         await app.state.ccxt_binance.close()
         await app.state.clickhouse.close()
         await close_redis()

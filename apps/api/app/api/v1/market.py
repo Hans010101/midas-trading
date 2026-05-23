@@ -7,11 +7,12 @@
 from __future__ import annotations
 
 import logging
-from typing import get_args
+from typing import Annotated, Literal, get_args
 
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.deps import (
+    BinanceFuturesSourceDep,
     ClickHouseDep,
     CnSourceDep,
     CryptoSourceDep,
@@ -24,6 +25,9 @@ from app.services.data_sources.exceptions import (
     SymbolNotFoundError,
     UpstreamUnavailableError,
 )
+
+# M2-B(0017 ADR)· instrument 区分 spot/perp · 默认 spot 向后兼容
+Instrument = Literal["spot", "perp"]
 
 logger = logging.getLogger(__name__)
 
@@ -45,24 +49,47 @@ async def get_kline(
     cn: CnSourceDep,
     us: UsSourceDep,
     crypto: CryptoSourceDep,
-    symbol: str = Query(..., min_length=1, examples=["600519", "NVDA", "BTC/USDT"]),
+    binance_futures: BinanceFuturesSourceDep,
+    symbol: str = Query(..., min_length=1, examples=["600519", "NVDA", "BTC/USDT", "BTCUSDT"]),
     market: Market = Query(...),
     period: Period = Query("1d"),
     limit: int = Query(500, ge=1, le=5000),
+    instrument: Annotated[
+        Instrument,
+        Query(description="'spot' 现货(默认)· 'perp' USDT-M 永续合约 · 只 crypto 市场支持 perp"),
+    ] = "spot",
 ) -> KlineResponse:
+    # M2-B 校验:perp 只允许 crypto 市场(cn/us 没有 perp)
+    if instrument == "perp" and market != "crypto":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"instrument=perp 只支持 market=crypto · 当前 market={market}",
+        )
+
     # 1. 缓存命中:CH 已有 ≥ limit 条 → 直接返回(最近 limit 条)
-    cached = await ch.select_kline(symbol=symbol, market=market, period=period, limit=limit)
+    cached = await ch.select_kline(
+        symbol=symbol, market=market, period=period, limit=limit, instrument=instrument,
+    )
     if len(cached) >= limit:
         logger.info(
-            "[market.kline] cache hit · symbol=%s market=%s period=%s rows=%d",
-            symbol, market, period, len(cached),
+            "[market.kline] cache hit · symbol=%s market=%s instrument=%s period=%s rows=%d",
+            symbol, market, instrument, period, len(cached),
         )
         return KlineResponse(symbol=symbol, market=market, period=period, items=cached[-limit:])
 
     # 2. 缓存未命中(或不足):回源
-    source = _source_for(market, cn=cn, us=us, crypto=crypto)
+    # M2-B · perp 走 BinanceFuturesSource;spot 走原有 _source_for 逻辑
+    if instrument == "perp":
+        # perp symbol 用 Binance Futures 风格(BTCUSDT 无斜杠)· 如果传入 BTC/USDT 转一下
+        binance_symbol = symbol.replace("/", "") if "/" in symbol else symbol
+        source: BaseDataSource = binance_futures
+        fetch_symbol = binance_symbol
+    else:
+        source = _source_for(market, cn=cn, us=us, crypto=crypto)
+        fetch_symbol = symbol
+
     try:
-        upstream_rows = await source.fetch_kline(symbol, period, limit=limit)
+        upstream_rows = await source.fetch_kline(fetch_symbol, period, limit=limit)
     except SymbolNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -80,12 +107,14 @@ async def get_kline(
             detail=str(e),
         ) from e
 
-    # 3. 写回 CH(insert_kline 内部已经做去重,幂等)
-    written = await ch.insert_kline(upstream_rows, symbol=symbol, market=market, period=period)
+    # 3. 写回 CH(insert_kline 内部已经做去重,幂等)· 带上 instrument
+    written = await ch.insert_kline(
+        upstream_rows, symbol=symbol, market=market, period=period, instrument=instrument,
+    )
     logger.info(
-        "[market.kline] upstream fetch + write · symbol=%s market=%s period=%s"
-        " upstream=%d ch_new=%d",
-        symbol, market, period, len(upstream_rows), written,
+        "[market.kline] upstream fetch + write · symbol=%s market=%s instrument=%s"
+        " period=%s upstream=%d ch_new=%d",
+        symbol, market, instrument, period, len(upstream_rows), written,
     )
 
     return KlineResponse(

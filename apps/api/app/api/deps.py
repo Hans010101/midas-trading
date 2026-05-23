@@ -20,6 +20,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.services.auth import verify_session
 from app.services.clickhouse_client import ClickHouseClient
+from app.services.data_sources.binance_futures_source import BinanceFuturesSource
 from app.services.data_sources.cn_source import AKShareCnSource
 from app.services.data_sources.crypto_source import CcxtBinanceCryptoSource
 from app.services.data_sources.us_source import YFinanceUsSource
@@ -39,6 +40,14 @@ def get_us_source(request: Request) -> YFinanceUsSource:
 
 def get_crypto_source(request: Request) -> CcxtBinanceCryptoSource:
     return cast(CcxtBinanceCryptoSource, request.app.state.crypto_source)
+
+
+def get_binance_futures_source(request: Request) -> BinanceFuturesSource:
+    """M2-B(0017 ADR)· perp K 线 + funding/OI/long-short 数据源。
+
+    生命周期 lifespan 管理 · 单例 · 复用 httpx 连接池。
+    """
+    return cast(BinanceFuturesSource, request.app.state.binance_futures_source)
 
 
 _oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
@@ -74,4 +83,5 @@ ClickHouseDep = Annotated[ClickHouseClient, Depends(get_clickhouse)]
 CnSourceDep = Annotated[AKShareCnSource, Depends(get_cn_source)]
 UsSourceDep = Annotated[YFinanceUsSource, Depends(get_us_source)]
 CryptoSourceDep = Annotated[CcxtBinanceCryptoSource, Depends(get_crypto_source)]
+BinanceFuturesSourceDep = Annotated[BinanceFuturesSource, Depends(get_binance_futures_source)]
 CurrentUserDep = Annotated[User, Depends(get_current_user)]

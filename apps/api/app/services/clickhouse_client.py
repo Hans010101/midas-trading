@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 _KLINE_COLUMNS: tuple[str, ...] = (
     "symbol",
     "market",
+    "instrument",   # M2-B · 0017 ADR · 'spot' / 'perp' · 默认 spot 兼容老数据
     "period",
     "ts",
     "open",
@@ -42,6 +43,10 @@ _KLINE_COLUMNS: tuple[str, ...] = (
     "volume",
     "amount",
 )
+
+# M2-B · Crypto Pro 合约 K 线用 'perp' · 其它情况用 'spot'
+# 当前 spot / perp 只有 crypto market 有意义 · cn/us 永远是 spot
+KLINE_INSTRUMENT_DEFAULT = "spot"
 
 _SYMBOL_META_COLUMNS: tuple[str, ...] = (
     "symbol",
@@ -100,8 +105,15 @@ class ClickHouseClient:
         symbol: str,
         market: Market,
         period: Period,
+        instrument: str = KLINE_INSTRUMENT_DEFAULT,
     ) -> int:
-        """批量插入 K 线,已存在的 ts 跳过。返回真正新增的行数。"""
+        """批量插入 K 线,已存在的 ts 跳过。返回真正新增的行数。
+
+        M2-B(0017 ADR)· 新增 instrument 参数:
+          · 'spot' (默认) · 现货 K 线 · cn / us / crypto-spot 都用这个
+          · 'perp'        · USDT-M 永续合约 K 线 · 只 crypto 有
+          · 现有调用方不传 instrument 时 = 'spot' · 向后兼容
+        """
         if not rows:
             return 0
 
@@ -109,14 +121,15 @@ class ClickHouseClient:
         min_ts = min(ts_set_aware_utc)
         max_ts = max(ts_set_aware_utc)
 
-        # 查这段时间窗里已经存在的 ts
+        # 查这段时间窗里已经存在的 ts(同 instrument)· M2-B 增加 instrument 过滤
         existing = await self._client.query(
             "SELECT ts FROM kline "
-            "WHERE symbol = %(s)s AND market = %(m)s AND period = %(p)s "
-            "AND ts BETWEEN %(min)s AND %(max)s",
+            "WHERE symbol = %(s)s AND market = %(m)s AND instrument = %(inst)s "
+            "AND period = %(p)s AND ts BETWEEN %(min)s AND %(max)s",
             parameters={
                 "s": symbol,
                 "m": market,
+                "inst": instrument,
                 "p": period,
                 "min": min_ts,
                 "max": max_ts,
@@ -131,18 +144,21 @@ class ClickHouseClient:
         new_rows = [r for r in rows if self._to_aware_utc(r.ts) not in existing_ts]
         if not new_rows:
             logger.info(
-                "kline 跳过 %d 行重复(symbol=%s market=%s period=%s)",
+                "kline 跳过 %d 行重复(symbol=%s market=%s instrument=%s period=%s)",
                 len(rows),
                 symbol,
                 market,
+                instrument,
                 period,
             )
             return 0
 
+        # 注:_KLINE_COLUMNS 顺序(M2-B 后):symbol, market, instrument, period, ts, ...
         data = [
             (
                 symbol,
                 market,
+                instrument,
                 period,
                 self._to_aware_utc(r.ts),
                 r.open,
@@ -160,10 +176,11 @@ class ClickHouseClient:
             column_names=list(_KLINE_COLUMNS),
         )
         logger.info(
-            "kline 新增 %d 行(symbol=%s market=%s period=%s,跳过重复 %d)",
+            "kline 新增 %d 行(symbol=%s market=%s instrument=%s period=%s,跳过重复 %d)",
             len(new_rows),
             symbol,
             market,
+            instrument,
             period,
             len(rows) - len(new_rows),
         )
@@ -177,6 +194,7 @@ class ClickHouseClient:
         period: Period,
         limit: int = 500,
         since: datetime | None = None,
+        instrument: str = KLINE_INSTRUMENT_DEFAULT,
     ) -> list[Kline]:
         """查指定标的 / 周期**最近** `limit` 根 K 线,返回 ts 升序。
 
@@ -185,14 +203,22 @@ class ClickHouseClient:
         Python 端 reverse 保留 ASC 契约。所有 K 线相关调用方语义不变,
         但 limit=1/2 这种小窗口请求(用于 price fetcher / price anomaly)
         终于能拿到真正的「最新价」。
+
+        M2-B(0017 ADR)· 新增 instrument 参数:
+          · 'spot' (默认) · 现货 K 线
+          · 'perp'        · USDT-M 永续合约 K 线
+          · 不传 = 默认 spot · 向后兼容现有调用方
+          · 缠论引擎跟工作台直接复用本方法 · 改 instrument 参数即可读 perp
         """
         sql = (
             "SELECT ts, open, high, low, close, volume, amount FROM kline "
-            "WHERE symbol = %(symbol)s AND market = %(market)s AND period = %(period)s"
+            "WHERE symbol = %(symbol)s AND market = %(market)s "
+            "AND instrument = %(instrument)s AND period = %(period)s"
         )
         params: dict[str, Any] = {
             "symbol": symbol,
             "market": market,
+            "instrument": instrument,
             "period": period,
         }
         if since is not None:
@@ -225,11 +251,17 @@ class ClickHouseClient:
         symbol: str,
         market: Market,
         period: Period,
+        instrument: str = KLINE_INSTRUMENT_DEFAULT,
     ) -> int:
-        """统计某 symbol/market/period 当前在 CH 里的 K 线条数,用于诊断缺口。"""
+        """统计某 symbol/market/instrument/period 当前在 CH 里的 K 线条数,用于诊断缺口。
+
+        M2-B(0017 ADR)· 新增 instrument 参数 · 默认 spot 向后兼容。
+        """
         result = await self._client.query(
-            "SELECT count() FROM kline WHERE symbol = %(s)s AND market = %(m)s AND period = %(p)s",
-            parameters={"s": symbol, "m": market, "p": period},
+            "SELECT count() FROM kline "
+            "WHERE symbol = %(s)s AND market = %(m)s "
+            "AND instrument = %(inst)s AND period = %(p)s",
+            parameters={"s": symbol, "m": market, "inst": instrument, "p": period},
         )
         return int(result.result_rows[0][0])
 
