@@ -17,6 +17,7 @@
 
 import { useMemo, useState } from 'react'
 
+import { MarketSwitcher } from '@/components/layout/market-switcher'
 import { TopNav } from '@/components/layout/top-nav'
 import { cn } from '@/lib/utils'
 
@@ -136,6 +137,11 @@ export default function CryptoMarketPage() {
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       {/* 1 · 全站共用顶部导航栏(复用现有 <TopNav /> · 不新写、不改其本体)*/}
       <TopNav />
+
+      {/* 2 · 市场切换条(A股/美股/加密)· 全站共用 MarketSwitcher · 当前=加密高亮 */}
+      <div className="shrink-0 border-b border-paper bg-background px-6 py-2">
+        <MarketSwitcher />
+      </div>
 
       <main className="flex-1">
         {/* 骨架标识条 */}
