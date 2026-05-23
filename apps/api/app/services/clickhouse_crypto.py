@@ -312,17 +312,93 @@ async def select_latest_overview(client: AsyncClient) -> MarketOverview | None:
     if not rows:
         return None
     r = rows[0]
+
+    # FGI 修复:global_overview_refresh(每 30min)写 overview 行时 FGI=0,会把
+    # fear_greed_refresh(每 6h)合并进来的 FGI 覆盖掉 → 最新行 FGI 常为 0。
+    # 这里独立取「最近一条 FGI>0」的值,不依赖最新行的 FGI,避免被周期性清零。
+    fgi_value = int(r[5])
+    fgi_classification = str(r[6])
+    if fgi_value <= 0:
+        fgi_q = await client.query(
+            "SELECT fear_greed_value, fear_greed_classification "
+            "FROM crypto_market_overview "
+            "WHERE fear_greed_value > 0 ORDER BY ts DESC LIMIT 1"
+        )
+        fgi_rows = list(fgi_q.result_rows)
+        if fgi_rows:
+            fgi_value = int(fgi_rows[0][0])
+            fgi_classification = str(fgi_rows[0][1])
+
     return MarketOverview(
         ts=_attach_utc(r[0]),
         total_market_cap_usd=float(r[1]),
         total_volume_24h_usd=float(r[2]),
         btc_dominance=float(r[3]),
         eth_dominance=float(r[4]),
-        fear_greed_value=int(r[5]),
-        fear_greed_classification=str(r[6]),
+        fear_greed_value=fgi_value,
+        fear_greed_classification=fgi_classification,
         derivatives_oi_usd=float(r[7]),
         derivatives_volume_24h_usd=float(r[8]),
     )
+
+
+async def select_tickers_by_symbols(
+    client: AsyncClient, *, instrument: str, symbols: list[str],
+) -> dict[str, Ticker24h]:
+    """按 symbol 取最新 ticker(每 symbol 最新一行)· 返回 {symbol: Ticker24h}。
+
+    给主页 BTC/ETH 价格卡用 —— 这两个不一定在「按涨跌幅 top100」榜单里,
+    必须按 symbol 精确取,否则价格卡会因不在榜单而显示「—」(读取侧 bug)。
+    """
+    if not symbols:
+        return {}
+    query = """
+        SELECT symbol, instrument, ts, last_price, change_pct_24h,
+               high_24h, low_24h, volume_24h, quote_volume_24h, count_24h
+        FROM (
+            SELECT *,
+                   ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY ts DESC) AS rn
+            FROM crypto_ticker_24h FINAL
+            WHERE instrument = %(inst)s AND symbol IN %(syms)s
+        )
+        WHERE rn = 1
+    """
+    result = await client.query(
+        query, parameters={"inst": instrument, "syms": symbols},
+    )
+    out: dict[str, Ticker24h] = {}
+    for r in result.result_rows:
+        out[str(r[0])] = Ticker24h(
+            symbol=r[0], instrument=r[1], ts=_attach_utc(r[2]),
+            last_price=float(r[3]), change_pct_24h=float(r[4]),
+            high_24h=float(r[5]), low_24h=float(r[6]),
+            volume_24h=float(r[7]), quote_volume_24h=float(r[8]),
+            count_24h=int(r[9]),
+        )
+    return out
+
+
+async def select_perp_total_quote_volume(client: AsyncClient) -> float:
+    """全 perp 永续合约最新 24H quote_volume 之和 = 合约总成交额(USDT 计价)。
+
+    CoinGecko /global 的 derivatives_volume 在免费档拿不到(coingecko_source 里
+    硬编码 0),所以主页「24H 合约总成交额」一直空。这里用我们已采集的 perp
+    ticker 的 quote_volume_24h 求和 —— 全是真实数据,不伪造。
+    """
+    query = """
+        SELECT sum(quote_volume_24h) FROM (
+            SELECT quote_volume_24h,
+                   ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY ts DESC) AS rn
+            FROM crypto_ticker_24h FINAL
+            WHERE instrument = 'perp'
+        )
+        WHERE rn = 1
+    """
+    result = await client.query(query)
+    rows = list(result.result_rows)
+    if not rows or rows[0][0] is None:
+        return 0.0
+    return float(rows[0][0])
 
 
 async def select_fear_greed_series(

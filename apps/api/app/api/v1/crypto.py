@@ -49,6 +49,8 @@ from app.services.clickhouse_crypto import (
     select_latest_tickers,
     select_long_short,
     select_open_interest,
+    select_perp_total_quote_volume,
+    select_tickers_by_symbols,
 )
 
 logger = logging.getLogger(__name__)
@@ -116,11 +118,35 @@ async def get_overview(ch: ClickHouseDep) -> CryptoOverviewResponse:
         top_losers = []
         top_volume = []
 
+    # 24H 合约总成交额:CoinGecko 免费档拿不到 derivatives_volume(硬编码 0),
+    # 这里用已采集的全 perp ticker 的 quote_volume_24h 求和兜底(真实数据)。
+    btc_ticker = None
+    eth_ticker = None
+    try:
+        if overview.derivatives_volume_24h_usd <= 0:
+            perp_total = await select_perp_total_quote_volume(ch._client)  # type: ignore[attr-defined]
+            if perp_total > 0:
+                overview = overview.model_copy(
+                    update={"derivatives_volume_24h_usd": perp_total},
+                )
+        # BTC/ETH 价格卡:按 symbol 精确取 perp ticker(不依赖涨跌幅榜)
+        by_sym = await select_tickers_by_symbols(
+            ch._client,  # type: ignore[attr-defined]
+            instrument="perp",
+            symbols=["BTC/USDT", "ETH/USDT"],
+        )
+        btc_ticker = by_sym.get("BTC/USDT")
+        eth_ticker = by_sym.get("ETH/USDT")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[crypto.overview] 合约成交额/BTC-ETH ticker 拉取失败: %s", exc)
+
     return CryptoOverviewResponse(
         market_overview=overview,
         top_gainers=top_gainers,
         top_losers=top_losers,
         top_volume=top_volume,
+        btc_ticker=btc_ticker,
+        eth_ticker=eth_ticker,
     )
 
 

@@ -91,9 +91,10 @@ export default function CryptoMarketPage() {
 
   // 指标卡数据(真实;缺失 → null → 显示「—」)
   const ov = overviewQ.data?.market_overview
-  const findPx = (sym: string) => allItems.find((it) => it.symbol === sym) ?? null
-  const btc = findPx('BTC/USDT')
-  const eth = findPx('ETH/USDT')
+  // BTC/ETH 价格卡:从 overview 的 btc_ticker/eth_ticker 取(后端按 symbol 精确查),
+  // 不再用 findPx 在「按涨跌幅 top100」榜单里找 —— 大盘币基本不在涨幅榜,会导致卡空。
+  const btc = overviewQ.data?.btc_ticker ?? null
+  const eth = overviewQ.data?.eth_ticker ?? null
   const fgiOk = !!ov && ov.fear_greed_value > 0 && ov.fear_greed_classification !== '' && ov.fear_greed_classification !== 'N/A'
 
   function toggleSort(key: SortKey) {
@@ -141,14 +142,14 @@ export default function CryptoMarketPage() {
             />
             <MetricCard
               label="BTC 价格"
-              loading={tickersQ.isPending}
+              loading={overviewQ.isPending}
               value={btc ? `$${fmtPrice(btc.last_price)}` : '—'}
               sub={btc ? fmtPct(btc.change_pct_24h) : '暂无数据'}
               tone={btc ? (btc.change_pct_24h >= 0 ? 'bull' : 'bear') : undefined}
             />
             <MetricCard
               label="ETH 价格"
-              loading={tickersQ.isPending}
+              loading={overviewQ.isPending}
               value={eth ? `$${fmtPrice(eth.last_price)}` : '—'}
               sub={eth ? fmtPct(eth.change_pct_24h) : '暂无数据'}
               tone={eth ? (eth.change_pct_24h >= 0 ? 'bull' : 'bear') : undefined}

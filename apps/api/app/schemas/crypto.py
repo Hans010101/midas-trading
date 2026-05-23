@@ -228,3 +228,6 @@ class CryptoOverviewResponse(BaseModel):
     top_gainers: list[Ticker24h] = Field(description="涨幅榜 top 5")
     top_losers: list[Ticker24h] = Field(description="跌幅榜 top 5")
     top_volume: list[Ticker24h] = Field(description="成交榜 top 5")
+    # 主页 BTC/ETH 价格卡专用 · 按 symbol 精确取(不依赖涨跌幅榜,否则大盘币不在榜上 → 卡空)
+    btc_ticker: Ticker24h | None = Field(default=None, description="BTC/USDT 永续最新 ticker")
+    eth_ticker: Ticker24h | None = Field(default=None, description="ETH/USDT 永续最新 ticker")

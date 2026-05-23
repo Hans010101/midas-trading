@@ -50,6 +50,9 @@ export interface CryptoOverviewResponse {
   top_gainers: Ticker24h[]
   top_losers: Ticker24h[]
   top_volume: Ticker24h[]
+  // BTC/ETH 价格卡专用 · 后端按 symbol 精确取(不在涨跌幅榜上也能拿到)· 无则 null
+  btc_ticker: Ticker24h | null
+  eth_ticker: Ticker24h | null
 }
 
 export class CryptoMarketApiError extends Error {
