@@ -83,7 +83,14 @@ export default function CryptoMarketPage() {
     staleTime: 60_000,
   })
 
-  const allItems = useMemo(() => tickersQ.data?.items ?? [], [tickersQ.data])
+  // 整个加密频道只展示 USDT 本位永续 —— crypto_ticker_24h 是全市场(混入 USDC 本位、
+  // BTC 计价如 ETHBTC、季度合约 BTCUSDT_260626 等)。这些采集层(ADR-0018 USDT-only)
+  // 根本没采,其资金费率/多空比/OI 永远「—」,属无效行。用与采集一致的规则(symbol 以
+  // '/USDT' 结尾,即 quote=USDT)过滤,使列表/排序/无限滚动/搜索全部只在 USDT 本位范围内。
+  const allItems = useMemo(
+    () => (tickersQ.data?.items ?? []).filter((it) => it.symbol.endsWith('/USDT')),
+    [tickersQ.data],
+  )
 
   // ── 搜索(全域前端过滤)+ 排序(全域前端,仅 ticker 三列)──────────────────
   const viewRows = useMemo(() => {
