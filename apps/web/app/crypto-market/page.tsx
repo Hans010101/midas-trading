@@ -1,27 +1,27 @@
 'use client'
 
 /**
- * 加密频道 · 列表页(币种列表 / 涨幅榜)· 接真实数据(M2-D)。
+ * 加密频道 · 列表页(币种列表 / 涨幅榜)· 接真实数据(M2-D)· 全域化(ADR-0018 后续)。
  *
  * 数据走 M2-A 已有的只读端点(lib/api/crypto-market.ts):
- *   · GET /api/v1/crypto/overview      → 合约总成交额 + 恐慌贪婪指数
- *   · GET /api/v1/crypto/tickers/24h   → 榜单(交易对/最新价/涨跌/高低/成交额)+ BTC/ETH 价
+ *   · GET /api/v1/crypto/overview      → 合约总成交额 + 恐慌贪婪指数 + BTC/ETH 价
+ *   · GET /api/v1/crypto/tickers/24h   → 全市场 perp ticker(top=1000 一次取全量 ~623)
+ *   · GET /api/v1/crypto/futures/metrics-batch → 资金费率/账户多空比/OI 24H变化(只对可见行分批取)
  *
- * 红线 · 真实 vs 待补(逐列):
- *   ✅ 真实(ticker):交易对 / 最新价 / 24H 涨跌% / 24H 最高 / 24H 最低 / 24H 成交额
- *   ⏳ 待补(无榜单级接口,逐 symbol futures 端点才有,显示「—」):
- *        资金费率 / 账户多空比 / OI 24H 变化
- *   接不上一律「—」/ 空态,绝不伪造。M2-A 采集币种有限,有多少真实币种显示多少。
+ * 全域化(取代旧"前100 + 分页"):
+ *   · 一次取全市场 ~623 perp 进内存;排序/搜索基于全域;无限滚动(默认 20、续 20、删分页器)。
+ *   · 全域可排序列:24H 涨跌% / 24H 成交额 / 最新价(都在 ticker 表,前端内存排,即时)。
+ *   · 资金费率/多空比/OI 3 列:只展示不排序(全域按这 3 列排序需单独后端工程,本期不做)。
+ *   · metrics 受批量接口 200 上限约束 → 只对"已加载/可见行"分批请求(≤100/批 + inFlight 去重 +
+ *     fetched 标记避免重复),滚动加载到哪就补取到哪。
  *
- * 交互:
- *   · 行点击 → 新标签打开 /crypto-preview?symbol=<BTCUSDT>(详情页本步不改)
- *   · Tab 合约/现货 → 切 instrument 重新拉真实 ticker
- *   · 排序 → 仅对有真实数据的列(24H 涨跌% / 24H 成交额)· 前端排序
- *   · 搜索 → 后端无搜索接口,前端对已加载列表按交易对过滤
+ * 红线 · 真实 vs 待补:交易对/价格/涨跌/高低/成交额 = 真实(ticker);资金费率/多空比/OI =
+ *   USDT 永续采集范围内真实,范围外(USDC 本位等)或未采到一律「—」,绝不伪造。
+ *
+ * 交互:行点击 → 新标签打开 /crypto-preview?symbol=<BTCUSDT>;Tab 合约/现货切 instrument。
  */
 
-import { useQuery } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { MarketSwitcher } from '@/components/layout/market-switcher'
 import { TopNav } from '@/components/layout/top-nav'
@@ -29,14 +29,22 @@ import {
   fetchCryptoOverview,
   fetchFuturesMetricsBatch,
   fetchTickers24h,
+  type FuturesMetricItem,
   type Instrument,
 } from '@/lib/api/crypto-market'
+import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 
-const PAGE_SIZE = 20
+const PAGE_STEP = 20 // 无限滚动每次续加载行数
+const METRICS_CHUNK = 100 // metrics-batch 单次最多请求 symbol 数(接口上限 200,留余量)
 
-// 仅有真实数据的列可排序
-type SortKey = 'chgPct' | 'turnover'
+// 全域可排序列(均为 ticker 表字段,前端内存排)
+type SortKey = 'chgPct' | 'turnover' | 'price'
+
+type FuturesMetric = Pick<
+  FuturesMetricItem,
+  'funding_rate' | 'account_long_short_ratio' | 'oi_change_pct_24h'
+>
 
 // ── 格式化 ──────────────────────────────────────────────────────────────────
 function fmtPrice(n: number): string {
@@ -57,8 +65,8 @@ export default function CryptoMarketPage() {
   const [tab, setTab] = useState<Instrument>('perp')
   const [sortKey, setSortKey] = useState<SortKey>('chgPct')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
-  const [page, setPage] = useState(1)
   const [query, setQuery] = useState('')
+  const [visibleCount, setVisibleCount] = useState(PAGE_STEP)
 
   const overviewQ = useQuery({
     queryKey: ['crypto-overview'],
@@ -67,52 +75,109 @@ export default function CryptoMarketPage() {
     staleTime: 60_000,
   })
 
+  // 全域:一次取全市场 perp(top=1000 → 实际 ~623),进内存做排序/搜索/无限滚动
   const tickersQ = useQuery({
     queryKey: ['crypto-tickers', tab],
-    queryFn: ({ signal }) => fetchTickers24h(tab, 100, signal),
+    queryFn: ({ signal }) => fetchTickers24h(tab, 1000, signal),
     retry: 0,
     staleTime: 60_000,
   })
 
-  const allItems = useMemo(() => tickersQ.data?.items ?? [], [tickersQ.data])
-
-  // 榜单级合约指标(资金费率/账户多空比/OI 24H变化)· 一次批量取当前已加载榜单的所有 symbol。
-  // 仅 perp 有合约指标;现货 tab 这 3 列恒为「—」。不在采集名单(top100)的币也回「—」。
-  const binanceSymbols = useMemo(
-    () => allItems.map((it) => toBinanceSymbol(it.symbol)),
-    [allItems],
+  // 整个加密频道只展示 USDT 本位永续 —— crypto_ticker_24h 是全市场(混入 USDC 本位、
+  // BTC 计价如 ETHBTC、季度合约 BTCUSDT_260626 等)。这些采集层(ADR-0018 USDT-only)
+  // 根本没采,其资金费率/多空比/OI 永远「—」,属无效行。用与采集一致的规则(symbol 以
+  // '/USDT' 结尾,即 quote=USDT)过滤,使列表/排序/无限滚动/搜索全部只在 USDT 本位范围内。
+  const allItems = useMemo(
+    () => (tickersQ.data?.items ?? []).filter((it) => it.symbol.endsWith('/USDT')),
+    [tickersQ.data],
   )
-  const metricsQ = useQuery({
-    queryKey: ['crypto-futures-metrics', tab, binanceSymbols],
-    queryFn: ({ signal }) => fetchFuturesMetricsBatch(binanceSymbols, signal),
-    enabled: tab === 'perp' && binanceSymbols.length > 0,
-    retry: 0,
-    staleTime: 60_000,
-  })
-  const metricsMap = useMemo(() => {
-    const m = new Map<string, { funding_rate: number | null; account_long_short_ratio: number | null; oi_change_pct_24h: number | null }>()
-    for (const it of metricsQ.data?.items ?? []) m.set(it.symbol, it)
-    return m
-  }, [metricsQ.data])
 
-  // 搜索(前端过滤)+ 排序(前端,仅真实列)
+  // ── 搜索(全域前端过滤)+ 排序(全域前端,仅 ticker 三列)──────────────────
   const viewRows = useMemo(() => {
     const q = query.trim().toUpperCase()
     const filtered = q ? allItems.filter((it) => it.symbol.toUpperCase().includes(q)) : allItems
     const get = (it: (typeof allItems)[number]) =>
-      sortKey === 'chgPct' ? it.change_pct_24h : it.quote_volume_24h
+      sortKey === 'chgPct' ? it.change_pct_24h
+        : sortKey === 'turnover' ? it.quote_volume_24h
+          : it.last_price
     const dir = sortDir === 'asc' ? 1 : -1
     return [...filtered].sort((a, b) => (get(a) - get(b)) * dir)
   }, [allItems, query, sortKey, sortDir])
 
-  const totalPages = Math.max(1, Math.ceil(viewRows.length / PAGE_SIZE))
-  const safePage = Math.min(page, totalPages)
-  const pageRows = viewRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+  const visibleRows = useMemo(() => viewRows.slice(0, visibleCount), [viewRows, visibleCount])
 
-  // 指标卡数据(真实;缺失 → null → 显示「—」)
+  // 排序/搜索/切 tab 变化 → 重置可见行数到首屏 20 + 滚回顶部(否则停在原位、哨兵在视口会立即续加载)
+  useEffect(() => {
+    setVisibleCount(PAGE_STEP)
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0 })
+  }, [tab, sortKey, sortDir, query])
+
+  // ── 累积式分批 metrics(只对可见行,避开 200 上限)──────────────────────────
+  const [metricsMap, setMetricsMap] = useState<Map<string, FuturesMetric>>(new Map())
+  const fetchedRef = useRef<Set<string>>(new Set()) // 已请求过(含无数据)· 不再重复请求
+  const inFlightRef = useRef<Set<string>>(new Set()) // 在途 · 防滚动抖动重复请求
+
+  // 切 tab:清空 metrics 累积状态(现货无合约指标)
+  useEffect(() => {
+    setMetricsMap(new Map())
+    fetchedRef.current = new Set()
+    inFlightRef.current = new Set()
+  }, [tab])
+
+  useEffect(() => {
+    if (tab !== 'perp') return // 现货 tab:3 列恒「—」,不请求 metrics
+    const want = visibleRows
+      .map((r) => toBinanceSymbol(r.symbol))
+      .filter((s) => !fetchedRef.current.has(s) && !inFlightRef.current.has(s))
+    if (want.length === 0) return
+
+    let cancelled = false
+    for (let i = 0; i < want.length; i += METRICS_CHUNK) {
+      const chunk = want.slice(i, i + METRICS_CHUNK)
+      chunk.forEach((s) => inFlightRef.current.add(s))
+      fetchFuturesMetricsBatch(chunk)
+        .then((res) => {
+          if (cancelled) return
+          // 成功:无论该 symbol 有没有返回数据,都标记 fetched(避免无数据币每帧重复请求)
+          chunk.forEach((s) => fetchedRef.current.add(s))
+          setMetricsMap((prev) => {
+            const next = new Map(prev)
+            for (const it of res.items) {
+              next.set(it.symbol, {
+                funding_rate: it.funding_rate,
+                account_long_short_ratio: it.account_long_short_ratio,
+                oi_change_pct_24h: it.oi_change_pct_24h,
+              })
+            }
+            return next
+          })
+        })
+        .catch(() => { /* 失败不标 fetched · 下次滚动可重试 */ })
+        .finally(() => { chunk.forEach((s) => inFlightRef.current.delete(s)) })
+    }
+    return () => { cancelled = true }
+  }, [visibleRows, tab])
+
+  // ── 无限滚动:sentinel 进视口 → 续加载 20 ──────────────────────────────────
+  const sentinelRef = useRef<HTMLTableRowElement | null>(null)
+  const hasMore = visibleCount < viewRows.length
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el || !hasMore) return
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((c) => Math.min(c + PAGE_STEP, viewRows.length))
+        }
+      },
+      { rootMargin: '300px' }, // 提前 300px 预加载,滚动更顺
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [hasMore, viewRows.length, visibleCount])
+
+  // ── 指标卡 ────────────────────────────────────────────────────────────────
   const ov = overviewQ.data?.market_overview
-  // BTC/ETH 价格卡:从 overview 的 btc_ticker/eth_ticker 取(后端按 symbol 精确查),
-  // 不再用 findPx 在「按涨跌幅 top100」榜单里找 —— 大盘币基本不在涨幅榜,会导致卡空。
   const btc = overviewQ.data?.btc_ticker ?? null
   const eth = overviewQ.data?.eth_ticker ?? null
   const fgiOk = !!ov && ov.fear_greed_value > 0 && ov.fear_greed_classification !== '' && ov.fear_greed_classification !== 'N/A'
@@ -120,9 +185,8 @@ export default function CryptoMarketPage() {
   function toggleSort(key: SortKey) {
     if (key === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
     else { setSortKey(key); setSortDir('desc') }
-    setPage(1)
   }
-  function switchTab(t: Instrument) { setTab(t); setPage(1) }
+  function switchTab(t: Instrument) { setTab(t) }
   function openDetail(ccxtSymbol: string) {
     window.open(`/crypto-preview?symbol=${toBinanceSymbol(ccxtSymbol)}`, '_blank', 'noopener,noreferrer')
   }
@@ -138,13 +202,11 @@ export default function CryptoMarketPage() {
 
       <main className="flex-1">
         <div className="border-b border-dashed border-gold/60 bg-gold/10 px-6 py-2 text-center text-xs text-gold">
-          加密市场 · 真实行情(M2-A /api/v1/crypto/*)· 资金费率/多空比/OI 暂无榜单级数据显示「—」· 点行进详情页
+          加密市场 · 全市场 USDT 永续真实行情(M2-A /api/v1/crypto/*)· 全域排序 + 下拉无限加载 · 点行进详情页
         </div>
 
         <div className="mx-auto max-w-[1600px] px-6 py-5">
-          {/* H1「加密市场」已删 · 顶部市场切换 Tab 已有「加密」· 标题冗余。
-              容器 py-5 顶距维持自然间距,直接以指标卡起首;卡片 mb-5 下距保留。
-              注:本删除曾在 main(2c9fec4)做过,feature 未同步导致 b3b537e 挑取时回退,这里在 feature 补删。 */}
+          {/* H1「加密市场」已删 · 顶部市场切换 Tab 已有「加密」· 标题冗余。 */}
           {/* 顶部 4 指标卡 */}
           <div className="mb-5 grid grid-cols-2 gap-4 md:grid-cols-4">
             <MetricCard
@@ -192,8 +254,8 @@ export default function CryptoMarketPage() {
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 rounded-md border border-paper bg-cream/40 px-3 py-1.5 text-sm">
                 <SearchIcon />
-                <input type="text" value={query} onChange={(e) => { setQuery(e.target.value); setPage(1) }}
-                  placeholder="搜索交易对(前端过滤)"
+                <input type="text" value={query} onChange={(e) => setQuery(e.target.value)}
+                  placeholder="搜索交易对(全市场)"
                   className="w-44 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50" />
               </div>
               <button type="button" title="刷新" onClick={() => { void overviewQ.refetch(); void tickersQ.refetch() }}
@@ -210,11 +272,11 @@ export default function CryptoMarketPage() {
                 <tr className="border-b border-paper bg-cream/50 text-xs text-muted-foreground">
                   <th className="w-12 px-3 py-2 text-center font-medium">#</th>
                   <th className="px-3 py-2 text-left font-medium">交易对</th>
-                  <th className="px-3 py-2 text-right font-medium">最新价格</th>
+                  <SortTh label="最新价格" col="price" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <SortTh label="24H 涨跌%" col="chgPct" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <th className="px-3 py-2 text-right font-medium">24H 最高</th>
                   <th className="px-3 py-2 text-right font-medium">24H 最低</th>
-                  <th className="px-3 py-2 text-right font-medium" title="合约 · top100 采集范围内为真实,范围外显示「—」">资金费率</th>
+                  <th className="px-3 py-2 text-right font-medium" title="合约 · USDT 永续采集范围内真实,范围外/未采到「—」">资金费率</th>
                   <th className="px-3 py-2 text-right font-medium" title="合约 · 账户多空比 long/short">账户多空比</th>
                   <th className="px-3 py-2 text-right font-medium" title="合约 · OI 近 24H 变化%">OI 24H 变化</th>
                   <SortTh label="24H 成交额" col="turnover" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
@@ -227,56 +289,55 @@ export default function CryptoMarketPage() {
                 {tickersQ.isSuccess && viewRows.length === 0 && (
                   <StateRow text={query ? '无匹配交易对' : '暂无行情数据 · 待采集'} />
                 )}
-                {tickersQ.isSuccess && pageRows.map((r, i) => {
-                  const rank = (safePage - 1) * PAGE_SIZE + i + 1
+                {tickersQ.isSuccess && visibleRows.map((r, i) => {
+                  const fm = metricsMap.get(toBinanceSymbol(r.symbol))
+                  const fr = fm?.funding_rate
+                  const ls = fm?.account_long_short_ratio
+                  const oi = fm?.oi_change_pct_24h
                   return (
                     <tr key={r.symbol} onClick={() => openDetail(r.symbol)} title="点击在新标签打开详情页"
                       className="group cursor-pointer border-b border-paper/60 transition-colors hover:bg-midas-red-glow/30">
-                      <td className="px-3 py-2.5 text-center font-mono text-xs text-muted-foreground/70">{rank}</td>
+                      <td className="px-3 py-2.5 text-center font-mono text-xs text-muted-foreground/70">{i + 1}</td>
                       <td className="px-3 py-2.5"><span className="font-serif font-bold text-foreground">{r.symbol}</span></td>
                       <Td>{fmtPrice(r.last_price)}</Td>
                       <Td className={r.change_pct_24h >= 0 ? 'text-bull' : 'text-bear'}>{fmtPct(r.change_pct_24h)}</Td>
                       <Td className="text-muted-foreground/80">{fmtPrice(r.high_24h)}</Td>
                       <Td className="text-muted-foreground/80">{fmtPrice(r.low_24h)}</Td>
-                      {(() => {
-                        const fm = metricsMap.get(toBinanceSymbol(r.symbol))
-                        const fr = fm?.funding_rate
-                        const ls = fm?.account_long_short_ratio
-                        const oi = fm?.oi_change_pct_24h
-                        return (
-                          <>
-                            <Td className={fr == null ? 'text-muted-foreground/40' : fr >= 0 ? 'text-bull' : 'text-bear'}>
-                              {fr == null ? '—' : `${fr >= 0 ? '+' : ''}${(fr * 100).toFixed(4)}%`}
-                            </Td>
-                            <Td className={ls == null ? 'text-muted-foreground/40' : 'text-muted-foreground/80'}>
-                              {ls == null ? '—' : ls.toFixed(2)}
-                            </Td>
-                            <Td className={oi == null ? 'text-muted-foreground/40' : oi >= 0 ? 'text-bull' : 'text-bear'}>
-                              {oi == null ? '—' : `${oi >= 0 ? '+' : ''}${oi.toFixed(2)}%`}
-                            </Td>
-                          </>
-                        )
-                      })()}
+                      <Td className={fr == null ? 'text-muted-foreground/40' : fr >= 0 ? 'text-bull' : 'text-bear'}>
+                        {fr == null ? '—' : `${fr >= 0 ? '+' : ''}${(fr * 100).toFixed(4)}%`}
+                      </Td>
+                      <Td className={ls == null ? 'text-muted-foreground/40' : 'text-muted-foreground/80'}>
+                        {ls == null ? '—' : ls.toFixed(2)}
+                      </Td>
+                      <Td className={oi == null ? 'text-muted-foreground/40' : oi >= 0 ? 'text-bull' : 'text-bear'}>
+                        {oi == null ? '—' : `${oi >= 0 ? '+' : ''}${oi.toFixed(2)}%`}
+                      </Td>
                       <Td className="text-muted-foreground/80">{fmtUsd(r.quote_volume_24h)}</Td>
                       <td className="px-2 text-center text-muted-foreground/30 transition-colors group-hover:text-midas-red">›</td>
                     </tr>
                   )
                 })}
+                {/* 无限滚动哨兵行 · 进视口续加载 */}
+                {tickersQ.isSuccess && hasMore && (
+                  <tr ref={sentinelRef}>
+                    <td colSpan={11} className="px-3 py-4 text-center text-xs text-muted-foreground/50">下拉加载更多…</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
 
-          {/* 分页(按实际真实币种数)*/}
+          {/* 计数(全域 · 无限滚动)*/}
           <div className="mt-4 flex items-center justify-between">
             <span className="text-xs text-muted-foreground/70">
-              共 {viewRows.length} 个 · 第 {safePage}/{totalPages} 页(每页 {PAGE_SIZE})
+              共 {viewRows.length} 个 · 已显示 {Math.min(visibleCount, viewRows.length)}
+              {!hasMore && viewRows.length > 0 && ' · 已全部加载'}
             </span>
-            {totalPages > 1 && <Pagination page={safePage} totalPages={totalPages} onChange={setPage} />}
           </div>
 
           <p className="mt-3 text-[11px] text-muted-foreground/60">
-            交易对/价格/涨跌/高低/成交额 = 真实(M2-A ticker)· 资金费率/账户多空比/OI 24H变化 = 合约 top100 采集范围内真实,范围外「—」·
-            点行新标签打开详情页 · 仅供参考,不构成投资建议
+            交易对/价格/涨跌/高低/成交额 = 真实(M2-A ticker · 全市场 USDT 永续)· 资金费率/账户多空比/OI 24H变化 =
+            采集范围内真实,范围外(如 USDC 本位)「—」· 点行新标签打开详情页 · 仅供参考,不构成投资建议
           </p>
         </div>
       </main>
@@ -299,7 +360,7 @@ function MetricCard({
   )
 }
 
-// ── 可排序表头(仅真实列)──────────────────────────────────────────────────
+// ── 可排序表头(全域 · 仅 ticker 三列)────────────────────────────────────────
 function SortTh({
   label, col, sortKey, sortDir, onSort,
 }: { label: string; col: SortKey; sortKey: SortKey; sortDir: 'asc' | 'desc'; onSort: (k: SortKey) => void }) {
@@ -315,28 +376,6 @@ function SortTh({
         </span>
       </button>
     </th>
-  )
-}
-
-function Pagination({ page, totalPages, onChange }: { page: number; totalPages: number; onChange: (p: number) => void }) {
-  const btn = 'flex h-7 min-w-7 items-center justify-center rounded-md border border-paper px-2 text-xs transition-colors'
-  return (
-    <div className="flex items-center gap-1">
-      <button type="button" disabled={page <= 1} onClick={() => onChange(page - 1)}
-        className={cn(btn, page <= 1 ? 'cursor-not-allowed text-muted-foreground/30' : 'text-muted-foreground hover:border-midas-red hover:text-midas-red')}>
-        上一页
-      </button>
-      {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-        <button key={p} type="button" onClick={() => onChange(p)}
-          className={cn(btn, p === page ? 'border-midas-red bg-midas-red text-white' : 'text-muted-foreground hover:border-midas-red hover:text-midas-red')}>
-          {p}
-        </button>
-      ))}
-      <button type="button" disabled={page >= totalPages} onClick={() => onChange(page + 1)}
-        className={cn(btn, page >= totalPages ? 'cursor-not-allowed text-muted-foreground/30' : 'text-muted-foreground hover:border-midas-red hover:text-midas-red')}>
-        下一页
-      </button>
-    </div>
   )
 }
 
