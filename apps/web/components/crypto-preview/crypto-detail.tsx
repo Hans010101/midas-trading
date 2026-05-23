@@ -14,7 +14,8 @@
  * 多标的切换 = 后续迭代(本步专注接数据)。
  */
 
-import { useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { useMemo, useState } from 'react'
 
 import { CryptoAiCard } from '@/components/crypto-preview/crypto-ai-card'
 import { CryptoHeader } from '@/components/crypto-preview/crypto-header'
@@ -23,10 +24,35 @@ import { DimensionSection } from '@/components/crypto-preview/dimension-section'
 import { VirtualBadge } from '@/components/ui/virtual-badge'
 import type { Period } from '@midas/shared'
 
-const KLINE_SYMBOL = 'BTC/USDT'
-const FUTURES_SYMBOL = 'BTCUSDT'
+// 常见 quote · 用于把 Binance 风格 'BEATUSDT' 切回 ccxt 风格 'BEAT/USDT'
+const QUOTES = ['USDT', 'USDC', 'BUSD', 'FDUSD'] as const
+const DEFAULT_KLINE = 'BTC/USDT'
+const DEFAULT_FUTURES = 'BTCUSDT'
+
+/**
+ * 由 URL ?symbol= 推导两种风格的 symbol:
+ *   - futuresSymbol:Binance 风格无斜杠(crypto futures 端点 / 列表页传入)
+ *   - klineSymbol:ccxt 风格带斜杠(/market/kline · /analysis/* 用)
+ * 无参数 / 非法 / 无法识别 quote → 默认 BTC(绝不崩、绝不留空)。
+ */
+function deriveSymbols(raw: string | null): { klineSymbol: string; futuresSymbol: string } {
+  const s = (raw ?? '').trim().toUpperCase()
+  if (!s) return { klineSymbol: DEFAULT_KLINE, futuresSymbol: DEFAULT_FUTURES }
+  if (s.includes('/')) {
+    // 已是 ccxt 风格(容错:列表页其实传无斜杠,这里兼容两种)
+    return { klineSymbol: s, futuresSymbol: s.replace('/', '') }
+  }
+  const quote = QUOTES.find((q) => s.endsWith(q) && s.length > q.length)
+  if (!quote) return { klineSymbol: DEFAULT_KLINE, futuresSymbol: DEFAULT_FUTURES }
+  return { klineSymbol: `${s.slice(0, -quote.length)}/${quote}`, futuresSymbol: s }
+}
 
 export function CryptoDetail() {
+  const searchParams = useSearchParams()
+  const { klineSymbol, futuresSymbol } = useMemo(
+    () => deriveSymbols(searchParams.get('symbol')),
+    [searchParams],
+  )
   const [period, setPeriod] = useState<Period>('1d')
 
   return (
@@ -38,8 +64,8 @@ export function CryptoDetail() {
       </div>
 
       <CryptoHeader
-        klineSymbol={KLINE_SYMBOL}
-        futuresSymbol={FUTURES_SYMBOL}
+        klineSymbol={klineSymbol}
+        futuresSymbol={futuresSymbol}
         period={period}
         onPeriodChange={setPeriod}
       />
@@ -47,15 +73,15 @@ export function CryptoDetail() {
       <div className="mx-auto flex max-w-[1600px] gap-4 px-4 py-4">
         {/* 左主区 */}
         <div className="flex-1 space-y-4">
-          <CryptoMainChart symbol={KLINE_SYMBOL} period={period} />
-          <DimensionSection futuresSymbol={FUTURES_SYMBOL} />
+          <CryptoMainChart symbol={klineSymbol} period={period} />
+          <DimensionSection futuresSymbol={futuresSymbol} />
         </div>
 
         {/* 右侧栏 */}
         <aside className="w-[360px] shrink-0 space-y-4">
           <CryptoAiCard
-            klineSymbol={KLINE_SYMBOL}
-            futuresSymbol={FUTURES_SYMBOL}
+            klineSymbol={klineSymbol}
+            futuresSymbol={futuresSymbol}
             period={period}
           />
           <OrderGuidance />
