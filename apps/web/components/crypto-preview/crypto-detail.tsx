@@ -20,6 +20,7 @@ import { useMemo, useState } from 'react'
 import { CryptoAiCard } from '@/components/crypto-preview/crypto-ai-card'
 import { CryptoHeader } from '@/components/crypto-preview/crypto-header'
 import { CryptoMainChart } from '@/components/crypto-preview/crypto-main-chart'
+import { CryptoPerpOrders } from '@/components/crypto-preview/crypto-perp-orders'
 import { DimensionSection } from '@/components/crypto-preview/dimension-section'
 import { PerpOrderGuidance } from '@/components/crypto-preview/perp-order-guidance'
 import type { Period } from '@midas/shared'
@@ -85,6 +86,7 @@ export function CryptoDetail() {
             period={period}
           />
           <PerpOrderGuidance futuresSymbol={futuresSymbol} klineSymbol={klineSymbol} />
+          <CryptoPerpOrders futuresSymbol={futuresSymbol} />
           <StrategyChecklist />
         </aside>
       </div>
