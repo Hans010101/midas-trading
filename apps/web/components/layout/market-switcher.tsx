@@ -8,13 +8,11 @@
  * 行为(按当前所在页面自适应,组件自己判断「当前在哪个市场」):
  *  - 在工作台(/workbench):
  *      · A 股 / 美股 → setMarket 工作台内切换(**与抽取前完全一致**,无路由跳转)
- *      · 加密       → 跳 /crypto-market 列表页(B 方案:加密频道 = 列表→详情,
- *                     不再用旧加密工作台;这是相对抽取前唯一的行为变化)
+ *      · 加密       → 跳 /crypto-market 列表页(B 方案:加密频道 = 列表→详情)
  *      · 选中态     = 工作台 store 的当前 market
- *  - 在加密市场列表页(/crypto-market):
- *      · 加密       → 已在本页,no-op(高亮)
- *      · A 股 / 美股 → setMarket 预设市场 + 跳 /workbench
- *      · 选中态     = 加密
+ *  - 在任一「市场首页」(/cn-market、/us-market、/crypto-market · 0023 阶段③):
+ *      · 点任一市场 → 跳对应市场首页(已在本页则 no-op · 三首页互链)
+ *      · 选中态     = 当前所在市场首页
  *
  * 视觉沿用工作台 Header 原市场 Tab 样式(中国红选中态),保证工作台外观不变。
  */
@@ -32,19 +30,32 @@ export function MarketSwitcher({ className }: { className?: string }) {
   const storeMarket = useWorkbenchStore((s) => s.market)
   const setMarket = useWorkbenchStore((s) => s.setMarket)
 
-  const onCryptoMarket = pathname?.startsWith('/crypto-market') ?? false
-  const active: Market = onCryptoMarket ? 'crypto' : storeMarket
+  // 当前在哪个「市场首页」(列表/总览页)· 0023 阶段③ 起 A股/美股/加密 三市场首页互链
+  const homeMarket: Market | null = pathname?.startsWith('/cn-market')
+    ? 'cn'
+    : pathname?.startsWith('/us-market')
+      ? 'us'
+      : pathname?.startsWith('/crypto-market')
+        ? 'crypto'
+        : null
+  const active: Market = homeMarket ?? storeMarket
 
   function handleSelect(m: Market) {
-    if (m === 'crypto') {
-      // 加密统一进列表页;已在列表页则 no-op
-      if (!onCryptoMarket) router.push('/crypto-market')
+    // 在任一市场首页:点市场 → 跳对应市场首页(已在本页则 no-op)
+    if (homeMarket) {
+      if (m === homeMarket) return
+      if (m === 'cn') router.push('/cn-market')
+      else if (m === 'us') router.push('/us-market')
+      else router.push('/crypto-market')
       return
     }
-    // A 股 / 美股:setMarket 与抽取前工作台行为完全一致(含再次点击当前市场重置 symbol)
+    // 在工作台(/workbench)· 保持抽取前行为(零回归):
+    //   加密 → 跳加密列表页;A 股 / 美股 → 工作台内 setMarket 切换(含重置 symbol · 不跳转)
+    if (m === 'crypto') {
+      router.push('/crypto-market')
+      return
+    }
     setMarket(m)
-    // 若当前在加密列表页,切 A 股/美股需跳回工作台
-    if (onCryptoMarket) router.push('/workbench')
   }
 
   return (
