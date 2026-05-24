@@ -13,6 +13,7 @@
  */
 
 import { TopNav } from '@/components/layout/top-nav'
+import { ColorPrefSection } from '@/components/settings/color-pref-section'
 import { NotificationsConfigSection } from '@/components/settings/notifications-config-section'
 
 export default function SettingsPage() {
@@ -26,12 +27,10 @@ export default function SettingsPage() {
 
         <NotificationsConfigSection />
 
+        {/* 涨跌色偏好(3.5 · 决策⑧)· 实装 */}
+        <ColorPrefSection />
+
         {/* M1 占位 */}
-        <PlaceholderSection
-          title="偏好设置"
-          milestone="M1"
-          description="主题切换 · 默认市场 · 默认数量 · 时区"
-        />
         <PlaceholderSection
           title="安全设置"
           milestone="M1"
