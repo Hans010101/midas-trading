@@ -15,6 +15,7 @@ import { useQuery } from '@tanstack/react-query'
 import { MarketSwitcher } from '@/components/layout/market-switcher'
 import { TopNav } from '@/components/layout/top-nav'
 import { CnSections } from '@/components/market-home/cn-sections'
+import { UsSections } from '@/components/market-home/us-sections'
 import { StatusPill } from '@/components/ui/direction-badge'
 import { Panel } from '@/components/ui/panel'
 import { EmptyState, LoadingNote } from '@/components/ui/state'
@@ -93,17 +94,7 @@ export function MarketHomePage({ market }: { market: MarketKind }) {
             </div>
           )}
 
-          {market === 'cn' ? (
-            <CnSections />
-          ) : (
-            <>
-              <h2 className="mb-3 mt-8 font-serif text-sm font-bold text-foreground">市场榜单</h2>
-              <EmptyState
-                title="美股榜单建设中"
-                hint="热门美股 / 重点关注池榜单 + 行业 / 中概股板块 · 3.3 上线"
-              />
-            </>
-          )}
+          {market === 'cn' ? <CnSections /> : <UsSections />}
 
           <p className="mt-6 text-[11px] text-muted-foreground/60">
             大盘指数为{MARKET_NAME[market]}实时快照(
