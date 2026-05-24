@@ -127,6 +127,41 @@ TTL ingested_at + INTERVAL 2 DAY
 SETTINGS index_granularity = 8192
 """
 
+# us_spot_snapshot · 美股策展池个股快照(0023 阶段③ · 3.3)· 与 init.sql 一致
+_CREATE_US_SPOT_SNAPSHOT = """
+CREATE TABLE IF NOT EXISTS us_spot_snapshot (
+    symbol String,
+    name String,
+    sector String,
+    ts DateTime,
+    last_price Float64,
+    change_pct Float64,
+    amount Float64,
+    volume Float64,
+    ingested_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(ts)
+ORDER BY (ts, symbol)
+TTL ingested_at + INTERVAL 2 DAY
+SETTINGS index_granularity = 8192
+"""
+
+# us_sector_snapshot · 美股板块聚合(行业 + 中概股)(0023 阶段③ · 3.3)· 与 init.sql 一致
+_CREATE_US_SECTOR_SNAPSHOT = """
+CREATE TABLE IF NOT EXISTS us_sector_snapshot (
+    name String,
+    ts DateTime,
+    change_pct Float64,
+    stock_count UInt32,
+    total_amount Float64,
+    ingested_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(ts)
+ORDER BY (ts, name)
+TTL ingested_at + INTERVAL 2 DAY
+SETTINGS index_granularity = 8192
+"""
+
 # 未来新增 CH 表 → 往这个 list 里加一条幂等 DDL 即可
 _DDL_STATEMENTS: tuple[str, ...] = (
     _CREATE_PREMIUM_INDEX,
@@ -135,6 +170,8 @@ _DDL_STATEMENTS: tuple[str, ...] = (
     _CREATE_CN_SPOT_SNAPSHOT,
     _CREATE_CN_MARKET_BREADTH,
     _CREATE_CN_SECTOR_SNAPSHOT,
+    _CREATE_US_SPOT_SNAPSHOT,
+    _CREATE_US_SECTOR_SNAPSHOT,
 )
 
 

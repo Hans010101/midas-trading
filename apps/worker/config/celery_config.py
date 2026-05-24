@@ -88,6 +88,13 @@ beat_schedule = {
         "schedule": crontab(minute="*/3", hour="9-15", day_of_week="mon-fri"),
         "options": {"expires": 170},
     },
+    "market-us-board-scan": {
+        "task": "tasks.market.us_board_scan",
+        # 美股榜单(3.3)· yfinance 批量拉策展池(~128)+ 行业/中概板块 · 美股时段每 5 分钟。
+        # 分块错峰(40/块 + sleep)· 单轮 ~30s · 每 5min 留足余量 · 避免 yfinance 限流。
+        "schedule": crontab(minute="*/5", hour="20-23,0-5"),
+        "options": {"expires": 280},
+    },
     # ── M2-A · Crypto Pro 数据采集(0017 ADR)· 常驻定时刷新 ────────────────────
     # 错峰原则:Binance 四个采集(ticker/oi/longshort/funding)分钟数互不重叠,避免
     #   同一刻对 Binance 合约接口集中打请求(IP 权重限流)。oi 落在 5 的倍数;

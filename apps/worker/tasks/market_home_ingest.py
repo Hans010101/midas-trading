@@ -1,11 +1,13 @@
 """A股 / 美股 市场首页数据采集(0023 阶段③ · 3.1)。
 
-4 个任务:
+5 个任务:
 - market.cn_index_scan       · Sina 大盘指数快照(上证/深成/创业板/沪深300)→ market_index_snapshot
 - market.us_index_scan        · yfinance 4 大盘指数(道指/纳指/标普/罗素)→ market_index_snapshot
 - market.cn_calendar_refresh  · AKShare 交易日历 → market_trade_calendar(每日刷 · 给状态机判交易日)
 - market.cn_board_scan        · Sina 全市场 spot → cn_spot_snapshot + cn_market_breadth(情绪)·
                                 Sina 行业板块 → cn_sector_snapshot(0023 阶段③ · 3.2)
+- market.us_board_scan        · yfinance 批量拉策展池 → us_spot_snapshot + us_sector_snapshot
+                                (行业 + 中概股板块)(0023 阶段③ · 3.3 · 决策⑥ 策展池)
 
 调度(celery_config.py):指数/榜单采集只在各自交易时段跑(A股日盘 / 美股夜盘 · 错峰)·
 交易日历每日开盘前刷一次。
@@ -33,10 +35,13 @@ from app.services.clickhouse_market_home import (
     insert_index_snapshots,
     insert_trade_calendar,
 )
+from app.services.clickhouse_us_market import insert_us_sectors, insert_us_spot
 from app.services.cn_market import aggregate_breadth
 from app.services.data_sources.cn_source import AKShareCnSource
 from app.services.data_sources.us_source import YFinanceUsSource
 from app.services.market_home_config import CN_INDEX_CODES, US_INDICES
+from app.services.us_market import aggregate_sectors
+from app.services.us_pool import US_POOL
 
 logger = logging.getLogger(__name__)
 
@@ -165,5 +170,35 @@ async def _cn_board_scan_async() -> dict[str, Any]:
             breadth.limit_up_count, breadth.limit_down_count, n_sec,
         )
         return {"spot": n_spot, "sectors": n_sec}
+    finally:
+        await ch.close()
+
+
+# ============================================================================
+# 5 · 美股榜单 · 策展池批量报价 + 行业/中概板块 · 美股时段每 5min(3.3)
+# ============================================================================
+
+
+@shared_task(name="tasks.market.us_board_scan")
+def us_board_scan() -> dict[str, Any]:
+    return asyncio.run(_us_board_scan_async())
+
+
+async def _us_board_scan_async() -> dict[str, Any]:
+    """yfinance 批量拉策展池 → 存个股快照 + 算板块聚合(行业 + 中概股)→ 存。
+
+    全 yfinance(策展池 · 决策⑥)· 分块错峰避限流(见 us_source._fetch_pool_sync)·
+    所有行共享同一扫描 ts。
+    """
+    source = YFinanceUsSource()
+    ch = await _get_ch_client()
+    try:
+        now = datetime.now(tz=UTC)
+        rows = await source.fetch_pool_quotes(US_POOL)
+        n_spot = await insert_us_spot(ch, rows, ts=now)
+        sectors = aggregate_sectors(rows)
+        n_sec = await insert_us_sectors(ch, sectors, ts=now)
+        logger.info("[market.us_board_scan] pool=%d sectors=%d", n_spot, n_sec)
+        return {"pool": n_spot, "sectors": n_sec}
     finally:
         await ch.close()
