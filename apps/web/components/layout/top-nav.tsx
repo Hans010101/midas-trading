@@ -38,14 +38,15 @@ export function TopNav() {
   const pathname = usePathname()
   const { data: session, status } = useSession()
 
-  // 市场首页 = 产品主入口 · "市场" / Logo 进当前所在市场首页,不在任一市场首页时默认 A 股。
+  // "市场" 进当前所在市场首页(产品主入口),不在任一市场首页时默认 A 股。
   const marketHref = MARKET_HOME_PATHS.find((p) => pathname?.startsWith(p)) ?? '/cn-market'
   const onMarketHome = MARKET_HOME_PATHS.some((p) => pathname?.startsWith(p))
 
   return (
     <header className="h-12 shrink-0 border-b border-paper bg-background">
       <div className="flex h-full items-center justify-between px-6">
-        <Link href={marketHref} className="flex items-center gap-2">
+        {/* Logo 点击回官网首页 /(终端 ⇄ 官网闭环 · 0023 阶段③ 微调) */}
+        <Link href="/" className="flex items-center gap-2">
           <Image src="/brand/seal.png" alt="Midas 印章" width={24} height={24} priority />
           <span className="font-serif text-lg font-bold text-midas-red">
             Midas
