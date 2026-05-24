@@ -1,0 +1,449 @@
+'use client'
+
+/**
+ * 现货下单区(0023 阶段③ · 3.4 批2)· 详情页右栏。
+ *
+ * 差异化(决策③④):
+ *   · A股(cn):纯现货做多 · 买入(开)/ 卖出(平)· T+1 + 涨跌停提示 · position_side 不传(后端默认 long)
+ *   · 美股(us):做多 + 卖空(无杠杆 1:1)· tab 切换
+ *       - 做多:买入(开)/ 卖出(平)· position_side=long(不传)
+ *       - 卖空:卖出(开空)/ 买入(平空)· position_side=short · 接 3.4 批1 引擎
+ *
+ * 复用:usePlaceOrder / useAccount / usePositions / useKline / estimateOrder / formatMoney(0008)。
+ * 现金语义:
+ *   - 买入做多 / 卖出开空 = 开仓 · 需现金(成本 / 担保 = notional + 手续费)· 校验余额
+ *   - 卖出平多 / 买入平空 = 平仓 · 不需预付现金 · 数量受持仓上限约束
+ *
+ * 红线:全程虚拟资金 · 美股卖空只是虚拟负持仓记账 · 绝不接真实交易 · 仅供参考不构成投资建议。
+ */
+
+import Link from 'next/link'
+import { useMemo, useState } from 'react'
+import { toast } from 'sonner'
+
+import { VirtualBadge } from '@/components/ui/virtual-badge'
+import { useSession } from 'next-auth/react'
+import { useAccount, usePlaceOrder, usePositions } from '@/hooks/use-virtual'
+import { useKline } from '@/hooks/use-kline'
+import { VirtualApiError, type OrderSide, type PositionSide } from '@/lib/api/virtual'
+import { estimateOrder } from '@/lib/fees'
+import { currencyOf, formatMoney } from '@/lib/format-money'
+import { cn } from '@/lib/utils'
+import type { Market } from '@midas/shared'
+
+type Tab = 'long' | 'short'
+
+interface SpotOrderPanelProps {
+  symbol: string
+  name?: string | null
+  market: 'cn' | 'us'
+}
+
+interface PendingAction {
+  side: OrderSide
+  positionSide: PositionSide
+  /** 开仓(需现金)还是平仓(受持仓约束) */
+  intent: 'open' | 'close'
+  label: string
+}
+
+function defaultQty(market: 'cn' | 'us'): string {
+  return market === 'cn' ? '100' : '1'
+}
+
+export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
+  const { status } = useSession()
+  const authed = status === 'authenticated'
+  const account = useAccount(market)
+  const positions = usePositions({ market })
+  const [tab, setTab] = useState<Tab>('long')
+  const [quantity, setQuantity] = useState(defaultQty(market))
+  const [pending, setPending] = useState<PendingAction | null>(null)
+
+  // 当前标的 · 当前方向的活仓(用于平仓上限 + 展示)
+  const heldPosition = useMemo(() => {
+    const wanted: PositionSide = market === 'us' ? tab : 'long'
+    return (positions.data ?? []).find(
+      (p) => p.symbol === symbol && p.position_side === wanted && Number(p.quantity) > 0,
+    )
+  }, [positions.data, symbol, market, tab])
+  const heldQty = heldPosition ? Number(heldPosition.quantity) : 0
+
+  // ===== 未登录 / 未激活 网关 =====
+  if (!authed) {
+    return (
+      <PanelShell>
+        <GateNote
+          title="登录后可下单"
+          hint="点金全程虚拟资金,登录即可用模拟盘买卖。"
+          href="/login"
+          cta="去登录"
+        />
+      </PanelShell>
+    )
+  }
+  if (account.isSuccess && account.data === null) {
+    return (
+      <PanelShell>
+        <GateNote
+          title={`${market === 'cn' ? 'A股' : '美股'}虚拟资金未激活`}
+          hint="先到设置页设定该市场的初始虚拟资金,再来下单。"
+          href="/settings/wallet"
+          cta="去激活"
+        />
+      </PanelShell>
+    )
+  }
+
+  const activePositionSide: PositionSide = market === 'us' ? tab : 'long'
+
+  function openConfirm(side: OrderSide, intent: 'open' | 'close', label: string) {
+    setPending({ side, positionSide: activePositionSide, intent, label })
+  }
+
+  return (
+    <PanelShell>
+      {/* 美股:做多 / 卖空 tab · A股不显示(纯做多) */}
+      {market === 'us' && (
+        <div className="mb-3 flex overflow-hidden rounded-md border border-paper text-sm">
+          {(['long', 'short'] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => {
+                setTab(t)
+                setQuantity(defaultQty(market))
+              }}
+              className={cn(
+                'flex-1 px-3 py-1.5 transition-colors',
+                tab === t ? 'bg-midas-red text-white' : 'text-muted-foreground hover:bg-midas-red-glow/50',
+              )}
+            >
+              {t === 'long' ? '做多' : '卖空'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* 持仓提示 */}
+      <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
+        <span>
+          当前{market === 'us' && tab === 'short' ? '空头' : '持仓'}
+        </span>
+        <span className="font-mono text-foreground">
+          {heldQty > 0
+            ? `${heldQty} @ ${formatMoney(heldPosition!.avg_entry_price, currencyOf(market))}`
+            : '无'}
+        </span>
+      </div>
+
+      {/* 数量输入 */}
+      <label className="mb-1 block text-xs text-muted-foreground">数量</label>
+      <input
+        type="number"
+        value={quantity}
+        onChange={(e) => setQuantity(e.target.value)}
+        min={0}
+        step={market === 'cn' ? 100 : 1}
+        className="mb-3 h-9 w-full rounded border border-paper bg-background px-3 text-right font-mono text-sm"
+      />
+
+      {/* 操作按钮 · 开仓 / 平仓 两枚 */}
+      {activePositionSide === 'long' ? (
+        <div className="grid grid-cols-2 gap-2">
+          <OrderButton variant="solid" onClick={() => openConfirm('buy', 'open', '买入(做多)')}>
+            买入
+          </OrderButton>
+          <OrderButton variant="outline" onClick={() => openConfirm('sell', 'close', '卖出(平多)')}>
+            卖出
+          </OrderButton>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          <OrderButton variant="solid" onClick={() => openConfirm('sell', 'open', '卖出(开空)')}>
+            卖出开空
+          </OrderButton>
+          <OrderButton variant="outline" onClick={() => openConfirm('buy', 'close', '买入(平空)')}>
+            买入平空
+          </OrderButton>
+        </div>
+      )}
+
+      {/* 市场提示 */}
+      {market === 'cn' ? (
+        <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground/70">
+          A股 T+1:当日买入次日方可卖出 · ±10%/20% 涨跌停限制 ·
+          模拟撮合按最新价成交,不强制 T+1 / 涨跌停。
+        </p>
+      ) : (
+        <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground/70">
+          {tab === 'short'
+            ? '卖空 = 虚拟负持仓记账 · 无杠杆 1:1 锁定等额现金担保 · 无强平/资金费 · 仅模拟。'
+            : '美股做多 · 现货买卖 · 模拟撮合按最新价成交。'}
+        </p>
+      )}
+      <p className="mt-1 text-[11px] text-muted-foreground/60">仅供参考,不构成投资建议</p>
+
+      {pending && (
+        <SpotOrderConfirm
+          symbol={symbol}
+          name={name}
+          market={market}
+          action={pending}
+          quantity={quantity}
+          heldQty={heldQty}
+          availableCash={account.data ? Number(account.data.cash_balance) : 0}
+          onClose={() => setPending(null)}
+        />
+      )}
+    </PanelShell>
+  )
+}
+
+// ===== 确认模态 =====
+
+interface ConfirmProps {
+  symbol: string
+  name?: string | null
+  market: 'cn' | 'us'
+  action: PendingAction
+  quantity: string
+  heldQty: number
+  availableCash: number
+  onClose: () => void
+}
+
+function SpotOrderConfirm({
+  symbol, name, market, action, quantity, heldQty, availableCash, onClose,
+}: ConfirmProps) {
+  const currency = currencyOf(market)
+  const place = usePlaceOrder()
+  const { data: kline } = useKline({
+    symbol, market: market as Market, period: '1d', limit: 1,
+  })
+  const marketPrice = kline?.items?.at(-1)?.close ?? null
+  const qtyNum = Number(quantity) || 0
+
+  const estimate = marketPrice && qtyNum > 0
+    ? estimateOrder(market as Market, action.side, marketPrice, qtyNum)
+    : null
+
+  // 现金影响 · 开仓需现金(买做多成本 / 卖空担保 = notional + 手续费);平仓不需预付
+  const cashNeeded =
+    action.intent === 'open' && estimate ? estimate.notional + estimate.commission : 0
+  const enoughCash = action.intent !== 'open' || (estimate !== null && cashNeeded <= availableCash)
+  const enoughPosition = action.intent !== 'close' || qtyNum <= heldQty
+
+  const canSubmit =
+    !place.isPending && qtyNum > 0 && estimate !== null && enoughCash && enoughPosition
+
+  async function handleSubmit() {
+    try {
+      const order = await place.mutateAsync({
+        symbol,
+        market: market as Market,
+        side: action.side,
+        quantity: quantity.trim(),
+        // A股 / 美股做多 不传(后端默认 long · 字节同 0008)· 仅美股卖空传 short
+        ...(action.positionSide === 'short' ? { position_side: 'short' as const } : {}),
+      })
+      if (order.status === 'filled') {
+        const realized = order.realized_pnl
+        toast.success(
+          `${action.label} ${quantity} ${symbol} 已成交` +
+            (realized ? ` · 已实现 ${formatMoney(realized, currency)}` : ''),
+          { className: 'midas-toast-success', duration: 4000 },
+        )
+      } else {
+        toast.error(`下单被拒 · ${order.reject_reason ?? '未知原因'}`, { duration: 5000 })
+      }
+      onClose()
+    } catch (e) {
+      toast.error(e instanceof VirtualApiError ? e.detail : '下单失败')
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4"
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div className="w-full max-w-md rounded-lg border border-midas-red bg-cream p-6 shadow-xl">
+        <div className="mb-3 flex justify-center">
+          <VirtualBadge size="sm" />
+        </div>
+        <h3 className="mb-5 text-center font-serif text-xl font-bold text-foreground">确认下单</h3>
+
+        <dl className="space-y-3 text-sm">
+          <Row label="标的">
+            <span className="font-mono">{symbol}</span>
+            {name && <span className="ml-2 text-xs text-muted-foreground">· {name}</span>}
+          </Row>
+          <Row label="操作">
+            <span className="rounded bg-midas-red px-2 py-0.5 text-xs font-medium text-white">
+              {action.label}
+            </span>
+          </Row>
+          <Row label="数量">
+            <span className="font-mono">{quantity}</span>
+          </Row>
+
+          <div className="my-2 border-t border-paper" />
+
+          <Row label="市场价" muted>
+            <span className="font-mono">
+              {marketPrice ? formatMoney(marketPrice, currency) : '—'}
+            </span>
+          </Row>
+          <Row label="预估成交价" muted>
+            <span className="font-mono">
+              {estimate ? formatMoney(estimate.fillPrice, currency, { decimals: 4 }) : '—'}
+              <span className="ml-1 text-xs text-muted-foreground/70">(含滑点)</span>
+            </span>
+          </Row>
+          {market !== 'us' && (
+            <Row label="预估手续费" muted>
+              <span className="font-mono">
+                {estimate ? formatMoney(estimate.commission, currency, { decimals: 4 }) : '—'}
+              </span>
+            </Row>
+          )}
+
+          <div className="my-2 border-t border-paper" />
+
+          {action.intent === 'open' ? (
+            <>
+              <Row label={action.positionSide === 'short' ? '锁定担保' : '预估成本'}>
+                <span className="font-mono text-base font-bold text-midas-red">
+                  {estimate ? formatMoney(cashNeeded, currency) : '—'}
+                </span>
+              </Row>
+              <Row label="可用余额" muted>
+                <span className="font-mono">{formatMoney(availableCash, currency)}</span>
+              </Row>
+            </>
+          ) : (
+            <Row label="可平数量" muted>
+              <span className="font-mono">{heldQty}</span>
+            </Row>
+          )}
+        </dl>
+
+        {action.intent === 'open' && estimate && !enoughCash && (
+          <p className="mt-3 rounded-md bg-midas-red-glow px-3 py-2 text-xs text-midas-red">
+            {action.positionSide === 'short' ? '现金担保不足' : '余额不足'} · 差{' '}
+            {formatMoney(cashNeeded - availableCash, currency)}
+          </p>
+        )}
+        {action.intent === 'close' && !enoughPosition && (
+          <p className="mt-3 rounded-md bg-midas-red-glow px-3 py-2 text-xs text-midas-red">
+            {action.positionSide === 'short' ? '空头持仓不足' : '持仓不足'} · 最多 {heldQty}
+          </p>
+        )}
+        {action.positionSide === 'short' && action.intent === 'close' && (
+          <p className="mt-2 text-[11px] text-muted-foreground/70">
+            平空返还担保 + 已实现盈亏(成交后按开仓均价结算)
+          </p>
+        )}
+
+        <p className="mt-5 text-center text-[10px] text-muted-foreground/70">
+          本次为模拟交易,不构成投资建议
+        </p>
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-paper bg-background px-4 py-2 text-sm text-foreground hover:bg-cream"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            className={cn(
+              'rounded-md px-4 py-2 text-sm font-medium text-white transition-colors',
+              canSubmit ? 'bg-midas-red hover:bg-midas-red-deep' : 'cursor-not-allowed bg-midas-red/30',
+            )}
+          >
+            {place.isPending ? '提交中…' : `确认${action.label}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ===== 小组件 =====
+
+function PanelShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-md border border-paper bg-background p-3">
+      <header className="mb-3 flex items-center justify-between">
+        <p className="font-serif text-sm font-bold text-foreground">下单 · 模拟盘</p>
+        <VirtualBadge size="sm" />
+      </header>
+      {children}
+    </div>
+  )
+}
+
+function GateNote({
+  title, hint, href, cta,
+}: {
+  title: string; hint: string; href: '/login' | '/settings/wallet'; cta: string
+}) {
+  return (
+    <div className="rounded-md border border-dashed border-paper bg-cream p-4 text-center">
+      <p className="mb-1 text-sm font-medium text-foreground">{title}</p>
+      <p className="mb-3 text-xs leading-relaxed text-muted-foreground/80">{hint}</p>
+      <Link
+        href={href}
+        className="inline-flex items-center rounded-md border border-midas-red px-3 py-1 text-xs text-midas-red transition-colors hover:bg-midas-red-glow"
+      >
+        {cta}
+      </Link>
+    </div>
+  )
+}
+
+function OrderButton({
+  variant, onClick, children,
+}: {
+  variant: 'solid' | 'outline'; onClick: () => void; children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'rounded-md px-4 py-2.5 text-sm font-medium transition-colors',
+        variant === 'solid'
+          ? 'bg-midas-red text-white hover:bg-midas-red-deep'
+          : 'border border-midas-red text-midas-red hover:bg-midas-red-glow',
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
+function Row({
+  label, children, muted,
+}: {
+  label: string; children: React.ReactNode; muted?: boolean
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <dt className={cn('text-xs', muted ? 'text-muted-foreground/70' : 'text-muted-foreground')}>
+        {label}
+      </dt>
+      <dd className="text-right text-foreground">{children}</dd>
+    </div>
+  )
+}

@@ -13,6 +13,8 @@ export type Currency = 'CNY' | 'USD' | 'USDT'
 export type OrderSide = 'buy' | 'sell'
 export type OrderType = 'market'
 export type OrderStatus = 'filled' | 'rejected'
+// 3.4 · 持仓方向 · long=做多(A股/加密/美股做多)· short=美股卖空(SELL 开空 / BUY 平空)
+export type PositionSide = 'long' | 'short'
 
 export interface VirtualAccount {
   id: number
@@ -28,6 +30,7 @@ export interface PositionView {
   id: number
   symbol: string
   market: Market
+  position_side: PositionSide
   quantity: string
   avg_entry_price: string
   current_price: string | null
@@ -51,6 +54,7 @@ export interface Position {
   id: number
   symbol: string
   market: Market
+  position_side: PositionSide
   quantity: string
   avg_entry_price: string
   realized_pnl: string | null
@@ -64,6 +68,7 @@ export interface VirtualOrder {
   symbol: string
   market: Market
   side: OrderSide
+  position_side: PositionSide
   order_type: OrderType
   quantity: string
   price: string | null
@@ -169,6 +174,8 @@ export interface PlaceOrderInput {
   market: Market
   side: OrderSide
   quantity: string
+  // 3.4 · 不传 = long(后端默认 · A股/加密/美股做多原行为不变)· short 仅美股卖空
+  position_side?: PositionSide
 }
 
 export async function placeOrder(

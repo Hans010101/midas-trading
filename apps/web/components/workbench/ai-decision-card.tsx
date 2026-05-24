@@ -28,12 +28,27 @@ import { useAiDecision } from '@/hooks/use-ai-decision'
 import type { CompositeLabel, DecisionCard } from '@/lib/api/ai-decision'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
 import { cn } from '@/lib/utils'
+import type { Market, Period } from '@midas/shared'
 
 
-export function AiDecisionCard() {
-  const symbol = useWorkbenchStore((s) => s.symbol)
-  const market = useWorkbenchStore((s) => s.market)
-  const period = useWorkbenchStore((s) => s.period)
+interface AiDecisionCardProps {
+  /** 不传 = 读 workbench store(工作台原行为)· 详情页传入覆盖(spot-preview 复用)。 */
+  symbol?: string
+  market?: Market
+  period?: Period
+}
+
+export function AiDecisionCard({
+  symbol: propSymbol,
+  market: propMarket,
+  period: propPeriod,
+}: AiDecisionCardProps = {}) {
+  const storeSymbol = useWorkbenchStore((s) => s.symbol)
+  const storeMarket = useWorkbenchStore((s) => s.market)
+  const storePeriod = useWorkbenchStore((s) => s.period)
+  const symbol = propSymbol ?? storeSymbol
+  const market = propMarket ?? storeMarket
+  const period = propPeriod ?? storePeriod
 
   const query = useAiDecision({ symbol, market, period })
 

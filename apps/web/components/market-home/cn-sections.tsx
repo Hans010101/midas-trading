@@ -39,6 +39,15 @@ function fmtAmount(n: number): string {
 }
 const upDown = (n: number) => (n >= 0 ? 'text-up' : 'text-down')
 
+// 行点击 → 新标签打开 A股个股详情页(纯做多下单)· 同 crypto-market 模式
+function openDetail(symbol: string, name: string) {
+  window.open(
+    `/cn-preview?symbol=${encodeURIComponent(symbol)}&name=${encodeURIComponent(name)}`,
+    '_blank',
+    'noopener,noreferrer',
+  )
+}
+
 export function CnSections() {
   const q = useQuery({
     queryKey: ['cn-board'],
@@ -109,7 +118,12 @@ export function CnSections() {
                 </TRow>
               )}
               {rows.map((r, i) => (
-                <TRow key={r.symbol}>
+                <TRow
+                  key={r.symbol}
+                  onClick={() => openDetail(r.symbol, r.name)}
+                  className="cursor-pointer transition-colors hover:bg-midas-red-glow/30"
+                  title="点击查看详情 · 模拟下单"
+                >
                   <TCell align="center" mono className="text-xs text-muted-foreground/70">
                     {i + 1}
                   </TCell>
@@ -129,7 +143,7 @@ export function CnSections() {
             </tbody>
           </DataTable>
           <p className="mt-2 text-[11px] text-muted-foreground/60">
-            个股详情页将于 3.4 上线 · 数据 Sina 实时快照 · 仅供参考,不构成投资建议
+            点击个股看详情 / 模拟下单 · 数据 Sina 实时快照 · 仅供参考,不构成投资建议
           </p>
         </section>
       )}
