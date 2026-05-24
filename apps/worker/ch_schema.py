@@ -72,11 +72,69 @@ ORDER BY (market, trade_date)
 SETTINGS index_granularity = 8192
 """
 
+# cn_spot_snapshot · A股全市场个股快照(0023 阶段③ · 3.2)· 与 init.sql 一致
+_CREATE_CN_SPOT_SNAPSHOT = """
+CREATE TABLE IF NOT EXISTS cn_spot_snapshot (
+    symbol String,
+    name String,
+    ts DateTime,
+    last_price Float64,
+    change_pct Float64,
+    change_amount Float64,
+    amount Float64,
+    volume Float64,
+    ingested_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toDate(ts)
+ORDER BY (ts, symbol)
+TTL ingested_at + INTERVAL 2 DAY
+SETTINGS index_granularity = 8192
+"""
+
+# cn_market_breadth · A股情绪条单行(0023 阶段③ · 3.2)· 与 init.sql 一致
+_CREATE_CN_MARKET_BREADTH = """
+CREATE TABLE IF NOT EXISTS cn_market_breadth (
+    ts DateTime,
+    up_count UInt32,
+    down_count UInt32,
+    flat_count UInt32,
+    limit_up_count UInt32,
+    limit_down_count UInt32,
+    total_amount Float64,
+    ingested_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(ts)
+ORDER BY ts
+TTL ingested_at + INTERVAL 30 DAY
+SETTINGS index_granularity = 8192
+"""
+
+# cn_sector_snapshot · A股行业板块快照(0023 阶段③ · 3.2)· 与 init.sql 一致
+_CREATE_CN_SECTOR_SNAPSHOT = """
+CREATE TABLE IF NOT EXISTS cn_sector_snapshot (
+    name String,
+    ts DateTime,
+    change_pct Float64,
+    stock_count UInt32,
+    total_amount Float64,
+    leader_name String,
+    leader_change_pct Float64,
+    ingested_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(ts)
+ORDER BY (ts, name)
+TTL ingested_at + INTERVAL 2 DAY
+SETTINGS index_granularity = 8192
+"""
+
 # 未来新增 CH 表 → 往这个 list 里加一条幂等 DDL 即可
 _DDL_STATEMENTS: tuple[str, ...] = (
     _CREATE_PREMIUM_INDEX,
     _CREATE_MARKET_INDEX_SNAPSHOT,
     _CREATE_MARKET_TRADE_CALENDAR,
+    _CREATE_CN_SPOT_SNAPSHOT,
+    _CREATE_CN_MARKET_BREADTH,
+    _CREATE_CN_SECTOR_SNAPSHOT,
 )
 
 
