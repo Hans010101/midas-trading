@@ -289,3 +289,40 @@ PARTITION BY toYYYYMM(ts)
 ORDER BY (ts, name)
 TTL ingested_at + INTERVAL 2 DAY
 SETTINGS index_granularity = 8192;
+
+-- ============================================================================
+-- 0023 阶段③ · 美股榜单 / 行业·中概板块(3.3)· 数据源 yfinance 批量(策展池 · 决策⑥)
+-- ============================================================================
+-- ⚠️ 与 apps/worker/ch_schema.py 的 DDL 必须保持一致。
+--
+-- us_spot_snapshot · 策展池个股快照(重点关注池 · 非全市场)· 每次扫描同一 ts 写全池
+--   成交额 amount = 现价 × 成交量(美元估 · yfinance 无直接美元成交额)
+CREATE TABLE IF NOT EXISTS us_spot_snapshot (
+    symbol String,                          -- yfinance 代码 'AAPL'
+    name String,                            -- 中文名
+    sector String,                          -- 板块(11 GICS 行业 / 中概股)
+    ts DateTime,                            -- 快照时间(UTC · 一次扫描全池同值)
+    last_price Float64,
+    change_pct Float64,                     -- 涨跌幅 %(可负)
+    amount Float64,                         -- 成交额(美元估 = close × volume)
+    volume Float64,                         -- 成交量(股)
+    ingested_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(ts)
+ORDER BY (ts, symbol)
+TTL ingested_at + INTERVAL 2 DAY
+SETTINGS index_granularity = 8192;
+
+-- us_sector_snapshot · 板块聚合(行业 + 中概股)· change_pct = 成分等权均值
+CREATE TABLE IF NOT EXISTS us_sector_snapshot (
+    name String,                            -- 板块名(科技 / 金融 / 中概股 …)
+    ts DateTime,
+    change_pct Float64,                     -- 成分等权均值涨跌幅
+    stock_count UInt32,
+    total_amount Float64,                    -- 板块成交额(美元估)
+    ingested_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(ts)
+ORDER BY (ts, name)
+TTL ingested_at + INTERVAL 2 DAY
+SETTINGS index_granularity = 8192;

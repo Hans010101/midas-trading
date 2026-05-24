@@ -18,12 +18,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import UTC, datetime
 
+import pandas as pd
 import yfinance as yf
 
 from app.schemas.market import Kline, Period, SymbolMeta
 from app.schemas.market_home import IndexQuote
+from app.schemas.us_market import UsSpotRow
 from app.services.data_sources.base import BaseDataSource
 from app.services.data_sources.exceptions import (
     DataFormatError,
@@ -150,6 +153,85 @@ class YFinanceUsSource(BaseDataSource):
                     change_point=last - prev,
                     change_pct=((last - prev) / prev * 100) if prev > 0 else 0.0,
                 ),
+            )
+        return out
+
+    # ===========================
+    # 策展池批量报价(0023 阶段③ · 3.3)· yfinance 批量 · 分块错峰避限流
+    # ===========================
+
+    async def fetch_pool_quotes(
+        self, pool: tuple[tuple[str, str, str], ...],
+    ) -> list[UsSpotRow]:
+        """批量拉策展池报价(决策⑥)· pool = ((symbol, name, sector), ...)。
+
+        yf.download 批量 + 分块(每块 40 + sleep 1.5s)· 避免触发 yfinance 限流。
+        成交额 = 现价 × 成交量(美元估 · yfinance 无直接美元成交额)。
+        盘前盘后异动本期不做(yfinance pre/post 质量参差 + 批量重 · 待数据源升级)。
+        """
+
+        async def _do() -> list[UsSpotRow]:
+            return await asyncio.to_thread(self._fetch_pool_sync, pool)
+
+        return await self._retry(op="fetch_pool_quotes", symbol="<pool>", coro_factory=_do)
+
+    def _fetch_pool_sync(
+        self, pool: tuple[tuple[str, str, str], ...],
+    ) -> list[UsSpotRow]:
+        meta = {sym: (name, sector) for sym, name, sector in pool}
+        symbols = [sym for sym, _, _ in pool]
+        chunk_size = 40
+        chunk_pause_s = 1.5
+        out: list[UsSpotRow] = []
+        for i in range(0, len(symbols), chunk_size):
+            chunk = symbols[i : i + chunk_size]
+            try:
+                df = yf.download(
+                    chunk, period="2d", interval="1d", auto_adjust=True,
+                    group_by="ticker", progress=False, threads=True,
+                )
+            except Exception as e:  # noqa: BLE001 · 单批失败不致命 · 跳过
+                logger.warning("[yfinance] pool 批 %d 拉取失败 · 跳过:%s", i // chunk_size, e)
+                continue
+            if df is None or df.empty:
+                continue
+            cols_l0 = (
+                set(df.columns.get_level_values(0))
+                if isinstance(df.columns, pd.MultiIndex)
+                else None
+            )
+            for sym in chunk:
+                try:
+                    if cols_l0 is not None:
+                        if sym not in cols_l0:
+                            continue
+                        sub = df[sym]
+                    else:
+                        sub = df  # 单票降级:整表即该票
+                    close_s = sub["Close"].dropna()
+                    if close_s.empty:
+                        continue
+                    last = float(close_s.iloc[-1])
+                    prev = float(close_s.iloc[-2]) if len(close_s) > 1 else last  # noqa: PLR2004
+                    if last <= 0:
+                        continue
+                    vol_s = sub["Volume"].dropna()
+                    vol = float(vol_s.iloc[-1]) if not vol_s.empty else 0.0
+                    name, sector = meta[sym]
+                    out.append(
+                        UsSpotRow(
+                            symbol=sym, name=name, sector=sector, last_price=last,
+                            change_pct=((last - prev) / prev * 100) if prev > 0 else 0.0,
+                            amount=max(last * vol, 0.0), volume=max(vol, 0.0),
+                        ),
+                    )
+                except (KeyError, ValueError, TypeError, IndexError):
+                    continue
+            if i + chunk_size < len(symbols):
+                time.sleep(chunk_pause_s)
+        if not out:
+            raise UpstreamUnavailableError(
+                "yfinance 策展池全部批次无数据", market="us", upstream="yfinance",
             )
         return out
 
