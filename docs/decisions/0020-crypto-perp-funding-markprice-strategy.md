@@ -2,7 +2,7 @@
 
 ## 状态
 
-**Proposed**(2026-05-24)· 待产品负责人审定 **§11「待拍板决策」** 后转 Approved,再按本 ADR 写实现代码。
+**Approved**(2026-05-24)· §11 十一条决策已由产品负责人审定锁定(见该节「最终结论」)。按 §9 分期先做 **M2-C.2.1**(真 mark price + premiumIndex 采集 + 修 futures/info)。
 
 > 只做设计,不含已落地实现代码。表结构 / 任务 / 公式均为「建议」,审定后才写。
 > 接 ADR-0019(M2-C.1 核心闭环,已上线)· 本文是其 §4.8 / §11(D5/D7/D10)的展开。
@@ -176,21 +176,23 @@ crypto_premium_index (
 
 ---
 
-## §11 待产品负责人拍板的决策(最重要 · 逐条)
+## §11 设计决策 —— 最终结论(产品负责人 2026-05-24 已审定锁定)
 
-| # | 决策 | 选项 | 推荐 |
-|---|---|---|---|
-| **E1** | funding interval 存储 | A 落库(统一表列 / 独立小表)· B 结算时实时拉 fundingInfo | **A · 落库**(慢刷,稳定)|
-| **E2** | premiumIndex 数据表 | A **统一表** `crypto_premium_index`(mark/index/funding/nextFunding/interval 一表)· B mark 高频表 + funding_info 慢表 分开 | **A · 统一表**(一表多用,最省)|
-| **E3** | 资金费结算触发 | A 每 UTC 整点扫 + `hour % interval` 对齐 · B premiumIndex.nextFundingTime 逐 symbol 驱动 | **A**(简单、覆盖所有周期、对齐交易所整点)|
-| **E4** | 资金费扣款 & 致强平 | A 只扣 cash、**不联动强平**(简化)· B 纳入权益、**可致强平**(真实,改强平核心)| **A 起步**(B 留 2.3 / M2-C.3)|
-| **E5** | 资金费流水 | A 新建 `virtual_perp_funding` 流水表 · B 只更 `funding_paid`+cash 不建流水 | **A**(可复盘 + 可展示)|
-| **E6** | mark price 切源影响 | 撮合/强平价 ticker `last_price` → premiumIndex `markPrice`,数值微变是否接受 | **接受**(mark 更官方、抗插针)|
-| **E7** | 策略③基差降级 | A 接 premiumIndex 后**不降级**(用 mark−index 算基差)· B 仍按 0019 D10 降级为只看缠论 | **A · 不降级**(基差已解锁)|
-| **E8** | 策略信号算在哪 | A 前端算(用已取数据 + 调 analysis/chan)· B 后端 `/perp/strategy-signals` 聚合端点 | **A · 前端**(少一个端点)|
-| **E9** | 资金费方向确认 | `rate>0`:多头付、空头收(标准永续)· 计入虚拟盈亏 | **确认标准方向** |
-| **E10** | `next_funding_time` 修复 | A 回源 premiumIndex 真 `nextFundingTime` · B 用 interval 算(ts+interval) | **A · 回源 premiumIndex**(交易所真值)|
-| **E11** | `funding_rate_refresh`(15min limit=1)去留 | A 保留(独立资金费率时序)· B 被 premiumIndex.last_funding_rate 取代 | 倾向 **A 保留**(各司其职),请确认 |
+> 11 条已定。实现以本表为准,不再以「推荐」对待。
+
+| # | 决策 | ✅ 最终结论 |
+|---|---|---|
+| **E1** | funding interval 存储 | **落库**(并入统一表 `funding_interval_hours` 列,慢刷)|
+| **E2** | premiumIndex 数据表 | **统一表** `crypto_premium_index`(mark/index/funding/nextFunding/interval 一表)|
+| **E3** | 资金费结算触发 | **每 UTC 整点扫 + `hour % interval` 对齐**(覆盖 1h/2h/4h/8h)|
+| **E4** | 资金费扣款 & 致强平 | **A · 只扣虚拟现金余额、不联动强平** —— 余额即便被扣为负也不因此强平,强平仍只看价格触没触强平价。B(纳入权益可致强平)**登记为 M2-C 后续增强,本期不做** |
+| **E5** | 资金费流水 | **新建 `virtual_perp_funding` 流水表**(可复盘 + 可展示)|
+| **E6** | mark price 切源影响 | **接受** 撮合/强平价 ticker `last_price` → premiumIndex `markPrice` 的数值微变(mark 更官方、抗插针)|
+| **E7** | 策略③基差 | **不降级 · 做完整版** —— 基差 = mark − index 随 premiumIndex 天然可算,0019 D10 降级前提解除 |
+| **E8** | 策略信号算在哪 | **前端算**(用已取数据 + 调 analysis/chan)|
+| **E9** | 资金费方向 | `rate>0`:多头付、空头收(标准永续)· 计入虚拟盈亏 |
+| **E10** | `next_funding_time` 修复 | **回源 premiumIndex 真 `nextFundingTime`** |
+| **E11** | `funding_rate_refresh`(15min)去留 | **保留**(独立资金费率时序,各司其职)|
 
 ---
 
@@ -207,3 +209,11 @@ crypto_premium_index (
 ### v1 (2026-05-24) · 初稿 Proposed
 
 接 0019(M2-C.1 上线)· 展开资金费结算(按各币周期)+ 真标记价(premiumIndex)+ 实战策略清单三块。核心洞察:premiumIndex 一源解三块(mark/资金费/基差),建议统一表 + 先做 mark price。待 §11 十一条决策审定后转 Approved。
+
+### v2 (2026-05-24) · Approved
+
+产品负责人审定 §11 十一条决策,状态转 **Approved**。关键锁定:
+- **E4 = A**:资金费只扣虚拟现金余额、**不联动强平**(余额可被扣为负也不因此强平;强平仍只看价格)· B(纳入权益致强平)登记 M2-C 后续。
+- **E7 = 不降级**:策略③用真实基差(mark − index,随 premiumIndex 解锁),D10 降级前提解除。
+- E1/E2/E3/E5/E6/E8/E9/E10/E11 采纳推荐(统一表 · 整点扫+interval 对齐 · 新建 virtual_perp_funding · 接受 mark 切源微变 · 策略前端算 · next_funding_time 回源 premiumIndex · 保留 funding_rate_refresh)。
+- 分期:先做 **M2-C.2.1**(premiumIndex 采集 + 真 mark price 换源 + 修 futures/info),验收后再 2.2 资金费 / 2.3 策略。
