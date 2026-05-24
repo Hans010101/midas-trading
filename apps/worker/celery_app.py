@@ -20,6 +20,7 @@ from tasks import (  # noqa: E402, F401
     data_ingest,
     equity_snapshot,
     incremental,
+    market_home_ingest,
     notifications,
     perp_funding,
     perp_liquidation,

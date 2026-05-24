@@ -42,8 +42,42 @@ TTL ingested_at + INTERVAL 7 DAY
 SETTINGS index_granularity = 8192
 """
 
+# market_index_snapshot · 大盘指数快照(0023 阶段③ · 3.1)· cn/us 共表 · 与 init.sql 一致
+_CREATE_MARKET_INDEX_SNAPSHOT = """
+CREATE TABLE IF NOT EXISTS market_index_snapshot (
+    market String,
+    symbol String,
+    name String,
+    ts DateTime,
+    last_point Float64,
+    prev_close Float64,
+    change_point Float64,
+    change_pct Float64,
+    ingested_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(ts)
+ORDER BY (market, symbol, ts)
+TTL ingested_at + INTERVAL 7 DAY
+SETTINGS index_granularity = 8192
+"""
+
+# market_trade_calendar · 交易日历(0023 阶段③ · 3.1)· 目前仅 cn · 与 init.sql 一致
+_CREATE_MARKET_TRADE_CALENDAR = """
+CREATE TABLE IF NOT EXISTS market_trade_calendar (
+    market String,
+    trade_date Date,
+    ingested_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+ORDER BY (market, trade_date)
+SETTINGS index_granularity = 8192
+"""
+
 # 未来新增 CH 表 → 往这个 list 里加一条幂等 DDL 即可
-_DDL_STATEMENTS: tuple[str, ...] = (_CREATE_PREMIUM_INDEX,)
+_DDL_STATEMENTS: tuple[str, ...] = (
+    _CREATE_PREMIUM_INDEX,
+    _CREATE_MARKET_INDEX_SNAPSHOT,
+    _CREATE_MARKET_TRADE_CALENDAR,
+)
 
 
 def ensure_crypto_ch_tables() -> None:
@@ -63,7 +97,7 @@ def ensure_crypto_ch_tables() -> None:
     try:
         for ddl in _DDL_STATEMENTS:
             client.command(ddl)
-        logger.info("[ch_schema] crypto CH 表 ensure 完成(%d 条 DDL)", len(_DDL_STATEMENTS))
+        logger.info("[ch_schema] CH 表 ensure 完成(%d 条 DDL)", len(_DDL_STATEMENTS))
     except Exception as exc:  # noqa: BLE001
         logger.warning("[ch_schema] 建表 DDL 执行失败:%s", exc)
     finally:

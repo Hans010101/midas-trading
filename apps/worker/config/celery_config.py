@@ -61,6 +61,26 @@ beat_schedule = {
         "schedule": crontab(minute="0"),
         "options": {"expires": 600},
     },
+    # ── 0023 阶段③ · A股/美股 市场首页数据采集(3.1 · 大盘指数 + 交易日历)──────────
+    # 指数只在各自交易时段采(非交易时段没新数据 · 省上游 + 省 CH 写)· 错峰 crypto。
+    "market-cn-index-scan": {
+        "task": "tasks.market.cn_index_scan",
+        # A股日盘(CST 9:30–15:00 · 含午休)· 每 2 分钟刷 Sina 指数快照 · 工作日。
+        "schedule": crontab(minute="*/2", hour="9-15", day_of_week="mon-fri"),
+        "options": {"expires": 110},
+    },
+    "market-us-index-scan": {
+        "task": "tasks.market.us_index_scan",
+        # 美股盘前+盘中+盘后(对国内 = 夜间 · 含 DST 偏移)· 覆盖 CST 20:00–次日 05:00。
+        "schedule": crontab(minute="*/2", hour="20-23,0-5"),
+        "options": {"expires": 110},
+    },
+    "market-cn-calendar-refresh": {
+        "task": "tasks.market.cn_calendar_refresh",
+        # 交易日历慢变 · 每日 08:00 CST 开盘前刷一次(全年交易日 · 给状态机判交易日)。
+        "schedule": crontab(hour="8", minute="0"),
+        "options": {"expires": 3000},
+    },
     # ── M2-A · Crypto Pro 数据采集(0017 ADR)· 常驻定时刷新 ────────────────────
     # 错峰原则:Binance 四个采集(ticker/oi/longshort/funding)分钟数互不重叠,避免
     #   同一刻对 Binance 合约接口集中打请求(IP 权重限流)。oi 落在 5 的倍数;
