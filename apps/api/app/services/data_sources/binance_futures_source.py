@@ -355,6 +355,34 @@ class BinanceFuturesSource(BaseDataSource):
         return await self._retry(op="fetch_premium_index", symbol="*", coro_factory=_do)
 
     # ========================================================================
+    # 5.6 · Funding Info · 各币资金费结算周期(非 8h 币)· M2-C.2.2
+    # ========================================================================
+
+    async def fetch_funding_info(self) -> dict[str, int]:
+        """各币资金费结算周期 · /fapi/v1/fundingInfo(无参 = 全量)。
+
+        ⚠️ Binance 该端点【只返回非 8h 周期的币】(4h/2h/1h 等);未列出的币 = 8h。
+        返回 {symbol: fundingIntervalHours}(只含上游列出的)· 调用方对未列出的
+        symbol 用 .get(sym, 8) 兜底为 8h。慢变(交易所偶尔调),权重极低。
+        """
+        async def _do() -> dict[str, int]:
+            data = await self._get_json("/fapi/v1/fundingInfo")
+            if not isinstance(data, list):
+                return {}
+            out: dict[str, int] = {}
+            for r in data:
+                try:
+                    sym = str(r["symbol"])
+                    iv = int(r["fundingIntervalHours"])
+                except (KeyError, ValueError, TypeError):
+                    continue
+                if iv > 0:
+                    out[sym] = iv
+            return out
+
+        return await self._retry(op="fetch_funding_info", symbol="*", coro_factory=_do)
+
+    # ========================================================================
     # 6 · 合约元信息(给 /api/v1/crypto/futures/{symbol}/info 用)
     # ========================================================================
 

@@ -154,14 +154,30 @@ async def _premium_index_scan_async() -> dict[str, Any]:
     撮合/强平价源(mark price)+ 基差(mark-index)+ futures/info 的真 nextFundingTime
     都吃这张表。单请求拉全市场(~500 perp)· 极轻 · 每分钟刷保证 ≤1min 新鲜。
     全市场存(不截断采集名单):任何用户可能开仓的 symbol 都有 mark,无需 intersect。
+
+    M2-C.2.2:顺带拉 fundingInfo(极轻 · 仅返非 8h 币)· 给每行 stamp 真实结算周期
+    funding_interval_hours(未列出默认 8)。资金费结算 worker(settle_funding)从本表读
+    interval 判断对齐(E1/E2 统一表落库)。fundingInfo 失败不影响 mark price 采集(降级默认 8)。
     """
     source = BinanceFuturesSource()
     ch = await _get_ch_client()
     try:
         items = await source.fetch_premium_index()
+        # fundingInfo 慢变但权重极低 · 折进本任务每轮一起拉(免独立 6h task + 跨任务状态);
+        # 失败时降级:interval 全默认 8,绝不阻断 mark price(撮合/强平价源)采集。
+        try:
+            interval_map = await source.fetch_funding_info()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[crypto.premium_index_scan] fundingInfo 失败 · interval 默认 8:%s", exc)
+            interval_map = {}
+        if interval_map:
+            items = [
+                it.model_copy(update={"funding_interval_hours": interval_map.get(it.symbol, 8)})
+                for it in items
+            ]
         n = await insert_premium_index(ch, items)
-        logger.info("[crypto.premium_index_scan] written=%d", n)
-        return {"written": n}
+        logger.info("[crypto.premium_index_scan] written=%d · non8h=%d", n, len(interval_map))
+        return {"written": n, "non_8h_symbols": len(interval_map)}
     finally:
         await source.close()
         await ch.close()
@@ -358,4 +374,4 @@ async def _fear_greed_refresh_async() -> dict[str, Any]:
 #   "crypto-long-short-scan":         crontab(minute="*/5"),              # 5 min
 #   "crypto-global-overview-refresh": crontab(minute="*/5"),              # 5 min
 #   "crypto-funding-rate-refresh":    crontab(minute="5", hour="*/8"),    # 8h · 错峰 5min
-#   "crypto-fear-greed-refresh":      crontab(hour="0", minute="30"),     # daily UTC 00:30 · CN 08:30
+#   "crypto-fear-greed-refresh":      crontab(hour="0", minute="30"),     # daily UTC 00:30
