@@ -582,6 +582,24 @@ async def select_premium_index_marks(
     return out
 
 
+async def select_premium_index_series(
+    client: AsyncClient, symbol: str, *, limit: int = 288,
+) -> list[tuple[datetime, float, float]]:
+    """某 symbol 最新 N 条 premium 时序 (ts, mark_price, index_price) · 返 ASC(0010 教训)。
+
+    给详情页 ⑥ 基差图(M2-C.2.4)· 基差率 = (mark - index) / index 由调用方算。
+    288 点 ≈ 24h @ 1min(premium_index_scan 每分钟一条)。
+    """
+    query = (
+        "SELECT ts, mark_price, index_price FROM crypto_premium_index "
+        "WHERE symbol = %(s)s ORDER BY ts DESC LIMIT %(n)s"
+    )
+    result = await client.query(query, parameters={"s": symbol, "n": limit})
+    rows = list(result.result_rows)
+    rows.reverse()  # → ASC
+    return [(_attach_utc(r[0]), float(r[1]), float(r[2])) for r in rows]
+
+
 async def select_latest_premium_index(
     client: AsyncClient, symbol: str,
 ) -> PremiumIndex | None:

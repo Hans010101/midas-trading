@@ -32,6 +32,7 @@ export interface PerpPosition {
   liquidation_price: string
   realized_pnl: string
   fee_paid: string
+  funding_paid: string // 累计资金费(M2-C.2.2)· 正=净付出,负=净收到
   opened_at: string
   closed_at: string | null
   close_reason: PerpCloseReason | null
@@ -39,6 +40,18 @@ export interface PerpPosition {
   unrealized_pnl: string | null
   liquidation_distance_pct: string | null
   roe_pct: string | null
+}
+
+export interface PerpFunding {
+  id: number
+  symbol: string
+  side: PerpSide
+  funding_rate: string // decimal · 0.0001 = 0.01%
+  mark_price: string
+  quantity: string
+  payment: string // USDT · 正=付出(现金减少)· 负=收到
+  funding_ts: string // 对齐的结算整点
+  settled_at: string
 }
 
 export interface PerpOrder {
@@ -141,6 +154,22 @@ export async function fetchPerpOrders(
   )
   if (!r.ok) throw new PerpApiError(r.status, await readDetail(r))
   return (await r.json()) as PerpOrder[]
+}
+
+export async function fetchPerpFunding(
+  token: string,
+  opts: { symbol?: string; limit?: number } = {},
+  signal?: AbortSignal,
+): Promise<PerpFunding[]> {
+  const params = new URLSearchParams()
+  if (opts.symbol) params.set('symbol', opts.symbol)
+  if (opts.limit) params.set('limit', String(opts.limit))
+  const r = await fetch(
+    `${API_BASE}/api/v1/virtual/perp/funding?${params.toString()}`,
+    { headers: authHeaders(token), signal },
+  )
+  if (!r.ok) throw new PerpApiError(r.status, await readDetail(r))
+  return (await r.json()) as PerpFunding[]
 }
 
 // ── 前端预估(开仓预览 · ADR-0019 §5.1 实时算 · 与后端公式一致)────────────────

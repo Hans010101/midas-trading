@@ -32,6 +32,8 @@ from fastapi import APIRouter, HTTPException, Path, Query, status
 
 from app.api.deps import ClickHouseDep
 from app.schemas.crypto import (
+    BasisPoint,
+    BasisSeriesResponse,
     CryptoOverviewResponse,
     FearGreedResponse,
     FundingRateResponse,
@@ -53,6 +55,7 @@ from app.services.clickhouse_crypto import (
     select_long_short,
     select_open_interest,
     select_perp_total_quote_volume,
+    select_premium_index_series,
     select_tickers_by_symbols,
 )
 
@@ -375,6 +378,39 @@ async def get_futures_info(
         open_interest_coin=oi.oi_coin,
         open_interest_usd=oi.oi_usd,
     )
+
+
+# ============================================================================
+# 6.5 · GET /futures/{symbol}/basis · 基差时序(详情页 ⑥ 基差图)· M2-C.2.4
+# ============================================================================
+
+
+@router.get(
+    "/futures/{symbol}/basis",
+    response_model=BasisSeriesResponse,
+    summary="基差时序(合约价 / 指数价 / 基差率)· 读 crypto_premium_index",
+    description=(
+        "M2-C.2.4 · 来自 premiumIndex 每分钟采集的 crypto_premium_index 时序。"
+        "基差率 = (mark − index) / index × 100(% · 可正可负)。空 = 未预热 / 待采集。"
+    ),
+)
+async def get_basis_series(
+    ch: ClickHouseDep,
+    symbol: Annotated[str, Path(min_length=3, examples=["BTCUSDT"])],
+    limit: Annotated[int, Query(ge=1, le=1440)] = 288,
+) -> BasisSeriesResponse:
+    rows = await select_premium_index_series(
+        ch._client, symbol, limit=limit,  # noqa: SLF001
+    )
+    items = [
+        BasisPoint(
+            ts=ts, mark_price=mark, index_price=index,
+            basis_pct=((mark - index) / index * 100) if index > 0 else 0.0,
+        )
+        for ts, mark, index in rows
+        if mark > 0 and index > 0
+    ]
+    return BasisSeriesResponse(symbol=symbol, items=items)
 
 
 # ============================================================================

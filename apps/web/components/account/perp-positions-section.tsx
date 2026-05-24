@@ -18,11 +18,17 @@ import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 
 import { VirtualBadge } from '@/components/ui/virtual-badge'
-import { usePerpOrders, usePerpPositions, usePlacePerpOrder } from '@/hooks/use-perp'
+import {
+  usePerpFunding,
+  usePerpOrders,
+  usePerpPositions,
+  usePlacePerpOrder,
+} from '@/hooks/use-perp'
 import { useAccount } from '@/hooks/use-virtual'
 import {
   PerpApiError,
   type PerpAction,
+  type PerpFunding,
   type PerpPosition,
 } from '@/lib/api/perp'
 import { cn } from '@/lib/utils'
@@ -74,6 +80,7 @@ export function PerpPositionsSection() {
   const { data: account } = useAccount('crypto') // null = 未激活
   const posQ = usePerpPositions({ includeClosed: true })
   const ordersQ = usePerpOrders({ limit: 50 })
+  const fundingQ = usePerpFunding({ limit: 50 })
   const placeOrder = usePlacePerpOrder()
   const [confirm, setConfirm] = useState<PerpPosition | null>(null)
 
@@ -86,6 +93,7 @@ export function PerpPositionsSection() {
     [posQ.data],
   )
   const orders = ordersQ.data ?? []
+  const funding = fundingQ.data ?? []
 
   if (!authed) return null
 
@@ -145,6 +153,7 @@ export function PerpPositionsSection() {
                     <th className="py-2 text-right">标记价</th>
                     <th className="py-2 text-right">浮动盈亏 / ROE</th>
                     <th className="py-2 text-right">强平价</th>
+                    <th className="py-2 text-right">累计资金费</th>
                     <th className="py-2 text-right">操作</th>
                   </tr>
                 </thead>
@@ -173,6 +182,13 @@ export function PerpPositionsSection() {
                           ${fmtP(p.liquidation_price)}
                           {dist != null && <span className="text-[11px]"> ({dist.toFixed(1)}%)</span>}
                           <IsolatedTag />
+                        </td>
+                        <td className={cn('py-2 text-right font-mono text-xs', num(p.funding_paid) > 0 ? 'text-bear' : num(p.funding_paid) < 0 ? 'text-bull' : 'text-muted-foreground/60')}>
+                          {num(p.funding_paid) === 0
+                            ? '—'
+                            : num(p.funding_paid) > 0
+                              ? `付 ${fmtU(p.funding_paid)}`
+                              : `收 ${num(p.funding_paid) < 0 ? fmtU(String(-num(p.funding_paid))) : '0'}`}
                         </td>
                         <td className="py-2 text-right">
                           <button
@@ -294,6 +310,60 @@ export function PerpPositionsSection() {
                   </tbody>
                 </table>
               </div>
+            </>
+          )}
+
+          {/* ④ 资金费记录(M2-C.2.2)· 每整点按币周期结算 · 只读复盘 */}
+          {funding.length > 0 && (
+            <>
+              <h3 className="mb-2 mt-6 font-serif text-base font-bold text-foreground">
+                资金费记录 · {funding.length} 笔
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[760px] text-sm">
+                  <thead>
+                    <tr className="border-b border-paper text-xs text-muted-foreground">
+                      <th className="py-2 text-left">结算时刻</th>
+                      <th className="py-2 text-left">标的</th>
+                      <th className="py-2 text-left">方向</th>
+                      <th className="py-2 text-right">资金费率</th>
+                      <th className="py-2 text-right">标记价</th>
+                      <th className="py-2 text-right">数量</th>
+                      <th className="py-2 text-right">金额</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {funding.map((f: PerpFunding) => {
+                      const pay = num(f.payment)
+                      const rate = num(f.funding_rate)
+                      return (
+                        <tr key={f.id} className="border-b border-paper/60">
+                          <td className="py-2 text-xs text-muted-foreground">
+                            {new Date(f.funding_ts).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td className="py-2 font-mono text-xs">{f.symbol}</td>
+                          <td className="py-2">
+                            <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-bold text-white', f.side === 'long' ? 'bg-bull' : 'bg-bear')}>
+                              {f.side === 'long' ? '多' : '空'}
+                            </span>
+                          </td>
+                          <td className={cn('py-2 text-right font-mono text-xs', rate >= 0 ? 'text-bull' : 'text-bear')}>
+                            {rate >= 0 ? '+' : ''}{(rate * 100).toFixed(4)}%
+                          </td>
+                          <td className="py-2 text-right font-mono text-xs">${fmtP(f.mark_price)}</td>
+                          <td className="py-2 text-right font-mono text-xs">{num(f.quantity)}</td>
+                          <td className={cn('py-2 text-right font-mono text-xs', pay > 0 ? 'text-bear' : pay < 0 ? 'text-bull' : 'text-muted-foreground/60')}>
+                            {pay === 0 ? '0' : pay > 0 ? `付 ${fmtU(f.payment)}` : `收 ${fmtU(String(-pay))}`}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-2 text-[10px] text-muted-foreground/60">
+                资金费率为正:多头付、空头收 · 每币按各自结算周期(8h/4h…)在整点结算 · 只扣虚拟现金 · 全程虚拟
+              </p>
             </>
           )}
         </>

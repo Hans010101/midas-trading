@@ -23,6 +23,7 @@ import { CryptoMainChart } from '@/components/crypto-preview/crypto-main-chart'
 import { CryptoPerpOrders } from '@/components/crypto-preview/crypto-perp-orders'
 import { DimensionSection } from '@/components/crypto-preview/dimension-section'
 import { PerpOrderGuidance } from '@/components/crypto-preview/perp-order-guidance'
+import { StrategyChecklist } from '@/components/crypto-preview/strategy-checklist'
 import type { Period } from '@midas/shared'
 
 // 常见 quote · 用于把 Binance 风格 'BEATUSDT' 切回 ccxt 风格 'BEAT/USDT'
@@ -87,7 +88,11 @@ export function CryptoDetail() {
           />
           <PerpOrderGuidance futuresSymbol={futuresSymbol} klineSymbol={klineSymbol} />
           <CryptoPerpOrders futuresSymbol={futuresSymbol} />
-          <StrategyChecklist />
+          <StrategyChecklist
+            futuresSymbol={futuresSymbol}
+            klineSymbol={klineSymbol}
+            period={period}
+          />
         </aside>
       </div>
     </main>
@@ -99,25 +104,5 @@ export function CryptoDetail() {
 // ============================================================
 // (占位组件已删 · 替换为 components/crypto-preview/perp-order-guidance.tsx)
 
-// ============================================================
-// 右栏 3 · 实战策略清单(占位 · 待虚拟交易模块接入 M2-C.2)
-// ============================================================
-function StrategyChecklist() {
-  return (
-    <div className="rounded-lg border border-dashed border-gold/60 bg-gold/5 p-4">
-      <div className="mb-2 font-serif text-base font-bold">实战策略清单</div>
-      <p className="mb-3 rounded bg-gold/15 px-2 py-1 text-[11px] text-gold">
-        【占位 · 待虚拟交易模块接入(M2-C)】
-      </p>
-      <ul className="space-y-2 text-xs text-foreground/70 opacity-60">
-        <li className="flex gap-2"><span className="text-gold">▢</span> 资金费率为正且 OI 增 → 顺势虚拟开多</li>
-        <li className="flex gap-2"><span className="text-gold">▢</span> 大户多空比极端 → 反向预警</li>
-        <li className="flex gap-2"><span className="text-gold">▢</span> 缠论一卖 + 基差走弱 → 虚拟减仓</li>
-        <li className="flex gap-2"><span className="text-gold">▢</span> 强平价距现价 &lt; 5% → 降杠杆提示</li>
-      </ul>
-      <p className="mt-3 text-[10px] text-muted-foreground/70">
-        策略仅供参考,不构成投资建议 · 全程虚拟
-      </p>
-    </div>
-  )
-}
+// 右栏 3 · 实战策略清单 → 已接真实(StrategyChecklist · M2-C.2.3 · ADR-0020 Block3)
+// (占位组件已删 · 替换为 components/crypto-preview/strategy-checklist.tsx)

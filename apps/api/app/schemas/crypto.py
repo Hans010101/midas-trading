@@ -199,6 +199,34 @@ class PremiumIndex(BaseModel):
 
 
 # ============================================================================
+# 4.6 · 基差时序(详情页 ⑥ 基差图)· M2-C.2.4
+# ============================================================================
+
+
+class BasisPoint(BaseModel):
+    """基差时序单点 · 来自 crypto_premium_index(每分钟一条)。
+
+    基差率 basis_pct = (mark − index) / index × 100(% · 可正可负)。
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    ts: AwareDatetime
+    mark_price: float = Field(gt=0, description="标记价")
+    index_price: float = Field(gt=0, description="指数价")
+    basis_pct: float = Field(description="基差率 % · (mark−index)/index×100 · 可负")
+
+
+class BasisSeriesResponse(BaseModel):
+    """`/api/v1/crypto/futures/{symbol}/basis` 响应 · 给 ⑥ 基差图。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    symbol: str
+    items: list[BasisPoint]
+
+
+# ============================================================================
 # 5 · 全市场 Overview + Fear & Greed Index
 # ============================================================================
 

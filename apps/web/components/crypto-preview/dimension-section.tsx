@@ -8,10 +8,10 @@
  *   ② 大户多空比·账户数    → crypto_long_short_ratio   · 多/空 堆叠柱(归一 100%)+ 比值线
  *   ③ 大户多空比·持仓量    → crypto_long_short_ratio   · 同 ② 样式
  *   ⑤ 合约主动买卖量       → crypto_long_short_ratio   · 主买/主卖 对称双色柱(buy 正 / sell 负)
+ *   ⑥ 基差(basis)        → crypto_premium_index      · 合约价 + 指数价 + 基差率 三线(M2-C.2.4 接真)
  *
  * 占位(M2-B 数据缺口 · 上游未采集 · 绝不接真实数据 · 仅按目标样式画示意):
  *   ④ 多空人数比值(globalLongShortAccountRatio)→ 堆叠柱 + 比值线 示意
- *   ⑥ 基差(basis)→ 合约价 + 指数价 + 基差率 三线 示意
  *
  * 配色:多/买 = 青绿 · 空/卖 = 浅红(跟点金涨跌语义区分:这是多空/买卖,不是涨跌)。
  *       #6482A0 缠论中枢专用色本模块禁用。
@@ -31,7 +31,7 @@ import {
   YAxis,
 } from 'recharts'
 
-import { useLongShortRatio, useOpenInterest } from '@/hooks/use-crypto'
+import { useBasisSeries, useLongShortRatio, useOpenInterest } from '@/hooks/use-crypto'
 
 // 视觉 token(recharts 需 hex)
 const C_LONG = '#1FA383' // 青绿 · 多 / 买
@@ -90,6 +90,8 @@ export function DimensionSection({ futuresSymbol }: DimensionSectionProps) {
   // 288 点 = 24h @ 5min(任务4:数据点加密,曲线更细腻;采集 top100 扩容后历史变密)
   const oi = useOpenInterest(futuresSymbol, 288)
   const lsr = useLongShortRatio(futuresSymbol, 288)
+  // ⑥ 基差(M2-C.2.4)· crypto_premium_index 每分钟一条 · 288 点 ≈ 近 5h
+  const basis = useBasisSeries(futuresSymbol, 288)
 
   const oiData = (oi.data?.items ?? []).map((p) => ({
     t: hhmm(p.ts), full: mmddhhmm(p.ts), oi_coin: p.oi_coin, oi_usd: p.oi_usd,
@@ -111,6 +113,11 @@ export function DimensionSection({ futuresSymbol }: DimensionSectionProps) {
   const takerData = lsrItems.map((p) => ({
     t: hhmm(p.ts), full: mmddhhmm(p.ts),
     buy: p.taker_buy_vol, sell: -p.taker_sell_vol, // sell 取负 · 对称展示
+  }))
+
+  const basisData = (basis.data?.items ?? []).map((p) => ({
+    t: hhmm(p.ts), full: mmddhhmm(p.ts),
+    mark: p.mark_price, index: p.index_price, basisPct: +p.basis_pct.toFixed(3),
   }))
 
   return (
@@ -152,11 +159,11 @@ export function DimensionSection({ futuresSymbol }: DimensionSectionProps) {
           </ChartState>
         </ChartCard>
 
-        {/* ⑥ 基差 · 占位(M2-B 待补)· 按目标样式画示意 */}
-        <ChartCard title="⑥ 基差(basis)" sub="合约价 / 指数价 / 基差率 · 上游未采集" pending>
-          <SchematicOverlay reason="数据源 M2-B 待补 · 仅示意样式 · 不接真实数据">
-            <BasisChart data={SAMPLE_BASIS} />
-          </SchematicOverlay>
+        {/* ⑥ 基差 · 真实(M2-C.2.4)· crypto_premium_index 每分钟 mark/index 时序 */}
+        <ChartCard title="⑥ 基差(basis)" sub="合约价 / 指数价 / 基差率 · premiumIndex 每分钟">
+          <ChartState isLoading={basis.isPending} isError={basis.isError} isEmpty={basis.isSuccess && basisData.length === 0}>
+            <BasisChart data={basisData} />
+          </ChartState>
         </ChartCard>
       </div>
     </div>
@@ -269,11 +276,6 @@ const SAMPLE_RATIO = Array.from({ length: 24 }, (_, i) => {
   const long = 50 + 6 * Math.sin(i / 3) + 2
   const short = 100 - long
   return { t: '', full: '示意', long: +long.toFixed(1), short: +short.toFixed(1), ratio: +(long / short).toFixed(3) }
-})
-const SAMPLE_BASIS = Array.from({ length: 24 }, (_, i) => {
-  const index = 100 + 3 * Math.sin(i / 4)
-  const mark = index * (1 + 0.0008 * Math.sin(i / 2 + 1))
-  return { t: '', full: '示意', mark: +mark.toFixed(2), index: +index.toFixed(2), basisPct: +(((mark - index) / index) * 100).toFixed(3) }
 })
 
 // ── 卡片外壳 ──────────────────────────────────────────────────────────────

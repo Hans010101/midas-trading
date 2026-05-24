@@ -86,6 +86,8 @@ class PerpPositionResponse(BaseModel):
     liquidation_price: Decimal
     realized_pnl: Decimal
     fee_paid: Decimal
+    # 累计资金费(M2-C.2.2)· 正=净付出(现金减少),负=净收到 · 活仓期随结算累加
+    funding_paid: Decimal
     opened_at: AwareDatetime
     closed_at: AwareDatetime | None
     close_reason: PerpCloseReason | None
@@ -94,3 +96,22 @@ class PerpPositionResponse(BaseModel):
     unrealized_pnl: Decimal | None
     liquidation_distance_pct: Decimal | None
     roe_pct: Decimal | None  # 浮盈 / 保证金 × 100(杠杆放大收益率)
+
+
+class PerpFundingResponse(BaseModel):
+    """资金费结算流水行(M2-C.2.2 · ADR-0020 E5)· 账户页展示。
+
+    payment 符号:正 = 该仓本次【付出】(现金减少),负 = 【收到】(现金增加)。
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: int
+    symbol: str
+    side: PerpSide
+    funding_rate: Decimal  # decimal · 0.0001 = 0.01%
+    mark_price: Decimal
+    quantity: Decimal
+    payment: Decimal  # USDT · 正=付出 / 负=收到
+    funding_ts: AwareDatetime  # 对齐的结算整点
+    settled_at: AwareDatetime
