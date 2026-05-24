@@ -195,3 +195,63 @@ class VirtualPerpOrder(Base):
     __table_args__ = (
         Index("ix_perp_order_account_placed", "account_id", "placed_at"),
     )
+
+
+class VirtualPerpFunding(Base):
+    """资金费结算流水 · ADR-0020 E5 · M2-C.2.2。
+
+    每条 = 某活仓在某结算整点被收 / 付的一次资金费(可复盘 · 账户/详情页可展示)。
+    结算服务(perp_funding.settle_funding)写:cash_balance -= payment · position.funding_paid
+    += payment · 并 add 一行本表。E4=A:只扣虚拟现金,不联动强平。
+
+    payment 符号约定(与 position.funding_paid 同号):
+      正 = 该仓本次【付出】(现金减少);负 = 【收到】(现金增加)。
+      标准永续:rate>0 → 多头付、空头收。
+
+    幂等:(position_id, funding_ts) 唯一 —— funding_ts 是对齐到整点的结算时刻,
+    同一结算点重复跑(beat 重触发 / 手动重试)不会重复扣费。
+
+    🔴 红线:全程虚拟资金,worker 只读行情结算,绝不接真实资金费 / 转账。
+    """
+
+    __tablename__ = "virtual_perp_funding"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("virtual_account.id", ondelete="CASCADE"), nullable=False,
+    )
+    position_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("virtual_perp_position.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    symbol: Mapped[str] = mapped_column(String(64), nullable=False)
+    side: Mapped[PerpSide] = mapped_column(
+        Enum(PerpSide, name="perp_side"), nullable=False,
+    )
+    # 结算时该币资金费率(decimal · 0.0001 = 0.01%)
+    funding_rate: Mapped[Decimal] = mapped_column(Numeric(20, 8), nullable=False)
+    # 结算时标记价(计 notional 用)
+    mark_price: Mapped[Decimal] = mapped_column(Numeric(20, 8), nullable=False)
+    # 结算时持仓量 · 币
+    quantity: Mapped[Decimal] = mapped_column(Numeric(20, 8), nullable=False)
+    # 支付额 · USDT · 正为付出令现金减少 · 负为收到令现金增加
+    payment: Mapped[Decimal] = mapped_column(Numeric(20, 4), nullable=False)
+    # 对齐到整点的结算时刻(幂等键 · 防重复结算)
+    funding_ts: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False,
+    )
+    # 实际执行结算的时间
+    settled_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+
+    __table_args__ = (
+        # 幂等 · 同一活仓同一结算整点只结算一次
+        Index(
+            "uq_perp_funding_position_ts",
+            "position_id", "funding_ts",
+            unique=True,
+        ),
+        Index("ix_perp_funding_account_settled", "account_id", "settled_at"),
+    )

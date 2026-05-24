@@ -52,6 +52,15 @@ beat_schedule = {
         "schedule": crontab(minute="*"),
         "options": {"expires": 50},
     },
+    "perp-funding-settle": {
+        "task": "tasks.perp.settle_funding",
+        # ADR-0020 Block1 / M2-C.2.2 · 资金费结算 · 每 UTC 整点跑一次,
+        # 按每币各自周期对齐(hour % interval == 0)结算 1h/2h/4h/8h 全部周期。
+        # crontab minute=0 → 每小时第 0 分;只在有 perp 活仓时才有实际工作。
+        # expires 600:整点附近没被领走就丢(下个整点再结;幂等键防漏结/重结)。
+        "schedule": crontab(minute="0"),
+        "options": {"expires": 600},
+    },
     # ── M2-A · Crypto Pro 数据采集(0017 ADR)· 常驻定时刷新 ────────────────────
     # 错峰原则:Binance 四个采集(ticker/oi/longshort/funding)分钟数互不重叠,避免
     #   同一刻对 Binance 合约接口集中打请求(IP 权重限流)。oi 落在 5 的倍数;
