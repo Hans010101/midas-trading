@@ -7,8 +7,8 @@
 - GET  /positions  · 合约持仓(默认活仓 · 含实时浮盈 / 强平距离 / ROE)
 - GET  /orders     · 合约流水 · cursor 翻页
 
-价源(D7 / §4.1):perp ticker 最新价(crypto_ticker_24h · instrument=perp)·
-  分钟级,最新;真实时标记价(premiumIndex)随 M2-C.2 接入。
+价源(§4.1 · M2-C.2.1 起):真标记价 mark price(crypto_premium_index · premiumIndex
+  每分钟回源)· perp ticker 最新价兜底。注入式换源 —— 撮合/强平引擎核心逻辑不改。
 """
 
 from __future__ import annotations
@@ -31,7 +31,10 @@ from app.schemas.perp import (
     PerpPositionResponse,
 )
 from app.services.clickhouse_client import ClickHouseClient
-from app.services.clickhouse_crypto import select_tickers_by_symbols
+from app.services.clickhouse_crypto import (
+    select_premium_index_marks,
+    select_tickers_by_symbols,
+)
 from app.services.virtual_trading.perp_engine import (
     ClosePerpRequest,
     OpenPerpRequest,
@@ -66,9 +69,22 @@ def _to_ccxt(binance_symbol: str) -> str:
 
 
 def make_perp_mark_price_fetcher(ch: ClickHouseClient) -> PerpPriceFetcher:
-    """走 ClickHouse crypto_ticker_24h(instrument=perp)取该 symbol 最新价。"""
+    """撮合/强平价源 · 真标记价(premiumIndex.mark_price)优先,perp ticker 最新价兜底。
+
+    M2-C.2.1 起价源从 perp ticker last_price 切到真 mark price(crypto_premium_index)·
+    撮合/强平引擎核心逻辑不改(注入式换源)。
+    兜底:premium_index 无该 symbol(刚上市未采 / 采集瞬时缺)→ 退回 ticker last_price,
+    保证 M2-C.1 撮合/强平零回归(不因价源切换而拒单 / 漏强平)。
+    稳态(premium 每分钟刷)永远走 mark price;ticker 只是过渡/缺数安全网。
+    symbol 为 Binance 风格无斜杠 'BTCUSDT'(premium_index 表一致)· ticker 兜底时转 ccxt。
+    """
 
     async def fetcher(symbol: str) -> Decimal | None:
+        marks = await select_premium_index_marks(ch._client, [symbol])  # noqa: SLF001
+        mark = marks.get(symbol)
+        if mark is not None and mark > 0:
+            return mark
+        # 兜底 · perp ticker 最新价(crypto_ticker_24h · ccxt 风格)
         ccxt_symbol = _to_ccxt(symbol)
         tickers = await select_tickers_by_symbols(
             ch._client,  # noqa: SLF001

@@ -1,13 +1,13 @@
 """Celery beat · 加密永续合约虚拟仓强平监控(混合 60s · ADR-0019 §4.7 / D4)。
 
-每 60s 扫所有 perp 活仓:perp ticker 最新价(crypto_ticker_24h · instrument=perp)
-对比 liquidation_price。
+每 60s 扫所有 perp 活仓 · 用真标记价 mark price(crypto_premium_index · premiumIndex
+每分钟回源)对比 liquidation_price · perp ticker 最新价兜底(M2-C.2.1 起换源)。
 - 多仓:mark ≤ 强平价 → 强平
 - 空仓:mark ≥ 强平价 → 强平
 强平走 perp_engine.liquidate_position(close_reason=liquidated · is_liquidation)。
 
 🔴 红线:全程【虚拟资金】· 只读行情 · 绝不接真实平仓。
-- 取不到 mark(行情未到 / 下架)→ 跳过该仓,绝不误杀(ADR-0019 §8 风险 2)。
+- 取不到 mark(premium + ticker 都缺 / 下架)→ 跳过该仓,绝不误杀(ADR-0019 §8 风险 2)。
 - 重新 SELECT … FOR UPDATE 再平,避免与用户手动平 / 加仓竞争(§4.10)。
 - 这是「混合方案」里的周期 worker;用户交互(平仓/查持仓)是另一条兜底路径。
 """
@@ -28,7 +28,10 @@ from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 from app.models.perp import PerpSide, VirtualPerpPosition
-from app.services.clickhouse_crypto import select_tickers_by_symbols
+from app.services.clickhouse_crypto import (
+    select_premium_index_marks,
+    select_tickers_by_symbols,
+)
 from app.services.virtual_trading.perp_engine import liquidate_position
 
 logger = logging.getLogger(__name__)
@@ -76,17 +79,20 @@ async def _scan_and_liquidate() -> dict[str, int]:
             if not positions:
                 return {"checked": 0, "liquidated": 0}
 
-            # 批量取活仓涉及的 symbol 的最新 perp 价
+            # 批量取活仓涉及的 symbol 的价 · 真标记价(premiumIndex)优先
             ch = await _get_ch_client()
             symbols = sorted({p.symbol for p in positions})
-            tickers = await select_tickers_by_symbols(
-                ch, instrument="perp", symbols=[_to_ccxt(s) for s in symbols],
-            )
-            marks: dict[str, Decimal] = {}
-            for s in symbols:
-                t = tickers.get(_to_ccxt(s))
-                if t is not None and t.last_price > 0:
-                    marks[s] = Decimal(str(t.last_price))
+            marks: dict[str, Decimal] = await select_premium_index_marks(ch, symbols)
+            # 兜底:premium_index 缺的 symbol 退回 perp ticker 最新价(零回归 · 不漏强平)
+            missing = [s for s in symbols if s not in marks]
+            if missing:
+                tickers = await select_tickers_by_symbols(
+                    ch, instrument="perp", symbols=[_to_ccxt(s) for s in missing],
+                )
+                for s in missing:
+                    t = tickers.get(_to_ccxt(s))
+                    if t is not None and t.last_price > 0:
+                        marks[s] = Decimal(str(t.last_price))
 
             for p in positions:
                 mark = marks.get(p.symbol)

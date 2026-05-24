@@ -30,6 +30,7 @@ from app.schemas.crypto import (
     FundingRate,
     LongShortRatio,
     OpenInterest,
+    PremiumIndex,
     Ticker24h,
 )
 from app.schemas.market import Kline, Period
@@ -217,7 +218,9 @@ class BinanceFuturesSource(BaseDataSource):
             params["endTime"] = int(end_ts.timestamp() * 1000)
 
         async def _do() -> list[FundingRate]:
-            data = await self._get_json("/fapi/v1/fundingRate", params=params, symbol_for_error=symbol)
+            data = await self._get_json(
+                "/fapi/v1/fundingRate", params=params, symbol_for_error=symbol,
+            )
             if not isinstance(data, list):
                 raise DataFormatError(
                     f"fundingRate 响应非数组: {type(data).__name__}",
@@ -323,6 +326,35 @@ class BinanceFuturesSource(BaseDataSource):
         return await self._retry(op="fetch_ticker_24h", symbol="*", coro_factory=_do)
 
     # ========================================================================
+    # 5.5 · Premium Index 全市场快照(标记价/指数价/资金费)· M2-C.2.1
+    # ========================================================================
+
+    async def fetch_premium_index(self) -> list[PremiumIndex]:
+        """全市场标记价/指数价/资金费快照 · /fapi/v1/premiumIndex(无 symbol = 全量)。
+
+        单请求返回全市场 ~500 个 perp 的
+        {symbol, markPrice, indexPrice, lastFundingRate, nextFundingTime, time}。
+        权重极低(类 ticker/24hr 全市场)· 适合每分钟刷,给撮合/强平价源用。
+
+        过滤(在 _parse_premium_index_row 内):
+        - 非法价/时间(<=0)→ 跳过(下架/异常 symbol)
+        - 含 '_' 的交割合约(BTCUSDT_240628 等)→ 跳过(只要永续)
+        """
+        async def _do() -> list[PremiumIndex]:
+            data = await self._get_json("/fapi/v1/premiumIndex")
+            if not isinstance(data, list):
+                # 理论上无 symbol 时返数组;容错单对象
+                data = [data]
+            out: list[PremiumIndex] = []
+            for r in data:
+                parsed = _parse_premium_index_row(r)
+                if parsed is not None:
+                    out.append(parsed)
+            return out
+
+        return await self._retry(op="fetch_premium_index", symbol="*", coro_factory=_do)
+
+    # ========================================================================
     # 6 · 合约元信息(给 /api/v1/crypto/futures/{symbol}/info 用)
     # ========================================================================
 
@@ -396,6 +428,39 @@ def _parse_funding_row(row: dict[str, Any], *, symbol: str) -> FundingRate:
             f"funding 行解析失败: {row} {exc}",
             market="crypto", symbol=symbol, upstream="binance-futures",
         ) from exc
+
+
+def _parse_premium_index_row(row: dict[str, Any]) -> PremiumIndex | None:
+    """premiumIndex 行 → PremiumIndex · 非法行返回 None(由调用方跳过,不抛)。
+
+    上游字段:
+    {symbol, markPrice, indexPrice, estimatedSettlePrice, lastFundingRate,
+     interestRate, nextFundingTime (ms), time (ms)}
+    estimatedSettlePrice / interestRate 本期不用。
+
+    跳过条件:
+    - 含 '_' 的交割合约(只要永续)
+    - mark/index/nextFundingTime <= 0(下架/异常)
+    """
+    try:
+        symbol = str(row["symbol"])
+        if "_" in symbol:  # 交割合约(BTCUSDT_240628)· 非永续 · 跳过
+            return None
+        mark = float(row["markPrice"])
+        index = float(row["indexPrice"])
+        next_ms = int(row["nextFundingTime"])
+        if mark <= 0 or index <= 0 or next_ms <= 0:
+            return None
+        return PremiumIndex(
+            symbol=symbol,
+            ts=datetime.fromtimestamp(int(row["time"]) / 1000, tz=UTC),
+            mark_price=mark,
+            index_price=index,
+            last_funding_rate=float(row.get("lastFundingRate") or 0),
+            next_funding_time=datetime.fromtimestamp(next_ms / 1000, tz=UTC),
+        )
+    except (KeyError, ValueError, TypeError):
+        return None
 
 
 def _parse_oi_row(row: dict[str, Any], *, symbol: str) -> OpenInterest:

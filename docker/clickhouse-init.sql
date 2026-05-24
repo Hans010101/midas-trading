@@ -168,3 +168,31 @@ CREATE TABLE IF NOT EXISTS crypto_market_overview (
 PARTITION BY toYYYYMM(ts)
 ORDER BY ts
 SETTINGS index_granularity = 8192;
+
+-- ============================================================================
+-- Crypto Pro · premium index 标记价/指数价/资金费 实时快照(M2-C.2.1 · ADR-0020)
+-- ============================================================================
+-- 上游 Binance fapi/v1/premiumIndex(无 symbol = 全市场单请求 · 极轻)· 每 1min 采
+-- symbol 用 Binance Futures 风格 "BTCUSDT"(无斜杠)· 跟其余 perp 表一致
+-- 用途:
+--   mark_price  → 撮合/强平价源(M2-C.2.1 起替代 perp ticker last_price · 注入式换源)
+--   index_price → 基差 = mark - index(补 M2-B 基差数据缺口)
+--   next_funding_time → 修 futures/info 的 +8h 硬编码 bug(真实回源)
+--   last_funding_rate / funding_interval_hours → M2-C.2.2 资金费结算用(interval 暂统一 8)
+-- TTL 7 天:mark price 是「最新」语义,撮合/强平/基差只看近实时,无需长历史 · 磁盘稳态封顶
+-- ⚠️ 与 apps/worker/ch_schema.py 的 DDL 必须保持一致(那边是 worker 启动幂等 ensure ·
+--    update.sh 没有 ClickHouse 建表步骤 · 本文件只在容器首次启动/全新 CH 执行)
+CREATE TABLE IF NOT EXISTS crypto_premium_index (
+    symbol String,                          -- "BTCUSDT" Binance 风格(无斜杠)
+    ts DateTime,                            -- 快照时间(回源 time 字段 · UTC)
+    mark_price Float64,                     -- 标记价(撮合/强平价源)
+    index_price Float64,                    -- 指数价(现货综合)· 基差 = mark - index
+    last_funding_rate Float64,              -- 最近资金费率 · decimal 0.0001=0.01%
+    next_funding_time DateTime,             -- 下次资金费结算时间(UTC · 回源真值)
+    funding_interval_hours UInt8 DEFAULT 8, -- 资金费周期(小时)· M2-C.2.2 用 · 暂统一 8
+    ingested_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(ts)
+ORDER BY (symbol, ts)
+TTL ingested_at + INTERVAL 7 DAY
+SETTINGS index_granularity = 8192;

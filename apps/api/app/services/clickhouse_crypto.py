@@ -18,7 +18,8 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from app.schemas.crypto import (
     FearGreedPoint,
@@ -26,6 +27,7 @@ from app.schemas.crypto import (
     LongShortRatio,
     MarketOverview,
     OpenInterest,
+    PremiumIndex,
     Ticker24h,
 )
 
@@ -58,6 +60,10 @@ _OVERVIEW_COLUMNS = (
     "btc_dominance", "eth_dominance",
     "fear_greed_value", "fear_greed_classification",
     "derivatives_oi_usd", "derivatives_volume_24h_usd",
+)
+_PREMIUM_INDEX_COLUMNS = (
+    "symbol", "ts", "mark_price", "index_price",
+    "last_funding_rate", "next_funding_time", "funding_interval_hours",
 )
 
 
@@ -196,8 +202,10 @@ async def select_long_short(
     return [
         LongShortRatio(
             symbol=r[0], ts=_attach_utc(r[1]),
-            top_account_long=float(r[2]), top_account_short=float(r[3]), top_account_ratio=float(r[4]),
-            top_position_long=float(r[5]), top_position_short=float(r[6]), top_position_ratio=float(r[7]),
+            top_account_long=float(r[2]), top_account_short=float(r[3]),
+            top_account_ratio=float(r[4]),
+            top_position_long=float(r[5]), top_position_short=float(r[6]),
+            top_position_ratio=float(r[7]),
             taker_buy_vol=float(r[8]), taker_sell_vol=float(r[9]), taker_ratio=float(r[10]),
         )
         for r in rows
@@ -520,3 +528,81 @@ async def select_futures_metrics_batch(
                 (now_oi - then_oi) / then_oi * 100
             )
     return out
+
+
+# ============================================================================
+# 7 · Premium Index(标记价/指数价/资金费)· M2-C.2.1 · ADR-0020
+# ============================================================================
+
+
+async def insert_premium_index(
+    client: AsyncClient, items: list[PremiumIndex],
+) -> int:
+    """批量写 · ReplacingMergeTree 按 (symbol, ts) 去重。symbol Binance 风格无斜杠。"""
+    if not items:
+        return 0
+    data = [
+        [
+            it.symbol, _aware_utc(it.ts), it.mark_price, it.index_price,
+            it.last_funding_rate, _aware_utc(it.next_funding_time),
+            it.funding_interval_hours,
+        ]
+        for it in items
+    ]
+    await client.insert(
+        "crypto_premium_index", data, column_names=list(_PREMIUM_INDEX_COLUMNS),
+    )
+    return len(items)
+
+
+async def select_premium_index_marks(
+    client: AsyncClient, symbols: list[str],
+) -> dict[str, Decimal]:
+    """批量取多 symbol 最新 mark_price · 给撮合/强平价源用(注入式换源)。
+
+    symbol 用 Binance 风格无斜杠 'BTCUSDT'(跟表存储一致 · **不转 ccxt**)。
+    返回 {symbol: Decimal(mark_price)} · 只含 mark>0 的;无数据的 symbol 不出现
+    (调用方据此兜底回 perp ticker · 保证撮合/强平零回归)。
+
+    用 Decimal(str(float)) 转换:撮合/强平引擎全程 Decimal 计价,这里桥接
+    CH 的 Float64 → Decimal,跟 perp ticker 价源路径(perp.py)一致。
+    """
+    if not symbols:
+        return {}
+    query = (
+        "SELECT symbol, argMax(mark_price, ts) FROM crypto_premium_index FINAL "
+        "WHERE symbol IN %(syms)s GROUP BY symbol"
+    )
+    result = await client.query(query, parameters={"syms": symbols})
+    out: dict[str, Decimal] = {}
+    for r in result.result_rows:
+        mark = float(r[1])
+        if mark > 0:
+            out[str(r[0])] = Decimal(str(mark))
+    return out
+
+
+async def select_latest_premium_index(
+    client: AsyncClient, symbol: str,
+) -> PremiumIndex | None:
+    """单 symbol 最新一行 premiumIndex · 给 futures/info 用(真 nextFundingTime/index)。
+
+    不存在(未采到该 symbol)返 None · 调用方兜底到 funding 表 +8h 估算。
+    """
+    query = (
+        "SELECT symbol, ts, mark_price, index_price, "
+        "last_funding_rate, next_funding_time, funding_interval_hours "
+        "FROM crypto_premium_index FINAL "
+        "WHERE symbol = %(s)s ORDER BY ts DESC LIMIT 1"
+    )
+    result = await client.query(query, parameters={"s": symbol})
+    rows = list(result.result_rows)
+    if not rows:
+        return None
+    r = rows[0]
+    return PremiumIndex(
+        symbol=str(r[0]), ts=_attach_utc(r[1]),
+        mark_price=float(r[2]), index_price=float(r[3]),
+        last_funding_rate=float(r[4]), next_funding_time=_attach_utc(r[5]),
+        funding_interval_hours=int(r[6]),
+    )

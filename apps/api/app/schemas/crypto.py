@@ -155,7 +155,9 @@ class FuturesMetricItem(BaseModel):
 
     symbol: str = Field(description="Binance 风格 · 'BTCUSDT'")
     funding_rate: float | None = Field(default=None, description="最新资金费率 · decimal")
-    account_long_short_ratio: float | None = Field(default=None, description="账户多空比 long/short")
+    account_long_short_ratio: float | None = Field(
+        default=None, description="账户多空比 long/short",
+    )
     oi_change_pct_24h: float | None = Field(default=None, description="OI 近 24H 变化%")
 
 
@@ -165,6 +167,35 @@ class FuturesMetricsBatchResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     items: list[FuturesMetricItem]
+
+
+# ============================================================================
+# 4.5 · Premium Index(标记价 / 指数价 / 资金费 实时快照)· M2-C.2.1 · ADR-0020
+# ============================================================================
+
+
+class PremiumIndex(BaseModel):
+    """premiumIndex 单点 · 标记价 / 指数价 / 资金费实时快照。
+
+    上游 Binance fapi/v1/premiumIndex(无 symbol = 全市场单请求)· symbol 用
+    `BTCUSDT` 无斜杠风格(跟 funding / OI / long-short 表一致)。
+    - mark_price:标记价 → 撮合 / 强平价源(M2-C.2.1 起替代 perp ticker last_price)
+    - index_price:指数价(现货综合)· 基差 = mark - index(补 M2-B 基差缺口)
+    - last_funding_rate / next_funding_time:给 futures/info(修 +8h bug)+ M2-C.2.2 资金费结算
+    - funding_interval_hours:资金费周期 · 暂统一 8(per-symbol 周期 M2-C.2.2 再回源 fundingInfo)
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    symbol: str = Field(min_length=1, description="Binance Futures symbol · 'BTCUSDT'")
+    ts: AwareDatetime = Field(description="快照时间 · UTC")
+    mark_price: float = Field(gt=0, description="标记价")
+    index_price: float = Field(gt=0, description="指数价(现货综合)")
+    last_funding_rate: float = Field(description="最近资金费率 · decimal 0.0001=0.01%")
+    next_funding_time: AwareDatetime = Field(description="下次资金费结算时间 · UTC")
+    funding_interval_hours: int = Field(
+        default=8, gt=0, le=24, description="资金费周期(小时)· M2-C.2.2 用 · 暂统一 8",
+    )
 
 
 # ============================================================================

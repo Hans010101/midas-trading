@@ -41,7 +41,6 @@ from app.schemas.crypto import (
     LongShortRatioResponse,
     MarketOverview,
     OpenInterestResponse,
-    Ticker24h,
     Tickers24hResponse,
 )
 from app.services.clickhouse_crypto import (
@@ -49,6 +48,7 @@ from app.services.clickhouse_crypto import (
     select_funding_rates,
     select_futures_metrics_batch,
     select_latest_overview,
+    select_latest_premium_index,
     select_latest_tickers,
     select_long_short,
     select_open_interest,
@@ -79,7 +79,7 @@ async def get_overview(ch: ClickHouseDep) -> CryptoOverviewResponse:
     # 走 ClickHouse · 实际数据由 Celery 任务定期写入
     # ch 是 ClickHouseClient 对象 · 内部 self._client 是 AsyncClient · M2-A
     # 联调时 type ignore · M2-B 把 ClickHouseClient 改成有 .raw 暴露 AsyncClient
-    overview = await select_latest_overview(ch._client)  # type: ignore[attr-defined]
+    overview = await select_latest_overview(ch._client)  # noqa: SLF001
     if overview is None:
         # 没数据 · M2-A 阶段允许返 stub · M2-B 之前 Celery 任务确保有数据
         overview = MarketOverview(
@@ -95,21 +95,21 @@ async def get_overview(ch: ClickHouseDep) -> CryptoOverviewResponse:
     # 涨幅榜 / 跌幅榜 / 成交榜 · 都取 spot top 5(M2-D 可改成 perp)
     try:
         top_gainers = await select_latest_tickers(
-            ch._client,  # type: ignore[attr-defined]
+            ch._client,  # noqa: SLF001
             instrument="spot",
             sort_by="change_pct_24h",
             order="DESC",
             limit=5,
         )
         top_losers = await select_latest_tickers(
-            ch._client,  # type: ignore[attr-defined]
+            ch._client,  # noqa: SLF001
             instrument="spot",
             sort_by="change_pct_24h",
             order="ASC",
             limit=5,
         )
         top_volume = await select_latest_tickers(
-            ch._client,  # type: ignore[attr-defined]
+            ch._client,  # noqa: SLF001
             instrument="spot",
             sort_by="quote_volume_24h",
             order="DESC",
@@ -127,14 +127,14 @@ async def get_overview(ch: ClickHouseDep) -> CryptoOverviewResponse:
     eth_ticker = None
     try:
         if overview.derivatives_volume_24h_usd <= 0:
-            perp_total = await select_perp_total_quote_volume(ch._client)  # type: ignore[attr-defined]
+            perp_total = await select_perp_total_quote_volume(ch._client)  # noqa: SLF001
             if perp_total > 0:
                 overview = overview.model_copy(
                     update={"derivatives_volume_24h_usd": perp_total},
                 )
         # BTC/ETH 价格卡:按 symbol 精确取 perp ticker(不依赖涨跌幅榜)
         by_sym = await select_tickers_by_symbols(
-            ch._client,  # type: ignore[attr-defined]
+            ch._client,  # noqa: SLF001
             instrument="perp",
             symbols=["BTC/USDT", "ETH/USDT"],
         )
@@ -176,7 +176,7 @@ async def get_tickers_24h(
 ) -> Tickers24hResponse:
     try:
         items = await select_latest_tickers(
-            ch._client,  # type: ignore[attr-defined]
+            ch._client,  # noqa: SLF001
             instrument=instrument,
             sort_by=sort_by,
             order=order.upper(),
@@ -221,7 +221,7 @@ async def get_futures_metrics_batch(
             detail=f"symbols 最多 200 个 · 当前 {len(syms)}",
         )
     metrics = await select_futures_metrics_batch(
-        ch._client,  # type: ignore[attr-defined]
+        ch._client,  # noqa: SLF001
         symbols=syms,
     )
     items = [
@@ -253,7 +253,7 @@ async def get_funding_rate(
     limit: Annotated[int, Query(ge=1, le=1000)] = 100,
 ) -> FundingRateResponse:
     items = await select_funding_rates(
-        ch._client,  # type: ignore[attr-defined]
+        ch._client,  # noqa: SLF001
         symbol=symbol, limit=limit,
     )
     return FundingRateResponse(symbol=symbol, items=items)
@@ -275,7 +275,7 @@ async def get_open_interest(
     limit: Annotated[int, Query(ge=1, le=500)] = 288,
 ) -> OpenInterestResponse:
     items = await select_open_interest(
-        ch._client,  # type: ignore[attr-defined]
+        ch._client,  # noqa: SLF001
         symbol=symbol, limit=limit,
     )
     return OpenInterestResponse(symbol=symbol, items=items)
@@ -298,7 +298,7 @@ async def get_long_short_ratio(
     limit: Annotated[int, Query(ge=1, le=500)] = 288,
 ) -> LongShortRatioResponse:
     items = await select_long_short(
-        ch._client,  # type: ignore[attr-defined]
+        ch._client,  # noqa: SLF001
         symbol=symbol, limit=limit,
     )
     return LongShortRatioResponse(symbol=symbol, items=items)
@@ -312,49 +312,66 @@ async def get_long_short_ratio(
 @router.get(
     "/futures/{symbol}/info",
     response_model=FuturesSymbolInfo,
-    summary="合约元信息(下次资金费率 / 标记价 / 最大杠杆)",
+    summary="合约元信息(下次资金费率 / 标记价 / 指数价 / 最大杠杆)",
     description=(
-        "M2-A WIP · 当前返回 stub(基于 ClickHouse 最近 funding + OI 推断)· "
-        "M2-B 实装实时从 Binance Futures /fapi/v1/premiumIndex 拉取。"
+        "M2-C.2.1 起:mark_price / index_price / next_funding_time / last_funding_rate "
+        "取自 crypto_premium_index(premiumIndex 每分钟回源 · 真实值)· 修复原 +8h 硬编码 bug。"
+        "premium 未采到该 symbol 时兜底回 funding 表 + 8h 估算(老行为)· "
+        "max_leverage 暂留 125(ADR-0020 §1.4 低优先 · 后续从 exchangeInfo 取真值)。"
     ),
 )
 async def get_futures_info(
     ch: ClickHouseDep,
     symbol: Annotated[str, Path(min_length=3, examples=["BTCUSDT"])],
 ) -> FuturesSymbolInfo:
-    # M2-A stub · 从 CH 数据拼装 · M2-B 改成回源
-    latest_funding = await select_funding_rates(
-        ch._client, symbol=symbol, limit=1,  # type: ignore[attr-defined]
-    )
     latest_oi = await select_open_interest(
-        ch._client, symbol=symbol, limit=1,  # type: ignore[attr-defined]
+        ch._client, symbol=symbol, limit=1,  # noqa: SLF001
     )
-
-    if not latest_funding or not latest_oi:
+    if not latest_oi:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"symbol {symbol} 没有 funding 或 OI 数据 · M2-A 数据预热未覆盖此 symbol",
+            detail=f"symbol {symbol} 没有 OI 数据 · 数据预热未覆盖此 symbol",
         )
-
-    fr = latest_funding[-1]
     oi = latest_oi[-1]
 
     # base/quote 简单切尾 USDT/USDC/BUSD
     base, quote = _split_symbol(symbol)
 
-    # 下次资金费率 = 最近 funding ts + 8h(Binance 标准节奏)
-    next_funding = fr.ts + timedelta(hours=8)
+    # 价/资金费来源:真标记价(premiumIndex)优先 · 修 +8h 硬编码 bug
+    premium = await select_latest_premium_index(
+        ch._client, symbol=symbol,  # noqa: SLF001
+    )
+    if premium is not None:
+        mark_price = premium.mark_price
+        index_price = premium.index_price  # 真指数价 · 基差 = mark - index(不再用 mark 近似)
+        last_funding_rate = premium.last_funding_rate
+        next_funding = premium.next_funding_time  # 真 nextFundingTime(回源)
+    else:
+        # 兜底:premium 未采到 · 退回 funding 表最近一条 + 8h 估算(老 stub 行为)
+        latest_funding = await select_funding_rates(
+            ch._client, symbol=symbol, limit=1,  # noqa: SLF001
+        )
+        if not latest_funding:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"symbol {symbol} 没有 premium / funding 数据 · 数据预热未覆盖此 symbol",
+            )
+        fr = latest_funding[-1]
+        mark_price = fr.mark_price
+        index_price = fr.mark_price  # 兜底无指数价 · 用 mark 近似
+        last_funding_rate = fr.rate
+        next_funding = fr.ts + timedelta(hours=8)
 
     return FuturesSymbolInfo(
         symbol=symbol,
         base_asset=base,
         quote_asset=quote,
         contract_type="perpetual",
-        mark_price=fr.mark_price,
-        index_price=fr.mark_price,  # M2-A 用 mark_price 近似 · M2-B 改 premiumIndex
-        last_funding_rate=fr.rate,
+        mark_price=mark_price,
+        index_price=index_price,
+        last_funding_rate=last_funding_rate,
         next_funding_time=next_funding,
-        max_leverage=125,  # Binance perp 默认上限 · M2-B 从 exchangeInfo 取真值
+        max_leverage=125,  # ADR-0020 §1.4 低优先 · 后续从 exchangeInfo 取真值
         open_interest_coin=oi.oi_coin,
         open_interest_usd=oi.oi_usd,
     )
@@ -375,7 +392,7 @@ async def get_fear_greed(
     limit: Annotated[int, Query(ge=1, le=365)] = 30,
 ) -> FearGreedResponse:
     items = await select_fear_greed_series(
-        ch._client, limit=limit,  # type: ignore[attr-defined]
+        ch._client, limit=limit,  # noqa: SLF001
     )
     return FearGreedResponse(items=items)
 
