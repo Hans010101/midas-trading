@@ -6,7 +6,7 @@
  *    具体「需登录」操作(下单 / 加自选 / 设虚拟资金 / 保存绘图)
  *    由前端组件用 useRequireAuth() 弹登录引导,不在 middleware 拦截
  *  - /account / /settings / /portfolio 仍强制登录
- *  - 已登录访问 /login or /register → /workbench
+ *  - 已登录访问 /login or /register → /cn-market(0023 阶段③ · 市场首页为主入口)
  */
 
 import { auth } from '@/auth'
@@ -30,7 +30,7 @@ export default auth((req) => {
   }
 
   if (isAuthPage && isAuthed) {
-    return NextResponse.redirect(new URL('/workbench', req.nextUrl.origin))
+    return NextResponse.redirect(new URL('/cn-market', req.nextUrl.origin))
   }
 
   return NextResponse.next()

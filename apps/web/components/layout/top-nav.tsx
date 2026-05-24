@@ -4,9 +4,12 @@
  * 共享顶部导航 · Logo + 3 个页面 Tab + 用户菜单占位。
  *
  * 使用 usePathname 判断当前页高亮:
- * - /workbench    → 自选 K 线
- * - /account      → 我的账户
- * - /settings    → 设置
+ * - /cn-market /us-market /crypto-market → 市场(产品主入口 · 0023 阶段③ 导航收口)
+ * - /account  → 我的账户
+ * - /settings → 设置
+ *
+ * 0023 阶段③:市场首页 = 产品主入口;工作台(/workbench)入口已从主导航下线
+ * (代码保留 · 3.4 新建 A股/美股详情页时复用其 K线/缠论/AI 组件)。
  */
 
 import Image from 'next/image'
@@ -23,20 +26,26 @@ interface NavItem {
   matchPrefix?: string
 }
 
+// 三市场首页路径(0023 阶段③ · 市场首页为产品主入口)
+const MARKET_HOME_PATHS = ['/cn-market', '/us-market', '/crypto-market'] as const
+
 const NAV_ITEMS: NavItem[] = [
-  { href: '/workbench', label: '自选 K 线' },
   { href: '/account', label: '我的账户' },
-  { href: '/settings', label: '设置' },
+  { href: '/settings', label: '设置', matchPrefix: '/settings' },
 ]
 
 export function TopNav() {
   const pathname = usePathname()
   const { data: session, status } = useSession()
 
+  // 市场首页 = 产品主入口 · "市场" / Logo 进当前所在市场首页,不在任一市场首页时默认 A 股。
+  const marketHref = MARKET_HOME_PATHS.find((p) => pathname?.startsWith(p)) ?? '/cn-market'
+  const onMarketHome = MARKET_HOME_PATHS.some((p) => pathname?.startsWith(p))
+
   return (
     <header className="h-12 shrink-0 border-b border-paper bg-background">
       <div className="flex h-full items-center justify-between px-6">
-        <Link href="/workbench" className="flex items-center gap-2">
+        <Link href={marketHref} className="flex items-center gap-2">
           <Image src="/brand/seal.png" alt="Midas 印章" width={24} height={24} priority />
           <span className="font-serif text-lg font-bold text-midas-red">
             Midas
@@ -44,6 +53,17 @@ export function TopNav() {
         </Link>
 
         <nav className="flex items-center gap-1" aria-label="页面导航">
+          <Link
+            href={marketHref}
+            className={cn(
+              'rounded-md px-3 py-1 text-sm transition-colors',
+              onMarketHome
+                ? 'bg-midas-red-glow text-midas-red font-medium'
+                : 'text-muted-foreground hover:bg-midas-red-glow/50 hover:text-foreground',
+            )}
+          >
+            市场
+          </Link>
           {NAV_ITEMS.map((item) => {
             const active = item.matchPrefix
               ? pathname.startsWith(item.matchPrefix)

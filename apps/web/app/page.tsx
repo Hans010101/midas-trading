@@ -107,7 +107,7 @@ function TopNav() {
             登录
           </Link>
           <Link
-            href="/workbench"
+            href="/cn-market"
             className="inline-flex items-center gap-1 rounded-md bg-midas-red px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-midas-red-deep"
           >
             进入终端
@@ -169,7 +169,7 @@ function Hero() {
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link
-              href="/workbench"
+              href="/cn-market"
               className="inline-flex items-center gap-2 rounded-md bg-midas-red px-6 py-3 text-base font-medium text-white shadow-md transition-all hover:bg-midas-red-deep hover:shadow-lg"
             >
               开始分析
@@ -498,7 +498,7 @@ function Pricing() {
             当前所有功能免费开放。会员方案规划中,敬请期待。
           </p>
           <Link
-            href="/workbench"
+            href="/cn-market"
             className="mt-6 inline-flex items-center gap-2 rounded-md bg-midas-red px-6 py-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-midas-red-deep"
           >
             立即体验
@@ -527,7 +527,7 @@ function BottomCTA() {
       </p>
       <div className="mt-6">
         <Link
-          href="/workbench"
+          href="/cn-market"
           className="inline-flex items-center gap-2 rounded-md bg-midas-red px-8 py-3.5 text-base font-medium text-white shadow-lg transition-all hover:bg-midas-red-deep hover:shadow-xl"
         >
           进入终端
@@ -568,7 +568,7 @@ function Footer() {
           <FooterCol
             title="产品"
             links={[
-              { label: '工作台', href: '/workbench' },
+              { label: '市场', href: '/cn-market' },
               { label: '功能', href: '#features' },
               { label: 'AI + 缠论', href: '#ai-chan' },
               { label: '定价', href: '#pricing' },
