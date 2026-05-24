@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.virtual import (
+    PositionSide,
     SnapshotTrigger,
     VirtualAccount,
     VirtualEquitySnapshot,
@@ -34,11 +35,12 @@ class PositionView:
     id: int
     symbol: str
     market: str
+    position_side: str  # 'long' / 'short'(3.4)
     quantity: Decimal
     avg_entry_price: Decimal
     current_price: Decimal | None  # 没拿到价 = None
     unrealized_pnl: Decimal | None
-    value: Decimal | None  # quantity × current_price
+    value: Decimal | None  # long: quantity × current_price · short: 担保 + 浮盈
 
 
 @dataclass(frozen=True)
@@ -93,7 +95,14 @@ async def snapshot_equity_for_account(
         )
         if price is None or price <= 0:
             price = p.avg_entry_price  # 兜底,不让快照失败
-        positions_value += p.quantity * price
+        if p.position_side == PositionSide.SHORT:
+            # 空头估值 = 锁定担保(qty×avg_entry)+ 浮盈((avg_entry−price)×qty)· 3.4
+            positions_value += (
+                p.quantity * p.avg_entry_price
+                + (p.avg_entry_price - price) * p.quantity
+            )
+        else:
+            positions_value += p.quantity * price  # 做多(原有)· 字节不变
 
     positions_value = positions_value.quantize(Decimal("0.0001"))
     equity = (account.cash_balance + positions_value).quantize(Decimal("0.0001"))
@@ -145,10 +154,20 @@ async def aggregate_portfolio(
         for p in positions:
             price = await price_fetcher(p.symbol, p.market)
             if price is not None and price > 0:
-                value = (p.quantity * price).quantize(Decimal("0.0001"))
-                unrealized = (
-                    (price - p.avg_entry_price) * p.quantity
-                ).quantize(Decimal("0.0001"))
+                if p.position_side == PositionSide.SHORT:
+                    # 空头(3.4):浮盈 =(avg_entry−price)×qty;估值 = 担保 + 浮盈
+                    unrealized = (
+                        (p.avg_entry_price - price) * p.quantity
+                    ).quantize(Decimal("0.0001"))
+                    value = (
+                        p.quantity * p.avg_entry_price
+                        + (p.avg_entry_price - price) * p.quantity
+                    ).quantize(Decimal("0.0001"))
+                else:
+                    value = (p.quantity * price).quantize(Decimal("0.0001"))  # 做多 原有 字节不变
+                    unrealized = (
+                        (price - p.avg_entry_price) * p.quantity
+                    ).quantize(Decimal("0.0001"))
                 total_positions_value += value
             else:
                 value = None
@@ -156,6 +175,7 @@ async def aggregate_portfolio(
             position_views.append(
                 PositionView(
                     id=p.id, symbol=p.symbol, market=p.market,
+                    position_side=p.position_side.value,
                     quantity=p.quantity, avg_entry_price=p.avg_entry_price,
                     current_price=price if price and price > 0 else None,
                     unrealized_pnl=unrealized, value=value,
