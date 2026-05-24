@@ -207,6 +207,7 @@ async def get_portfolio(
                     id=p.id,
                     symbol=p.symbol,
                     market=p.market,
+                    position_side=p.position_side,
                     quantity=p.quantity,
                     avg_entry_price=p.avg_entry_price,
                     current_price=p.current_price,
@@ -242,6 +243,7 @@ async def place_order(
         symbol=payload.symbol,
         market=payload.market,
         side=payload.side,
+        position_side=payload.position_side,
         quantity=payload.quantity,
     )
     order = await place_market_order(db, req, fetcher)
@@ -355,7 +357,9 @@ def _serialize_order(order: VirtualOrder) -> OrderResponse:
         id=order.id if order.id else None,
         account_id=order.account_id if order.account_id else None,
         symbol=order.symbol,
-        market=order.market,        side=order.side,
+        market=order.market,
+        side=order.side,
+        position_side=order.position_side,
         order_type=order.order_type,
         quantity=order.quantity,
         price=order.price,

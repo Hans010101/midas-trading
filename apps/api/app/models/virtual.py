@@ -47,6 +47,18 @@ class OrderSide(enum.StrEnum):
     SELL = "sell"
 
 
+class PositionSide(enum.StrEnum):
+    """持仓方向(0023 阶段③ · 3.4)。
+
+    LONG = 做多(0008 现货原有 · 存量行 backfill 为 LONG)· BUY 开/加,SELL 平。
+    SHORT = 卖空(美股专用 · 无杠杆 1:1 锁现金)· SELL 开空,BUY 平空(买回)。
+    A股 / 加密现货只用 LONG;美股两者皆可(但同标的同时仅一个方向活仓)。
+    """
+
+    LONG = "long"
+    SHORT = "short"
+
+
 class OrderType(enum.StrEnum):
     MARKET = "market"
     # 未来扩展位:LIMIT 等订单类型在 0008 Task 5+ M1 实装,留 enum 增量空间
@@ -124,6 +136,12 @@ class VirtualPosition(Base):
     )
     symbol: Mapped[str] = mapped_column(String(64), nullable=False)
     market: Mapped[str] = mapped_column(String(16), nullable=False)
+    # 持仓方向(3.4)· LONG=现货做多(原有 · 存量 backfill 为 LONG)。
+    # SHORT=卖空(美股 · 无杠杆 1:1 锁现金担保)· 现货做多路径零改动。
+    position_side: Mapped[PositionSide] = mapped_column(
+        Enum(PositionSide, name="position_side"), nullable=False,
+        server_default=PositionSide.LONG.name,
+    )
     quantity: Mapped[Decimal] = mapped_column(Numeric(20, 8), nullable=False)
     avg_entry_price: Mapped[Decimal] = mapped_column(Numeric(20, 8), nullable=False)
     realized_pnl: Mapped[Decimal | None] = mapped_column(Numeric(20, 4))
@@ -158,6 +176,12 @@ class VirtualOrder(Base):
     market: Mapped[str] = mapped_column(String(16), nullable=False)
     side: Mapped[OrderSide] = mapped_column(
         Enum(OrderSide, name="order_side"), nullable=False,
+    )
+    # 持仓方向(3.4)· LONG=现货做多(原有 · 存量 backfill);SHORT=卖空(美股)。
+    # side=SELL+SHORT=开空,side=BUY+SHORT=平空(买回);LONG 时 side 即买/卖。
+    position_side: Mapped[PositionSide] = mapped_column(
+        Enum(PositionSide, name="position_side"), nullable=False,
+        server_default=PositionSide.LONG.name,
     )
     order_type: Mapped[OrderType] = mapped_column(
         Enum(OrderType, name="order_type"), nullable=False,

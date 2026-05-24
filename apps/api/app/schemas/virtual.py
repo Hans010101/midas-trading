@@ -9,7 +9,7 @@ from decimal import Decimal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
-from app.models.virtual import Currency, OrderSide, OrderStatus, OrderType
+from app.models.virtual import Currency, OrderSide, OrderStatus, OrderType, PositionSide
 from app.schemas.market import Market
 
 # ===== Account =====
@@ -52,6 +52,7 @@ class PositionResponse(BaseModel):
     id: int
     symbol: str
     market: Market
+    position_side: PositionSide
     quantity: Decimal
     avg_entry_price: Decimal
     realized_pnl: Decimal | None
@@ -67,11 +68,12 @@ class PositionWithQuoteResponse(BaseModel):
     id: int
     symbol: str
     market: Market
+    position_side: PositionSide
     quantity: Decimal
     avg_entry_price: Decimal
     current_price: Decimal | None
     unrealized_pnl: Decimal | None
-    value: Decimal | None  # quantity × current_price
+    value: Decimal | None  # long: quantity × current_price · short: 担保 + 浮盈
 
 
 # ===== Portfolio =====
@@ -104,6 +106,8 @@ class OrderPlaceIn(BaseModel):
     symbol: str = Field(min_length=1, max_length=64)
     market: Market
     side: OrderSide
+    # 3.4 · 默认 LONG(做多 · A股/加密/美股做多)· SHORT 仅美股卖空(SELL=开空 / BUY=平空)
+    position_side: PositionSide = PositionSide.LONG
     quantity: Decimal = Field(gt=0)
 
 
@@ -118,6 +122,7 @@ class OrderResponse(BaseModel):
     market: Market
     side: OrderSide
     order_type: OrderType
+    position_side: PositionSide
     quantity: Decimal
     price: Decimal | None
     notional: Decimal | None
