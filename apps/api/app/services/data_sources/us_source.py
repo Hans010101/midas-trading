@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 import yfinance as yf
 
 from app.schemas.market import Kline, Period, SymbolMeta
+from app.schemas.market_home import IndexQuote
 from app.services.data_sources.base import BaseDataSource
 from app.services.data_sources.exceptions import (
     DataFormatError,
@@ -100,6 +101,57 @@ class YFinanceUsSource(BaseDataSource):
             )
             for sym, name in _DEMO_SYMBOLS
         ]
+
+    # ===========================
+    # 大盘指数(0023 阶段③ · 3.1)
+    # ===========================
+
+    async def fetch_indices(
+        self, targets: tuple[tuple[str, str], ...],
+    ) -> list[IndexQuote]:
+        """大盘指数快照(0023 §2)· yfinance history 取 last + prev close · 算涨跌。
+
+        targets = ((yf_symbol, 展示名), ...)· 单指数失败不致命 · 跳过(其余仍展示)。
+        """
+
+        async def _do() -> list[IndexQuote]:
+            return await asyncio.to_thread(self._fetch_indices_sync, targets)
+
+        return await self._retry(op="fetch_indices", symbol="<indices>", coro_factory=_do)
+
+    def _fetch_indices_sync(
+        self, targets: tuple[tuple[str, str], ...],
+    ) -> list[IndexQuote]:
+        now_utc = datetime.now(tz=UTC)
+        out: list[IndexQuote] = []
+        for symbol, name in targets:
+            try:
+                df = yf.Ticker(symbol).history(
+                    period="5d", interval="1d", auto_adjust=True,
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.warning("[yfinance] 指数 %s 拉取失败 · 跳过:%s", symbol, e)
+                continue
+            if df is None or df.empty or "Close" not in df.columns:
+                logger.warning("[yfinance] 指数 %s 无数据 · 跳过", symbol)
+                continue
+            df = df.dropna(subset=["Close"])
+            closes = [float(x) for x in df["Close"].tolist()]
+            if not closes:
+                continue
+            last = closes[-1]
+            prev = closes[-2] if len(closes) > 1 else last  # noqa: PLR2004
+            if last <= 0:
+                continue
+            out.append(
+                IndexQuote(
+                    market="us", symbol=symbol, name=name, ts=now_utc,
+                    last_point=last, prev_close=prev,
+                    change_point=last - prev,
+                    change_pct=((last - prev) / prev * 100) if prev > 0 else 0.0,
+                ),
+            )
+        return out
 
     # ===========================
     # 同步实现

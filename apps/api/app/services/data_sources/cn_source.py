@@ -19,13 +19,14 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
-from datetime import UTC, datetime, time
+from datetime import UTC, date, datetime, time
 from zoneinfo import ZoneInfo
 
 import akshare as ak
 import pandas as pd
 
 from app.schemas.market import Kline, Period, SymbolMeta
+from app.schemas.market_home import IndexQuote
 from app.services.data_sources.base import BaseDataSource
 from app.services.data_sources.exceptions import (
     DataFormatError,
@@ -104,6 +105,93 @@ class AKShareCnSource(BaseDataSource):
             return await asyncio.to_thread(self._list_sync)
 
         return await self._retry(op="list_symbols", symbol="<all>", coro_factory=_do)
+
+    # ===========================
+    # 大盘指数 + 交易日历(0023 阶段③ · 3.1)
+    # ===========================
+
+    async def fetch_indices(self, codes: tuple[str, ...]) -> list[IndexQuote]:
+        """大盘指数快照 · Sina stock_zh_index_spot_sina · 筛 codes(0023 §1)。"""
+
+        async def _do() -> list[IndexQuote]:
+            return await asyncio.to_thread(self._fetch_indices_sync, codes)
+
+        return await self._retry(op="fetch_indices", symbol="<indices>", coro_factory=_do)
+
+    async def fetch_trade_calendar(self) -> list[date]:
+        """A股交易日历 · AKShare tool_trade_date_hist_sina · 全量交易日(0023 §3)。"""
+
+        async def _do() -> list[date]:
+            return await asyncio.to_thread(self._fetch_trade_calendar_sync)
+
+        return await self._retry(
+            op="fetch_trade_calendar", symbol="<calendar>", coro_factory=_do,
+        )
+
+    def _fetch_indices_sync(self, codes: tuple[str, ...]) -> list[IndexQuote]:
+        try:
+            df = ak.stock_zh_index_spot_sina()
+        except (ConnectionError, TimeoutError, OSError) as e:
+            raise UpstreamUnavailableError(
+                str(e), market="cn", upstream="akshare-sina",
+            ) from e
+        if df is None or df.empty:
+            raise UpstreamUnavailableError(
+                "Sina 指数快照返回空", market="cn", upstream="akshare-sina",
+            )
+        required = {"代码", "名称", "最新价", "涨跌额", "涨跌幅", "昨收"}
+        if not required.issubset(set(df.columns)):
+            raise DataFormatError(
+                f"Sina 指数快照字段不全 · 实际: {sorted(df.columns)}",
+                market="cn", upstream="akshare-sina",
+            )
+        now_utc = datetime.now(tz=UTC)
+        wanted = set(codes)
+        out: list[IndexQuote] = []
+        for _, row in df.iterrows():
+            code = str(row["代码"])
+            if code not in wanted:
+                continue
+            try:
+                last = float(row["最新价"])
+                prev = float(row["昨收"])
+                if last <= 0:  # 盘前无成交 · 用昨收兜底(满足 last_point > 0 契约)
+                    last = prev
+                out.append(
+                    IndexQuote(
+                        market="cn", symbol=code, name=str(row["名称"]).strip(),
+                        ts=now_utc, last_point=last, prev_close=prev,
+                        change_point=float(row["涨跌额"]), change_pct=float(row["涨跌幅"]),
+                    ),
+                )
+            except (ValueError, TypeError) as e:
+                raise DataFormatError(
+                    f"Sina 指数行映射失败:{row.to_dict()};{e}",
+                    market="cn", symbol=code, upstream="akshare-sina",
+                ) from e
+        return out
+
+    def _fetch_trade_calendar_sync(self) -> list[date]:
+        try:
+            df = ak.tool_trade_date_hist_sina()
+        except (ConnectionError, TimeoutError, OSError) as e:
+            raise UpstreamUnavailableError(
+                str(e), market="cn", upstream="akshare-sina",
+            ) from e
+        if df is None or df.empty or "trade_date" not in df.columns:
+            raise DataFormatError(
+                "tool_trade_date_hist_sina 返回空 / 无 trade_date 列",
+                market="cn", upstream="akshare-sina",
+            )
+        out: list[date] = []
+        for v in df["trade_date"].tolist():
+            if isinstance(v, date):
+                out.append(v)
+            else:
+                out.append(
+                    datetime.strptime(str(v), "%Y-%m-%d").replace(tzinfo=UTC).date(),
+                )
+        return out
 
     # ===========================
     # 同步实现

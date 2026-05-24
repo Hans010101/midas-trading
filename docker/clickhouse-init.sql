@@ -196,3 +196,39 @@ PARTITION BY toYYYYMM(ts)
 ORDER BY (symbol, ts)
 TTL ingested_at + INTERVAL 7 DAY
 SETTINGS index_granularity = 8192;
+
+-- ============================================================================
+-- 0023 阶段③ · A股/美股 市场首页(3.1 基建)· 大盘指数快照 + 交易日历
+-- ============================================================================
+-- ⚠️ 与 apps/worker/ch_schema.py 的 DDL 必须保持一致(那边 worker 启动幂等 ensure ·
+--    update.sh 没有 ClickHouse 建表步骤 · 本文件只在容器首次启动/全新 CH 执行)。
+--
+-- market_index_snapshot · 大盘指数快照(cn/us 共表 · market 列区分)
+--   cn:Sina stock_zh_index_spot_sina(上证/深成/创业板/沪深300)· symbol 'sh000001'
+--   us:yfinance(道指/纳指/标普/罗素)· symbol '^DJI'
+--   TTL 7 天:指数卡只看「最新」· 历史趋势走 kline 表 · 无需长留
+CREATE TABLE IF NOT EXISTS market_index_snapshot (
+    market String,                          -- 'cn' / 'us'
+    symbol String,                          -- 'sh000001' / '^DJI'
+    name String,                            -- '上证指数' / '标普500'
+    ts DateTime,                            -- 快照时间(UTC)
+    last_point Float64,                     -- 最新点位
+    prev_close Float64,                     -- 昨收
+    change_point Float64,                   -- 涨跌点
+    change_pct Float64,                     -- 涨跌幅 %(已是百分数 · 可负)
+    ingested_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(ts)
+ORDER BY (market, symbol, ts)
+TTL ingested_at + INTERVAL 7 DAY
+SETTINGS index_granularity = 8192;
+
+-- market_trade_calendar · 交易日历(目前仅 cn · AKShare tool_trade_date_hist_sina)
+--   给市场状态机判「今天是不是交易日」· 美股用 market_calendar 硬编码节假日,不入此表
+CREATE TABLE IF NOT EXISTS market_trade_calendar (
+    market String,                          -- 'cn'(美股暂不入表)
+    trade_date Date,                        -- 交易日
+    ingested_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+ORDER BY (market, trade_date)
+SETTINGS index_granularity = 8192;
