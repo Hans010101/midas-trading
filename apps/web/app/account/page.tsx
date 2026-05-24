@@ -24,6 +24,7 @@ import {
   YAxis,
 } from 'recharts'
 
+import { PerpPositionsSection } from '@/components/account/perp-positions-section'
 import { WalletSection } from '@/components/account/wallet-section'
 import { TopNav } from '@/components/layout/top-nav'
 import { VirtualBadge } from '@/components/ui/virtual-badge'
@@ -193,6 +194,9 @@ export default function AccountPage() {
             )}
           </>
         )}
+
+        {/* 加密合约(永续)持仓 / 订单中心 · M2-C.1 · 独立 Section,自身按 crypto 激活态门控 */}
+        <PerpPositionsSection />
 
         <p className="mt-12 text-center text-xs text-muted-foreground/70">
           模拟交易,不构成投资建议

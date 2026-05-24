@@ -39,6 +39,19 @@ const fmtU = (n: number): string =>
   `${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
 const numOr = (s: string | null, d = 0): number => (s == null ? d : Number(s) || d)
 
+// 逐仓标注(问题2)· 强平价旁说明强平价与保证金金额无关
+const ISOLATED_TIP = '逐仓:强平价只取决于开仓价与杠杆,与保证金金额无关'
+function IsolatedTag() {
+  return (
+    <span
+      title={ISOLATED_TIP}
+      className="ml-1 cursor-help rounded bg-paper px-1 py-0.5 text-[9px] text-muted-foreground/80"
+    >
+      逐仓
+    </span>
+  )
+}
+
 interface Props {
   /** Binance 风格 'BTCUSDT' */
   futuresSymbol: string
@@ -210,6 +223,7 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
               <span className={cn('ml-1', estimate.liquidationDistancePct < 5 ? 'text-bear' : 'text-muted-foreground/70')}>
                 (距现价 {estimate.liquidationDistancePct.toFixed(2)}%)
               </span>
+              <IsolatedTag />
             </>
           ) : '—'}
         </EstRow>
@@ -304,7 +318,7 @@ function ActivePositionCard({
         <Cell label="ROE" v={roe != null ? `${roe >= 0 ? '+' : ''}${roe.toFixed(2)}%` : '—'} tone={roe == null ? undefined : roe >= 0 ? 'bull' : 'bear'} />
         <Cell label="标记价" v={pos.mark_price != null ? `$${fmtP(Number(pos.mark_price))}` : '—'} />
         <Cell
-          label="强平价"
+          label={<>强平价<IsolatedTag /></>}
           v={`$${fmtP(Number(pos.liquidation_price))}${dist != null ? ` (${dist.toFixed(1)}%)` : ''}`}
           tone={dist != null && dist < 5 ? 'bear' : undefined}
         />
@@ -316,7 +330,7 @@ function ActivePositionCard({
   )
 }
 
-function Cell({ label, v, tone }: { label: string; v: string; tone?: 'bull' | 'bear' }) {
+function Cell({ label, v, tone }: { label: React.ReactNode; v: string; tone?: 'bull' | 'bear' }) {
   return (
     <div className="flex justify-between">
       <span className="text-muted-foreground/70">{label}</span>
