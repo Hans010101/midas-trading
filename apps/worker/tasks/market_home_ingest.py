@@ -1,11 +1,13 @@
 """A股 / 美股 市场首页数据采集(0023 阶段③ · 3.1)。
 
-3 个任务:
+4 个任务:
 - market.cn_index_scan       · Sina 大盘指数快照(上证/深成/创业板/沪深300)→ market_index_snapshot
 - market.us_index_scan        · yfinance 4 大盘指数(道指/纳指/标普/罗素)→ market_index_snapshot
 - market.cn_calendar_refresh  · AKShare 交易日历 → market_trade_calendar(每日刷 · 给状态机判交易日)
+- market.cn_board_scan        · Sina 全市场 spot → cn_spot_snapshot + cn_market_breadth(情绪)·
+                                Sina 行业板块 → cn_sector_snapshot(0023 阶段③ · 3.2)
 
-调度(celery_config.py):指数采集只在各自交易时段跑(A股日盘 / 美股夜盘 · 错峰)·
+调度(celery_config.py):指数/榜单采集只在各自交易时段跑(A股日盘 / 美股夜盘 · 错峰)·
 交易日历每日开盘前刷一次。
 
 红线:本 worker 只 GET 行情 + INSERT ClickHouse · 永不触碰任何交易/下单接口。
@@ -15,17 +17,23 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any
 
 import clickhouse_connect
 from celery import shared_task
 
 from app.core.config import settings
+from app.services.clickhouse_cn_market import (
+    insert_breadth,
+    insert_sectors,
+    insert_spot_snapshot,
+)
 from app.services.clickhouse_market_home import (
     insert_index_snapshots,
     insert_trade_calendar,
 )
+from app.services.cn_market import aggregate_breadth
 from app.services.data_sources.cn_source import AKShareCnSource
 from app.services.data_sources.us_source import YFinanceUsSource
 from app.services.market_home_config import CN_INDEX_CODES, US_INDICES
@@ -117,5 +125,45 @@ async def _cn_calendar_refresh_async() -> dict[str, Any]:
             "[market.cn_calendar_refresh] written=%d (upstream total=%d)", n, len(days),
         )
         return {"written": n}
+    finally:
+        await ch.close()
+
+
+# ============================================================================
+# 4 · A股榜单 · 全市场 spot 快照 + 情绪条 + 行业板块 · 交易时段每 3min(3.2)
+# ============================================================================
+
+
+@shared_task(name="tasks.market.cn_board_scan")
+def cn_board_scan() -> dict[str, Any]:
+    return asyncio.run(_cn_board_scan_async())
+
+
+async def _cn_board_scan_async() -> dict[str, Any]:
+    """Sina 全市场 spot → 存快照 + 算情绪条;Sina 行业板块 → 存。
+
+    spot / sectors 都用 Sina(东财 _em 本地不可达 · 跟 3.1 指数同款)· 所有行共享同一扫描 ts。
+    板块失败不阻断榜单 / 情绪条(独立 try)。
+    """
+    source = AKShareCnSource()
+    ch = await _get_ch_client()
+    try:
+        now = datetime.now(tz=UTC)
+        rows = await source.fetch_spot_snapshot()
+        n_spot = await insert_spot_snapshot(ch, rows, ts=now)
+        breadth = aggregate_breadth(rows, ts=now)
+        await insert_breadth(ch, breadth)
+        try:
+            sectors = await source.fetch_sectors()
+            n_sec = await insert_sectors(ch, sectors, ts=now)
+        except Exception as exc:  # noqa: BLE001 · 板块失败不阻断榜单/情绪条
+            logger.warning("[market.cn_board_scan] sectors 失败 · 跳过:%s", exc)
+            n_sec = 0
+        logger.info(
+            "[market.cn_board_scan] spot=%d breadth(up=%d down=%d lu=%d ld=%d) sectors=%d",
+            n_spot, breadth.up_count, breadth.down_count,
+            breadth.limit_up_count, breadth.limit_down_count, n_sec,
+        )
+        return {"spot": n_spot, "sectors": n_sec}
     finally:
         await ch.close()

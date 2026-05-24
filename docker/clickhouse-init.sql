@@ -232,3 +232,60 @@ CREATE TABLE IF NOT EXISTS market_trade_calendar (
 ) ENGINE = ReplacingMergeTree(ingested_at)
 ORDER BY (market, trade_date)
 SETTINGS index_granularity = 8192;
+
+-- ============================================================================
+-- 0023 阶段③ · A股榜单 / 情绪 / 行业板块(3.2)· 数据源统一 Sina(东财 _em 不可达)
+-- ============================================================================
+-- ⚠️ 与 apps/worker/ch_schema.py 的 DDL 必须保持一致。
+--
+-- cn_spot_snapshot · 全市场个股快照(Sina stock_zh_a_spot ~5500 只)· 每次扫描同一 ts 写全量
+--   榜单 = 最新 ts 的快照按 涨跌幅/成交额 排序;换手率/量比 Sina 无字段 → 不存、本期不做
+--   TTL 2 天:榜单只看最新 · 个股历史走 kline 表
+CREATE TABLE IF NOT EXISTS cn_spot_snapshot (
+    symbol String,                          -- 纯代码(去 sh/sz/bj 前缀)· '600519'
+    name String,
+    ts DateTime,                            -- 快照时间(UTC · 一次扫描全量同值)
+    last_price Float64,
+    change_pct Float64,                     -- 涨跌幅 %(可负)
+    change_amount Float64,
+    amount Float64,                         -- 成交额(元)
+    volume Float64,                         -- 成交量(股)
+    ingested_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toDate(ts)
+ORDER BY (ts, symbol)
+TTL ingested_at + INTERVAL 2 DAY
+SETTINGS index_granularity = 8192;
+
+-- cn_market_breadth · 情绪条单行(涨跌平家数精确 + 涨跌停估算 + 总成交额)
+--   涨跌停按板块涨跌幅阈值估(东财涨跌停池不可达)· 口径见 services/cn_market.py
+CREATE TABLE IF NOT EXISTS cn_market_breadth (
+    ts DateTime,
+    up_count UInt32,
+    down_count UInt32,
+    flat_count UInt32,
+    limit_up_count UInt32,                   -- 估算
+    limit_down_count UInt32,                 -- 估算
+    total_amount Float64,                    -- 两市总成交额(元)
+    ingested_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(ts)
+ORDER BY ts
+TTL ingested_at + INTERVAL 30 DAY
+SETTINGS index_granularity = 8192;
+
+-- cn_sector_snapshot · 行业板块快照(Sina stock_sector_spot · 新浪行业 ~49 板块)
+CREATE TABLE IF NOT EXISTS cn_sector_snapshot (
+    name String,                            -- 板块名
+    ts DateTime,
+    change_pct Float64,
+    stock_count UInt32,                      -- 成分股家数
+    total_amount Float64,                    -- 板块总成交额(元)
+    leader_name String,                      -- 代表/领涨股
+    leader_change_pct Float64,
+    ingested_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(ts)
+ORDER BY (ts, name)
+TTL ingested_at + INTERVAL 2 DAY
+SETTINGS index_granularity = 8192;

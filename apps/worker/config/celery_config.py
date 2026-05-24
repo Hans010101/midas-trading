@@ -81,6 +81,13 @@ beat_schedule = {
         "schedule": crontab(hour="8", minute="0"),
         "options": {"expires": 3000},
     },
+    "market-cn-board-scan": {
+        "task": "tasks.market.cn_board_scan",
+        # A股榜单(3.2)· 全市场 spot 快照 + 情绪条 + 行业板块 · A股日盘每 3 分钟(工作日)。
+        # 全 Sina(东财 _em 不可达)· 比指数(*/2)略重(5500 行),错开放 */3。
+        "schedule": crontab(minute="*/3", hour="9-15", day_of_week="mon-fri"),
+        "options": {"expires": 170},
+    },
     # ── M2-A · Crypto Pro 数据采集(0017 ADR)· 常驻定时刷新 ────────────────────
     # 错峰原则:Binance 四个采集(ticker/oi/longshort/funding)分钟数互不重叠,避免
     #   同一刻对 Binance 合约接口集中打请求(IP 权重限流)。oi 落在 5 的倍数;

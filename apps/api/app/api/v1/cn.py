@@ -12,11 +12,18 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import Annotated
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from app.api.deps import ClickHouseDep
+from app.schemas.cn_market import CnBoardResponse
 from app.schemas.market_home import MarketHomeOverview
+from app.services.clickhouse_cn_market import (
+    select_latest_breadth,
+    select_latest_sectors,
+    select_latest_spot,
+)
 from app.services.clickhouse_market_home import select_latest_indices, select_trade_days
 from app.services.market_calendar import compute_market_status
 from app.services.market_home_config import CN_INDEX_CODES
@@ -49,3 +56,37 @@ async def get_cn_overview(ch: ClickHouseDep) -> MarketHomeOverview:
         "cn", now_utc=now, data_as_of=data_as_of, cn_trading_days=trading_days,
     )
     return MarketHomeOverview(market="cn", status=status, indices=indices)
+
+
+@router.get(
+    "/board",
+    response_model=CnBoardResponse,
+    summary="A股榜单 + 情绪条 + 行业板块(3.2)",
+    description=(
+        "情绪条(涨跌平家数 + 涨跌停估算)+ 涨幅/跌幅/成交额 3 榜(同一全市场快照 3 种排序)+ "
+        "行业板块。Sina 源 · 只读。换手率/量比本期不做(Sina 无字段 · 东财不可达)。"
+    ),
+)
+async def get_cn_board(
+    ch: ClickHouseDep,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> CnBoardResponse:
+    breadth = await select_latest_breadth(ch._client)  # noqa: SLF001
+    gainers = await select_latest_spot(
+        ch._client, sort_by="change_pct", order="DESC", limit=limit,  # noqa: SLF001
+    )
+    losers = await select_latest_spot(
+        ch._client, sort_by="change_pct", order="ASC", limit=limit,  # noqa: SLF001
+    )
+    top_amount = await select_latest_spot(
+        ch._client, sort_by="amount", order="DESC", limit=limit,  # noqa: SLF001
+    )
+    sectors = await select_latest_sectors(ch._client, limit=60)  # noqa: SLF001
+    return CnBoardResponse(
+        breadth=breadth,
+        data_as_of=breadth.ts if breadth else None,
+        gainers=gainers,
+        losers=losers,
+        top_amount=top_amount,
+        sectors=sectors,
+    )

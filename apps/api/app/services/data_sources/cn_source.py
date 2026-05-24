@@ -25,6 +25,7 @@ from zoneinfo import ZoneInfo
 import akshare as ak
 import pandas as pd
 
+from app.schemas.cn_market import CnSector, CnSpotRow
 from app.schemas.market import Kline, Period, SymbolMeta
 from app.schemas.market_home import IndexQuote
 from app.services.data_sources.base import BaseDataSource
@@ -191,6 +192,102 @@ class AKShareCnSource(BaseDataSource):
                 out.append(
                     datetime.strptime(str(v), "%Y-%m-%d").replace(tzinfo=UTC).date(),
                 )
+        return out
+
+    # ===========================
+    # 全市场 spot 榜单 + 行业板块(0023 阶段③ · 3.2)· 统一 Sina(东财 _em 本地不可达)
+    # ===========================
+
+    async def fetch_spot_snapshot(self) -> list[CnSpotRow]:
+        """全市场个股实时快照 · Sina stock_zh_a_spot(~5500 只 · 涨跌幅/成交额)。"""
+
+        async def _do() -> list[CnSpotRow]:
+            return await asyncio.to_thread(self._fetch_spot_sync)
+
+        return await self._retry(op="fetch_spot", symbol="<spot>", coro_factory=_do)
+
+    async def fetch_sectors(self) -> list[CnSector]:
+        """行业板块快照 · Sina stock_sector_spot(新浪行业 · ~49 板块)。"""
+
+        async def _do() -> list[CnSector]:
+            return await asyncio.to_thread(self._fetch_sectors_sync)
+
+        return await self._retry(op="fetch_sectors", symbol="<sectors>", coro_factory=_do)
+
+    def _fetch_spot_sync(self) -> list[CnSpotRow]:
+        try:
+            df = ak.stock_zh_a_spot()
+        except (ConnectionError, TimeoutError, OSError) as e:
+            raise UpstreamUnavailableError(
+                str(e), market="cn", upstream="akshare-sina",
+            ) from e
+        if df is None or df.empty:
+            raise UpstreamUnavailableError(
+                "Sina A股 spot 返回空", market="cn", upstream="akshare-sina",
+            )
+        required = {"代码", "名称", "最新价", "涨跌额", "涨跌幅", "成交量", "成交额"}
+        if not required.issubset(set(df.columns)):
+            raise DataFormatError(
+                f"Sina A股 spot 字段不全 · 实际: {sorted(df.columns)}",
+                market="cn", upstream="akshare-sina",
+            )
+        out: list[CnSpotRow] = []
+        for _, row in df.iterrows():
+            try:
+                if pd.isna(row["最新价"]) or pd.isna(row["涨跌幅"]):
+                    continue  # 停牌 / 脏行 · 跳过
+                raw_code = str(row["代码"]).strip()
+                code = raw_code[2:] if raw_code[:2] in ("sh", "sz", "bj") else raw_code
+                out.append(
+                    CnSpotRow(
+                        symbol=code, name=str(row["名称"]).strip(),
+                        last_price=max(float(row["最新价"]), 0.0),
+                        change_pct=float(row["涨跌幅"]),
+                        change_amount=float(row["涨跌额"]),
+                        amount=max(float(row["成交额"]), 0.0),
+                        volume=max(float(row["成交量"]), 0.0),
+                    ),
+                )
+            except (ValueError, TypeError):
+                continue  # 全市场 5500+ · 个别脏行跳过,不致命
+        if not out:
+            raise DataFormatError(
+                "Sina A股 spot 全部行解析失败", market="cn", upstream="akshare-sina",
+            )
+        return out
+
+    def _fetch_sectors_sync(self) -> list[CnSector]:
+        try:
+            df = ak.stock_sector_spot(indicator="新浪行业")
+        except (ConnectionError, TimeoutError, OSError) as e:
+            raise UpstreamUnavailableError(
+                str(e), market="cn", upstream="akshare-sina",
+            ) from e
+        if df is None or df.empty:
+            raise UpstreamUnavailableError(
+                "Sina 行业板块返回空", market="cn", upstream="akshare-sina",
+            )
+        required = {"板块", "公司家数", "涨跌幅", "总成交额", "股票名称", "个股-涨跌幅"}
+        if not required.issubset(set(df.columns)):
+            raise DataFormatError(
+                f"Sina 行业板块字段不全 · 实际: {sorted(df.columns)}",
+                market="cn", upstream="akshare-sina",
+            )
+        out: list[CnSector] = []
+        for _, row in df.iterrows():
+            try:
+                out.append(
+                    CnSector(
+                        name=str(row["板块"]).strip(),
+                        change_pct=float(row["涨跌幅"]),
+                        stock_count=int(float(row["公司家数"])),
+                        total_amount=max(float(row["总成交额"]), 0.0),
+                        leader_name=str(row["股票名称"]).strip(),
+                        leader_change_pct=float(row["个股-涨跌幅"]),
+                    ),
+                )
+            except (ValueError, TypeError, KeyError):
+                continue
         return out
 
     # ===========================
