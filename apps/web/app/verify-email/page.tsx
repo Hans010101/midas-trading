@@ -93,7 +93,7 @@ function VerifyEmailInner() {
 
 export default function VerifyEmailPage() {
   return (
-    <Suspense fallback={<AuthShell title="加载中…">{null}</AuthShell>}>
+    <Suspense fallback={<AuthShell title="载入中…">{null}</AuthShell>}>
       <VerifyEmailInner />
     </Suspense>
   )

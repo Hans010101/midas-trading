@@ -53,14 +53,14 @@ export function CryptoHeader({
   const up = changePct !== null && changePct >= 0
 
   return (
-    <header className="border-b border-paper bg-cream/40 px-6 py-3">
+    <header className="border-b border-paper bg-surface-card px-6 py-3">
       <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-6 gap-y-2">
         <div className="flex items-baseline gap-2">
           <span className="font-serif text-2xl font-bold">{klineSymbol}</span>
-          <span className={cn('font-mono text-lg font-bold', up ? 'text-bull' : 'text-bear')}>
+          <span className={cn('font-mono text-lg font-bold', up ? 'text-up' : 'text-down')}>
             {price !== null ? `$${price.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '—'}
           </span>
-          <span className={cn('font-mono text-sm', up ? 'text-bull' : 'text-bear')}>
+          <span className={cn('font-mono text-sm', up ? 'text-up' : 'text-down')}>
             {changePct !== null ? `${up ? '+' : ''}${changePct.toFixed(2)}%` : ''}
           </span>
           <span className="text-[10px] text-muted-foreground/50">日涨跌</span>
@@ -99,7 +99,7 @@ export function CryptoHeader({
           {fundingRate !== null ? (
             <>
               资金费率{' '}
-              <span className={fundingRate >= 0 ? 'text-bull' : 'text-bear'}>
+              <span className={fundingRate >= 0 ? 'text-up' : 'text-down'}>
                 {fundingRate >= 0 ? '+' : ''}
                 {(fundingRate * 100).toFixed(4)}%
               </span>

@@ -220,7 +220,7 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
           {estimate ? (
             <>
               <span className="font-mono">${fmtP(estimate.liquidationPrice)}</span>
-              <span className={cn('ml-1', estimate.liquidationDistancePct < 5 ? 'text-bear' : 'text-muted-foreground/70')}>
+              <span className={cn('ml-1', estimate.liquidationDistancePct < 5 ? 'text-down' : 'text-muted-foreground/70')}>
                 (距现价 {estimate.liquidationDistancePct.toFixed(2)}%)
               </span>
               <IsolatedTag />
@@ -296,10 +296,10 @@ function ActivePositionCard({
   const dist = pos.liquidation_distance_pct != null ? Number(pos.liquidation_distance_pct) : null
   const longSide = pos.side === 'long'
   return (
-    <div className="mb-3 rounded-md border border-paper bg-cream/60 p-3 text-xs">
+    <div className="mb-3 rounded-md border border-paper bg-surface-card p-3 text-xs">
       <div className="mb-2 flex items-center justify-between">
         <span className="flex items-center gap-1.5">
-          <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-bold text-white', longSide ? 'bg-bull' : 'bg-bear')}>
+          <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-bold text-white', longSide ? 'bg-up' : 'bg-down')}>
             {longSide ? '多' : '空'} {pos.leverage}x
           </span>
           <span className="font-mono">{Number(pos.quantity)} @ ${fmtP(Number(pos.entry_price))}</span>
@@ -324,7 +324,7 @@ function ActivePositionCard({
         />
       </div>
       {dist != null && dist < 5 && (
-        <p className="mt-1.5 text-[10px] text-bear">⚠️ 强平距离仅 {dist.toFixed(1)}% · 建议降杠杆 / 加保证金(虚拟)</p>
+        <p className="mt-1.5 text-[10px] text-down">⚠️ 强平距离仅 {dist.toFixed(1)}% · 建议降杠杆 / 加保证金(虚拟)</p>
       )}
     </div>
   )
@@ -334,7 +334,7 @@ function Cell({ label, v, tone }: { label: React.ReactNode; v: string; tone?: 'b
   return (
     <div className="flex justify-between">
       <span className="text-muted-foreground/70">{label}</span>
-      <span className={cn(tone === 'bull' ? 'text-bull' : tone === 'bear' ? 'text-bear' : 'text-foreground')}>{v}</span>
+      <span className={cn(tone === 'bull' ? 'text-up' : tone === 'bear' ? 'text-down' : 'text-foreground')}>{v}</span>
     </div>
   )
 }
@@ -379,14 +379,14 @@ function PerpConfirmModal({
           {isClose && activePos ? (
             <>
               <ModalRow label="方向">
-                <span className={cn('rounded px-2 py-0.5 text-xs text-white', activePos.side === 'long' ? 'bg-bull' : 'bg-bear')}>
+                <span className={cn('rounded px-2 py-0.5 text-xs text-white', activePos.side === 'long' ? 'bg-up' : 'bg-down')}>
                   平{activePos.side === 'long' ? '多' : '空'} {activePos.leverage}x
                 </span>
               </ModalRow>
               <ModalRow label="平仓量"><span className="font-mono">{Number(activePos.quantity)}(全部)</span></ModalRow>
               {activePos.unrealized_pnl != null && (
                 <ModalRow label="当前浮盈">
-                  <span className={cn('font-mono', Number(activePos.unrealized_pnl) >= 0 ? 'text-bull' : 'text-bear')}>
+                  <span className={cn('font-mono', Number(activePos.unrealized_pnl) >= 0 ? 'text-up' : 'text-down')}>
                     {Number(activePos.unrealized_pnl) >= 0 ? '+' : ''}{fmtU(Number(activePos.unrealized_pnl))} USDT
                   </span>
                 </ModalRow>

@@ -96,9 +96,7 @@ export default function AccountPage() {
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">账户类型</dt>
                 <dd>
-                  <span className="rounded bg-gold/[0.08] border border-gold px-2 py-0.5 font-mono text-[10px] text-gold">
-                    VIRTUAL · 模拟
-                  </span>
+                  <VirtualBadge size="sm" />
                 </dd>
               </div>
             </dl>
@@ -230,7 +228,7 @@ function KPICard({ summary }: { summary: AccountSummary }) {
   const initial = Number(summary.initial_capital)
   const totalPct = initial > 0 ? ((equity - initial) / initial) * 100 : 0
   const realizedPctClass =
-    realized > 0 ? 'text-bull' : realized < 0 ? 'text-bear' : 'text-muted-foreground'
+    realized > 0 ? 'text-up' : realized < 0 ? 'text-down' : 'text-muted-foreground'
 
   return (
     <div className="rounded-lg border border-paper bg-cream p-5 shadow-sm">
@@ -382,8 +380,8 @@ function PositionsTable({ positions, portfolioMap, onClose }: PositionsTableProp
               <td
                 className={cn(
                   'py-2 text-right font-mono',
-                  unrealized !== null && unrealized > 0 && 'text-bull',
-                  unrealized !== null && unrealized < 0 && 'text-bear',
+                  unrealized !== null && unrealized > 0 && 'text-up',
+                  unrealized !== null && unrealized < 0 && 'text-down',
                 )}
               >
                 {unrealized !== null
@@ -442,8 +440,8 @@ function HistoricalTable({
               <td
                 className={cn(
                   'py-2 text-right font-mono',
-                  realized > 0 && 'text-bull',
-                  realized < 0 && 'text-bear',
+                  realized > 0 && 'text-up',
+                  realized < 0 && 'text-down',
                 )}
               >
                 {p.realized_pnl
@@ -539,8 +537,8 @@ function OrdersTable({
               <td
                 className={cn(
                   'py-2 text-right font-mono text-xs',
-                  pnl !== null && pnl > 0 && 'text-bull',
-                  pnl !== null && pnl < 0 && 'text-bear',
+                  pnl !== null && pnl > 0 && 'text-up',
+                  pnl !== null && pnl < 0 && 'text-down',
                 )}
               >
                 {pnl !== null

@@ -14,7 +14,8 @@
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 10%;
 
-    --primary: 350 88% 43%;
+    /* 0022 收口:primary / destructive / ring 全部 = #C8102E(midas-red)· 350 85% 42% ≈ #C8102E */
+    --primary: 350 85% 42%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 43 89% 38%;
@@ -26,12 +27,13 @@
     --accent: 40 14% 96%;
     --accent-foreground: 0 0% 10%;
 
-    --destructive: 0 84% 60%;
+    /* 0022:destructive 收口到品牌红(本产品危险动作=品牌红,危险性靠确认模态表达) */
+    --destructive: 350 85% 42%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 40 10% 90%;
     --input: 40 10% 90%;
-    --ring: 350 88% 43%;
+    --ring: 350 85% 42%;
 
     --radius: 4px;
 
@@ -43,6 +45,17 @@
     --midas-cream: #FCFCF9;
     --midas-bull: #DC143C;
     --midas-bear: #0F6E5F;
+
+    /* 涨跌色语义 token(0022 §2)· 默认红涨绿跌 · 偏好开关翻转见 [data-color-pref] */
+    --color-up: #DC143C;   /* 涨 = 朱红 */
+    --color-down: #0F6E5F; /* 跌 = 墨绿 */
+  }
+
+  /* 涨跌色偏好「绿涨红跌」· 翻转 up/down 两个值 · 全产品所有市场同步(0022 §2.2)·
+     根布局据用户偏好在 <html> 上设 data-color-pref,首屏 SSR 渲染避免闪烁 */
+  :root[data-color-pref="green-up"] {
+    --color-up: #0F6E5F;
+    --color-down: #DC143C;
   }
 
   /* Dark theme token 预留（M0 不实现切换） */

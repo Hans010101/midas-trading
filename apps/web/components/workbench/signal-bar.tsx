@@ -30,7 +30,7 @@ export function SignalBar() {
   const query = useAiDecision({ symbol, market, period })
 
   return (
-    <div className="flex h-10 shrink-0 items-center gap-4 border-b border-paper bg-cream/50 px-4">
+    <div className="flex h-10 shrink-0 items-center gap-4 border-b border-paper bg-surface-card px-4">
       <span className="font-serif text-xs font-bold text-foreground">
         AI 信号
       </span>
@@ -81,7 +81,7 @@ function SignalBarBody({ card }: { card: DecisionCard }) {
                 key={s.ts}
                 className={cn(
                   'inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] font-bold',
-                  isBuy ? 'bg-bull/10 text-bull' : 'bg-bear/10 text-bear',
+                  isBuy ? 'bg-up/10 text-up' : 'bg-down/10 text-down',
                 )}
                 title={s.description}
               >
@@ -107,10 +107,10 @@ function composeLabelColor(label: CompositeLabel): string {
   switch (label) {
     case '强多':
     case '弱多':
-      return 'text-bull'
+      return 'text-up'
     case '强空':
     case '弱空':
-      return 'text-bear'
+      return 'text-down'
     default:
       return 'text-muted-foreground'
   }

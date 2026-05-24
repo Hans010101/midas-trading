@@ -39,7 +39,7 @@ export function CryptoPerpOrders({ futuresSymbol }: { futuresSymbol: string }) {
   if (status !== 'authenticated') return null
 
   return (
-    <div className="rounded-lg border border-paper bg-cream/40 p-3">
+    <div className="rounded-lg border border-paper bg-surface-card p-3">
       <div className="mb-2 font-serif text-sm font-bold text-foreground">
         本币合约订单 · {futuresSymbol}
       </div>
@@ -87,7 +87,7 @@ export function CryptoPerpOrders({ futuresSymbol }: { futuresSymbol: string }) {
                         {ACTION_ZH[o.action]}
                       </span>
                       {o.is_liquidation && (
-                        <span className="ml-1 rounded bg-bear/15 px-1 py-0.5 text-[9px] text-bear">强平</span>
+                        <span className="ml-1 rounded bg-down/15 px-1 py-0.5 text-[9px] text-down">强平</span>
                       )}
                     </td>
                     <td className="py-1.5 text-right font-mono">{num(o.quantity)}</td>
@@ -96,8 +96,8 @@ export function CryptoPerpOrders({ futuresSymbol }: { futuresSymbol: string }) {
                     <td
                       className={cn(
                         'py-1.5 text-right font-mono',
-                        pnl != null && pnl > 0 && 'text-bull',
-                        pnl != null && pnl < 0 && 'text-bear',
+                        pnl != null && pnl > 0 && 'text-up',
+                        pnl != null && pnl < 0 && 'text-down',
                       )}
                     >
                       {pnl != null ? `${pnl >= 0 ? '+' : ''}${fmtU(o.realized_pnl)}` : '—'}

@@ -283,7 +283,7 @@ function ChartCard({
   title, sub, pending = false, children,
 }: { title: string; sub?: string; pending?: boolean; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-paper bg-cream/30 p-3">
+    <div className="rounded-lg border border-paper bg-surface-card p-3">
       <div className="mb-2 flex items-center justify-between">
         <span className="font-serif text-sm font-bold">{title}</span>
         {pending && (
@@ -300,7 +300,7 @@ function ChartCard({
 function ChartState({
   isLoading, isError, isEmpty, children,
 }: { isLoading: boolean; isError: boolean; isEmpty: boolean; children: React.ReactNode }) {
-  if (isLoading) return <CenterNote>加载中…</CenterNote>
+  if (isLoading) return <CenterNote>载入中…</CenterNote>
   if (isError) return <CenterNote>暂时无法读取(后端不可达)</CenterNote>
   if (isEmpty) return <CenterNote>暂无数据 · 预览环境未预热 / 待采集</CenterNote>
   return <>{children}</>

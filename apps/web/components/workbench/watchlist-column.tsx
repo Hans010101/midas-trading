@@ -271,8 +271,8 @@ function SortableRow({ item, quote, selected, onSelect }: SortableRowProps) {
           <div
             className={cn(
               'font-mono text-[10px] tabular-nums',
-              isUp && 'text-bull',
-              isDown && 'text-bear',
+              isUp && 'text-up',
+              isDown && 'text-down',
               !isUp && !isDown && 'text-muted-foreground/60',
             )}
           >

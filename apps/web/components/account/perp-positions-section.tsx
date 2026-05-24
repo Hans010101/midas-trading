@@ -66,7 +66,7 @@ function SideBadge({ side, leverage }: { side: 'long' | 'short'; leverage: numbe
     <span
       className={cn(
         'rounded px-1.5 py-0.5 text-[10px] font-bold text-white',
-        side === 'long' ? 'bg-bull' : 'bg-bear',
+        side === 'long' ? 'bg-up' : 'bg-down',
       )}
     >
       {side === 'long' ? '多' : '空'} {leverage}x
@@ -138,7 +138,7 @@ export function PerpPositionsSection() {
             当前合约持仓 · {active.length} 笔
           </h3>
           {active.length === 0 ? (
-            <p className="mb-6 rounded-lg border border-paper bg-cream/50 px-4 py-6 text-center text-sm text-muted-foreground/70">
+            <p className="mb-6 rounded-lg border border-paper bg-surface-card px-4 py-6 text-center text-sm text-muted-foreground/70">
               暂无合约持仓 · 去币种详情页开多 / 开空
             </p>
           ) : (
@@ -162,7 +162,7 @@ export function PerpPositionsSection() {
                     const upnl = p.unrealized_pnl != null ? num(p.unrealized_pnl) : null
                     const roe = p.roe_pct != null ? num(p.roe_pct) : null
                     const dist = p.liquidation_distance_pct != null ? num(p.liquidation_distance_pct) : null
-                    const tone = upnl == null ? '' : upnl >= 0 ? 'text-bull' : 'text-bear'
+                    const tone = upnl == null ? '' : upnl >= 0 ? 'text-up' : 'text-down'
                     return (
                       <tr key={p.id} className="border-b border-paper/60">
                         <td className="py-2 font-mono">{p.symbol}</td>
@@ -178,12 +178,12 @@ export function PerpPositionsSection() {
                             <span className="ml-1 text-[11px]">({roe >= 0 ? '+' : ''}{roe.toFixed(2)}%)</span>
                           )}
                         </td>
-                        <td className={cn('py-2 text-right font-mono', dist != null && dist < 5 ? 'text-bear' : '')}>
+                        <td className={cn('py-2 text-right font-mono', dist != null && dist < 5 ? 'text-down' : '')}>
                           ${fmtP(p.liquidation_price)}
                           {dist != null && <span className="text-[11px]"> ({dist.toFixed(1)}%)</span>}
                           <IsolatedTag />
                         </td>
-                        <td className={cn('py-2 text-right font-mono text-xs', num(p.funding_paid) > 0 ? 'text-bear' : num(p.funding_paid) < 0 ? 'text-bull' : 'text-muted-foreground/60')}>
+                        <td className={cn('py-2 text-right font-mono text-xs', num(p.funding_paid) > 0 ? 'text-down' : num(p.funding_paid) < 0 ? 'text-up' : 'text-muted-foreground/60')}>
                           {num(p.funding_paid) === 0
                             ? '—'
                             : num(p.funding_paid) > 0
@@ -235,11 +235,11 @@ export function PerpPositionsSection() {
                           <td className="py-2 font-mono">{p.symbol}</td>
                           <td className="py-2"><SideBadge side={p.side} leverage={p.leverage} /></td>
                           <td className="py-2 text-right font-mono">${fmtP(p.entry_price)}</td>
-                          <td className={cn('py-2 text-right font-mono', realized > 0 ? 'text-bull' : realized < 0 ? 'text-bear' : '')}>
+                          <td className={cn('py-2 text-right font-mono', realized > 0 ? 'text-up' : realized < 0 ? 'text-down' : '')}>
                             {realized >= 0 ? '+' : ''}{fmtU(p.realized_pnl)}
                           </td>
                           <td className="py-2 text-xs">
-                            <span className={cn('rounded px-1.5 py-0.5 text-[10px]', liquidated ? 'bg-bear/15 text-bear' : 'text-muted-foreground')}>
+                            <span className={cn('rounded px-1.5 py-0.5 text-[10px]', liquidated ? 'bg-down/15 text-down' : 'text-muted-foreground')}>
                               {liquidated ? '强平' : '手动平'}
                             </span>
                           </td>
@@ -290,13 +290,13 @@ export function PerpPositionsSection() {
                             <span className={cn('rounded px-1.5 py-0.5 text-[10px]', o.action.startsWith('open') ? 'bg-midas-red text-white' : 'border border-midas-red text-midas-red')}>
                               {ACTION_ZH[o.action]}
                             </span>
-                            {o.is_liquidation && <span className="ml-1 rounded bg-bear/15 px-1 py-0.5 text-[9px] text-bear">强平</span>}
+                            {o.is_liquidation && <span className="ml-1 rounded bg-down/15 px-1 py-0.5 text-[9px] text-down">强平</span>}
                           </td>
                           <td className="py-2 font-mono text-xs">{o.symbol}{o.leverage ? <span className="ml-1 text-muted-foreground">{o.leverage}x</span> : null}</td>
                           <td className="py-2 text-right font-mono text-xs">{num(o.quantity)}</td>
                           <td className="py-2 text-right font-mono text-xs">{o.price ? `$${fmtP(o.price)}` : '—'}</td>
                           <td className="py-2 text-right font-mono text-xs">{o.fee ? fmtU(o.fee) : '—'}</td>
-                          <td className={cn('py-2 text-right font-mono text-xs', pnl != null && pnl > 0 ? 'text-bull' : pnl != null && pnl < 0 ? 'text-bear' : '')}>
+                          <td className={cn('py-2 text-right font-mono text-xs', pnl != null && pnl > 0 ? 'text-up' : pnl != null && pnl < 0 ? 'text-down' : '')}>
                             {pnl != null ? `${pnl >= 0 ? '+' : ''}${fmtU(o.realized_pnl)}` : '—'}
                           </td>
                           <td className="py-2 text-xs">
@@ -343,16 +343,16 @@ export function PerpPositionsSection() {
                           </td>
                           <td className="py-2 font-mono text-xs">{f.symbol}</td>
                           <td className="py-2">
-                            <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-bold text-white', f.side === 'long' ? 'bg-bull' : 'bg-bear')}>
+                            <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-bold text-white', f.side === 'long' ? 'bg-up' : 'bg-down')}>
                               {f.side === 'long' ? '多' : '空'}
                             </span>
                           </td>
-                          <td className={cn('py-2 text-right font-mono text-xs', rate >= 0 ? 'text-bull' : 'text-bear')}>
+                          <td className={cn('py-2 text-right font-mono text-xs', rate >= 0 ? 'text-up' : 'text-down')}>
                             {rate >= 0 ? '+' : ''}{(rate * 100).toFixed(4)}%
                           </td>
                           <td className="py-2 text-right font-mono text-xs">${fmtP(f.mark_price)}</td>
                           <td className="py-2 text-right font-mono text-xs">{num(f.quantity)}</td>
-                          <td className={cn('py-2 text-right font-mono text-xs', pay > 0 ? 'text-bear' : pay < 0 ? 'text-bull' : 'text-muted-foreground/60')}>
+                          <td className={cn('py-2 text-right font-mono text-xs', pay > 0 ? 'text-down' : pay < 0 ? 'text-up' : 'text-muted-foreground/60')}>
                             {pay === 0 ? '0' : pay > 0 ? `付 ${fmtU(f.payment)}` : `收 ${fmtU(String(-pay))}`}
                           </td>
                         </tr>
@@ -403,7 +403,7 @@ function PerpCloseConfirm({
           {upnl != null && (
             <div className="flex justify-between">
               <dt className="text-xs text-muted-foreground">当前浮盈</dt>
-              <dd className={cn('font-mono', upnl >= 0 ? 'text-bull' : 'text-bear')}>{upnl >= 0 ? '+' : ''}{fmtU(pos.unrealized_pnl)} USDT</dd>
+              <dd className={cn('font-mono', upnl >= 0 ? 'text-up' : 'text-down')}>{upnl >= 0 ? '+' : ''}{fmtU(pos.unrealized_pnl)} USDT</dd>
             </div>
           )}
         </dl>

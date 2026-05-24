@@ -54,7 +54,7 @@ interface PlaceholderProps {
 
 function PlaceholderSection({ title, milestone, description }: PlaceholderProps) {
   return (
-    <section className="mb-6 rounded-lg border border-dashed border-paper bg-cream/40 p-5">
+    <section className="mb-6 rounded-lg border border-dashed border-paper bg-surface-card p-5">
       <div className="mb-2 flex items-center gap-2">
         <h2 className="font-serif text-lg font-bold text-muted-foreground/70">
           {title}

@@ -76,8 +76,8 @@ export function CurrentPositionCard() {
           <dd
             className={cn(
               'font-mono',
-              unrealized !== null && unrealized > 0 && 'text-bull',
-              unrealized !== null && unrealized < 0 && 'text-bear',
+              unrealized !== null && unrealized > 0 && 'text-up',
+              unrealized !== null && unrealized < 0 && 'text-down',
               unrealized === null && 'text-muted-foreground/60',
             )}
           >

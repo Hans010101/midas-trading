@@ -70,7 +70,7 @@ export function CryptoMainChart({ symbol, period }: CryptoMainChartProps) {
   )
 
   return (
-    <div className="rounded-lg border border-paper bg-cream/30 p-3">
+    <div className="rounded-lg border border-paper bg-surface-card p-3">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div>
           <span className="font-serif text-sm font-bold">主图:K 线 + 布林带 + MACD + 缠论</span>

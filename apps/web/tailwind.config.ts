@@ -64,6 +64,21 @@ const config: Config = {
         bull: '#DC143C',
         bear: '#0F6E5F',
         warn: '#B45309',
+
+        // ===== 0022 语义层(业务代码引用这层;primitives 不再直接用)=====
+        // 涨跌:只有 up/down 走 CSS 变量,支持「偏好开关」一处翻转全产品(0022 §2)
+        up: 'var(--color-up)',
+        down: 'var(--color-down)',
+        // 动作(收口到 #C8102E · midas-red)
+        'action-primary': '#C8102E',
+        'action-hover': '#9E1024',
+        'action-danger': '#C8102E', // 现与 primary 同值 · 独立命名留未来分色余地
+        // 表面(收敛 cream 随机透明度 → 两档)
+        'surface-card': '#FCFCF9', // = cream · 卡片/面板/弹窗实色
+        'surface-subtle': '#F7F6F1', // = paper · 表头/信号条/次级面板
+        // 文字弱提示 / 状态
+        faint: '#94949C', // = ink-faint · 占位/「—」/弱提示
+        success: '#0F6E5F', // 独立成功绿(与 down 解耦,不随涨跌翻转)
       },
       fontFamily: {
         serif: ['"Noto Serif SC"', 'serif'],

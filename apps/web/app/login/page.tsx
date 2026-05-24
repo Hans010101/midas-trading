@@ -144,7 +144,7 @@ function GoogleIcon() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<AuthShell title="加载中…">{null}</AuthShell>}>
+    <Suspense fallback={<AuthShell title="载入中…">{null}</AuthShell>}>
       <LoginInner />
     </Suspense>
   )

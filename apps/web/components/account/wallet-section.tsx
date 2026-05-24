@@ -190,8 +190,8 @@ function WalletCard({ market }: WalletCardProps) {
             <span
               className={cn(
                 'font-mono',
-                Number(account.realized_pnl) > 0 && 'text-bull',
-                Number(account.realized_pnl) < 0 && 'text-bear',
+                Number(account.realized_pnl) > 0 && 'text-up',
+                Number(account.realized_pnl) < 0 && 'text-down',
               )}
             >
               {formatMoney(account.realized_pnl, currency, { sign: true })}

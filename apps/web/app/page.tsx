@@ -211,7 +211,7 @@ function Stat({ icon, label }: { icon: React.ReactNode; label: string }) {
 
 function Showcase() {
   return (
-    <section id="showcase" className="border-y border-paper/60 bg-cream/40 py-16">
+    <section id="showcase" className="border-y border-paper/60 bg-surface-card py-16">
       <div className="mx-auto max-w-6xl px-6 text-center">
         <h2 className="font-serif text-3xl font-bold lg:text-4xl">
           打开即是专业终端
@@ -290,7 +290,7 @@ interface MarketCardProps {
 
 function MarketCard({ icon, name, desc, examples }: MarketCardProps) {
   return (
-    <div className="rounded-xl border border-paper bg-cream/40 p-6 transition-all hover:border-midas-red hover:shadow-md">
+    <div className="rounded-xl border border-paper bg-surface-card p-6 transition-all hover:border-midas-red hover:shadow-md">
       <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-midas-red-glow/40">
         {icon}
       </div>
@@ -313,7 +313,7 @@ function Features() {
   return (
     <section
       id="features"
-      className="border-y border-paper/60 bg-cream/40 py-16"
+      className="border-y border-paper/60 bg-surface-card py-16"
     >
       <div className="mx-auto max-w-6xl px-6">
         <div className="text-center">
@@ -464,7 +464,7 @@ function AiChan() {
       </div>
 
       {/* 强制 disclaimer · 跟 0011 / 0012 ADR 红线一致 */}
-      <div className="mx-auto mt-8 max-w-3xl rounded-lg border border-paper bg-cream/60 px-5 py-3 text-center">
+      <div className="mx-auto mt-8 max-w-3xl rounded-lg border border-paper bg-surface-card px-5 py-3 text-center">
         <p className="font-mono text-xs text-muted-foreground/80">
           ⚠ 分析仅供参考,不构成投资建议。所有交易均为虚拟资金模拟。
         </p>
@@ -483,7 +483,7 @@ function Pricing() {
   return (
     <section
       id="pricing"
-      className="border-y border-paper/60 bg-cream/40 py-16"
+      className="border-y border-paper/60 bg-surface-card py-16"
     >
       <div className="mx-auto max-w-3xl px-6 text-center">
         <h2 className="font-serif text-3xl font-bold lg:text-4xl">定价</h2>
@@ -546,7 +546,7 @@ function BottomCTA() {
 
 function Footer() {
   return (
-    <footer className="border-t border-paper bg-cream/60">
+    <footer className="border-t border-paper bg-surface-card">
       <div className="mx-auto max-w-6xl px-6 py-10">
         <div className="grid gap-8 md:grid-cols-4">
           <div className="md:col-span-2">

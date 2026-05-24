@@ -130,7 +130,7 @@ function CardBody({ card }: { card: DecisionCard }) {
                     className={cn(
                       'inline-flex h-5 w-7 shrink-0 items-center justify-center rounded',
                       'font-mono text-[10px] font-bold',
-                      isBuy ? 'bg-bull/10 text-bull' : 'bg-bear/10 text-bear',
+                      isBuy ? 'bg-up/10 text-up' : 'bg-down/10 text-down',
                     )}
                   >
                     {s.kind}
@@ -200,10 +200,10 @@ function composeLabelColor(label: CompositeLabel): string {
   switch (label) {
     case '强多':
     case '弱多':
-      return 'text-bull'
+      return 'text-up'
     case '强空':
     case '弱空':
-      return 'text-bear'
+      return 'text-down'
     default:
       return 'text-muted-foreground'
   }

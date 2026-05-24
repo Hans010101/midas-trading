@@ -256,7 +256,7 @@ export default function CryptoMarketPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 rounded-md border border-paper bg-cream/40 px-3 py-1.5 text-sm">
+              <div className="flex items-center gap-1.5 rounded-md border border-paper bg-surface-card px-3 py-1.5 text-sm">
                 <SearchIcon />
                 <input type="text" value={query} onChange={(e) => setQuery(e.target.value)}
                   placeholder="搜索交易对(全市场)"
@@ -273,7 +273,7 @@ export default function CryptoMarketPage() {
           <div className="overflow-x-auto rounded-lg border border-paper">
             <table className="w-full min-w-[1100px] border-collapse text-sm">
               <thead>
-                <tr className="border-b border-paper bg-cream/50 text-xs text-muted-foreground">
+                <tr className="border-b border-paper bg-surface-card text-xs text-muted-foreground">
                   <th className="w-12 px-3 py-2 text-center font-medium">#</th>
                   <th className="px-3 py-2 text-left font-medium">交易对</th>
                   <SortTh label="最新价格" col="price" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
@@ -288,7 +288,7 @@ export default function CryptoMarketPage() {
                 </tr>
               </thead>
               <tbody>
-                {tickersQ.isPending && <StateRow text="加载中…" />}
+                {tickersQ.isPending && <StateRow text="载入中…" />}
                 {tickersQ.isError && <StateRow text="暂时无法读取行情(后端不可达)" />}
                 {tickersQ.isSuccess && viewRows.length === 0 && (
                   <StateRow text={query ? '无匹配交易对' : '暂无行情数据 · 待采集'} />
@@ -304,16 +304,16 @@ export default function CryptoMarketPage() {
                       <td className="px-3 py-2.5 text-center font-mono text-xs text-muted-foreground/70">{i + 1}</td>
                       <td className="px-3 py-2.5"><span className="font-serif font-bold text-foreground">{r.symbol}</span></td>
                       <Td>{fmtPrice(r.last_price)}</Td>
-                      <Td className={r.change_pct_24h >= 0 ? 'text-bull' : 'text-bear'}>{fmtPct(r.change_pct_24h)}</Td>
+                      <Td className={r.change_pct_24h >= 0 ? 'text-up' : 'text-down'}>{fmtPct(r.change_pct_24h)}</Td>
                       <Td className="text-muted-foreground/80">{fmtPrice(r.high_24h)}</Td>
                       <Td className="text-muted-foreground/80">{fmtPrice(r.low_24h)}</Td>
-                      <Td className={fr == null ? 'text-muted-foreground/40' : fr >= 0 ? 'text-bull' : 'text-bear'}>
+                      <Td className={fr == null ? 'text-muted-foreground/40' : fr >= 0 ? 'text-up' : 'text-down'}>
                         {fr == null ? '—' : `${fr >= 0 ? '+' : ''}${(fr * 100).toFixed(4)}%`}
                       </Td>
                       <Td className={ls == null ? 'text-muted-foreground/40' : 'text-muted-foreground/80'}>
                         {ls == null ? '—' : ls.toFixed(2)}
                       </Td>
-                      <Td className={oi == null ? 'text-muted-foreground/40' : oi >= 0 ? 'text-bull' : 'text-bear'}>
+                      <Td className={oi == null ? 'text-muted-foreground/40' : oi >= 0 ? 'text-up' : 'text-down'}>
                         {oi == null ? '—' : `${oi >= 0 ? '+' : ''}${oi.toFixed(2)}%`}
                       </Td>
                       <Td className="text-muted-foreground/80">{fmtUsd(r.quote_volume_24h)}</Td>
@@ -356,10 +356,10 @@ function MetricCard({
   return (
     <div className="rounded-lg border border-paper bg-cream p-4 shadow-sm">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={cn('mt-1 font-mono text-2xl font-bold', tone === 'bull' ? 'text-bull' : tone === 'bear' ? 'text-bear' : 'text-foreground')}>
+      <div className={cn('mt-1 font-mono text-2xl font-bold', tone === 'bull' ? 'text-up' : tone === 'bear' ? 'text-down' : 'text-foreground')}>
         {loading ? '…' : value}
       </div>
-      {sub && <div className={cn('mt-0.5 text-[11px]', tone === 'bull' ? 'text-bull' : tone === 'bear' ? 'text-bear' : 'text-muted-foreground/70')}>{loading ? '' : sub}</div>}
+      {sub && <div className={cn('mt-0.5 text-[11px]', tone === 'bull' ? 'text-up' : tone === 'bear' ? 'text-down' : 'text-muted-foreground/70')}>{loading ? '' : sub}</div>}
     </div>
   )
 }

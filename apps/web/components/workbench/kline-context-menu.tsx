@@ -110,12 +110,12 @@ export function KlineContextMenu({ children }: Props) {
             {symbol} · {MARKET_LABEL[market]}
           </div>
           {!isAuthenticated && (
-            <div className="border-b border-paper bg-cream/60 px-3 py-2 text-[10px] text-warn">
+            <div className="border-b border-paper bg-surface-card px-3 py-2 text-[10px] text-warn">
               ⚠ 未登录 · 点击下单将引导登录
             </div>
           )}
           {isAuthenticated && !isActivated && (
-            <div className="border-b border-paper bg-cream/60 px-3 py-2 text-[10px] text-warn">
+            <div className="border-b border-paper bg-surface-card px-3 py-2 text-[10px] text-warn">
               ⚠ 未设置 {MARKET_LABEL[market]} 虚拟资金 · 去 /account 激活
             </div>
           )}

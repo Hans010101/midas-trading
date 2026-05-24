@@ -118,7 +118,7 @@ export function StrategyChecklist({ futuresSymbol, klineSymbol, period }: Props)
   ]
 
   return (
-    <div className="rounded-lg border border-paper bg-cream/40 p-4">
+    <div className="rounded-lg border border-paper bg-surface-card p-4">
       <div className="mb-3 flex items-center justify-between">
         <span className="font-serif text-base font-bold">实战策略清单</span>
         <VirtualBadge size="sm" />
@@ -136,9 +136,9 @@ export function StrategyChecklist({ futuresSymbol, klineSymbol, period }: Props)
 }
 
 const TONE_HIT: Record<Rule['tone'], string> = {
-  green: 'bg-bull/15 text-bull border-bull/40',
+  green: 'bg-up/15 text-up border-up/40',
   amber: 'bg-gold/15 text-gold border-gold/40',
-  red: 'bg-bear/15 text-bear border-bear/40',
+  red: 'bg-down/15 text-down border-down/40',
 }
 
 function RuleRow({ rule }: { rule: Rule }) {

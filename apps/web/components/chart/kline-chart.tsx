@@ -96,16 +96,22 @@ export function KlineChart({
     if (!chart) return
     chartRef.current = chart
 
+    // 涨跌色读 CSS 变量 --color-up/--color-down(0022)· 跟随用户「涨跌色偏好」翻转,
+    // 不再硬编码;默认红涨绿跌,取不到时回退默认值。
+    const rootStyle = getComputedStyle(document.documentElement)
+    const upColor = rootStyle.getPropertyValue('--color-up').trim() || '#DC143C'
+    const downColor = rootStyle.getPropertyValue('--color-down').trim() || '#0F6E5F'
+
     // 视觉 token · 04 文档 + CLAUDE.md 视觉系统
     chart.setStyles({
       candle: {
         bar: {
-          upColor: '#DC143C', // bull 朱红
-          downColor: '#0F6E5F', // bear 墨绿
-          upBorderColor: '#DC143C',
-          downBorderColor: '#0F6E5F',
-          upWickColor: '#DC143C',
-          downWickColor: '#0F6E5F',
+          upColor,
+          downColor,
+          upBorderColor: upColor,
+          downBorderColor: downColor,
+          upWickColor: upColor,
+          downWickColor: downColor,
           noChangeColor: '#94949C', // ink-faint
         },
       },

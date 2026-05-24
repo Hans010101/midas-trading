@@ -172,8 +172,8 @@ function WalletIndicator({
       <Stat label="累计盈亏">
         <span
           className={cn(
-            realized > 0 && 'text-bull',
-            realized < 0 && 'text-bear',
+            realized > 0 && 'text-up',
+            realized < 0 && 'text-down',
           )}
         >
           {formatMoney(summary.realized_pnl, currency, { sign: true })}
