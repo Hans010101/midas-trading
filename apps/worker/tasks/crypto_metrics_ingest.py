@@ -34,6 +34,7 @@ from app.services.clickhouse_crypto import (
     insert_long_short,
     insert_market_overview,
     insert_open_interest,
+    insert_premium_index,
     insert_tickers_24h,
     merge_fear_greed_into_latest_overview,
 )
@@ -132,6 +133,35 @@ async def _ticker_24h_scan_async() -> dict[str, Any]:
         n = await insert_tickers_24h(ch, perp_tickers)
         logger.info("[crypto.ticker_24h_scan] perp tickers written=%d", n)
         return {"perp_count": n}
+    finally:
+        await source.close()
+        await ch.close()
+
+
+# ============================================================================
+# 1.5 · premium index scan · 1 min(标记价/指数价/资金费 · 撮合/强平价源)· M2-C.2.1
+# ============================================================================
+
+
+@shared_task(name="tasks.crypto.premium_index_scan")
+def premium_index_scan() -> dict[str, Any]:
+    return asyncio.run(_premium_index_scan_async())
+
+
+async def _premium_index_scan_async() -> dict[str, Any]:
+    """全市场 premiumIndex 单请求 → 落 crypto_premium_index。
+
+    撮合/强平价源(mark price)+ 基差(mark-index)+ futures/info 的真 nextFundingTime
+    都吃这张表。单请求拉全市场(~500 perp)· 极轻 · 每分钟刷保证 ≤1min 新鲜。
+    全市场存(不截断采集名单):任何用户可能开仓的 symbol 都有 mark,无需 intersect。
+    """
+    source = BinanceFuturesSource()
+    ch = await _get_ch_client()
+    try:
+        items = await source.fetch_premium_index()
+        n = await insert_premium_index(ch, items)
+        logger.info("[crypto.premium_index_scan] written=%d", n)
+        return {"written": n}
     finally:
         await source.close()
         await ch.close()

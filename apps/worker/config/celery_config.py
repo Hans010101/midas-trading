@@ -71,6 +71,15 @@ beat_schedule = {
         "schedule": crontab(minute="*/5"),
         "options": {"expires": 240},
     },
+    "crypto-premium-index-scan": {
+        "task": "tasks.crypto.premium_index_scan",
+        # M2-C.2.1 · 标记价/指数价/资金费 实时快照 · 撮合/强平价源(perp-liquidation 每分钟读)·
+        # 单请求拉全市场(/fapi/v1/premiumIndex 无 symbol · 权重极低)· 每 1 分钟保证 ≤1min 新鲜。
+        # 不与四个错峰采集冲突:单个轻量 endpoint,即便偶尔同分钟也只多一个低权重请求。
+        # expires 50:本轮没及时领走就丢(下一分钟再拉),不堆任务。
+        "schedule": crontab(minute="*"),
+        "options": {"expires": 50},
+    },
     "crypto-long-short-scan": {
         "task": "tasks.crypto.long_short_scan",
         # ADR-0018 配套③:全量(~527)后单轮 3 上游×全量较重 · 10min → 15min 降频。
