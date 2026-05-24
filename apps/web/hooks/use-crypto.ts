@@ -13,10 +13,12 @@
 import { useQuery } from '@tanstack/react-query'
 
 import {
+  fetchBasisSeries,
   fetchFundingRate,
   fetchFuturesInfo,
   fetchLongShortRatio,
   fetchOpenInterest,
+  type BasisSeriesResponse,
   type FundingRateResponse,
   type FuturesSymbolInfo,
   type LongShortRatioResponse,
@@ -59,6 +61,16 @@ export function useFuturesInfo(symbol: string, enabled = true) {
   return useQuery<FuturesSymbolInfo>({
     queryKey: ['crypto-info', symbol],
     queryFn: ({ signal }) => fetchFuturesInfo(symbol, signal),
+    enabled,
+    retry: 0,
+    staleTime: STALE,
+  })
+}
+
+export function useBasisSeries(symbol: string, limit = 288, enabled = true) {
+  return useQuery<BasisSeriesResponse>({
+    queryKey: ['crypto-basis', symbol, limit],
+    queryFn: ({ signal }) => fetchBasisSeries(symbol, limit, signal),
     enabled,
     retry: 0,
     staleTime: STALE,

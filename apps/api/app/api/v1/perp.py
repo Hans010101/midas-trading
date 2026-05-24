@@ -23,9 +23,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import ClickHouseDep, CurrentUserDep
 from app.core.database import get_db
-from app.models.perp import PerpSide, VirtualPerpOrder, VirtualPerpPosition
+from app.models.perp import (
+    PerpSide,
+    VirtualPerpFunding,
+    VirtualPerpOrder,
+    VirtualPerpPosition,
+)
 from app.models.virtual import VirtualAccount
 from app.schemas.perp import (
+    PerpFundingResponse,
     PerpOrderPlaceIn,
     PerpOrderResponse,
     PerpPositionResponse,
@@ -198,6 +204,7 @@ async def list_perp_positions(
                 quantity=p.quantity, entry_price=p.entry_price,
                 initial_margin=p.initial_margin, liquidation_price=p.liquidation_price,
                 realized_pnl=p.realized_pnl, fee_paid=p.fee_paid,
+                funding_paid=p.funding_paid,
                 opened_at=p.opened_at, closed_at=p.closed_at,
                 close_reason=p.close_reason,
                 mark_price=mark, unrealized_pnl=upnl,
@@ -235,6 +242,42 @@ async def list_perp_orders(
         stmt = stmt.where(VirtualPerpOrder.id < before_id)
     orders = (await db.scalars(stmt)).all()
     return [_serialize_order(o) for o in orders]
+
+
+# ===== GET /funding =====
+
+
+@router.get(
+    "/funding",
+    response_model=list[PerpFundingResponse],
+    summary="资金费结算流水(M2-C.2.2)· 倒序 · 可按 symbol 过滤",
+)
+async def list_perp_funding(
+    current_user: CurrentUserDep,
+    db: DbDep,
+    symbol: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+) -> list[PerpFundingResponse]:
+    """本用户的资金费结算流水 · 只读(结算由 worker settle_funding 写)· 全程虚拟。"""
+    stmt = (
+        select(VirtualPerpFunding)
+        .join(VirtualAccount, VirtualAccount.id == VirtualPerpFunding.account_id)
+        .where(VirtualAccount.user_id == current_user.id)
+        .order_by(desc(VirtualPerpFunding.funding_ts), desc(VirtualPerpFunding.id))
+        .limit(limit)
+    )
+    if symbol is not None:
+        stmt = stmt.where(VirtualPerpFunding.symbol == symbol)
+    rows = (await db.scalars(stmt)).all()
+    return [
+        PerpFundingResponse(
+            id=r.id, symbol=r.symbol, side=r.side,
+            funding_rate=r.funding_rate, mark_price=r.mark_price,
+            quantity=r.quantity, payment=r.payment,
+            funding_ts=r.funding_ts, settled_at=r.settled_at,
+        )
+        for r in rows
+    ]
 
 
 # ===== 内部 =====

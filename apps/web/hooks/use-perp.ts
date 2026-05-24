@@ -11,9 +11,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSession } from 'next-auth/react'
 
 import {
+  type PerpFunding,
   type PerpOrder,
   type PerpPosition,
   type PlacePerpOrderInput,
+  fetchPerpFunding,
   fetchPerpOrders,
   fetchPerpPositions,
   placePerpOrder,
@@ -23,6 +25,7 @@ export const PERP_KEY = {
   positions: (includeClosed?: boolean) =>
     ['perp', 'positions', includeClosed ?? false] as const,
   orders: (symbol?: string) => ['perp', 'orders', symbol ?? 'all'] as const,
+  funding: (symbol?: string) => ['perp', 'funding', symbol ?? 'all'] as const,
 }
 
 function useToken(): { token: string; ready: boolean } {
@@ -54,6 +57,18 @@ export function usePerpOrders(opts: { symbol?: string; limit?: number } = {}) {
     enabled: ready,
     retry: 0,
     staleTime: 10_000,
+  })
+}
+
+export function usePerpFunding(opts: { symbol?: string; limit?: number } = {}) {
+  const { token, ready } = useToken()
+  return useQuery<PerpFunding[]>({
+    queryKey: PERP_KEY.funding(opts.symbol),
+    queryFn: ({ signal }) =>
+      fetchPerpFunding(token, { symbol: opts.symbol, limit: opts.limit }, signal),
+    enabled: ready,
+    retry: 0,
+    staleTime: 30_000,
   })
 }
 

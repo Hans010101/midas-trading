@@ -143,3 +143,26 @@ export function fetchFuturesInfo(
     signal,
   )
 }
+
+// ── 基差时序(详情页 ⑥ 基差图)· M2-C.2.4 ───────────────────────────────────
+export interface BasisPoint {
+  ts: string
+  mark_price: number
+  index_price: number
+  basis_pct: number // (mark − index) / index × 100 · 可负
+}
+export interface BasisSeriesResponse {
+  symbol: string
+  items: BasisPoint[]
+}
+
+export function fetchBasisSeries(
+  symbol: string,
+  limit = 288,
+  signal?: AbortSignal,
+): Promise<BasisSeriesResponse> {
+  return getJson<BasisSeriesResponse>(
+    `/api/v1/crypto/futures/${symbol}/basis?limit=${limit}`,
+    signal,
+  )
+}
