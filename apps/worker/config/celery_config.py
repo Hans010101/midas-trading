@@ -43,7 +43,15 @@ beat_schedule = {
     "scan-price-anomalies": {
         "task": "tasks.price_alerts.scan_price_anomalies",
         # 0009 § 4 · 每 1 分钟扫所有自选股 · 涨跌 ±5% 触发 · Redis 5 分钟去重
+        # DP13:0025 告警引擎上线后保留此任务并行(不替代)
         "schedule": crontab(minute="*"),
+    },
+    "scan-alert-rules": {
+        "task": "tasks.alerts.scan_alert_rules",
+        # 0025 G2b · 每 1 分钟扫所有启用告警规则 · 指标分类频率分层(DP6)·
+        # 命中经统一 bot 推送 · Redis 按 rule.cooldown_sec 去重
+        "schedule": crontab(minute="*"),
+        "options": {"expires": 50},
     },
     "perp-liquidation-scan": {
         "task": "tasks.perp.scan_liquidations",

@@ -10,6 +10,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from app.services.notifications.events import (
+    AlertTriggeredEvent,
     NotificationEvent,
     PriceAnomalyEvent,
     TradeFilledEvent,
@@ -19,6 +20,9 @@ MARKET_LABEL: dict[str, str] = {"cn": "A 股", "us": "美股", "crypto": "加密
 CURRENCY_SYMBOL: dict[str, str] = {"CNY": "¥", "USD": "$", "USDT": "USDT"}
 
 DISCLAIMER = "本次为模拟交易,不构成投资建议"
+# 告警类不是交易,用「仅供参考」免责(红线:bot 文案必带免责)
+ALERT_DISCLAIMER = "仅供参考,不构成投资建议"
+_OP_SYMBOL: dict[str, str] = {"gt": ">", "gte": "≥", "lt": "<", "lte": "≤"}
 
 
 def _fmt_money(amount: Decimal, currency: str) -> str:
@@ -43,8 +47,30 @@ def render_telegram(event: NotificationEvent) -> str:
         return _tg_trade_filled(event)
     if isinstance(event, PriceAnomalyEvent):
         return _tg_price_anomaly(event)
+    if isinstance(event, AlertTriggeredEvent):
+        return _tg_alert_triggered(event)
     msg = f"未知事件类型 {type(event)}"
     raise ValueError(msg)
+
+
+def _fmt_num(n: float) -> str:
+    """紧凑数值:整数去小数,否则保留 2 位(去尾零)。"""
+    if n == int(n):
+        return f"{int(n):,}"
+    return f"{n:,.2f}".rstrip("0").rstrip(".")
+
+
+def _tg_alert_triggered(event: AlertTriggeredEvent) -> str:
+    target = event.symbol or MARKET_LABEL.get(event.market, event.market)
+    unit = event.unit or ""
+    op = _OP_SYMBOL.get(event.operator, event.operator)
+    return (
+        "*点金 Midas · 告警触发*\n\n"
+        f"🔔 {target} · {MARKET_LABEL.get(event.market, event.market)}\n"
+        f"{event.indicator_label}  {op} {_fmt_num(event.threshold)}{unit}\n"
+        f"当前 {_fmt_num(event.value)}{unit}\n\n"
+        f"_{ALERT_DISCLAIMER}_"
+    )
 
 
 def _tg_trade_filled(event: TradeFilledEvent) -> str:

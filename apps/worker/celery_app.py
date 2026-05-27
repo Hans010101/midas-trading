@@ -16,6 +16,7 @@ app.config_from_object("config.celery_config")
 # 若把 import 放进 handler 里会 ModuleNotFoundError(实测踩过)。
 from ch_schema import ensure_crypto_ch_tables  # noqa: E402
 from tasks import (  # noqa: E402, F401
+    alert_scan,
     crypto_metrics_ingest,
     data_ingest,
     equity_snapshot,
