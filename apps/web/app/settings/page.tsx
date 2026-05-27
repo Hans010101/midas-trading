@@ -13,6 +13,8 @@
  */
 
 import { TopNav } from '@/components/layout/top-nav'
+import { AlertRulesSection } from '@/components/settings/alert-rules-section'
+import { BotOrderPresetSection } from '@/components/settings/bot-order-preset-section'
 import { ColorPrefSection } from '@/components/settings/color-pref-section'
 import { NotificationsConfigSection } from '@/components/settings/notifications-config-section'
 
@@ -26,6 +28,12 @@ export default function SettingsPage() {
         </h1>
 
         <NotificationsConfigSection />
+
+        {/* 0026 G5 · 告警规则配置(复用 G2b CRUD + 一键推荐)*/}
+        <AlertRulesSection />
+
+        {/* 0026 G5 · Bot 下单默认参数(后台预设)*/}
+        <BotOrderPresetSection />
 
         {/* 涨跌色偏好(3.5 · 决策⑧)· 实装 */}
         <ColorPrefSection />
