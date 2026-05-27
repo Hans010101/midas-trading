@@ -1,12 +1,11 @@
 'use client'
 
 /**
- * 设置页 · 消息推送配置 section · 0009 v2 UI 填充(Checkpoint U)。
+ * 设置页 · 消息推送配置 section · 0025 G2a 统一 Telegram bot。
  *
- * 飞书 webhook + TG bot token + chat_id · 各通道独立 「保存」+「发送测试」按钮。
- * 总开关:成交通知 / 价格异动 各一个 toggle。
- *
- * Toast 配色严守红线:成功用帝王金,失败用中国红,绝不绿色。
+ * 0025 改动:移除飞书 + per-user TG token 手填;Telegram 经统一 bot 的 /start 绑定。
+ * 本期(G2a)只展示绑定状态 + 测试按钮 + 事件总开关;完整绑定 UX(扫码 / deep link)
+ * 在 G5 接入。Toast 配色:成功帝王金,失败中国红,绝不绿色。
  */
 
 import { Loader2 } from 'lucide-react'
@@ -24,55 +23,15 @@ export function NotificationsConfigSection() {
   const { data: config, isLoading } = useNotificationConfig()
   const saveMutation = useSaveNotificationConfig()
 
-  // 本地输入 state · config 加载完同步初始值
-  const [feishuUrl, setFeishuUrl] = useState('')
-  const [tgToken, setTgToken] = useState('')
-  const [tgChatId, setTgChatId] = useState('')
   const [tradeEnabled, setTradeEnabled] = useState(true)
   const [priceEnabled, setPriceEnabled] = useState(true)
 
-  // 标记 token 字段是否被用户修改过(避免清空截断的 token)
-  const [tokenTouched, setTokenTouched] = useState(false)
-
   useEffect(() => {
     if (config) {
-      setFeishuUrl(config.feishu_webhook_url ?? '')
-      // 截断 token 仅展示 · 不写入 input(避免提交时把截断版本当真 token 存)
-      setTgToken('')
-      setTokenTouched(false)
-      setTgChatId(config.tg_chat_id ?? '')
       setTradeEnabled(config.trade_alert_enabled)
       setPriceEnabled(config.price_alert_enabled)
     }
   }, [config])
-
-  async function saveFeishu() {
-    try {
-      await saveMutation.mutateAsync({
-        feishu_webhook_url: feishuUrl,
-      })
-      toast.success('飞书配置已保存')
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '保存失败')
-    }
-  }
-
-  async function saveTelegram() {
-    try {
-      const payload: Parameters<typeof saveMutation.mutateAsync>[0] = {
-        tg_chat_id: tgChatId,
-      }
-      // token 仅在用户主动输入新值时写入 · 否则保留 DB 已有(避免被截断版本污染)
-      if (tokenTouched) {
-        payload.tg_bot_token = tgToken
-      }
-      await saveMutation.mutateAsync(payload)
-      toast.success('Telegram 配置已保存')
-      setTokenTouched(false)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '保存失败')
-    }
-  }
 
   async function saveSwitches() {
     try {
@@ -90,109 +49,45 @@ export function NotificationsConfigSection() {
     return <p className="py-4 text-sm text-muted-foreground">载入中…</p>
   }
 
+  const bound = config?.has_telegram ?? false
+
   return (
     <section className="mb-10">
       <h2 className="mb-2 font-serif text-xl font-bold text-foreground">
         消息推送
       </h2>
       <p className="mb-4 text-sm text-muted-foreground">
-        填飞书 webhook 推飞书 · 填 TG bot 推 TG · 都填都推 · 都不填只有站内
+        绑定 Telegram 后,成交通知 / 价格异动会推送到你的 Telegram · 未绑定只有站内提示
       </p>
 
       <div className="space-y-4">
-        {/* 飞书 */}
-        <ChannelCard
-          icon="📣"
-          title="飞书机器人"
-          subtitle="自定义关键词「点金」· 消息天然含此字样"
-          configured={config?.has_feishu ?? false}
-        >
-          <div className="mb-3">
-            <label
-              htmlFor="feishu-url"
-              className="mb-1 block text-xs text-muted-foreground"
+        {/* Telegram 绑定状态 */}
+        <div className="rounded-lg border border-paper bg-cream p-5 shadow-sm">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="text-xl" aria-hidden="true">✈️</span>
+            <h3 className="font-serif text-base font-bold text-foreground">
+              Telegram
+            </h3>
+            <span
+              className={cn(
+                'rounded border px-1.5 py-0.5 font-mono text-[10px]',
+                bound
+                  ? 'border-gold bg-gold/[0.08] text-gold'
+                  : 'border-paper text-muted-foreground/70',
+              )}
             >
-              Webhook URL
-            </label>
-            <input
-              id="feishu-url"
-              type="text"
-              value={feishuUrl}
-              onChange={(e) => setFeishuUrl(e.target.value)}
-              placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
-              className="h-10 w-full rounded-md border border-paper bg-background px-3 font-mono text-xs text-foreground placeholder:text-muted-foreground/40"
-            />
+              {bound ? '✓ 已绑定' : '未绑定'}
+            </span>
           </div>
-          <ButtonRow>
-            <SaveButton onClick={saveFeishu} pending={saveMutation.isPending}>
-              保存飞书配置
-            </SaveButton>
-            <TestButton channel="feishu" />
-          </ButtonRow>
-        </ChannelCard>
+          <p className="mb-3 text-xs text-muted-foreground">
+            {bound
+              ? '已绑定到你的 Telegram · 推送将发到这里。'
+              : '绑定入口即将上线 —— 届时在此扫码 / 点链接,在官方 bot 里 /start 完成绑定。'}
+          </p>
+          <TestButton disabled={!bound} />
+        </div>
 
-        {/* Telegram */}
-        <ChannelCard
-          icon="✈️"
-          title="Telegram bot"
-          subtitle="到 @BotFather 申请 token,把 bot 加进群拿 chat_id"
-          configured={config?.has_telegram ?? false}
-        >
-          <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div>
-              <label
-                htmlFor="tg-token"
-                className="mb-1 block text-xs text-muted-foreground"
-              >
-                Bot Token
-                {config?.tg_bot_token && !tokenTouched && (
-                  <span className="ml-2 font-mono text-[10px] text-muted-foreground/70">
-                    已保存 · {config.tg_bot_token}
-                  </span>
-                )}
-              </label>
-              <input
-                id="tg-token"
-                type="password"
-                value={tgToken}
-                onChange={(e) => {
-                  setTgToken(e.target.value)
-                  setTokenTouched(true)
-                }}
-                placeholder={
-                  config?.tg_bot_token
-                    ? '已保存 · 输入新 token 替换'
-                    : '123456789:ABC...XYZ'
-                }
-                className="h-10 w-full rounded-md border border-paper bg-background px-3 font-mono text-xs text-foreground placeholder:text-muted-foreground/40"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="tg-chat-id"
-                className="mb-1 block text-xs text-muted-foreground"
-              >
-                Chat ID
-              </label>
-              <input
-                id="tg-chat-id"
-                type="text"
-                value={tgChatId}
-                onChange={(e) => setTgChatId(e.target.value)}
-                placeholder="-100123456789"
-                className="h-10 w-full rounded-md border border-paper bg-background px-3 font-mono text-xs text-foreground placeholder:text-muted-foreground/40"
-              />
-            </div>
-          </div>
-          <ButtonRow>
-            <SaveButton onClick={saveTelegram} pending={saveMutation.isPending}>
-              保存 Telegram 配置
-            </SaveButton>
-            <TestButton channel="telegram" />
-          </ButtonRow>
-        </ChannelCard>
-
-        {/* 总开关 */}
+        {/* 事件总开关 */}
         <div className="rounded-lg border border-paper bg-cream p-5 shadow-sm">
           <h3 className="mb-3 font-serif text-base font-bold text-foreground">
             事件总开关
@@ -216,51 +111,11 @@ export function NotificationsConfigSection() {
           </SaveButton>
         </div>
       </div>
-
-      <p className="mt-4 text-[10px] text-muted-foreground/70">
-        ⚠ Token / Webhook URL 在数据库以明文存储(M0)· M1 升级加密
-      </p>
     </section>
   )
 }
 
 // ===== sub-components =====
-
-interface ChannelCardProps {
-  icon: string
-  title: string
-  subtitle: string
-  configured: boolean
-  children: React.ReactNode
-}
-
-function ChannelCard({
-  icon, title, subtitle, configured, children,
-}: ChannelCardProps) {
-  return (
-    <div className="rounded-lg border border-paper bg-cream p-5 shadow-sm">
-      <div className="mb-3 flex items-baseline justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-xl" aria-hidden="true">{icon}</span>
-          <h3 className="font-serif text-base font-bold text-foreground">
-            {title}
-          </h3>
-          {configured && (
-            <span className="rounded border border-gold bg-gold/[0.08] px-1.5 py-0.5 font-mono text-[10px] text-gold">
-              ✓ 已配置
-            </span>
-          )}
-        </div>
-      </div>
-      <p className="mb-3 text-xs text-muted-foreground">{subtitle}</p>
-      {children}
-    </div>
-  )
-}
-
-function ButtonRow({ children }: { children: React.ReactNode }) {
-  return <div className="flex gap-2">{children}</div>
-}
 
 interface SaveButtonProps {
   onClick: () => void
@@ -282,20 +137,16 @@ function SaveButton({ onClick, pending, children }: SaveButtonProps) {
   )
 }
 
-function TestButton({ channel }: { channel: 'feishu' | 'telegram' }) {
+function TestButton({ disabled }: { disabled: boolean }) {
   const testMutation = useSendTestNotification()
 
   async function handleClick() {
     try {
-      const result = await testMutation.mutateAsync(channel)
+      const result = await testMutation.mutateAsync('telegram')
       if (result.ok) {
-        toast.success(
-          channel === 'feishu' ? '飞书测试消息已发送' : 'TG 测试消息已发送',
-        )
+        toast.success('Telegram 测试消息已发送')
       } else {
-        toast.error(
-          `${channel === 'feishu' ? '飞书' : 'TG'} 推送失败 · ${result.error ?? '未知原因'}`,
-        )
+        toast.error(`推送失败 · ${result.error ?? '未知原因'}`)
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '请求失败')
@@ -306,7 +157,8 @@ function TestButton({ channel }: { channel: 'feishu' | 'telegram' }) {
     <button
       type="button"
       onClick={handleClick}
-      disabled={testMutation.isPending}
+      disabled={disabled || testMutation.isPending}
+      title={disabled ? '绑定 Telegram 后可用' : undefined}
       className="inline-flex items-center gap-1.5 rounded-md border border-paper bg-background px-4 py-2 text-sm text-foreground transition-colors hover:bg-cream disabled:cursor-not-allowed disabled:opacity-50"
     >
       {testMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

@@ -1,7 +1,9 @@
-"""NotificationConfig SQLAlchemy model · 0009 推送通知设计。
+"""NotificationConfig SQLAlchemy model · 0009 推送 → 0025 v2 统一 bot。
 
-每用户一行 · lazy create(用户首次保存配置时 INSERT)· user_id 既 PK 又 FK。
-跟 0008 VirtualAccount lazy create 同模式 · 不存在 = 未配置任何通道。
+每用户一行 · lazy create · user_id 既 PK 又 FK(跟 VirtualAccount 同模式)。
+
+0025 G2a:移除飞书 + per-user TG token(统一 bot,token 走全局 env);
+tg_chat_id 由 /start 绑定写入,加 partial 唯一索引(一 chat 一账号)。
 """
 
 from __future__ import annotations
@@ -9,7 +11,16 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Uuid, func, text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Uuid,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -17,6 +28,16 @@ from app.core.database import Base
 
 class NotificationConfig(Base):
     __tablename__ = "notification_config"
+    # 一 chat 一账号:tg_chat_id 非空时唯一(防一个 Telegram 绑多个 Midas 账号)。
+    # partial(WHERE tg_chat_id IS NOT NULL)· 允许多用户都未绑定(NULL)。
+    __table_args__ = (
+        Index(
+            "uq_notification_config_tg_chat_id",
+            "tg_chat_id",
+            unique=True,
+            postgresql_where=text("tg_chat_id IS NOT NULL"),
+        ),
+    )
 
     user_id: Mapped[UUID] = mapped_column(
         Uuid,
@@ -24,11 +45,8 @@ class NotificationConfig(Base):
         primary_key=True,
     )
 
-    # 飞书自定义机器人 · webhook URL(M0 明文 · M1 加密)
-    feishu_webhook_url: Mapped[str | None] = mapped_column(String(512))
-
-    # Telegram bot · token + chat_id
-    tg_bot_token: Mapped[str | None] = mapped_column(String(128))
+    # Telegram 统一 bot 绑定的 chat_id(由 /start 绑定写入 · 0025 G1)。
+    # 注:统一 bot 的 token 是全局 env(settings.tg_bot_token),不再 per-user。
     tg_chat_id: Mapped[str | None] = mapped_column(String(64))
 
     # 总开关 · 默认开
