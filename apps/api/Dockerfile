@@ -19,4 +19,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=10 \
     CMD curl -fsS http://localhost:8000/health || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# 生产模式启动:不带 --reload(开发热重载)· 单进程(lifespan 单例:ClickHouse / ccxt / 数据源)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -148,9 +148,25 @@ fi
 # ============================================================
 banner "3/6 · 执行 docker 层动作"
 # ============================================================
-if [ "$NEED_COMPOSE_UP" = "true" ]; then
-  section "docker compose up -d --build · cache 命中的不会重建"
-  $COMPOSE up -d --build 2>&1 | tail -20
+# 收集"有代码改动、需要强制重建"的【无状态】服务(只 api/worker/web)。
+# ⚠ 安全边界:postgres / clickhouse / redis 是有状态服务,绝不放进这个列表、绝不 --force-recreate、绝不动数据卷。
+RECREATE_SVCS=()
+[ "$NEED_BUILD_API" = "true" ] && RECREATE_SVCS+=("api" "worker")
+[ "$NEED_BUILD_WEB" = "true" ] && RECREATE_SVCS+=("web")
+
+if [ ${#RECREATE_SVCS[@]} -gt 0 ]; then
+  section "强制重建有代码改动的无状态服务:${RECREATE_SVCS[*]}"
+  # --build         重建镜像
+  # --force-recreate 即使 Docker 层缓存命中、镜像未变,也用新镜像重建容器
+  #                  → 根治"代码已在 main / 已在主机磁盘,但运行容器还是旧码"(2026-05-27 故障)
+  # --no-deps       只动列出的无状态服务,绝不触碰它们的依赖(postgres/clickhouse/redis 不重建、数据卷不动)
+  $COMPOSE up -d --build --force-recreate --no-deps "${RECREATE_SVCS[@]}" 2>&1 | tail -20
+  ok "force-recreate 完成:${RECREATE_SVCS[*]}(有状态容器未触碰)"
+elif [ "$NEED_COMPOSE_UP" = "true" ]; then
+  # 仅 compose yaml 改动(无后端/前端代码改动)→ 普通 up -d 应用配置差异。
+  # 不 --build、不 --force-recreate:compose 只重建"配置确实变了"的服务,有状态容器不会被无故重建。
+  section "compose 配置变更 · docker compose up -d 应用(不 --build / 不 --force-recreate)"
+  $COMPOSE up -d 2>&1 | tail -20
   ok "compose up 返回"
 else
   skip "docker 容器无需变更"
