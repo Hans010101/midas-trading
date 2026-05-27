@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections.abc import Callable
 from datetime import UTC, date, datetime, time
@@ -97,13 +96,13 @@ class AKShareCnSource(BaseDataSource):
         limit: int = 500,
     ) -> list[Kline]:
         async def _do() -> list[Kline]:
-            return await asyncio.to_thread(self._fetch_sync, symbol, period, limit)
+            return await self._run_blocking(self._fetch_sync, symbol, period, limit)
 
         return await self._retry(op="fetch_kline", symbol=symbol, coro_factory=_do)
 
     async def list_symbols(self) -> list[SymbolMeta]:
         async def _do() -> list[SymbolMeta]:
-            return await asyncio.to_thread(self._list_sync)
+            return await self._run_blocking(self._list_sync)
 
         return await self._retry(op="list_symbols", symbol="<all>", coro_factory=_do)
 
@@ -115,7 +114,7 @@ class AKShareCnSource(BaseDataSource):
         """大盘指数快照 · Sina stock_zh_index_spot_sina · 筛 codes(0023 §1)。"""
 
         async def _do() -> list[IndexQuote]:
-            return await asyncio.to_thread(self._fetch_indices_sync, codes)
+            return await self._run_blocking(self._fetch_indices_sync, codes)
 
         return await self._retry(op="fetch_indices", symbol="<indices>", coro_factory=_do)
 
@@ -123,7 +122,7 @@ class AKShareCnSource(BaseDataSource):
         """A股交易日历 · AKShare tool_trade_date_hist_sina · 全量交易日(0023 §3)。"""
 
         async def _do() -> list[date]:
-            return await asyncio.to_thread(self._fetch_trade_calendar_sync)
+            return await self._run_blocking(self._fetch_trade_calendar_sync)
 
         return await self._retry(
             op="fetch_trade_calendar", symbol="<calendar>", coro_factory=_do,
@@ -202,7 +201,7 @@ class AKShareCnSource(BaseDataSource):
         """全市场个股实时快照 · Sina stock_zh_a_spot(~5500 只 · 涨跌幅/成交额)。"""
 
         async def _do() -> list[CnSpotRow]:
-            return await asyncio.to_thread(self._fetch_spot_sync)
+            return await self._run_blocking(self._fetch_spot_sync)
 
         return await self._retry(op="fetch_spot", symbol="<spot>", coro_factory=_do)
 
@@ -210,7 +209,7 @@ class AKShareCnSource(BaseDataSource):
         """行业板块快照 · Sina stock_sector_spot(新浪行业 · ~49 板块)。"""
 
         async def _do() -> list[CnSector]:
-            return await asyncio.to_thread(self._fetch_sectors_sync)
+            return await self._run_blocking(self._fetch_sectors_sync)
 
         return await self._retry(op="fetch_sectors", symbol="<sectors>", coro_factory=_do)
 
