@@ -94,6 +94,8 @@ services:
     restart: always
     environment:
       DEBUG: "false"
+      # 0024 v2 · Telegram webhook 注册用公网 base(非 secret · 字面值不用 ${} 插值 · 0014 ADR)
+      PUBLIC_API_BASE_URL: "https://api.midastrade.asia"
     logging:
       driver: json-file
       options:

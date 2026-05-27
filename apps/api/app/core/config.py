@@ -35,6 +35,17 @@ class Settings(BaseSettings):
     # Celery
     celery_broker_url: str = "redis://localhost:6379/1"
 
+    # Telegram 统一 bot(0024 v2 · M1-G G1)· 与旧 per-user bot 并存,G2 才切换派发。
+    # ⚠ tg_bot_token 敏感:只从 env 读 · 绝不进 git/前端/DB · 空 = 统一 bot 未启用。
+    tg_bot_token: str = ""
+    # bot 用户名(拼 t.me deep link)· D9 待定 · 可空(前端 G3 补)。
+    tg_bot_username: str = ""
+    # 公网 API base · 拼 webhook URL · prod = https://api.midastrade.asia · 非 secret。
+    public_api_base_url: str = "http://localhost:8000"
+    # /start 一次性绑定 token TTL(秒)。
+    tg_bind_token_ttl_seconds: int = 600
+    # webhook secret 不单独配:由 secret_key 派生(见 telegram_bind.webhook_secret)。
+
     # AI 决策卡 · 0012 ADR · M1 第二波
     llm_provider: str = "deepseek"           # litellm 命名(deepseek / openai / claude 等)
     llm_model: str = "deepseek/deepseek-chat"

@@ -16,6 +16,7 @@ from app.services.data_sources.binance_futures_source import BinanceFuturesSourc
 from app.services.data_sources.cn_source import AKShareCnSource
 from app.services.data_sources.crypto_source import CcxtBinanceCryptoSource
 from app.services.data_sources.us_source import YFinanceUsSource
+from app.services.notifications.telegram_bind import register_webhook_if_configured
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -40,6 +41,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # 存 app.state 持引用,避免 task 被 GC。
     app.state.markets_preload_task = asyncio.create_task(
         app.state.crypto_source.ensure_markets_loaded(),
+    )
+    # Telegram 统一 bot(0024 v2 · M1-G G1)· 配了 token 才后台注册 webhook(不阻塞启动)
+    app.state.tg_webhook_task = asyncio.create_task(
+        register_webhook_if_configured(),
     )
     logger.info(
         "Lifespan startup: ClickHouse + ccxt exchange + 4 sources 就绪"

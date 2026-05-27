@@ -7,6 +7,7 @@ from app.api.v1.crypto import router as crypto_router
 from app.api.v1.market import router as market_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.perp import router as perp_router
+from app.api.v1.telegram import router as telegram_router
 from app.api.v1.us import router as us_router
 from app.api.v1.virtual import router as virtual_router
 from app.api.v1.watchlist import router as watchlist_router
@@ -18,6 +19,7 @@ router.include_router(watchlist_router)
 router.include_router(virtual_router)
 router.include_router(perp_router)
 router.include_router(notifications_router)
+router.include_router(telegram_router)
 router.include_router(analysis_router)
 router.include_router(crypto_router)
 # 0023 阶段③ · A股/美股 市场首页(3.1 基建:状态 + 大盘指数)
