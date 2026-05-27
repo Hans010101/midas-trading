@@ -149,6 +149,23 @@ async def edit_message_text(
     )
 
 
+async def set_my_commands(
+    bot_token: str,
+    commands: list[dict[str, str]],
+    *,
+    timeout: float = 10.0,
+    client: httpx.AsyncClient | None = None,
+) -> dict[str, Any]:
+    """setMyCommands · 设置 bot 命令菜单(G5 DP-G5-5 · 启动期随代码同步)。
+
+    commands = [{"command": "menu", "description": "功能菜单"}, ...]。幂等。
+    """
+    return await _post_json(
+        bot_token, "setMyCommands", {"commands": commands},
+        timeout=timeout, client=client,
+    )
+
+
 async def set_webhook(
     bot_token: str,
     webhook_url: str,

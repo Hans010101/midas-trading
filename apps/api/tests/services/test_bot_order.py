@@ -150,3 +150,51 @@ def test_direction_valid_per_market():
     assert order_mod.direction_valid("us", "short")
     assert not order_mod.direction_valid("cn", "short")   # A股无卖空
     assert not order_mod.direction_valid("crypto", "buy")  # 加密走合约
+
+
+# ── G5:下单读用户后台预设(无预设=默认=G4;有预设=用其值)──────────────
+
+
+@pytest.mark.asyncio
+async def test_perp_open_uses_user_preset_leverage(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+):
+    """设了预设(杠杆 10)→ perp 开仓用 10x,而非默认 3x。"""
+    from app.models.bot_order_preset import BotOrderPreset
+
+    async def _fake_mark(_ch: object, _sym: str) -> Decimal:
+        return Decimal("60000")
+
+    monkeypatch.setattr(order_mod, "_perp_mark", _fake_mark)
+    user = await make_user(db_session)
+    await make_virtual_account(db_session, user_id=user.id, market="crypto")
+    db_session.add(
+        BotOrderPreset(
+            user_id=user.id, perp_leverage=10,
+            perp_notional_usdt=Decimal("500"), perp_margin_mode="isolated",
+            spot_notional_cny=Decimal("10000"), spot_notional_usd=Decimal("1000"),
+        ),
+    )
+    await db_session.commit()
+
+    result = await order_mod.execute(
+        db_session, _FakeCH(), user.id,  # type: ignore[arg-type]
+        order_mod.OrderIntent(market="crypto", symbol="BTC/USDT", direction="open_long"),
+    )
+    assert result.filled is True
+    pos = await db_session.scalar(
+        select(VirtualPerpPosition).where(VirtualPerpPosition.symbol == "BTCUSDT"),
+    )
+    assert pos is not None
+    assert pos.leverage == 10  # 用了用户预设(非默认 3)
+
+
+@pytest.mark.asyncio
+async def test_load_preset_defaults_when_no_row(db_session: AsyncSession):
+    """无预设行 → DEFAULT_PRESET(= G4 常量 · 零回归)。"""
+    user = await make_user(db_session)
+    await db_session.commit()
+    p = await order_mod.load_preset(db_session, user.id)
+    assert p.perp_leverage == order_mod.DEFAULT_PERP_LEVERAGE
+    assert p.perp_notional_usdt == order_mod.DEFAULT_PERP_NOTIONAL_USDT
+    assert p.spot_notional("cn") == order_mod.DEFAULT_SPOT_NOTIONAL["cn"]

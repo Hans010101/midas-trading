@@ -10,6 +10,7 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,7 +25,13 @@ from app.schemas.alert_rule import (
     to_response,
 )
 from app.services.alerts.engine import MAX_RULES_PER_USER
+from app.services.alerts.recommended import apply_recommended_rules
 from app.services.alerts.registry import REGISTRY, get_indicator
+
+
+class ApplyRecommendedResult(BaseModel):
+    created: int
+    skipped: int
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +126,19 @@ async def create_alert_rule(
     await db.commit()
     await db.refresh(rule)
     return to_response(rule)
+
+
+@router.post(
+    "/apply-recommended",
+    response_model=ApplyRecommendedResult,
+    summary="一键应用推荐告警规则(跳过已存在 / 超上限)",
+)
+async def apply_recommended(
+    current_user: CurrentUserDep, db: DbDep,
+) -> ApplyRecommendedResult:
+    # 🔴 user_id 取自登录用户,绝不从请求体取
+    created, skipped = await apply_recommended_rules(db, current_user.id)
+    return ApplyRecommendedResult(created=created, skipped=skipped)
 
 
 @router.patch(

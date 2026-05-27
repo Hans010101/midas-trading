@@ -15,11 +15,20 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from sqlalchemy import select
+
+from app.models.alert_rule import AlertRule
+from app.services.alerts.recommended import apply_recommended_rules
 from app.services.bot import order as order_mod
 from app.services.bot import ratelimit
 from app.services.bot import telegram_ui as ui
 from app.services.bot.identity import resolve_user_id
-from app.services.bot.query import query_positions, query_symbol, query_watchlist
+from app.services.bot.query import (
+    query_alert_rules,
+    query_positions,
+    query_symbol,
+    query_watchlist,
+)
 from app.services.bot.session import clear_session, get_session, set_session
 
 if TYPE_CHECKING:
@@ -153,8 +162,16 @@ async def handle_callback(
     if d == "act:positions":
         pos_rows = await query_positions(db, user_id)
         return ui.render_positions(pos_rows)
-    if d == "stub:rules":
-        return ui.render_rules_stub()
+    # ── 告警规则(G5 · 查看 / 启停 / 一键推荐)─────────────────────────
+    if d == "menu:rules":
+        await clear_session(redis, chat_id)
+        return ui.render_alert_rules(await query_alert_rules(db, user_id))
+    if d.startswith("rules:toggle:"):
+        return await _handle_rule_toggle(db, user_id, d)
+    if d == "rules:apply":
+        created, skipped = await apply_recommended_rules(db, user_id)
+        note = f"已应用推荐:新增 {created} 条 · 跳过 {skipped} 条"
+        return ui.render_alert_rules(await query_alert_rules(db, user_id), note=note)
 
     # ── 下单流程(G4 · 虚拟 · 必经二次确认)──────────────────────────
     if d == "menu:order":
@@ -232,3 +249,22 @@ async def _handle_confirm(
     intent = order_mod.OrderIntent(market=market, symbol=symbol, direction=direction)
     result = await order_mod.execute(db, ch, user_id, intent)
     return ui.render_order_result(result.title, result.detail)
+
+
+async def _handle_rule_toggle(db: AsyncSession, user_id: UUID, data: str) -> BotReply:
+    """切换某条告警规则启停。
+
+    🔴 ownership-scoped:按 (id, user_id) 查询,只能翻【自己】的规则 —— 跨用户无效
+    (A 的 chat 绝不能启停 B 的规则)· 与 G2b PATCH 同款归属校验。
+    """
+    parts = data.split(":")  # rules:toggle:{id}
+    if len(parts) == _ASK_PARTS and parts[2].isdigit():
+        rule = await db.scalar(
+            select(AlertRule).where(
+                AlertRule.id == int(parts[2]), AlertRule.user_id == user_id,
+            ),
+        )
+        if rule is not None:
+            rule.enabled = not rule.enabled
+            await db.commit()
+    return ui.render_alert_rules(await query_alert_rules(db, user_id))

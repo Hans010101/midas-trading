@@ -164,3 +164,27 @@ async def test_delete_own_and_cross_user(client: AsyncClient, db_session: AsyncS
         f"/api/v1/alert-rules/{rule.id}", headers=await _auth(owner, db_session),
     )
     assert r_own.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_apply_recommended_creates_then_idempotent(
+    client: AsyncClient, db_session: AsyncSession,
+):
+    """一键应用推荐 → 建 9 条;再次调用全跳过(幂等)· user_id 取自登录用户。"""
+    user = await make_user(db_session)
+    await db_session.commit()
+    headers = await _auth(user, db_session)
+
+    r1 = await client.post("/api/v1/alert-rules/apply-recommended", headers=headers)
+    assert r1.status_code == 200
+    assert r1.json() == {"created": 9, "skipped": 0}
+
+    # 列表确有 9 条
+    listed = await client.get("/api/v1/alert-rules", headers=headers)
+    assert len(listed.json()) == 9
+
+    # 再次 → 全部已存在 → 跳过(不重复建)
+    r2 = await client.post("/api/v1/alert-rules/apply-recommended", headers=headers)
+    assert r2.json() == {"created": 0, "skipped": 9}
+    listed2 = await client.get("/api/v1/alert-rules", headers=headers)
+    assert len(listed2.json()) == 9

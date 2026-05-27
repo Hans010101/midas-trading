@@ -14,10 +14,12 @@ from uuid import UUID
 
 from sqlalchemy import select
 
+from app.models.alert_rule import AlertRule
 from app.models.perp import VirtualPerpPosition
 from app.models.virtual import VirtualAccount, VirtualPosition
 from app.models.watchlist import WatchlistItem
 from app.services import clickhouse_crypto
+from app.services.alerts.registry import get_indicator
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -242,3 +244,45 @@ async def query_positions(db: AsyncSession, user_id: UUID) -> list[PositionRow]:
             ),
         )
     return rows
+
+
+@dataclass(frozen=True)
+class AlertRuleRow:
+    """告警规则行(bot 查看/启停用)。"""
+
+    rule_id: int
+    market: str
+    symbol: str | None
+    indicator_label: str
+    operator: str
+    threshold: float
+    unit: str | None
+    enabled: bool
+
+
+async def query_alert_rules(db: AsyncSession, user_id: UUID) -> list[AlertRuleRow]:
+    """用户全部告警规则(只读 · 给 bot 查看/启停)· 永远按 user_id 限定。"""
+    rules = list(
+        await db.scalars(
+            select(AlertRule)
+            .where(AlertRule.user_id == user_id)
+            .order_by(AlertRule.created_at),
+        ),
+    )
+    out: list[AlertRuleRow] = []
+    for r in rules:
+        ind = get_indicator(r.indicator)
+        out.append(
+            AlertRuleRow(
+                rule_id=r.id,
+                market=r.market,
+                symbol=r.symbol,
+                indicator_label=ind.label if ind else r.indicator,
+                operator=r.operator,
+                threshold=float(r.threshold),
+                unit=ind.unit if ind else None,
+                enabled=r.enabled,
+            ),
+        )
+    return out
+

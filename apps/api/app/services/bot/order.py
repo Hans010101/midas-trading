@@ -29,6 +29,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 
+from app.models.bot_order_preset import BotOrderPreset
 from app.models.perp import PerpSide, VirtualPerpPosition
 from app.models.virtual import (
     OrderSide,
@@ -54,13 +55,51 @@ if TYPE_CHECKING:
 
     from app.services.clickhouse_client import ClickHouseClient
 
-# ── 安全默认参数(G4 常量;G5 接网页后台预设后改为读用户配置)──────────────
+# ── 安全默认参数(G4 常量 · G5 起作为「无预设行」的回退值,与 DB server_default 一致)──
 DEFAULT_PERP_LEVERAGE = 3
 DEFAULT_PERP_NOTIONAL_USDT = Decimal("100")  # 每单名义额(USDT)· margin = 名义/杠杆
 DEFAULT_SPOT_NOTIONAL: dict[str, Decimal] = {
     "cn": Decimal("10000"),  # 每单名义额(CNY)
     "us": Decimal("1000"),   # 每单名义额(USD)
 }
+
+
+@dataclass(frozen=True)
+class PresetValues:
+    """bot 下单后台预设的取值(G5)· 单一接入点 load_preset 产出。"""
+
+    perp_leverage: int
+    perp_notional_usdt: Decimal
+    perp_margin_mode: str
+    spot_notional_cny: Decimal
+    spot_notional_usd: Decimal
+
+    def spot_notional(self, market: str) -> Decimal:
+        return self.spot_notional_cny if market == "cn" else self.spot_notional_usd
+
+
+# 无预设行时的回退默认(= G4 行为 · 与 bot_order_preset 的 server_default 完全一致)
+DEFAULT_PRESET = PresetValues(
+    perp_leverage=DEFAULT_PERP_LEVERAGE,
+    perp_notional_usdt=DEFAULT_PERP_NOTIONAL_USDT,
+    perp_margin_mode="isolated",
+    spot_notional_cny=DEFAULT_SPOT_NOTIONAL["cn"],
+    spot_notional_usd=DEFAULT_SPOT_NOTIONAL["us"],
+)
+
+
+async def load_preset(db: AsyncSession, user_id: UUID) -> PresetValues:
+    """G5 唯一接入点:读用户后台预设;无行 → DEFAULT_PRESET(= G4 行为 · 零回归)。"""
+    row = await db.get(BotOrderPreset, user_id)
+    if row is None:
+        return DEFAULT_PRESET
+    return PresetValues(
+        perp_leverage=row.perp_leverage,
+        perp_notional_usdt=Decimal(row.perp_notional_usdt),
+        perp_margin_mode=row.perp_margin_mode,
+        spot_notional_cny=Decimal(row.spot_notional_cny),
+        spot_notional_usd=Decimal(row.spot_notional_usd),
+    )
 
 _MARKET_CCY: dict[str, str] = {"cn": "CNY", "us": "USD", "crypto": "USDT"}
 _PERP_QUOTES = ("USDT", "USDC", "BUSD", "FDUSD")
@@ -224,6 +263,7 @@ async def build_preview(
     if not direction_valid(intent.market, intent.direction):
         return None
     is_open = intent.direction in _OPEN_DIRS
+    preset = await load_preset(db, user_id)  # G5:读用户预设(无行=默认)
 
     if intent.market == "crypto":
         bsym = _to_binance(intent.symbol)
@@ -231,9 +271,9 @@ async def build_preview(
         if price is None:
             return None
         if is_open:
-            notional = DEFAULT_PERP_NOTIONAL_USDT
+            notional = preset.perp_notional_usdt
             qty = (notional / price).quantize(_QTY_Q, rounding=ROUND_DOWN)
-            lev: int | None = DEFAULT_PERP_LEVERAGE
+            lev: int | None = preset.perp_leverage
         else:
             pos = await _active_perp(db, user_id, bsym)
             if pos is None:
@@ -251,7 +291,7 @@ async def build_preview(
     if price is None:
         return None
     if is_open:
-        notional = DEFAULT_SPOT_NOTIONAL.get(intent.market, Decimal("1000"))
+        notional = preset.spot_notional(intent.market)
         qty = (notional / price).quantize(_QTY_Q, rounding=ROUND_DOWN)
     else:
         side = PositionSide.LONG if intent.direction == "sell" else PositionSide.SHORT
@@ -294,15 +334,16 @@ async def _exec_perp(
             db, ClosePerpRequest(user_id=user_id, symbol=bsym, close_all=True), fetcher,
         )
     else:
+        preset = await load_preset(db, user_id)  # G5:杠杆 / 名义来自用户预设
         side = PerpSide.LONG if intent.direction == "open_long" else PerpSide.SHORT
         margin = (
-            DEFAULT_PERP_NOTIONAL_USDT / Decimal(DEFAULT_PERP_LEVERAGE)
+            preset.perp_notional_usdt / Decimal(preset.perp_leverage)
         ).quantize(Decimal("0.0001"))
         order = await open_perp_position(
             db,
             OpenPerpRequest(
                 user_id=user_id, symbol=bsym, side=side,
-                leverage=DEFAULT_PERP_LEVERAGE, margin=margin,
+                leverage=preset.perp_leverage, margin=margin,
             ),
             fetcher,
         )
@@ -366,7 +407,8 @@ async def _resolve_spot_order(
         price = await _spot_price(ch, market, symbol)
         if price is None or price <= 0:
             return side, pside, None
-        notional = DEFAULT_SPOT_NOTIONAL.get(market, Decimal("1000"))
+        preset = await load_preset(db, user_id)  # G5:每单名义来自用户预设
+        notional = preset.spot_notional(market)
         return side, pside, (notional / price).quantize(_QTY_Q, rounding=ROUND_DOWN)
     # 平仓(sell=平多 / cover=平空)· 平全仓
     pside = PositionSide.LONG if direction == "sell" else PositionSide.SHORT

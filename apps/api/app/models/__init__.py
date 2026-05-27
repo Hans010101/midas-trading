@@ -1,5 +1,6 @@
 from app.core.database import Base  # noqa: F401
 from app.models.ai_usage import AIUsageLog  # noqa: F401
+from app.models.bot_order_preset import BotOrderPreset  # noqa: F401
 from app.models.notification import NotificationConfig  # noqa: F401
 from app.models.perp import (  # noqa: F401
     MarginMode,

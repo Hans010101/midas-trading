@@ -242,3 +242,57 @@ async def test_command_rate_limited(db_session: AsyncSession):
         last = await router.handle_command(db_session, redis, ch, 703, "/menu")  # type: ignore[arg-type]
     assert last is not None
     assert "频繁" in last.text
+
+
+# ── 告警规则(G5)· 一键推荐 + 启停 + 🔴 跨用户隔离 ────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_bot_apply_then_toggle_own_rule(db_session: AsyncSession):
+    from sqlalchemy import select as _select
+
+    from app.models.alert_rule import AlertRule
+
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 800)
+    redis = _FakeRedis()
+    ch = _FakeCH()
+
+    # 一键应用推荐 → 建规则
+    applied = await router.handle_callback(db_session, redis, ch, 800, "rules:apply")  # type: ignore[arg-type]
+    assert "新增" in applied.text
+    rule = await db_session.scalar(
+        _select(AlertRule).where(AlertRule.user_id == user.id),
+    )
+    assert rule is not None
+    before = rule.enabled
+
+    # 启停自己的规则 → 翻转
+    await router.handle_callback(
+        db_session, redis, ch, 800, f"rules:toggle:{rule.id}",  # type: ignore[arg-type]
+    )
+    await db_session.refresh(rule)
+    assert rule.enabled is not before
+
+
+@pytest.mark.asyncio
+async def test_bot_rule_toggle_cross_user_blocked(db_session: AsyncSession):
+    """🔴 chat 绑 A,试图启停 B 的规则 → B 的规则纹丝不动。"""
+    from app.models.alert_rule import AlertRule
+
+    user_a = await make_user(db_session)
+    user_b = await make_user(db_session)
+    await _bind(db_session, user_a.id, 801)  # chat 801 → A
+    b_rule = AlertRule(
+        user_id=user_b.id, market="crypto", symbol=None,
+        indicator="fear_greed", operator="lt", threshold=Decimal("20"), enabled=True,
+    )
+    db_session.add(b_rule)
+    await db_session.commit()
+    before = b_rule.enabled
+
+    await router.handle_callback(
+        db_session, _FakeRedis(), _FakeCH(), 801, f"rules:toggle:{b_rule.id}",  # type: ignore[arg-type]
+    )
+    await db_session.refresh(b_rule)
+    assert b_rule.enabled == before  # B 的规则没被 A 改

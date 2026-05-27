@@ -35,6 +35,13 @@ logger = logging.getLogger(__name__)
 _BIND_KEY_PREFIX = "tg_bind:"
 _DISCLAIMER = "仅供参考,不构成投资建议。"
 
+# G5 DP-G5-5:bot 命令菜单(启动期 setMyCommands · 随代码同步)
+_BOT_COMMANDS: list[dict[str, str]] = [
+    {"command": "menu", "description": "功能菜单(行情/自选/持仓/下单/告警)"},
+    {"command": "price", "description": "查行情 · 用法 /price <代码>"},
+    {"command": "start", "description": "绑定 / 开始"},
+]
+
 
 # ── secret / url 派生 ────────────────────────────────────────────────
 
@@ -209,3 +216,11 @@ async def register_webhook_if_configured() -> None:
         logger.warning("[tg-bind] setWebhook 失败(可重新部署重试):%s", e)
         return
     logger.info("[tg-bind] webhook 已注册 → %s", url)
+
+    # G5 DP-G5-5:命令菜单随代码同步(失败不致命,与 webhook 注册解耦)
+    try:
+        await telegram.set_my_commands(settings.tg_bot_token, _BOT_COMMANDS)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[tg-bind] setMyCommands 失败(不致命):%s", e)
+    else:
+        logger.info("[tg-bind] 命令菜单已同步(%d 条)", len(_BOT_COMMANDS))

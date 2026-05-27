@@ -17,7 +17,12 @@ from app.services.bot import order as order_mod
 
 if TYPE_CHECKING:
     from app.services.bot.order import OrderPreview
-    from app.services.bot.query import PositionRow, SymbolQuote, WatchlistRow
+    from app.services.bot.query import (
+        AlertRuleRow,
+        PositionRow,
+        SymbolQuote,
+        WatchlistRow,
+    )
 
 DISCLAIMER = "仅供参考,不构成投资建议"
 _BRAND = "点金 Midas"
@@ -104,7 +109,7 @@ def main_menu_keyboard() -> Keyboard:
             ],
             [
                 {"text": "🛒 下单", "callback_data": "menu:order"},
-                {"text": "🔔 告警规则", "callback_data": "stub:rules"},
+                {"text": "🔔 告警规则", "callback_data": "menu:rules"},
             ],
         ],
     }
@@ -363,13 +368,42 @@ def render_rate_limited() -> BotReply:
     return BotReply(_tail(text), None)
 
 
-def render_rules_stub() -> BotReply:
-    text = (
-        f"*{_BRAND} · 告警规则*\n\n"
-        "🔔 请在网页端【设置 → 消息推送】配置告警规则。\n"
-        "(bot 内规则配置后续上线)"
-    )
-    return BotReply(_tail(text), _back_keyboard())
+# ── 告警规则(G5 · 查看 / 启停 / 一键推荐 · 全量新建留网页)────────────────
+
+_OP_SYM: dict[str, str] = {"gt": ">", "gte": "≥", "lt": "<", "lte": "≤"}
+
+
+def _alert_rule_label(r: AlertRuleRow) -> str:
+    icon = "🔔" if r.enabled else "🔕"
+    op = _OP_SYM.get(r.operator, r.operator)
+    target = r.symbol or _MARKET_LABEL.get(r.market, r.market)
+    unit = r.unit or ""
+    label = f"{icon} {r.indicator_label}{op}{_fmt_qty(r.threshold)}{unit} · {target}"
+    return label[:60]  # Telegram 按钮文字上限
+
+
+def _alert_rules_keyboard(rows: list[AlertRuleRow]) -> Keyboard:
+    kb: list[list[dict[str, str]]] = [
+        [{"text": _alert_rule_label(r), "callback_data": f"rules:toggle:{r.rule_id}"}]
+        for r in rows[:20]
+    ]
+    kb.append([{"text": "✨ 一键应用推荐规则", "callback_data": "rules:apply"}])
+    kb.append([{"text": "⬅️ 返回菜单", "callback_data": "menu:main"}])
+    return {"inline_keyboard": kb}
+
+
+def render_alert_rules(rows: list[AlertRuleRow], *, note: str | None = None) -> BotReply:
+    head = f"*{_BRAND} · 告警规则*"
+    if note:
+        head += f"\n\n{note}"
+    if not rows:
+        body = (
+            "\n\n你还没有告警规则。\n"
+            "点「✨ 一键应用推荐规则」快速开始,或在网页端【设置 → 告警规则】自定义。"
+        )
+    else:
+        body = "\n\n🔔=启用 / 🔕=停用 · 点规则可切换状态;全量新建在网页端。"
+    return BotReply(_tail(head + body), _alert_rules_keyboard(rows))
 
 
 def render_not_bound() -> BotReply:
