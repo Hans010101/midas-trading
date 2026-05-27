@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from datetime import UTC, datetime
@@ -87,7 +86,7 @@ class YFinanceUsSource(BaseDataSource):
         limit: int = 500,
     ) -> list[Kline]:
         async def _do() -> list[Kline]:
-            return await asyncio.to_thread(self._fetch_sync, symbol, period, limit)
+            return await self._run_blocking(self._fetch_sync, symbol, period, limit)
 
         return await self._retry(op="fetch_kline", symbol=symbol, coro_factory=_do)
 
@@ -118,7 +117,7 @@ class YFinanceUsSource(BaseDataSource):
         """
 
         async def _do() -> list[IndexQuote]:
-            return await asyncio.to_thread(self._fetch_indices_sync, targets)
+            return await self._run_blocking(self._fetch_indices_sync, targets)
 
         return await self._retry(op="fetch_indices", symbol="<indices>", coro_factory=_do)
 
@@ -171,7 +170,7 @@ class YFinanceUsSource(BaseDataSource):
         """
 
         async def _do() -> list[UsSpotRow]:
-            return await asyncio.to_thread(self._fetch_pool_sync, pool)
+            return await self._run_blocking(self._fetch_pool_sync, pool)
 
         return await self._retry(op="fetch_pool_quotes", symbol="<pool>", coro_factory=_do)
 
