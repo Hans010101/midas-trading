@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -34,9 +35,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.crypto_source = CcxtBinanceCryptoSource(exchange=app.state.ccxt_binance)
     # M2-B(0017 ADR)· Binance Futures source · perp K + funding + OI + long-short
     app.state.binance_futures_source = BinanceFuturesSource()
+    # 加自选 crypto 存在性校验用:后台预载 Binance 现货交易对到内存。
+    # create_task → 不阻塞启动 / /health(不让上游可达性拖慢就绪)· 预载失败 fail-open。
+    # 存 app.state 持引用,避免 task 被 GC。
+    app.state.markets_preload_task = asyncio.create_task(
+        app.state.crypto_source.ensure_markets_loaded(),
+    )
     logger.info(
         "Lifespan startup: ClickHouse + ccxt exchange + 4 sources 就绪"
-        "(cn / us / crypto-spot / crypto-perp)"
+        "(cn / us / crypto-spot / crypto-perp)· crypto markets 后台预载中"
     )
 
     try:

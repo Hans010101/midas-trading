@@ -105,6 +105,48 @@ class CcxtBinanceCryptoSource(BaseDataSource):
         ]
 
     # ===========================
+    # 交易对存在性校验 · 加自选用
+    # ===========================
+
+    async def ensure_markets_loaded(self) -> None:
+        """预载 Binance 现货交易对到内存(ccxt 缓存进 exchange.markets)。
+
+        供「加自选」存在性校验(symbol_exists)用 —— 校验只查这份内存表,
+        请求路径不再打实时上游(避免同步上游卡死隐患,见 0002 / base.py)。
+        由 API lifespan 启动时**后台**触发(不阻塞启动 / /health)。
+        预载失败不致命(fail-open):记 log,symbol_exists 退化为放行。
+        """
+        try:
+            markets = await self._exchange.load_markets()
+        except Exception as e:  # noqa: BLE001 · 预载失败不致命:校验退化为放行
+            logger.warning(
+                "[ccxt-binance] 预载 markets 失败 · 加自选校验将 fail-open 放行:%s", e,
+            )
+            return
+        logger.info(
+            "[ccxt-binance] 预载 %d 个现货交易对(供加自选存在性校验)",
+            len(markets or {}),
+        )
+
+    def symbol_exists(self, symbol: str) -> bool:
+        """该现货交易对在 Binance 是否真实存在 · 纯内存查(startup 已预载)。
+
+        - markets 已载入 → `symbol in markets`(ccxt 统一符号,如 'BTC/USDT')。
+        - markets 未载入(预载失败 / 尚未完成)→ fail-open 返回 True,不阻塞加自选
+          (宁可放过个别无效标的;自选页对拉不到行情的标的已优雅降级显示 '—')。
+
+        纯内存 dict 查 · 不打网络 · 同步即可。
+        """
+        markets = getattr(self._exchange, "markets", None)
+        if not markets:
+            logger.warning(
+                "[ccxt-binance] markets 未载入 · symbol=%s 存在性校验 fail-open 放行",
+                symbol,
+            )
+            return True
+        return symbol in markets
+
+    # ===========================
     # 内部异步实现
     # ===========================
 
