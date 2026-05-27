@@ -38,7 +38,9 @@ export function MarketSwitcher({ className }: { className?: string }) {
       : pathname?.startsWith('/crypto-market')
         ? 'crypto'
         : null
-  const active: Market = homeMarket ?? storeMarket
+  // 自选汇总页(3.6)· 第四 Tab · 非市场,单独高亮
+  const onWatchlist = pathname === '/watchlist'
+  const active: Market | null = onWatchlist ? null : (homeMarket ?? storeMarket)
 
   function handleSelect(m: Market) {
     // 在任一市场首页:点市场 → 跳对应市场首页(已在本页则 no-op)
@@ -75,6 +77,19 @@ export function MarketSwitcher({ className }: { className?: string }) {
           {MARKET_LABEL[m]}
         </button>
       ))}
+      <span className="mx-1 h-4 w-px self-center bg-paper" aria-hidden />
+      <button
+        type="button"
+        onClick={() => router.push('/watchlist')}
+        className={cn(
+          'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+          onWatchlist
+            ? 'bg-midas-red text-primary-foreground'
+            : 'text-muted-foreground hover:bg-midas-red-glow hover:text-foreground',
+        )}
+      >
+        自选
+      </button>
     </nav>
   )
 }

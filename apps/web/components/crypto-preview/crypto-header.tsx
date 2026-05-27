@@ -11,6 +11,7 @@
  */
 
 import { VirtualBadge } from '@/components/ui/virtual-badge'
+import { WatchlistToggleButton } from '@/components/watchlist/watchlist-toggle-button'
 import { useFuturesInfo } from '@/hooks/use-crypto'
 import { useKline } from '@/hooks/use-kline'
 import { cn } from '@/lib/utils'
@@ -67,6 +68,7 @@ export function CryptoHeader({
         </div>
 
         <VirtualBadge size="sm" />
+        <WatchlistToggleButton symbol={klineSymbol} market="crypto" />
 
         {/* 现货 / 合约 tab · 本页聚焦合约 · 现货切换 M2-B 待接 */}
         <div className="flex overflow-hidden rounded-md border border-paper text-sm">

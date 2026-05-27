@@ -14,6 +14,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 
 import { VirtualBadge } from '@/components/ui/virtual-badge'
+import { WatchlistToggleButton } from '@/components/watchlist/watchlist-toggle-button'
 import { useKline } from '@/hooks/use-kline'
 import { cn } from '@/lib/utils'
 import type { Market, Period } from '@midas/shared'
@@ -86,6 +87,7 @@ export function SpotHeader({ symbol, name, market, period, onPeriodChange }: Spo
           {MARKET_LABEL[market]} · 现货
         </span>
         <VirtualBadge size="sm" />
+        <WatchlistToggleButton symbol={symbol} market={market} />
 
         {/* 周期切换 · 驱动主图 */}
         <div className="flex gap-1 text-xs">
