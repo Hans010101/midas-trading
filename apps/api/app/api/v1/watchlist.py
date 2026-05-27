@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,12 +26,28 @@ from app.schemas.watchlist import (
     WatchlistItemResponse,
     WatchlistReorderIn,
 )
+from app.services.data_sources.crypto_source import CcxtBinanceCryptoSource
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/watchlist", tags=["watchlist"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
+
+
+def _get_crypto_source_optional(request: Request) -> CcxtBinanceCryptoSource | None:
+    """加自选 crypto 存在性校验用 · 取 lifespan 注入的 crypto 源。
+
+    无 lifespan(watchlist 单测 / 启动未完成)→ None · 此时跳过校验(fail-open),
+    保证单测无需 ccxt 也能跑、且绝不误伤 A股/美股加自选。
+    """
+    return getattr(request.app.state, "crypto_source", None)
+
+
+# Optional:无 lifespan 时为 None(不像 deps.CryptoSourceDep 那样硬取 app.state)
+OptionalCryptoSourceDep = Annotated[
+    CcxtBinanceCryptoSource | None, Depends(_get_crypto_source_optional),
+]
 
 
 # 首次登录预填三市场代表标的(0007 第 6 节)
@@ -126,6 +142,7 @@ async def add_watchlist(
     payload: WatchlistItemCreate,
     current_user: CurrentUserDep,
     db: DbDep,
+    crypto_source: OptionalCryptoSourceDep,
 ) -> WatchlistItemResponse:
     # 1. 重复检测
     existing = await db.scalar(
@@ -141,7 +158,20 @@ async def add_watchlist(
             detail="该标的已在自选列表",
         )
 
-    # 2. 算 sort_order = max + 1(或 0 如果列表为空)
+    # 2. 加密标的存在性校验(仅 crypto · A股/美股保持原逻辑、不校验)。
+    #    查内存交易对表(lifespan 预载 · 见 crypto_source.symbol_exists)· 不打实时上游。
+    #    crypto_source 为 None(无 lifespan / 预载未完成)→ 跳过(fail-open),不阻塞加入。
+    if (
+        payload.market == "crypto"
+        and crypto_source is not None
+        and not crypto_source.symbol_exists(payload.symbol)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"加密交易对不存在:{payload.symbol}(请用 Binance 现货交易对,如 BTC/USDT)",
+        )
+
+    # 3. 算 sort_order = max + 1(或 0 如果列表为空)
     max_order = await db.scalar(
         select(func.coalesce(func.max(WatchlistItem.sort_order), -1))
         .where(WatchlistItem.user_id == current_user.id),

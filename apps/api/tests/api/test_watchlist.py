@@ -9,11 +9,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.main import app
 from app.models.user import User
 from app.models.watchlist import WatchlistItem
 from app.services.auth import issue_session
@@ -28,6 +31,42 @@ async def _auth_headers(user: User, db: AsyncSession) -> dict[str, str]:
     token = await issue_session(db, user_id=user.id)
     await db.commit()
     return {"Authorization": f"Bearer {token}"}
+
+
+class _FakeCryptoSource:
+    """测试用 crypto 源 · 只实现加自选校验需要的 symbol_exists。
+
+    valid=None → 全部存在;否则只认集合内符号。记录被校验过的 symbol,
+    用于断言「A股/美股加自选根本不触发 crypto 校验」。
+    """
+
+    def __init__(self, valid: set[str] | None = None) -> None:
+        self._valid = valid
+        self.checked: list[str] = []
+
+    def symbol_exists(self, symbol: str) -> bool:
+        self.checked.append(symbol)
+        return self._valid is None or symbol in self._valid
+
+
+@pytest.fixture
+def crypto_source_only_btc() -> Iterator[_FakeCryptoSource]:
+    """注入「只认 BTC/USDT」的 crypto 源到 app.state · 测试后清理。"""
+    fake = _FakeCryptoSource(valid={"BTC/USDT"})
+    app.state.crypto_source = fake
+    yield fake
+    if hasattr(app.state, "crypto_source"):
+        delattr(app.state, "crypto_source")
+
+
+@pytest.fixture
+def crypto_source_reject_all() -> Iterator[_FakeCryptoSource]:
+    """注入「全部拒绝」的 crypto 源 · 用于验证 A股/美股加自选不被它误伤。"""
+    fake = _FakeCryptoSource(valid=set())
+    app.state.crypto_source = fake
+    yield fake
+    if hasattr(app.state, "crypto_source"):
+        delattr(app.state, "crypto_source")
 
 
 @pytest.mark.asyncio
@@ -225,3 +264,85 @@ async def test_reorder_with_invalid_id_404_rollback(
     await db_session.refresh(foreign)
     assert own.sort_order == 5
     assert foreign.sort_order == 7
+
+
+# =====================
+# 加密标的存在性校验(MU/USDT 根因修复)
+# =====================
+
+
+@pytest.mark.asyncio
+async def test_add_crypto_nonexistent_symbol_rejected(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    crypto_source_only_btc: _FakeCryptoSource,
+):
+    """加密非法交易对(如 MU/USDT)→ 400 + 友好提示 · 不入库。"""
+    user = await make_user(db_session, demo_prefilled=True)
+    await db_session.commit()
+    headers = await _auth_headers(user, db_session)
+
+    r = await client.post(
+        "/api/v1/watchlist",
+        json={"symbol": "MU/USDT", "market": "crypto"},
+        headers=headers,
+    )
+    assert r.status_code == 400
+    assert "不存在" in r.json()["detail"]
+    # 校验确实针对该 symbol 跑过
+    assert "MU/USDT" in crypto_source_only_btc.checked
+
+    # 不入库
+    row = await db_session.scalar(
+        select(WatchlistItem).where(
+            WatchlistItem.user_id == user.id,
+            WatchlistItem.symbol == "MU/USDT",
+        ),
+    )
+    assert row is None
+
+
+@pytest.mark.asyncio
+async def test_add_crypto_valid_symbol_succeeds(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    crypto_source_only_btc: _FakeCryptoSource,
+):
+    """加密真实交易对(BTC/USDT)→ 201 正常入库。"""
+    user = await make_user(db_session, demo_prefilled=True)
+    await db_session.commit()
+    headers = await _auth_headers(user, db_session)
+
+    r = await client.post(
+        "/api/v1/watchlist",
+        json={"symbol": "BTC/USDT", "market": "crypto"},
+        headers=headers,
+    )
+    assert r.status_code == 201
+    assert r.json()["symbol"] == "BTC/USDT"
+    # 校验确实跑过且放行
+    assert "BTC/USDT" in crypto_source_only_btc.checked
+
+
+@pytest.mark.asyncio
+async def test_add_cn_us_symbol_skips_crypto_validation(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    crypto_source_reject_all: _FakeCryptoSource,
+):
+    """A股/美股加自选不走 crypto 校验 —— 即便 crypto 源拒绝一切,仍正常入库;
+    且 crypto 源的 symbol_exists 根本不被调用(市场门控 · 零回归保证)。"""
+    user = await make_user(db_session, demo_prefilled=True)
+    await db_session.commit()
+    headers = await _auth_headers(user, db_session)
+
+    for symbol, market in (("600519", "cn"), ("AAPL", "us")):
+        r = await client.post(
+            "/api/v1/watchlist",
+            json={"symbol": symbol, "market": market},
+            headers=headers,
+        )
+        assert r.status_code == 201, f"{symbol}/{market} 应正常入库(不受 crypto 校验影响)"
+
+    # crypto 校验对 A股/美股完全没被触发
+    assert crypto_source_reject_all.checked == []

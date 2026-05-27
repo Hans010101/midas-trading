@@ -66,8 +66,9 @@ export function SymbolSearchDialog({ open, onOpenChange }: Props) {
       onOpenChange(false)
       setQuery('')
     } catch (e) {
-      if (e instanceof WatchlistApiError && e.status === 409) {
-        setErrorMsg(`${item.symbol} 已在自选列表`)
+      if (e instanceof WatchlistApiError) {
+        // 409 重复给固定文案;其余(如 422 加密交易对不存在)直接透传后端友好提示
+        setErrorMsg(e.status === 409 ? `${item.symbol} 已在自选列表` : e.detail)
       } else {
         setErrorMsg('添加失败,请重试')
       }
