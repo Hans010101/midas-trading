@@ -26,16 +26,22 @@ async def send(
     text: str,
     *,
     parse_mode: str = "Markdown",
+    reply_markup: dict[str, Any] | None = None,
     timeout: float = 5.0,
     client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
-    """POST text 到 TG Bot API · 失败抛 TelegramApiError。"""
+    """POST text 到 TG Bot API · 失败抛 TelegramApiError。
+
+    reply_markup 传入 inline_keyboard(G3 按钮界面)· None = 纯文本(G1/G2 行为不变)。
+    """
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    payload = {
+    payload: dict[str, Any] = {
         "chat_id": chat_id,
         "text": text,
         "parse_mode": parse_mode,
     }
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
 
     owned = client is None
     if owned:
@@ -63,6 +69,86 @@ async def send(
     return cast(dict[str, Any], body)
 
 
+# ── G3 · 按钮回调 / 原地编辑(共用 POST helper)──────────────────────────
+
+
+async def _post_json(
+    bot_token: str,
+    method: str,
+    payload: dict[str, Any],
+    *,
+    timeout: float,
+    client: httpx.AsyncClient | None,
+) -> dict[str, Any]:
+    """通用 Bot API POST · 失败抛 TelegramApiError(G3 新方法共用)。"""
+    url = f"https://api.telegram.org/bot{bot_token}/{method}"
+    owned = client is None
+    if owned:
+        client = httpx.AsyncClient(timeout=timeout)
+    assert client is not None  # noqa: S101
+
+    try:
+        resp = await client.post(url, json=payload)
+    except httpx.HTTPError as e:
+        raise TelegramApiError(0, f"网络错误:{e}") from e
+    finally:
+        if owned:
+            await client.aclose()
+
+    try:
+        body = resp.json()
+    except ValueError as e:
+        raise TelegramApiError(resp.status_code, "响应不是有效 JSON") from e
+
+    if resp.status_code != 200 or not body.get("ok"):
+        detail = body.get("description") or f"HTTP {resp.status_code}"
+        raise TelegramApiError(resp.status_code, str(detail))
+
+    return cast(dict[str, Any], body)
+
+
+async def answer_callback_query(
+    bot_token: str,
+    callback_query_id: str,
+    *,
+    text: str | None = None,
+    timeout: float = 5.0,
+    client: httpx.AsyncClient | None = None,
+) -> dict[str, Any]:
+    """回应 callback_query · 消除按钮 loading 态。可选轻量 toast text。"""
+    payload: dict[str, Any] = {"callback_query_id": callback_query_id}
+    if text is not None:
+        payload["text"] = text
+    return await _post_json(
+        bot_token, "answerCallbackQuery", payload, timeout=timeout, client=client,
+    )
+
+
+async def edit_message_text(
+    bot_token: str,
+    chat_id: str,
+    message_id: int,
+    text: str,
+    *,
+    parse_mode: str = "Markdown",
+    reply_markup: dict[str, Any] | None = None,
+    timeout: float = 5.0,
+    client: httpx.AsyncClient | None = None,
+) -> dict[str, Any]:
+    """原地编辑已发消息(菜单/查询结果刷新 · 比连发新消息干净)。"""
+    payload: dict[str, Any] = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": text,
+        "parse_mode": parse_mode,
+    }
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
+    return await _post_json(
+        bot_token, "editMessageText", payload, timeout=timeout, client=client,
+    )
+
+
 async def set_webhook(
     bot_token: str,
     webhook_url: str,
@@ -81,7 +167,8 @@ async def set_webhook(
     payload = {
         "url": webhook_url,
         "secret_token": secret_token,
-        "allowed_updates": ["message"],  # 只要 message(/start 绑定)· 降噪
+        # message(/start 绑定 + 命令)+ callback_query(G3 inline 按钮回调)· 其余降噪
+        "allowed_updates": ["message", "callback_query"],
     }
 
     owned = client is None

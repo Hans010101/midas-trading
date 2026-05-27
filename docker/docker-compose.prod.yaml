@@ -96,6 +96,8 @@ services:
       DEBUG: "false"
       # 0024 v2 · Telegram webhook 注册用公网 base(非 secret · 字面值不用 ${} 插值 · 0014 ADR)
       PUBLIC_API_BASE_URL: "https://api.midastrade.asia"
+      # 0025 G3 · bot K 线深链用公网 Web base(非 secret · 同上字面值约定)
+      PUBLIC_WEB_BASE_URL: "https://midastrade.asia"
     logging:
       driver: json-file
       options:

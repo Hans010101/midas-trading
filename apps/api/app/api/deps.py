@@ -30,6 +30,17 @@ def get_clickhouse(request: Request) -> ClickHouseClient:
     return cast(ClickHouseClient, request.app.state.clickhouse)
 
 
+def get_clickhouse_optional(request: Request) -> ClickHouseClient | None:
+    """CH 客户端 · lifespan 未起时返回 None(不抛)· 0025 G3 webhook 用。
+
+    Telegram webhook 在 prod 一定有 CH(lifespan 已初始化);测试不跑 lifespan,
+    返回 None 不让依赖注入炸掉绑定路径的既有测试。G3 查询分支自己兜底 None。
+    """
+    return cast(
+        "ClickHouseClient | None", getattr(request.app.state, "clickhouse", None),
+    )
+
+
 def get_cn_source(request: Request) -> AKShareCnSource:
     return cast(AKShareCnSource, request.app.state.cn_source)
 
@@ -80,6 +91,9 @@ async def get_current_user(
 
 
 ClickHouseDep = Annotated[ClickHouseClient, Depends(get_clickhouse)]
+OptionalClickHouseDep = Annotated[
+    ClickHouseClient | None, Depends(get_clickhouse_optional),
+]
 CnSourceDep = Annotated[AKShareCnSource, Depends(get_cn_source)]
 UsSourceDep = Annotated[YFinanceUsSource, Depends(get_us_source)]
 CryptoSourceDep = Annotated[CcxtBinanceCryptoSource, Depends(get_crypto_source)]
