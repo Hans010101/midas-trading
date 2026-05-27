@@ -4,7 +4,7 @@
 Markdown + inline_keyboard。无 IO、无 DB —— 便于单测。
 
 🔴 红线:每条消息尾部必带「仅供参考,不构成投资建议」;K 线走网页深链(DP14),不在
-bot 里画图;下单 / 告警规则配置本期是占位(分别 G4 / G5)。
+bot 里画图;下单(G4)全程 VIRTUAL·模拟 + 必经二次确认;告警规则配置占位(G5)。
 """
 
 from __future__ import annotations
@@ -13,8 +13,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from app.core.config import settings
+from app.services.bot import order as order_mod
 
 if TYPE_CHECKING:
+    from app.services.bot.order import OrderPreview
     from app.services.bot.query import PositionRow, SymbolQuote, WatchlistRow
 
 DISCLAIMER = "仅供参考,不构成投资建议"
@@ -101,7 +103,7 @@ def main_menu_keyboard() -> Keyboard:
                 {"text": "💼 我的持仓", "callback_data": "act:positions"},
             ],
             [
-                {"text": "🛒 下单(下一期)", "callback_data": "stub:order"},
+                {"text": "🛒 下单", "callback_data": "menu:order"},
                 {"text": "🔔 告警规则", "callback_data": "stub:rules"},
             ],
         ],
@@ -247,13 +249,118 @@ def render_positions(rows: list[PositionRow]) -> BotReply:
     return BotReply(_tail("\n".join(lines)), _back_keyboard())
 
 
-def render_order_stub() -> BotReply:
+# ── 下单(G4 · 虚拟 · 必经二次确认)────────────────────────────────────
+
+
+def _order_market_keyboard() -> Keyboard:
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "A股", "callback_data": "omkt:cn"},
+                {"text": "美股", "callback_data": "omkt:us"},
+                {"text": "加密合约", "callback_data": "omkt:crypto"},
+            ],
+            [{"text": "⬅️ 返回菜单", "callback_data": "menu:main"}],
+        ],
+    }
+
+
+def _order_direction_keyboard(market: str) -> Keyboard:
+    """按市场给方向按钮 · callback `odir:<direction>`。"""
+    dirs = order_mod.directions_for(market)
+    btns = [
+        {"text": order_mod.direction_label(d), "callback_data": f"odir:{d}"}
+        for d in dirs
+    ]
+    # 每行最多 2 个
+    rows = [btns[i : i + 2] for i in range(0, len(btns), 2)]
+    rows.append([{"text": "⬅️ 返回菜单", "callback_data": "menu:main"}])
+    return {"inline_keyboard": rows}
+
+
+def _order_confirm_keyboard() -> Keyboard:
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "✅ 确认下单", "callback_data": "ordok"},
+                {"text": "✖️ 取消", "callback_data": "ordno"},
+            ],
+        ],
+    }
+
+
+def render_order_market_picker() -> BotReply:
     text = (
-        f"*{_BRAND} · 下单*\n\n"
-        "🛒 bot 内虚拟下单将在下一期(G4)开放。\n"
-        "目前可在网页端工作台下单(全程 VIRTUAL · 模拟)。"
+        f"*{_BRAND} · 下单* (VIRTUAL · 模拟)\n\n"
+        "🛒 全程虚拟资金 · 先选市场:"
+    )
+    return BotReply(_tail(text), _order_market_keyboard())
+
+
+def render_order_ask_symbol(market: str) -> BotReply:
+    examples = {"cn": "600519", "us": "NVDA", "crypto": "BTC/USDT"}
+    mlabel = _MARKET_LABEL.get(market, market)
+    extra = "(加密为永续合约 · 逐仓)" if market == "crypto" else ""
+    text = (
+        f"*{_BRAND} · 下单* {extra}\n\n"
+        f"{mlabel} · 请发送要下单的代码,例如 `{examples.get(market, 'BTC/USDT')}`"
     )
     return BotReply(_tail(text), _back_keyboard())
+
+
+def render_order_directions(market: str, symbol: str, price: float | None) -> BotReply:
+    mlabel = _MARKET_LABEL.get(market, market)
+    price_line = (
+        f"当前价 {_fmt_price(price, _market_ccy(market))}" if price is not None else "—"
+    )
+    text = (
+        f"*{_BRAND} · 下单* (VIRTUAL · 模拟)\n\n"
+        f"{symbol} · {mlabel}\n{price_line}\n\n选择操作:"
+    )
+    return BotReply(_tail(text), _order_direction_keyboard(market))
+
+
+def render_order_preview(preview: OrderPreview) -> BotReply:
+    mlabel = _MARKET_LABEL.get(preview.market, preview.market)
+    lines = [
+        f"*{_BRAND} · 下单确认* (VIRTUAL · 模拟)",
+        "",
+        f"{preview.direction_label} · {preview.symbol} · {mlabel}",
+        f"预估价 {_fmt_price(preview.est_price, preview.currency)}",
+        f"数量 ~{_fmt_qty(preview.quantity)}",
+        f"名义 ~{_fmt_price(preview.notional, preview.currency)}",
+    ]
+    if preview.leverage is not None:
+        lines.append(f"杠杆 {preview.leverage}x · 逐仓")
+    lines.append("")
+    lines.append("⚠️ 确认后立即以【虚拟资金】下单,不可撤销。")
+    return BotReply(_tail("\n".join(lines)), _order_confirm_keyboard())
+
+
+def render_order_unavailable() -> BotReply:
+    text = (
+        f"*{_BRAND} · 下单*\n\n"
+        "无法下单:可能暂无最新报价,或(平仓时)当前没有可平持仓。\n"
+        "请确认代码 / 持仓后再试。"
+    )
+    return BotReply(_tail(text), _back_keyboard())
+
+
+def render_order_result(title: str, detail: str) -> BotReply:
+    text = f"*{_BRAND} · {title}*\n\n{detail}"
+    return BotReply(_tail(text), _back_keyboard())
+
+
+def render_order_cancelled() -> BotReply:
+    return BotReply(_tail(f"*{_BRAND} · 下单*\n\n已取消,未下单。"), main_menu_keyboard())
+
+
+def render_rate_limited() -> BotReply:
+    text = (
+        f"*{_BRAND}*\n\n"
+        "操作过于频繁,请稍后再试(防滥用限流)。"
+    )
+    return BotReply(_tail(text), None)
 
 
 def render_rules_stub() -> BotReply:

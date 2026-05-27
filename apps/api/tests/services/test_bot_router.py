@@ -1,7 +1,8 @@
-"""bot 入站编排 pytest · 0025 M1-G G3。
+"""bot 入站编排 pytest · 0025 M1-G G3 + G4(下单)。
 
 重点:① 未绑定 → 引导绑定;② 命令 / 回调路由正确;③ 🔴 安全边界 —— user_id 只从
-chat 绑定取(自选/持仓永远只返回该 chat 绑定账号的数据,跨用户隔离)。
+chat 绑定取(查询/下单永远只作用于该 chat 绑定账号,跨用户隔离);④ 下单必经二次确认
+(选方向不成交,确认才成交);⑤ DP11 限流。
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.notification import NotificationConfig
@@ -23,6 +25,7 @@ from tests.factories import make_user, make_virtual_account
 class _FakeRedis:
     def __init__(self) -> None:
         self._d: dict[str, str] = {}
+        self._counters: dict[str, int] = {}
 
     async def get(self, key: str) -> str | None:
         return self._d.get(key)
@@ -32,6 +35,13 @@ class _FakeRedis:
 
     async def delete(self, key: str) -> None:
         self._d.pop(key, None)
+
+    async def incr(self, key: str) -> int:
+        self._counters[key] = self._counters.get(key, 0) + 1
+        return self._counters[key]
+
+    async def expire(self, _key: str, _ttl: int) -> None:
+        return None
 
 
 class _FakeCH:
@@ -146,3 +156,89 @@ async def test_unknown_callback_falls_back_to_menu(db_session: AsyncSession):
     )
     assert reply.keyboard is not None
     assert "inline_keyboard" in reply.keyboard
+
+
+# ── 下单流程(G4)· 必经二次确认 + 跨用户隔离 + 限流 ─────────────────────
+
+
+async def _positions(db: AsyncSession, account_id: int) -> list[VirtualPosition]:
+    rows = await db.scalars(
+        select(VirtualPosition).where(VirtualPosition.account_id == account_id),
+    )
+    return list(rows)
+
+
+@pytest.mark.asyncio
+async def test_order_requires_confirm_then_fills(db_session: AsyncSession):
+    """选方向只出预览【不成交】;点确认才真正下单(DP8 必经二次确认)。"""
+    user = await make_user(db_session)
+    acct = await make_virtual_account(db_session, user_id=user.id, market="us")
+    await _bind(db_session, user.id, 700)
+    redis = _FakeRedis()
+    ch = _FakeCH([_bar(100.0)])
+
+    # 下单 → 选市场
+    await router.handle_callback(db_session, redis, ch, 700, "menu:order")  # type: ignore[arg-type]
+    await router.handle_callback(db_session, redis, ch, 700, "omkt:us")  # type: ignore[arg-type]
+    # 输代码 → 方向页
+    dirs = await router.handle_command(db_session, redis, ch, 700, "NVDA")  # type: ignore[arg-type]
+    assert "选择操作" in dirs.text
+    # 选「买入」→ 预览(确认页)· 此刻【还没下单】
+    preview = await router.handle_callback(db_session, redis, ch, 700, "odir:buy")  # type: ignore[arg-type]
+    assert "确认" in preview.text
+    assert not await _positions(db_session, acct.id), "选方向后绝不能已成交"
+    # 点「确认下单」→ 真正成交
+    result = await router.handle_callback(db_session, redis, ch, 700, "ordok")  # type: ignore[arg-type]
+    assert "成交" in result.text
+    assert "模拟" in result.text  # VIRTUAL 标识
+    assert len(await _positions(db_session, acct.id)) == 1
+
+
+@pytest.mark.asyncio
+async def test_order_cancel_no_execution(db_session: AsyncSession):
+    user = await make_user(db_session)
+    acct = await make_virtual_account(db_session, user_id=user.id, market="us")
+    await _bind(db_session, user.id, 701)
+    redis = _FakeRedis()
+    ch = _FakeCH([_bar(100.0)])
+
+    await router.handle_callback(db_session, redis, ch, 701, "omkt:us")  # type: ignore[arg-type]
+    await router.handle_command(db_session, redis, ch, 701, "NVDA")  # type: ignore[arg-type]
+    await router.handle_callback(db_session, redis, ch, 701, "odir:buy")  # type: ignore[arg-type]
+    cancelled = await router.handle_callback(db_session, redis, ch, 701, "ordno")  # type: ignore[arg-type]
+    assert "取消" in cancelled.text
+    assert not await _positions(db_session, acct.id)
+
+
+@pytest.mark.asyncio
+async def test_order_cross_user_isolation(db_session: AsyncSession):
+    """🔴 chat 绑定 A · 全程确认下单 → 单子只进 A 账户,B 账户绝不被动。"""
+    user_a = await make_user(db_session)
+    user_b = await make_user(db_session)
+    acct_a = await make_virtual_account(db_session, user_id=user_a.id, market="us")
+    acct_b = await make_virtual_account(db_session, user_id=user_b.id, market="us")
+    await _bind(db_session, user_a.id, 702)  # chat 702 → A
+    redis = _FakeRedis()
+    ch = _FakeCH([_bar(100.0)])
+
+    await router.handle_callback(db_session, redis, ch, 702, "omkt:us")  # type: ignore[arg-type]
+    await router.handle_command(db_session, redis, ch, 702, "NVDA")  # type: ignore[arg-type]
+    await router.handle_callback(db_session, redis, ch, 702, "odir:buy")  # type: ignore[arg-type]
+    await router.handle_callback(db_session, redis, ch, 702, "ordok")  # type: ignore[arg-type]
+
+    assert len(await _positions(db_session, acct_a.id)) == 1  # A 有单
+    assert len(await _positions(db_session, acct_b.id)) == 0  # B 一张没有
+
+
+@pytest.mark.asyncio
+async def test_command_rate_limited(db_session: AsyncSession):
+    """超过每分钟命令配额 → 限流提示。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 703)
+    redis = _FakeRedis()
+    ch = _FakeCH()
+    last = None
+    for _ in range(router.ratelimit.CMD_LIMIT_PER_MIN + 1):
+        last = await router.handle_command(db_session, redis, ch, 703, "/menu")  # type: ignore[arg-type]
+    assert last is not None
+    assert "频繁" in last.text
