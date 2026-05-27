@@ -14,6 +14,7 @@ from typing import Literal
 class NotificationKind(StrEnum):
     TRADE_FILLED = "trade_filled"
     PRICE_ANOMALY = "price_anomaly"
+    ALERT_TRIGGERED = "alert_triggered"
 
 
 @dataclass(frozen=True)
@@ -45,4 +46,18 @@ class PriceAnomalyEvent:
     currency: str = ""
 
 
-NotificationEvent = TradeFilledEvent | PriceAnomalyEvent
+@dataclass(frozen=True)
+class AlertTriggeredEvent:
+    """告警规则命中通知 · 0025 G2b。"""
+
+    kind: Literal[NotificationKind.ALERT_TRIGGERED] = NotificationKind.ALERT_TRIGGERED
+    market: str = ""
+    symbol: str | None = None  # 市场级指标(如恐贪)为 None
+    indicator_label: str = ""
+    operator: str = ""  # gt / gte / lt / lte
+    threshold: float = 0.0
+    value: float = 0.0
+    unit: str | None = None
+
+
+NotificationEvent = TradeFilledEvent | PriceAnomalyEvent | AlertTriggeredEvent

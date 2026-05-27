@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.v1.alert_rules import router as alert_rules_router
 from app.api.v1.analysis import router as analysis_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.cn import router as cn_router
@@ -21,6 +22,7 @@ router.include_router(perp_router)
 router.include_router(notifications_router)
 router.include_router(telegram_router)
 router.include_router(analysis_router)
+router.include_router(alert_rules_router)
 router.include_router(crypto_router)
 # 0023 阶段③ · A股/美股 市场首页(3.1 基建:状态 + 大盘指数)
 router.include_router(cn_router)
