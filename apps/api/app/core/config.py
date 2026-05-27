@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     tg_bot_username: str = ""
     # 公网 API base · 拼 webhook URL · prod = https://api.midastrade.asia · 非 secret。
     public_api_base_url: str = "http://localhost:8000"
+    # 公网 Web base · 拼 bot K 线深链(DP14)· prod = https://midastrade.asia · 非 secret。
+    public_web_base_url: str = "http://localhost:3000"
     # /start 一次性绑定 token TTL(秒)。
     tg_bind_token_ttl_seconds: int = 600
     # webhook secret 不单独配:由 secret_key 派生(见 telegram_bind.webhook_secret)。
