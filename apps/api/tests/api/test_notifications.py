@@ -1,13 +1,11 @@
-"""通知配置路由 pytest · 7 个场景。
+"""通知配置路由 pytest · 0025 G2a 统一 bot(飞书 / per-user token 已移除)。
 
 涵盖:
-- GET /config · 未配置返默认对象(不是 404)
-- GET /config · 已配置返 token 截断
-- PUT /config · 首次激活(lazy create)
-- PUT /config · 部分更新保持原值
-- PUT /config · 空字符串清空字段
-- POST /test · 未配置 400
-- POST /test · 用 mock httpx 验证 payload
+- GET /config 未配置返默认对象(未绑定 + 开关 true)
+- GET /config 已绑定(tg_chat_id)→ has_telegram true
+- PUT /config 只更新总开关(lazy create)
+- PUT /config 拒绝已移除字段(extra=forbid → 422)
+- POST /test 无配置 400 · 已配置但未绑定 → 200 ok=false
 """
 
 from __future__ import annotations
@@ -40,39 +38,33 @@ async def test_get_config_unconfigured_returns_default(
     )
     assert r.status_code == 200
     body = r.json()
-    assert body["feishu_webhook_url"] is None
-    assert body["tg_bot_token"] is None
-    assert body["trade_alert_enabled"] is True  # 默认开
+    assert body["tg_chat_id"] is None
+    assert body["trade_alert_enabled"] is True
     assert body["price_alert_enabled"] is True
-    assert body["has_feishu"] is False
     assert body["has_telegram"] is False
+    # 飞书 / token 字段已彻底移除
+    assert "feishu_webhook_url" not in body
+    assert "tg_bot_token" not in body
 
 
 @pytest.mark.asyncio
-async def test_get_config_truncates_tg_token(
+async def test_get_config_bound_has_telegram(
     client: AsyncClient, db_session: AsyncSession,
 ):
     user = await make_user(db_session)
-    config = NotificationConfig(
-        user_id=user.id,
-        tg_bot_token="1234567890123456:VeryLongTokenABCDEF",
-        tg_chat_id="42",
-    )
-    db_session.add(config)
+    db_session.add(NotificationConfig(user_id=user.id, tg_chat_id="42"))
     await db_session.commit()
 
     r = await client.get(
         "/api/v1/notifications/config", headers=await _auth(user, db_session),
     )
     body = r.json()
-    # 前 10 + ... + 后 4
-    assert body["tg_bot_token"] == "1234567890...CDEF"
     assert body["tg_chat_id"] == "42"
     assert body["has_telegram"] is True
 
 
 @pytest.mark.asyncio
-async def test_put_config_first_time_lazy_create(
+async def test_put_config_toggles_lazy_create(
     client: AsyncClient, db_session: AsyncSession,
 ):
     user = await make_user(db_session)
@@ -80,101 +72,61 @@ async def test_put_config_first_time_lazy_create(
 
     r = await client.put(
         "/api/v1/notifications/config",
-        json={"feishu_webhook_url": "https://feishu.example/webhook/abc"},
+        json={"trade_alert_enabled": False},
         headers=await _auth(user, db_session),
     )
     assert r.status_code == 200
     body = r.json()
-    assert body["feishu_webhook_url"] == "https://feishu.example/webhook/abc"
-    assert body["has_feishu"] is True
-    assert body["has_telegram"] is False
+    assert body["trade_alert_enabled"] is False
+    assert body["price_alert_enabled"] is True  # 未传 → 默认保持
 
-    # DB 实际写入(lazy create)
+    # DB lazy create
     config = await db_session.scalar(
         select(NotificationConfig).where(NotificationConfig.user_id == user.id),
     )
     assert config is not None
-    assert config.feishu_webhook_url == "https://feishu.example/webhook/abc"
+    assert config.trade_alert_enabled is False
 
 
 @pytest.mark.asyncio
-async def test_put_config_partial_update_keeps_other_fields(
+async def test_put_config_rejects_removed_fields(
     client: AsyncClient, db_session: AsyncSession,
 ):
+    """飞书 / token 字段已移除 · extra=forbid → 422(防回归再写这些字段)。"""
     user = await make_user(db_session)
-    config = NotificationConfig(
-        user_id=user.id,
-        feishu_webhook_url="https://feishu.example/webhook/keep",
-        tg_bot_token="old",
-        tg_chat_id="old_chat",
-    )
-    db_session.add(config)
-    await db_session.commit()
-
-    # 只更新 tg_chat_id · 其他保持
-    r = await client.put(
-        "/api/v1/notifications/config",
-        json={"tg_chat_id": "new_chat"},
-        headers=await _auth(user, db_session),
-    )
-    assert r.status_code == 200
-    body = r.json()
-    assert body["feishu_webhook_url"] == "https://feishu.example/webhook/keep"
-    assert body["tg_chat_id"] == "new_chat"
-
-
-@pytest.mark.asyncio
-async def test_put_config_empty_string_clears_field(
-    client: AsyncClient, db_session: AsyncSession,
-):
-    user = await make_user(db_session)
-    config = NotificationConfig(
-        user_id=user.id,
-        feishu_webhook_url="https://feishu.example/webhook/x",
-    )
-    db_session.add(config)
     await db_session.commit()
 
     r = await client.put(
         "/api/v1/notifications/config",
-        json={"feishu_webhook_url": ""},
+        json={"feishu_webhook_url": "https://x", "tg_bot_token": "y"},
         headers=await _auth(user, db_session),
     )
-    assert r.status_code == 200
-    body = r.json()
-    assert body["feishu_webhook_url"] is None
-    assert body["has_feishu"] is False
+    assert r.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_post_test_unconfigured_400(
+async def test_post_test_no_config_400(
     client: AsyncClient, db_session: AsyncSession,
 ):
     user = await make_user(db_session)
     await db_session.commit()
 
     r = await client.post(
-        "/api/v1/notifications/test?channel=feishu",
+        "/api/v1/notifications/test?channel=telegram",
         headers=await _auth(user, db_session),
     )
     assert r.status_code == 400
-    assert "未配置" in r.json()["detail"]
 
 
 @pytest.mark.asyncio
-async def test_post_test_channel_unconfigured_returns_error_payload(
+async def test_post_test_unbound_returns_error_payload(
     client: AsyncClient, db_session: AsyncSession,
 ):
-    """已配置另一通道 · 但请求测的通道未配 · 返回 200 + ok=false。"""
+    """有 config 但未绑定 Telegram → 200 + ok=false(无网络)。"""
     user = await make_user(db_session)
-    config = NotificationConfig(
-        user_id=user.id,
-        feishu_webhook_url="https://feishu.example/webhook/x",
-    )
-    db_session.add(config)
+    db_session.add(NotificationConfig(user_id=user.id, tg_chat_id=None))
     await db_session.commit()
 
-    # tg 未配置
     r = await client.post(
         "/api/v1/notifications/test?channel=telegram",
         headers=await _auth(user, db_session),
@@ -182,4 +134,4 @@ async def test_post_test_channel_unconfigured_returns_error_payload(
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is False
-    assert "未配置" in (body["error"] or "")
+    assert "未绑定" in (body["error"] or "")

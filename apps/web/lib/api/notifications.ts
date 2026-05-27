@@ -1,27 +1,21 @@
 /**
- * 推送通知 API client · 0009 v2。
+ * 推送通知 API client · 0009 → 0025 G2a 统一 Telegram bot。
  *
- * GET /config 返回截断展示的 token(前 10 + ... + 后 4 字符)。
- * PUT /config 部分更新 · 空字符串清空 · 字段不传 = 保持原值。
- * POST /test?channel=feishu|telegram 用当前配置发测试消息。
+ * GET /config 返回绑定状态 + 总开关(不再有飞书 / per-user token)。
+ * PUT /config 只更新总开关 · Telegram 绑定经 bot 内 /start。
+ * POST /test?channel=telegram 经统一 bot 发测试消息。
  */
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 export interface NotificationConfig {
-  feishu_webhook_url: string | null
-  tg_bot_token: string | null  // 截断展示 · 不是真 token
   tg_chat_id: string | null
   trade_alert_enabled: boolean
   price_alert_enabled: boolean
-  has_feishu: boolean
   has_telegram: boolean
 }
 
 export interface NotificationConfigUpdate {
-  feishu_webhook_url?: string | null
-  tg_bot_token?: string | null
-  tg_chat_id?: string | null
   trade_alert_enabled?: boolean
   price_alert_enabled?: boolean
 }
@@ -78,7 +72,7 @@ export async function updateNotificationConfig(
 }
 
 export async function sendTestNotification(
-  token: string, channel: 'feishu' | 'telegram',
+  token: string, channel: 'telegram' = 'telegram',
 ): Promise<NotificationTestResult> {
   const r = await fetch(
     `${API_BASE}/api/v1/notifications/test?channel=${channel}`,
