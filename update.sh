@@ -160,13 +160,13 @@ if [ ${#RECREATE_SVCS[@]} -gt 0 ]; then
   # --force-recreate 即使 Docker 层缓存命中、镜像未变,也用新镜像重建容器
   #                  → 根治"代码已在 main / 已在主机磁盘,但运行容器还是旧码"(2026-05-27 故障)
   # --no-deps       只动列出的无状态服务,绝不触碰它们的依赖(postgres/clickhouse/redis 不重建、数据卷不动)
-  $COMPOSE up -d --build --force-recreate --no-deps "${RECREATE_SVCS[@]}" 2>&1 | tail -20
+  $COMPOSE up -d --build --force-recreate --no-deps "${RECREATE_SVCS[@]}" 2>&1 | tail -40
   ok "force-recreate 完成:${RECREATE_SVCS[*]}(有状态容器未触碰)"
 elif [ "$NEED_COMPOSE_UP" = "true" ]; then
   # 仅 compose yaml 改动(无后端/前端代码改动)→ 普通 up -d 应用配置差异。
   # 不 --build、不 --force-recreate:compose 只重建"配置确实变了"的服务,有状态容器不会被无故重建。
   section "compose 配置变更 · docker compose up -d 应用(不 --build / 不 --force-recreate)"
-  $COMPOSE up -d 2>&1 | tail -20
+  $COMPOSE up -d 2>&1 | tail -40
   ok "compose up 返回"
 else
   skip "docker 容器无需变更"
