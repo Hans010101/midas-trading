@@ -1,14 +1,16 @@
 /**
- * Bot 下单后台预设 API client · 0026 G5。
- * GET 无行 → 默认值(与 G4 常量一致)· PUT upsert(本期固定逐仓)。
+ * Bot 下单后台预设 API client · 0026 G5 / 0027 MC-4(放开 perp_margin_mode 全仓)。
+ * GET 无行 → 默认值(与 G4 常量一致)· PUT upsert(MC-4 起 perp_margin_mode 可选 isolated/cross)。
  */
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
+export type PerpMarginMode = 'isolated' | 'cross'
+
 export interface BotPreset {
   perp_leverage: number
   perp_notional_usdt: string // Decimal → JSON string
-  perp_margin_mode: string
+  perp_margin_mode: PerpMarginMode
   spot_notional_cny: string
   spot_notional_usd: string
 }
@@ -16,6 +18,7 @@ export interface BotPreset {
 export interface BotPresetUpdate {
   perp_leverage: number
   perp_notional_usdt: number
+  perp_margin_mode: PerpMarginMode
   spot_notional_cny: number
   spot_notional_usd: number
 }

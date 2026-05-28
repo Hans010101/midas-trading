@@ -30,7 +30,7 @@ from uuid import UUID
 from sqlalchemy import select
 
 from app.models.bot_order_preset import BotOrderPreset
-from app.models.perp import PerpSide, VirtualPerpPosition
+from app.models.perp import MarginMode, PerpSide, VirtualPerpPosition
 from app.models.virtual import (
     OrderSide,
     OrderStatus,
@@ -43,11 +43,9 @@ from app.services.clickhouse_crypto import (
     select_tickers_by_symbols,
 )
 from app.services.virtual_trading.engine import PlaceOrderRequest, place_market_order
-from app.services.virtual_trading.perp_engine import (
-    ClosePerpRequest,
-    OpenPerpRequest,
-    close_perp_position,
-    open_perp_position,
+from app.services.virtual_trading.perp_dispatcher import (
+    route_close_perp,
+    route_open_perp,
 )
 
 if TYPE_CHECKING:
@@ -330,8 +328,10 @@ async def _exec_perp(
         return await _perp_mark(ch, symbol)
 
     if intent.direction == "close":
-        order = await close_perp_position(
-            db, ClosePerpRequest(user_id=user_id, symbol=bsym, close_all=True), fetcher,
+        # MC-4:平仓走 dispatcher,按【活仓 margin_mode】自动分流(逐仓/全仓)
+        order = await route_close_perp(
+            db, user_id=user_id, symbol=bsym,
+            quantity=None, close_all=True, get_mark_price=fetcher,
         )
     else:
         preset = await load_preset(db, user_id)  # G5:杠杆 / 名义来自用户预设
@@ -339,13 +339,12 @@ async def _exec_perp(
         margin = (
             preset.perp_notional_usdt / Decimal(preset.perp_leverage)
         ).quantize(Decimal("0.0001"))
-        order = await open_perp_position(
-            db,
-            OpenPerpRequest(
-                user_id=user_id, symbol=bsym, side=side,
-                leverage=preset.perp_leverage, margin=margin,
-            ),
-            fetcher,
+        # MC-4:开仓走 dispatcher,按 preset.perp_margin_mode 偏好分流(默认 isolated · 零回归)
+        order = await route_open_perp(
+            db, user_id=user_id, symbol=bsym, side=side,
+            leverage=preset.perp_leverage, margin=margin, quantity=None,
+            preferred_mode=MarginMode(preset.perp_margin_mode),
+            get_mark_price=fetcher,
         )
     await db.commit()
     if order.status == OrderStatus.FILLED:

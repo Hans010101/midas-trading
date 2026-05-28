@@ -39,15 +39,19 @@ const fmtU = (n: number): string =>
   `${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
 const numOr = (s: string | null, d = 0): number => (s == null ? d : Number(s) || d)
 
-// 逐仓标注(问题2)· 强平价旁说明强平价与保证金金额无关
-const ISOLATED_TIP = '逐仓:强平价只取决于开仓价与杠杆,与保证金金额无关'
-function IsolatedTag() {
+// 模式标注 · 强平语义因 mode 不同(逐仓=每仓强平价;全仓=账户级 · 该字段不展示)
+const MODE_TIP: Record<'isolated' | 'cross', string> = {
+  isolated: '逐仓:强平价只取决于开仓价与杠杆,与保证金金额无关',
+  cross: '全仓:账户级强平 · 单仓不存在独立强平价(后端 worker 看整账户保证金率)',
+}
+function ModeTag({ mode }: { mode: 'isolated' | 'cross' }) {
+  const label = mode === 'isolated' ? '逐仓' : '全仓'
   return (
     <span
-      title={ISOLATED_TIP}
+      title={MODE_TIP[mode]}
       className="ml-1 cursor-help rounded bg-paper px-1 py-0.5 text-[9px] text-muted-foreground/80"
     >
-      逐仓
+      {label}
     </span>
   )
 }
@@ -82,11 +86,15 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
   const [side, setSide] = useState<PerpSide>('long')
   const [leverage, setLeverage] = useState(10)
   const [margin, setMargin] = useState('1000')
+  const [marginMode, setMarginMode] = useState<'isolated' | 'cross'>('isolated')
   const [confirm, setConfirm] = useState<PerpIntent | null>(null)
 
   // 加仓(开同向)沿用持仓杠杆;反向 / 新开可调
   const sameSideAsPos = activePos != null && activePos.side === side
   const effLeverage = sameSideAsPos ? activePos!.leverage : leverage
+  // MC-4:有活仓时,模式锁定为活仓模式(DP-7 同 symbol 单一模式 · 后端也守)
+  const effMarginMode: 'isolated' | 'cross' =
+    activePos != null ? activePos.margin_mode : marginMode
 
   const marginNum = Number(margin) || 0
   const estimate =
@@ -109,6 +117,8 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
           : {
               symbol: futuresSymbol, intent, leverage: effLeverage,
               margin: margin.trim(),
+              // MC-4:开仓带 margin_mode → dispatcher 按此分流(平仓忽略,后端按活仓 mode 自动分流)
+              margin_mode: effMarginMode,
             },
       )
       if (order.status === 'filled') {
@@ -177,6 +187,45 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
         </button>
       </div>
 
+      {/* 保证金模式(MC-4)· 有活仓 → 锁定为活仓 mode(DP-7 同 symbol 单一模式) */}
+      <div className="mb-3">
+        <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+          <span>保证金模式</span>
+          {activePos != null && (
+            <span className="font-mono text-[10px] text-gold">已锁定 · 与活仓一致</span>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {(['isolated', 'cross'] as const).map((m) => {
+            const active = effMarginMode === m
+            const disabled = activePos != null && activePos.margin_mode !== m
+            return (
+              <button
+                key={m}
+                type="button"
+                disabled={disabled}
+                onClick={() => activePos == null && setMarginMode(m)}
+                aria-pressed={active}
+                className={cn(
+                  'rounded-md py-1.5 text-xs transition-colors',
+                  active
+                    ? 'border border-gold bg-gold/[0.08] font-medium text-gold'
+                    : 'border border-paper text-muted-foreground/70 hover:border-gold/40',
+                  disabled && 'cursor-not-allowed opacity-40 hover:border-paper',
+                )}
+              >
+                {m === 'isolated' ? '逐仓 isolated' : '全仓 cross'}
+              </button>
+            )
+          })}
+        </div>
+        <p className="mt-1 text-[10px] text-muted-foreground/70">
+          {effMarginMode === 'cross'
+            ? '全仓:保证金不实扣,账户 USDT 作共享抵押 · 强平为账户级(MC-3)'
+            : '逐仓:保证金从账户划出 · 每仓独立强平价 · 亏损封顶本仓保证金'}
+        </p>
+      </div>
+
       {/* 杠杆 */}
       <div className="mb-3">
         <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
@@ -223,7 +272,7 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
               <span className={cn('ml-1', estimate.liquidationDistancePct < 5 ? 'text-down' : 'text-muted-foreground/70')}>
                 (距现价 {estimate.liquidationDistancePct.toFixed(2)}%)
               </span>
-              <IsolatedTag />
+              <ModeTag mode={effMarginMode} />
             </>
           ) : '—'}
         </EstRow>
@@ -276,6 +325,7 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
           symbol={futuresSymbol}
           side={side}
           leverage={effLeverage}
+          marginMode={effMarginMode}
           estimate={estimate}
           activePos={activePos}
           pending={placeOrder.isPending}
@@ -318,12 +368,16 @@ function ActivePositionCard({
         <Cell label="ROE" v={roe != null ? `${roe >= 0 ? '+' : ''}${roe.toFixed(2)}%` : '—'} tone={roe == null ? undefined : roe >= 0 ? 'bull' : 'bear'} />
         <Cell label="标记价" v={pos.mark_price != null ? `$${fmtP(Number(pos.mark_price))}` : '—'} />
         <Cell
-          label={<>强平价<IsolatedTag /></>}
-          v={`$${fmtP(Number(pos.liquidation_price))}${dist != null ? ` (${dist.toFixed(1)}%)` : ''}`}
-          tone={dist != null && dist < 5 ? 'bear' : undefined}
+          label={<>强平价<ModeTag mode={pos.margin_mode} /></>}
+          v={
+            pos.margin_mode === 'cross'
+              ? '—(账户级)'
+              : `$${fmtP(Number(pos.liquidation_price))}${dist != null ? ` (${dist.toFixed(1)}%)` : ''}`
+          }
+          tone={pos.margin_mode === 'isolated' && dist != null && dist < 5 ? 'bear' : undefined}
         />
       </div>
-      {dist != null && dist < 5 && (
+      {pos.margin_mode === 'isolated' && dist != null && dist < 5 && (
         <p className="mt-1.5 text-[10px] text-down">⚠️ 强平距离仅 {dist.toFixed(1)}% · 建议降杠杆 / 加保证金(虚拟)</p>
       )}
     </div>
@@ -350,12 +404,13 @@ function EstRow({ label, children }: { label: string; children: React.ReactNode 
 
 // ── 确认模态(必经)──────────────────────────────────────────────────────────
 function PerpConfirmModal({
-  intent, symbol, side, leverage, estimate, activePos, pending, onCancel, onConfirm,
+  intent, symbol, side, leverage, marginMode, estimate, activePos, pending, onCancel, onConfirm,
 }: {
   intent: PerpIntent
   symbol: string
   side: PerpSide
   leverage: number
+  marginMode: 'isolated' | 'cross'
   estimate: ReturnType<typeof estimatePerpOpen>
   activePos: PerpPosition | null
   pending: boolean
@@ -378,6 +433,16 @@ function PerpConfirmModal({
           <ModalRow label="标的"><span className="font-mono">{symbol}</span></ModalRow>
           {isClose && activePos ? (
             <>
+              <ModalRow label="保证金模式">
+                <span className={cn(
+                  'rounded border px-2 py-0.5 text-[11px] font-mono',
+                  activePos.margin_mode === 'cross'
+                    ? 'border-gold bg-gold/[0.08] text-gold'
+                    : 'border-paper text-muted-foreground',
+                )}>
+                  {activePos.margin_mode === 'cross' ? '全仓 cross' : '逐仓 isolated'}
+                </span>
+              </ModalRow>
               <ModalRow label="方向">
                 <span className={cn('rounded px-2 py-0.5 text-xs text-white', activePos.side === 'long' ? 'bg-up' : 'bg-down')}>
                   平{activePos.side === 'long' ? '多' : '空'} {activePos.leverage}x
@@ -394,14 +459,30 @@ function PerpConfirmModal({
             </>
           ) : estimate && (
             <>
+              <ModalRow label="保证金模式">
+                <span className={cn(
+                  'rounded border px-2 py-0.5 text-[11px] font-mono',
+                  marginMode === 'cross'
+                    ? 'border-gold bg-gold/[0.08] text-gold'
+                    : 'border-paper text-muted-foreground',
+                )}>
+                  {marginMode === 'cross' ? '全仓 cross' : '逐仓 isolated'}
+                </span>
+              </ModalRow>
               <ModalRow label="方向">
                 <span className="rounded bg-midas-red px-2 py-0.5 text-xs text-white">
                   {side === 'long' ? '开多' : '开空'} {leverage}x
                 </span>
               </ModalRow>
-              <ModalRow label="保证金"><span className="font-mono">{fmtU(estimate.requiredMargin)} USDT</span></ModalRow>
+              <ModalRow label={marginMode === 'cross' ? '保证金(要求)' : '保证金'}>
+                <span className="font-mono">{fmtU(estimate.requiredMargin)} USDT</span>
+              </ModalRow>
               <ModalRow label="预估开仓量"><span className="font-mono">{estimate.quantity.toFixed(estimate.quantity >= 1 ? 4 : 6)} {base(symbol)}</span></ModalRow>
-              <ModalRow label="预估强平价"><span className="font-mono">${fmtP(estimate.liquidationPrice)}</span></ModalRow>
+              <ModalRow label="预估强平价">
+                <span className="font-mono">
+                  {marginMode === 'cross' ? '— · 账户级强平(MC-3)' : `$${fmtP(estimate.liquidationPrice)}`}
+                </span>
+              </ModalRow>
               <ModalRow label="预估手续费"><span className="font-mono">{fmtU(estimate.fee)} USDT</span></ModalRow>
             </>
           )}

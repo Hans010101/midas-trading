@@ -28,6 +28,8 @@ class PerpOrderPlaceIn(BaseModel):
     quantity: Decimal | None = Field(default=None, gt=0)
     # 平仓:close_all 或 quantity
     close_all: bool = False
+    # MC-4 接入:保证金模式 · 默认 isolated(老调用不传 → 行为完全等同 MC-3 之前)
+    margin_mode: Literal["isolated", "cross"] = "isolated"
 
     @model_validator(mode="after")
     def _check(self) -> PerpOrderPlaceIn:
@@ -80,6 +82,8 @@ class PerpPositionResponse(BaseModel):
     symbol: str
     side: PerpSide
     leverage: int
+    # MC-4 起对外暴露:'isolated' / 'cross'(前端确认页与活仓卡用,平仓自动按此分流)
+    margin_mode: Literal["isolated", "cross"]
     quantity: Decimal
     entry_price: Decimal
     initial_margin: Decimal

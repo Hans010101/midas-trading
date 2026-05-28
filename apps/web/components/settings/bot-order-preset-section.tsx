@@ -1,16 +1,17 @@
 'use client'
 
 /**
- * 设置页 · Bot 下单默认参数(后台预设)· 0026 G5 · DP-G5-1/DP-G5-7。
+ * 设置页 · Bot 下单默认参数(后台预设)· 0026 G5 / 0027 MC-4(放开全仓选择)。
  *
  * bot 里「开多/开空」(永续)/「买入/卖出」(现货)用这套默认参数下单(全程 VIRTUAL·模拟)。
- * 本期仅逐仓;全仓 chip 灰显预留。无预设行 = 默认值(= G4 行为)。
+ * MC-4 起保证金模式 isolated / cross 可选 · 无预设行 = 默认逐仓(= G4/MC-3 行为)。
  */
 
 import { Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import type { PerpMarginMode } from '@/lib/api/bot-preset'
 import { useBotPreset, useSaveBotPreset } from '@/hooks/use-bot-preset'
 
 export function BotOrderPresetSection() {
@@ -19,6 +20,7 @@ export function BotOrderPresetSection() {
 
   const [leverage, setLeverage] = useState(3)
   const [perpNotional, setPerpNotional] = useState(100)
+  const [marginMode, setMarginMode] = useState<PerpMarginMode>('isolated')
   const [cnyNotional, setCnyNotional] = useState(10000)
   const [usdNotional, setUsdNotional] = useState(1000)
 
@@ -26,6 +28,7 @@ export function BotOrderPresetSection() {
     if (data) {
       setLeverage(data.perp_leverage)
       setPerpNotional(Number(data.perp_notional_usdt))
+      setMarginMode(data.perp_margin_mode === 'cross' ? 'cross' : 'isolated')
       setCnyNotional(Number(data.spot_notional_cny))
       setUsdNotional(Number(data.spot_notional_usd))
     }
@@ -44,6 +47,7 @@ export function BotOrderPresetSection() {
       await save.mutateAsync({
         perp_leverage: leverage,
         perp_notional_usdt: perpNotional,
+        perp_margin_mode: marginMode,
         spot_notional_cny: cnyNotional,
         spot_notional_usd: usdNotional,
       })
@@ -75,11 +79,27 @@ export function BotOrderPresetSection() {
 
         <div className="flex items-center gap-2 pt-1">
           <span className="text-sm text-muted-foreground">保证金模式</span>
-          <span className="rounded border border-gold bg-gold/[0.08] px-2 py-0.5 font-mono text-[10px] text-gold">
-            逐仓
-          </span>
-          <span className="rounded border border-paper px-2 py-0.5 font-mono text-[10px] text-muted-foreground/50">
-            全仓(即将支持)
+          {(['isolated', 'cross'] as const).map((m) => {
+            const active = marginMode === m
+            const label = m === 'isolated' ? '逐仓' : '全仓'
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMarginMode(m)}
+                aria-pressed={active}
+                className={
+                  active
+                    ? 'rounded border border-gold bg-gold/[0.08] px-2 py-0.5 font-mono text-[10px] text-gold'
+                    : 'rounded border border-paper px-2 py-0.5 font-mono text-[10px] text-muted-foreground/70 hover:text-foreground hover:border-gold/40'
+                }
+              >
+                {label}
+              </button>
+            )
+          })}
+          <span className="ml-1 text-[10px] text-muted-foreground/60">
+            (同 symbol 不可混用 · 切模式前需先平掉该 symbol 活仓)
           </span>
         </div>
 

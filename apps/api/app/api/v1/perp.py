@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import ClickHouseDep, CurrentUserDep
 from app.core.database import get_db
 from app.models.perp import (
+    MarginMode,
     PerpSide,
     VirtualPerpFunding,
     VirtualPerpOrder,
@@ -41,13 +42,11 @@ from app.services.clickhouse_crypto import (
     select_premium_index_marks,
     select_tickers_by_symbols,
 )
-from app.services.virtual_trading.perp_engine import (
-    ClosePerpRequest,
-    OpenPerpRequest,
-    PerpPriceFetcher,
-    close_perp_position,
-    open_perp_position,
+from app.services.virtual_trading.perp_dispatcher import (
+    route_close_perp,
+    route_open_perp,
 )
+from app.services.virtual_trading.perp_engine import PerpPriceFetcher
 from app.services.virtual_trading.perp_fees import (
     liquidation_distance_pct,
     q_money,
@@ -124,28 +123,26 @@ async def place_perp_order(
     if payload.intent in ("open_long", "open_short"):
         side = PerpSide.LONG if payload.intent == "open_long" else PerpSide.SHORT
         assert payload.leverage is not None  # noqa: S101 · schema 已校验
-        order = await open_perp_position(
+        # MC-4:走 dispatcher 按 margin_mode 分流(默认 isolated · 零回归)
+        order = await route_open_perp(
             db,
-            OpenPerpRequest(
-                user_id=current_user.id,
-                symbol=payload.symbol,
-                side=side,
-                leverage=payload.leverage,
-                margin=payload.margin,
-                quantity=payload.quantity,
-            ),
-            fetcher,
+            user_id=current_user.id,
+            symbol=payload.symbol,
+            side=side,
+            leverage=payload.leverage,
+            margin=payload.margin,
+            quantity=payload.quantity,
+            preferred_mode=MarginMode(payload.margin_mode),
+            get_mark_price=fetcher,
         )
-    else:  # close
-        order = await close_perp_position(
+    else:  # close · 按活仓 mode 自动分流
+        order = await route_close_perp(
             db,
-            ClosePerpRequest(
-                user_id=current_user.id,
-                symbol=payload.symbol,
-                quantity=payload.quantity,
-                close_all=payload.close_all,
-            ),
-            fetcher,
+            user_id=current_user.id,
+            symbol=payload.symbol,
+            quantity=payload.quantity,
+            close_all=payload.close_all,
+            get_mark_price=fetcher,
         )
 
     await db.commit()
@@ -201,6 +198,8 @@ async def list_perp_positions(
         out.append(
             PerpPositionResponse(
                 id=p.id, symbol=p.symbol, side=p.side, leverage=p.leverage,
+                # MC-4 暴露:'isolated' / 'cross' · MC-1 列已是 String 直接返
+                margin_mode="cross" if p.margin_mode == "cross" else "isolated",
                 quantity=p.quantity, entry_price=p.entry_price,
                 initial_margin=p.initial_margin, liquidation_price=p.liquidation_price,
                 realized_pnl=p.realized_pnl, fee_paid=p.fee_paid,

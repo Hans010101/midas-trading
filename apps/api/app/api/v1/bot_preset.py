@@ -1,7 +1,7 @@
 """Bot 下单后台预设路由 · /api/v1/bot-preset · 0026 G5。
 
 - GET  · 返回当前用户预设;无行 → 默认值(load_preset · 与 G4 常量一致)。
-- PUT  · upsert 当前用户预设(本期 perp_margin_mode 固定 isolated)。
+- PUT  · upsert 当前用户预设(MC-4 起 perp_margin_mode 可选 isolated/cross)。
 
 🔴 user_id 只取自登录用户(CurrentUserDep),绝不从请求体取。预设只影响 bot 下单的
 默认参数,下单本身全程虚拟引擎。
@@ -49,7 +49,8 @@ async def put_bot_preset(
         db.add(row)
     row.perp_leverage = payload.perp_leverage
     row.perp_notional_usdt = payload.perp_notional_usdt
-    row.perp_margin_mode = "isolated"  # 本期固定逐仓(防误设全仓)
+    # MC-4 放开:接受 payload.perp_margin_mode(schema 已限 'isolated'|'cross',默认 isolated)
+    row.perp_margin_mode = payload.perp_margin_mode
     row.spot_notional_cny = payload.spot_notional_cny
     row.spot_notional_usd = payload.spot_notional_usd
     await db.commit()

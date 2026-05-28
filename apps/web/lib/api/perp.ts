@@ -26,6 +26,8 @@ export interface PerpPosition {
   symbol: string
   side: PerpSide
   leverage: number
+  /** MC-4 起返回:'isolated' / 'cross'(下单确认 + 活仓卡用) */
+  margin_mode: 'isolated' | 'cross'
   quantity: string
   entry_price: string
   initial_margin: string
@@ -81,6 +83,9 @@ export interface PlacePerpOrderInput {
   margin?: string
   quantity?: string
   close_all?: boolean
+  /** MC-4 接入:开仓时按此偏好分流到逐仓/全仓引擎(默认 'isolated' · 不传等同 MC-3 之前)。
+   *  平仓忽略此字段:后端按【活仓 margin_mode】自动分流。 */
+  margin_mode?: 'isolated' | 'cross'
 }
 
 export class PerpApiError extends Error {
