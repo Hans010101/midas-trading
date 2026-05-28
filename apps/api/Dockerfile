@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+# ↑ BuildKit 语法 · 使能 RUN --mount=type=cache(ADR 0029 DP1)
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -12,7 +14,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY . .
 
 # 装运行时 + dev 依赖
-RUN pip install --no-cache-dir -e ".[dev]"
+# ── ADR 0029 DP1:BuildKit pip cache + 阿里云 PyPI 镜像(extra-index 兜底 pypi.org)──
+# · --mount=type=cache · 把 ~/.cache/pip 挂成 BuildKit 缓存层 · 不写入镜像、跨 build 复用 wheel
+# · --index-url 阿里云镜像(HK→大陆线路通常优于 HK→pypi.org US CDN);若实测反慢回退见 ADR §7 DP1
+# · --extra-index-url 兜底 pypi.org · 防 Aliyun 缺包/版本滞后
+# · 移除原 --no-cache-dir(与 BuildKit cache mount 互斥 · 会让缓存挂载空跑)
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip install -e ".[dev]" \
+    --index-url https://mirrors.aliyun.com/pypi/simple/ \
+    --extra-index-url https://pypi.org/simple/
 
 EXPOSE 8000
 
