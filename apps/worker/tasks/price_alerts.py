@@ -1,7 +1,15 @@
-"""Celery beat · 每 1 分钟扫所有用户自选股,涨跌 ±5% 触发推送 · 0009 § 4。
+"""Celery beat · 每 1 分钟扫所有用户自选股,涨跌 ±5% 触发推送 · 0009 § 4 / 0028 N1。
 
-去重:Redis key `price_alert:{user_id}:{market}:{symbol}` · TTL 300s(5 分钟)
-跨用户同标的不共用 key(每用户独立去重)。
+🔴 0028 N1 边沿触发(降噪 · DP9 同 alert_scan 一并改):
+- Redis state key `price_alert:state:{user}:{market}:{symbol}` 持久态:triggered/not_triggered
+- |change_pct| ≥ 5% → "triggered"(否则 "not_triggered")
+- 状态机:
+  · not_triggered → triggered → **edge fire**(过 quiet/cool 后派发 + 写 state=triggered + 写 cool key)
+  · triggered → not_triggered → 状态复位(写 state=not_triggered · 不推)
+  · 持续态 → 不操作
+- Cool key `price_alert:cool:{user}:{market}:{symbol}` TTL 300s · 仅 edge fire 派发成功时写
+- Quiet 拦截(0028 DP10):PriceAnomalyEvent 非豁免,quiet 时段内不派发 + 仍写 state=triggered
+  避免每分钟空查;用户离开 quiet 后只有"再次进入 ±5%"才推
 
 价格参考:ClickHouse 日 K 取最近 2 条 close · pct = (current - prev) / prev
 """
@@ -19,13 +27,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.models.notification import NotificationConfig
 from app.models.watchlist import WatchlistItem
 from app.services.clickhouse_client import ClickHouseClient
+from app.services.notifications.events import PriceAnomalyEvent
+from app.services.notifications.quiet import is_in_quiet_now, is_quiet_exempt
 
 logger = logging.getLogger(__name__)
 
 PRICE_ALERT_THRESHOLD = Decimal("5.0")  # ±5%
-DEDUP_TTL_SECONDS = 300  # 5 分钟同标的去重
+COOLDOWN_TTL_SECONDS = 300  # 5 分钟同标的 cool 护栏(防 mark 抖动跨阈值反复)
 
 
 async def _scan_async() -> dict[str, int]:
@@ -39,7 +50,7 @@ async def _scan_async() -> dict[str, int]:
     ch = await ClickHouseClient.create()
 
     triggered = 0
-    skipped_dedup = 0
+    skipped_dedup = 0  # 兼容旧返回字段:含 edge 持续/cool 护栏/quiet 拦截 三种"未派发"
     no_data = 0
     scanned = 0
 
@@ -73,22 +84,53 @@ async def _scan_async() -> dict[str, int]:
                     (curr_close - prev_close) / prev_close * Decimal("100")
                 )
 
-                if abs(change_pct) < PRICE_ALERT_THRESHOLD:
-                    continue
-
-                # Dedup
-                key = (
-                    f"price_alert:{item.user_id}:"
+                # 0028 N1 边沿触发去重 · curr_state 由 |change_pct| ≥ 5% 决定
+                curr_state = (
+                    "triggered" if abs(change_pct) >= PRICE_ALERT_THRESHOLD
+                    else "not_triggered"
+                )
+                state_key = (
+                    f"price_alert:state:{item.user_id}:"
                     f"{item.market}:{item.symbol}"
                 )
-                already = await redis.get(key)
-                if already:
+                prev_state = await redis.get(state_key)
+
+                # 状态复位:triggered → not_triggered · 写状态不推
+                if prev_state == "triggered" and curr_state == "not_triggered":
+                    await redis.set(state_key, "not_triggered")
+                    continue
+                # 持续态(prev==curr,或 prev=None/not_triggered + curr=not_triggered)· 不推
+                if curr_state != "triggered" or prev_state == "triggered":
+                    continue
+
+                # edge fire 候选:curr=triggered & prev != triggered
+                # Quiet 拦截(price_alerts 不走 dispatcher · 自查 quiet)
+                event = PriceAnomalyEvent(
+                    symbol=item.symbol, market=item.market,
+                    current_price=curr_close, reference_price=prev_close,
+                    change_pct=change_pct,
+                )
+                config = await db.scalar(
+                    select(NotificationConfig).where(
+                        NotificationConfig.user_id == item.user_id,
+                    ),
+                )
+                if not is_quiet_exempt(event) and is_in_quiet_now(config):
+                    # quiet 内:写 state 防空转 · 不派
+                    await redis.set(state_key, "triggered")
                     skipped_dedup += 1
                     continue
 
-                await redis.set(key, "1", ex=DEDUP_TTL_SECONDS)
+                # Cool 护栏(防 mark 抖动反复跨阈值)
+                cool_key = (
+                    f"price_alert:cool:{item.user_id}:"
+                    f"{item.market}:{item.symbol}"
+                )
+                if await redis.get(cool_key):
+                    skipped_dedup += 1
+                    continue
 
-                # Dispatch via Celery(让 dispatcher 在 worker async ctx 里跑)
+                # 派发 · 走原 celery send_task 路径(链路不改)
                 from celery import Celery  # noqa: PLC0415
                 celery = Celery(
                     "midas-price-alert", broker=os.environ["CELERY_BROKER_URL"],
@@ -104,6 +146,10 @@ async def _scan_async() -> dict[str, int]:
                         str(change_pct.quantize(Decimal("0.01"))),
                     ],
                 )
+                # 派发任务入队(异步实际发)· 即视为"已触发":写 state + cool
+                # (失败重试由 send_price_anomaly_notification task 自管,无需我们重做 edge)
+                await redis.set(state_key, "triggered")
+                await redis.set(cool_key, "1", ex=COOLDOWN_TTL_SECONDS)
                 triggered += 1
     finally:
         await ch.close()

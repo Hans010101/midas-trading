@@ -26,6 +26,7 @@ from app.services.notifications.events import (
     PriceAnomalyEvent,
     TradeFilledEvent,
 )
+from app.services.notifications.quiet import is_in_quiet_now, is_quiet_exempt
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,9 @@ class ChannelResult:
 @dataclass(frozen=True)
 class DispatchResult:
     results: list[ChannelResult]
+    # 0028 N1:被 quiet 时段拦截(true=普通告警在安静窗口内被吞 · alert_scan 用此判定
+    # 是否更新 state,避免下次扫描仍判为 edge 反复空转)
+    dropped_quiet: bool = False
 
     @property
     def any_sent(self) -> bool:
@@ -83,6 +87,15 @@ async def dispatch(
     if not _kind_enabled(event, config):
         logger.info("[notify] %s disabled · user=%s", event.kind, user_id)
         return DispatchResult(results=[])
+
+    # 0028 N1 安静时段:在 quiet 窗口内吞掉【非豁免】事件(普通市场告警)。
+    # 豁免:TradeFilledEvent(钱相关 · 0028 DP10)照常发,夜间也不漏。
+    if not is_quiet_exempt(event) and is_in_quiet_now(config):
+        logger.info(
+            "[notify] quiet hours · dropped event=%s user=%s",
+            event.kind, user_id,
+        )
+        return DispatchResult(results=[], dropped_quiet=True)
 
     results: list[ChannelResult] = []
 

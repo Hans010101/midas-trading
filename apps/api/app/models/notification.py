@@ -16,6 +16,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    SmallInteger,
     String,
     Uuid,
     func,
@@ -55,6 +56,23 @@ class NotificationConfig(Base):
     )
     price_alert_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true"),
+    )
+
+    # 0028 N1 · 安静时段(quiet hours)· 在该窗口内吞掉普通告警,
+    # 钱相关事件(quiet_exempt=True,如 TradeFilledEvent · 0028 DP10)豁免照常发。
+    # 默认 23:00–07:00 / Asia/Shanghai / 开启(DP4 + DP5)。
+    quiet_hours_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true"),
+    )
+    # 起止小时 0–23(SMALLINT)· 跨夜(start > end)等同 23-7 这种用法
+    quiet_hours_start: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, server_default=text("23"),
+    )
+    quiet_hours_end: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, server_default=text("7"),
+    )
+    quiet_hours_tz: Mapped[str] = mapped_column(
+        String(64), nullable=False, server_default=text("'Asia/Shanghai'"),
     )
 
     created_at: Mapped[datetime] = mapped_column(

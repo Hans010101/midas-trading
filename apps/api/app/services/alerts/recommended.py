@@ -36,18 +36,20 @@ class RecommendedRule:
 
 
 # 9 条(0026 §4.2)· Tier1 全局 3 + Tier2 per-symbol(绑 3 个 demo 自选)6
+# 0028 DP6 轻调阈值 · 配合 N1 边沿触发(根治"卡阈值反复推"),阈值更收敛进一步降噪。
+# 老用户已建规则不强改(DP7),边沿触发是 DP7 主路径;此处只改"一键应用"的默认。
 RECOMMENDED_ALERT_RULES: tuple[RecommendedRule, ...] = (
-    # Tier1 · 全局 / 市场级(无需 symbol)
-    RecommendedRule("crypto", None, "fear_greed", "lt", 20),       # 极度恐慌
-    RecommendedRule("crypto", None, "fear_greed", "gt", 80),       # 极度贪婪
-    RecommendedRule("cn", None, "cn_breadth_up_ratio", "lt", 30),  # A股普跌
-    # Tier2 · per-symbol RSI 超买超卖(绑 demo 自选)
-    RecommendedRule("us", "NVDA", "rsi_14", "gt", 70, "1d"),
-    RecommendedRule("us", "NVDA", "rsi_14", "lt", 30, "1d"),
-    RecommendedRule("cn", "600519", "rsi_14", "gt", 70, "1d"),
-    RecommendedRule("cn", "600519", "rsi_14", "lt", 30, "1d"),
-    RecommendedRule("crypto", "BTC/USDT", "rsi_14", "gt", 75, "1d"),
-    RecommendedRule("crypto", "BTC/USDT", "rsi_14", "lt", 25, "1d"),
+    # Tier1 · 全局 / 市场级(无需 symbol)· 阈值轻调:20→15 / 80→85
+    RecommendedRule("crypto", None, "fear_greed", "lt", 15),       # 极度恐慌(原 20)
+    RecommendedRule("crypto", None, "fear_greed", "gt", 85),       # 极度贪婪(原 80)
+    RecommendedRule("cn", None, "cn_breadth_up_ratio", "lt", 25),  # A股普跌(原 30)
+    # Tier2 · per-symbol RSI 超买超卖(绑 demo 自选)· US/CN 70/30→75/25,crypto 75/25→80/20
+    RecommendedRule("us", "NVDA", "rsi_14", "gt", 75, "1d"),
+    RecommendedRule("us", "NVDA", "rsi_14", "lt", 25, "1d"),
+    RecommendedRule("cn", "600519", "rsi_14", "gt", 75, "1d"),
+    RecommendedRule("cn", "600519", "rsi_14", "lt", 25, "1d"),
+    RecommendedRule("crypto", "BTC/USDT", "rsi_14", "gt", 80, "1d"),
+    RecommendedRule("crypto", "BTC/USDT", "rsi_14", "lt", 20, "1d"),
 )
 
 

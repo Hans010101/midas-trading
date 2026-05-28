@@ -1,10 +1,22 @@
-"""告警规则扫描 worker · 0025 G2b。
+"""告警规则扫描 worker · 0025 G2b / 0028 N1 边沿触发降噪。
 
 beat 每 1 分钟跑一次:遍历所有启用规则 → 按指标分类做频率分层(DP6:价格/技术
 每分钟、衍生/全局 5min、市场结构 3min、缠论 30min)→ engine 求值(只读 ClickHouse,
-不打实时上游)→ 命中且过 Redis 冷却 → 经 G2a 核心层 dispatch 推送统一 bot。
+不打实时上游)→ 经【边沿触发去重】决定是否派发 → 经 G2a 核心层 dispatch 推送统一 bot。
 
-与 price_alerts(±5% 自选异动)并存(DP13):本任务是【新增并行】扫描,不替代旧任务。
+🔴 0028 N1 边沿触发(降噪根治):
+- Redis state key `alert_rule:state:{rule_id}` · 持久态(无 TTL)· 取值 'triggered' / 'not_triggered'
+- 状态机(4 种过渡):
+  · not_triggered/missing → triggered:**edge fire**(过 cooldown 护栏后派发,成功则写 state=triggered + 写 cool key)
+  · triggered → not_triggered:**状态复位**(写 state=not_triggered,不推)
+  · 持续 triggered:不推(已在触发中)
+  · 持续 not_triggered:不推
+- Cooldown key `alert_rule:cool:{rule_id}` · TTL=cooldown_sec · 仅在 edge fire 派发成功时写
+  · 用作"防 mark 抖动跨阈值反复"的护栏 · 即使值刚 not_triggered 又 triggered,cooldown 内仍被压住
+
+🔴 红线:本期【只动去重层 + 写状态】· 不改 evaluate_rule 求值逻辑一行(算得对不对不动)。
+
+与 price_alerts(±5% 自选异动)并存(DP13 + DP9):price_alerts 也改边沿触发。
 """
 
 from __future__ import annotations
@@ -93,12 +105,28 @@ async def _scan_async() -> int:
                 except Exception as e:  # noqa: BLE001 · 单规则失败不致命
                     logger.warning("[alert] rule=%s 求值失败:%s", rule.id, e)
                     continue
-                if not ev.triggered or ev.value is None:
+                # 0028 N1 边沿触发去重 · curr_state 由本轮求值决定
+                # ev.triggered=True 且 value 有效 → 当前处于触发态;否则视为未触发
+                curr_state = (
+                    "triggered" if (ev.triggered and ev.value is not None) else "not_triggered"
+                )
+                state_key = f"alert_rule:state:{rule.id}"
+                prev_state = await redis.get(state_key)  # str | None(首次=None=unknown)
+
+                # 状态复位:triggered → not_triggered · 写状态不推
+                if prev_state == "triggered" and curr_state == "not_triggered":
+                    await redis.set(state_key, "not_triggered")
                     continue
-                # Redis 冷却去重(key 含 rule_id · TTL = rule.cooldown_sec)
-                dedup_key = f"alert_rule:{rule.id}"
-                if await redis.get(dedup_key):
+                # 持续态(prev==curr,或 prev=None/not_triggered + curr=not_triggered)· 不操作
+                if curr_state != "triggered" or prev_state == "triggered":
                     continue
+
+                # 此处:curr_state == "triggered" 且 prev_state != "triggered" → edge fire 候选
+                # Cooldown 护栏:即使是 edge,仍受 cooldown_sec 压制(防 mark 抖动反复跨阈值)
+                cool_key = f"alert_rule:cool:{rule.id}"
+                if await redis.get(cool_key):
+                    continue
+
                 event = AlertTriggeredEvent(
                     market=rule.market, symbol=rule.symbol,
                     indicator_label=indicator.label, operator=rule.operator,
@@ -107,8 +135,16 @@ async def _scan_async() -> int:
                 )
                 disp = await dispatch(db, rule.user_id, event)
                 if disp.any_sent:
-                    await redis.set(dedup_key, "1", ex=rule.cooldown_sec)
+                    # 派发成功:更新 state + 写 cool 护栏
+                    await redis.set(state_key, "triggered")
+                    await redis.set(cool_key, "1", ex=rule.cooldown_sec)
                     triggered += 1
+                elif disp.dropped_quiet:
+                    # quiet 时段拦截:吞掉但视为"用户已知"(quiet 语义 = 静默,不是延迟)。
+                    # 写 state=triggered 防止后续每轮反复空转 dispatcher · 离开 quiet 后
+                    # 不补推这一次(若值仍在区间,只有"再次 not_triggered→triggered"才推)。
+                    await redis.set(state_key, "triggered")
+                # else:dispatch 失败(网络/未绑定/kind disabled)· 不写 state · 下次重试
     finally:
         await ch.close()
         await raw.close()
