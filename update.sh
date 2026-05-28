@@ -224,7 +224,10 @@ if [ ${#RECREATE_SVCS[@]} -gt 0 ]; then
   #                  → 根治"代码已在 main / 已在主机磁盘,但运行容器还是旧码"(2026-05-27 故障)
   # --no-deps       只动列出的无状态服务,绝不触碰它们的依赖(postgres/clickhouse/redis 不重建、数据卷不动)
   # ── ADR 0029 DP2 静默护栏三件套 ──
-  # · timeout 900 · 硬上限 15min · 防 docker build 卡死无限挂(2026-05 #57 故障根因 = 无超时)
+  # · timeout 1500 · 硬上限 25min · 防 docker build 卡死无限挂(2026-05 #57 故障根因 = 无超时)
+  #   ⚠️ 2026-05-28 实测调整:旧值 900s 太紧 · force_rebuild 同时 build api+worker+web 真实需要 ~14min30s
+  #     (api pip cache hit 8min · worker 2min · web build 4min 没 cache mount · 见 task #282 backlog)
+  #     新值 1500s (25min) 留 ~10min 余量 · 仍在外层 GitHub timeout-minutes 30 之内(DP7 兜底)
   # · BUILDKIT_PROGRESS=plain env · 流式 build log(替代原 `2>&1 | tail -40` 后置吞输出)
   #   ⚠️ 注:`docker compose up` 不支持 --progress flag(只 `docker compose build` 支持)
   #        → 走 BuildKit 客户端层 env var · 对 compose up --build 内部 build 也生效 · Docker 19.03+ 支持
@@ -233,7 +236,7 @@ if [ ${#RECREATE_SVCS[@]} -gt 0 ]; then
   # 暴露 BuildKit · DOCKER_BUILDKIT=1 是 cache mount + syntax 1.7 必需
   export DOCKER_BUILDKIT=1
   export BUILDKIT_PROGRESS=plain
-  timeout 900 $COMPOSE up -d --build --force-recreate --no-deps "${RECREATE_SVCS[@]}"
+  timeout 1500 $COMPOSE up -d --build --force-recreate --no-deps "${RECREATE_SVCS[@]}"
   ok "force-recreate 完成:${RECREATE_SVCS[*]}(有状态容器未触碰)"
 elif [ "$NEED_COMPOSE_UP" = "true" ]; then
   # 仅 compose yaml 改动(无后端/前端代码改动)→ 普通 up -d 应用配置差异。
