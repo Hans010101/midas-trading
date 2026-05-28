@@ -26,15 +26,53 @@ set -euo pipefail
 RED=$'\033[1;31m'; GREEN=$'\033[1;32m'; YELLOW=$'\033[1;33m'; CYAN=$'\033[1;36m'; MAGENTA=$'\033[1;35m'; NC=$'\033[0m'
 
 STAGE="init"
+# ── ADR 0029 DP4:外部 FORCE_REBUILD 开关(GitHub Actions inputs / 服务器手动) ──
+# true → 跳 "已是最新" + 跳 diff 判定 · 强制重建 api+worker+web(用于 cache 卡脏 / 强制刷依赖)
+# 缺省 false · 不影响正常 push 部署
+FORCE_REBUILD="${FORCE_REBUILD:-false}"
+# ── ADR 0029 DP2:失败时回滚 git HEAD · 仅在 1/7 真实 reset 后才被赋值 ──
+# 防止 "git HEAD 已动 / docker image 未起 / DB 半 migrate" 三向脱钩
+OLD_HEAD_SAVED=""
+
 on_err() {
+  # ⚠ trap - ERR:进入失败处理后立即解绑 · 防止 trap 内的诊断/回滚命令出错重入触发递归
+  trap - ERR
   local line=$1
   echo ""
   echo "${RED}╔═══════════════════════════════════════════════════════════${NC}"
   echo "${RED}║  ❌ update.sh 失败 · 阶段=「${STAGE}」 · 行号=${line}${NC}"
   echo "${RED}╚═══════════════════════════════════════════════════════════${NC}"
+
+  # ── DP2 静默护栏:失败诊断快照(磁盘 · BuildKit · 容器 · 进程) ──
+  echo ""
+  echo "${YELLOW}--- 磁盘:/var/lib/docker ---${NC}"
+  df -h /var/lib/docker 2>/dev/null || true
+  echo ""
+  echo "${YELLOW}--- docker system df(镜像 / 卷 / 缓存)---${NC}"
+  docker system df 2>/dev/null || true
   echo ""
   echo "${YELLOW}--- docker compose ps 快照 ---${NC}"
   docker compose -f docker/docker-compose.yaml -f docker/docker-compose.prod.yaml --profile self-hosted ps 2>/dev/null || true
+  echo ""
+  echo "${YELLOW}--- 关键进程(docker / buildkit / containerd)---${NC}"
+  ps aux | grep -E "docker|buildkit|containerd" | grep -v grep | head -10 || true
+
+  # ── 失败回滚 git HEAD · 防三向脱钩 ──
+  # OLD_HEAD_SAVED 仅在 1/7 已真实 git reset 后被赋值 · 失败发生在 reset 之前则不回滚
+  if [ -n "${OLD_HEAD_SAVED:-}" ]; then
+    local cur_head
+    cur_head=$(git rev-parse HEAD 2>/dev/null || echo "?")
+    if [ "$cur_head" != "$OLD_HEAD_SAVED" ]; then
+      echo ""
+      echo "${YELLOW}--- 回滚 git HEAD:${cur_head:0:8} → ${OLD_HEAD_SAVED:0:8}(防三向脱钩)---${NC}"
+      git reset --hard "$OLD_HEAD_SAVED" 2>&1 | tail -2 || \
+        echo "${RED}  ⚠ git reset 也失败 · 服务器需手动:git reset --hard ${OLD_HEAD_SAVED:0:8}${NC}"
+    else
+      echo ""
+      echo "${YELLOW}--- HEAD 未移动(失败发生在 reset 前)· 不回滚 ---${NC}"
+    fi
+  fi
+
   exit 1
 }
 trap 'on_err $LINENO' ERR
@@ -60,39 +98,55 @@ COMPOSE="docker compose -f docker/docker-compose.yaml -f docker/docker-compose.p
 START_TIME=$(date +%s)
 
 # ============================================================
-banner "1/6 · git pull · 拉最新代码"
+banner "1/7 · git pull · 拉最新代码"
 # ============================================================
 OLD_HEAD=$(git rev-parse HEAD)
 echo "  当前 HEAD = $(git rev-parse --short HEAD)"
+[ "$FORCE_REBUILD" = "true" ] && warn "FORCE_REBUILD=true · 跳过 fast-path · 强制走完整流程"
 git fetch origin main 2>&1 | tail -3
 NEW_HEAD=$(git rev-parse origin/main)
 
 if [ "$OLD_HEAD" = "$NEW_HEAD" ]; then
+  if [ "$FORCE_REBUILD" = "true" ]; then
+    warn "HEAD 已是最新 · 但 FORCE_REBUILD=true · 不退出 · 继续强制重建"
+    NEW_HEAD_SHORT=$(git rev-parse --short HEAD)
+    # HEAD 没动 · OLD_HEAD_SAVED 保持空 · 失败时 trap 不会回滚(无可回滚)
+  else
+    echo ""
+    echo "${GREEN}已是最新版本 · HEAD = $(git rev-parse --short HEAD)${NC}"
+    echo ""
+    echo "${CYAN}─── 顺便健康检查一遍 ───${NC}"
+    $COMPOSE ps
+    curl -sS http://127.0.0.1:8000/health && echo ""
+    echo ""
+    echo "${GREEN}✅ 无需更新 · 全栈正常${NC}"
+    exit 0
+  fi
+else
+  git reset --hard origin/main 2>&1 | tail -1
+  NEW_HEAD_SHORT=$(git rev-parse --short HEAD)
+  # ⚠ 关键:reset 真正发生后才设 OLD_HEAD_SAVED · trap 据此判定是否回滚
+  OLD_HEAD_SAVED=$OLD_HEAD
+  ok "更新到 HEAD = ${NEW_HEAD_SHORT}(失败时可回滚到 ${OLD_HEAD:0:8})"
+
   echo ""
-  echo "${GREEN}已是最新版本 · HEAD = $(git rev-parse --short HEAD)${NC}"
-  echo ""
-  echo "${CYAN}─── 顺便健康检查一遍 ───${NC}"
-  $COMPOSE ps
-  curl -sS http://127.0.0.1:8000/health && echo ""
-  echo ""
-  echo "${GREEN}✅ 无需更新 · 全栈正常${NC}"
-  exit 0
+  echo "${CYAN}─── 本次更新的 commit ───${NC}"
+  git log --oneline "${OLD_HEAD}..${NEW_HEAD}" | head -20
 fi
 
-git reset --hard origin/main 2>&1 | tail -1
-NEW_HEAD_SHORT=$(git rev-parse --short HEAD)
-ok "更新到 HEAD = ${NEW_HEAD_SHORT}"
-
-echo ""
-echo "${CYAN}─── 本次更新的 commit ───${NC}"
-git log --oneline "${OLD_HEAD}..${NEW_HEAD}" | head -20
-
 # ============================================================
-banner "2/6 · 计算变更范围 · 决定需要做什么"
+banner "2/7 · 计算变更范围 · 决定需要做什么"
 # ============================================================
-CHANGED=$(git diff --name-only "${OLD_HEAD}" "${NEW_HEAD}")
-TOTAL_FILES=$(echo "$CHANGED" | grep -c "" || true)
-echo "  本次变更 ${TOTAL_FILES} 个文件"
+if [ "$OLD_HEAD" = "$NEW_HEAD" ]; then
+  # FORCE_REBUILD 路径:HEAD 没变 · 跳 diff 直接走强制
+  echo "  (HEAD 未变 · 跳 diff 判定 · 由 FORCE_REBUILD 接管)"
+  CHANGED=""
+  TOTAL_FILES=0
+else
+  CHANGED=$(git diff --name-only "${OLD_HEAD}" "${NEW_HEAD}")
+  TOTAL_FILES=$(echo "$CHANGED" | grep -c "" || true)
+  echo "  本次变更 ${TOTAL_FILES} 个文件"
+fi
 echo ""
 
 # 各类别 flag
@@ -139,6 +193,15 @@ if [ "$NEED_BUILD_API" = "true" ] || [ "$NEED_BUILD_WEB" = "true" ]; then
   NEED_COMPOSE_UP=true
 fi
 
+# ── ADR 0029 DP4:FORCE_REBUILD 顶替 diff 判定 ──
+# 在所有 diff-based flag 计算完成之后强行 OR 上 · 不破坏正常 push 部署的 diff 判定路径
+if [ "$FORCE_REBUILD" = "true" ]; then
+  warn "FORCE_REBUILD=true · 忽略 diff · 强制重建 api + worker + web"
+  NEED_BUILD_API=true
+  NEED_BUILD_WEB=true
+  NEED_COMPOSE_UP=true
+fi
+
 if [ "$NEED_BUILD_API" = "false" ] && [ "$NEED_BUILD_WEB" = "false" ] \
    && [ "$NEED_COMPOSE_UP" = "false" ] && [ "$NEED_CADDY_RELOAD" = "false" ] \
    && [ "$NEED_ALEMBIC" = "false" ]; then
@@ -146,7 +209,7 @@ if [ "$NEED_BUILD_API" = "false" ] && [ "$NEED_BUILD_WEB" = "false" ] \
 fi
 
 # ============================================================
-banner "3/6 · 执行 docker 层动作"
+banner "3/7 · 执行 docker 层动作"
 # ============================================================
 # 收集"有代码改动、需要强制重建"的【无状态】服务(只 api/worker/web)。
 # ⚠ 安全边界:postgres / clickhouse / redis 是有状态服务,绝不放进这个列表、绝不 --force-recreate、绝不动数据卷。
@@ -160,7 +223,14 @@ if [ ${#RECREATE_SVCS[@]} -gt 0 ]; then
   # --force-recreate 即使 Docker 层缓存命中、镜像未变,也用新镜像重建容器
   #                  → 根治"代码已在 main / 已在主机磁盘,但运行容器还是旧码"(2026-05-27 故障)
   # --no-deps       只动列出的无状态服务,绝不触碰它们的依赖(postgres/clickhouse/redis 不重建、数据卷不动)
-  $COMPOSE up -d --build --force-recreate --no-deps "${RECREATE_SVCS[@]}" 2>&1 | tail -40
+  # ── ADR 0029 DP2 静默护栏三件套 ──
+  # · timeout 900 · 硬上限 15min · 防 docker build 卡死无限挂(2026-05 #57 故障根因 = 无超时)
+  # · --progress=plain · 流式 build log(替代原 `2>&1 | tail -40` 后置吞输出)
+  # · 失败诊断 · trap on_err 自动打出磁盘/缓存/进程快照
+  # ✅ 正常路径不变 · 仅在【失败 / 卡死】时显著提速排障
+  # 暴露 BuildKit · DOCKER_BUILDKIT=1 是 cache mount + syntax 1.7 必需
+  export DOCKER_BUILDKIT=1
+  timeout 900 $COMPOSE up -d --build --force-recreate --no-deps --progress=plain "${RECREATE_SVCS[@]}"
   ok "force-recreate 完成:${RECREATE_SVCS[*]}(有状态容器未触碰)"
 elif [ "$NEED_COMPOSE_UP" = "true" ]; then
   # 仅 compose yaml 改动(无后端/前端代码改动)→ 普通 up -d 应用配置差异。
@@ -173,7 +243,7 @@ else
 fi
 
 # ============================================================
-banner "4/6 · alembic migration(如有新文件)"
+banner "4/7 · alembic migration(如有新文件)"
 # ============================================================
 if [ "$NEED_ALEMBIC" = "true" ]; then
   section "等 api 容器健康再跑 alembic upgrade head"
@@ -191,7 +261,7 @@ else
 fi
 
 # ============================================================
-banner "5/6 · Caddy 配置 reload(如有改动)"
+banner "5/7 · Caddy 配置 reload(如有改动)"
 # ============================================================
 if [ "$NEED_CADDY_RELOAD" = "true" ]; then
   section "cp deploy/Caddyfile + caddy validate + systemctl reload"
@@ -204,9 +274,9 @@ else
 fi
 
 # ============================================================
-banner "6/6 · 健康检查 + 汇总"
+banner "6/7 · 健康检查"
 # ============================================================
-STAGE="6/6 healthcheck"
+STAGE="6/7 healthcheck"
 
 # 等服务回到 healthy(如果有重建 · 给 90s)
 if [ "$NEED_COMPOSE_UP" = "true" ]; then
@@ -241,6 +311,19 @@ echo "${CYAN}─── HTTPS 三域名 ───${NC}"
 printf "  api  · "; curl -sS -o /dev/null -w "HTTP %{http_code} · %{time_total}s\n" --max-time 10 "https://api.midastrade.asia/health" || true
 printf "  main · "; curl -sS -o /dev/null -w "HTTP %{http_code} · %{time_total}s\n" --max-time 10 "https://midastrade.asia/" || true
 printf "  www  · "; curl -sS -o /dev/null -w "HTTP %{http_code} · %{time_total}s\n" --max-time 10 -L "https://www.midastrade.asia/" || true
+
+# ============================================================
+banner "7/7 · 缓存清理(温和版 · 7 天未用)"
+# ============================================================
+# ADR 0029 DP3:部署成功后清理 7 天未用的 BuildKit 缓存碎片 · 防 30GB 失控(2026-05 #57 故障根因)
+# 温和策略:--filter until=168h · 保 7 天内热缓存 · 不影响下一次部署的 cache mount 命中
+# 兜底层:prune 失败不阻塞 deploy 成功路径(健康检查已过 · 此步纯卫生)
+STAGE="7/7 cache prune"
+echo "  清 7 天未用的 BuildKit 缓存..."
+docker builder prune -f --filter "until=168h" 2>&1 | tail -5 || warn "prune 失败 · 不阻塞 deploy(健康检查已过)"
+echo ""
+echo "${CYAN}─── 当前缓存占用(prune 后)───${NC}"
+docker system df 2>&1 | head -10 || true
 
 ELAPSED=$(($(date +%s) - START_TIME))
 

@@ -11,6 +11,16 @@ on:
       - 'docs/**'
       - '**/*.md'
   workflow_dispatch:
+    # ADR 0029 DP4:手动触发开关 · 强制完整重建(跳过 update.sh "已是最新" + diff fast-path)
+    # 使用场景:① cache 卡脏(buildx 状态损坏)② 依赖未变但要重装(pip 拉新 wheel)
+    # ③ 验证 docker image 真实状态(确认 git HEAD ↔ image 不脱钩)
+    # push 触发时此 input 为空 · update.sh 默认 FORCE_REBUILD=false 走原快速路径
+    inputs:
+      force_rebuild:
+        description: '强制完整重建(跳过 update.sh 已是最新 + diff 判定 · 重建 api/worker/web)'
+        type: boolean
+        default: false
+        required: false
 
 # 同一时间只允许一个部署在跑 · 后到的排队(部署不能并发,会互相打架)
 concurrency:
@@ -39,12 +49,14 @@ jobs:
       - name: SSH 到服务器 · git checkout main + update.sh
         run: |
           set -e
+          # FORCE_REBUILD 透传:push 事件 inputs.force_rebuild 为空字符串 →
+          # update.sh 的 ${FORCE_REBUILD:-false} 默认为 false · 不影响自动部署
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=accept-new \
             -o ServerAliveInterval=30 \
             -o ServerAliveCountMax=120 \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            'cd /opt/midas && git fetch origin && git checkout -f main && bash update.sh'
+            "cd /opt/midas && git fetch origin && git checkout -f main && FORCE_REBUILD='${{ inputs.force_rebuild }}' bash update.sh"
 
       # ────────────────────────────────────────────────
       # update.sh 内部已做容器健康检查 · 这里再从 GitHub runner(外网)
