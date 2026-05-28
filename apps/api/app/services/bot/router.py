@@ -20,6 +20,7 @@ from sqlalchemy import select
 from app.models.alert_rule import AlertRule
 from app.services.alerts.recommended import apply_recommended_rules
 from app.services.bot import order as order_mod
+from app.services.bot import quiet as quiet_mod
 from app.services.bot import ratelimit
 from app.services.bot import telegram_ui as ui
 from app.services.bot.identity import resolve_user_id
@@ -172,6 +173,33 @@ async def handle_callback(
         created, skipped = await apply_recommended_rules(db, user_id)
         note = f"已应用推荐:新增 {created} 条 · 跳过 {skipped} 条"
         return ui.render_alert_rules(await query_alert_rules(db, user_id), note=note)
+
+    # ── 安静时段(N3 · 查看 + 启停 + 起止小时步进 · 时区切换留网页 DP9)────
+    # 🔴 R1 隔离:user_id 来自顶部 resolve_user_id(chat_id) · 所有 quiet_mod 调用都用同一 user_id
+    #    quiet_mod 模块层不接受 chat_id / 其他 id · 物理上不可能改到别人的 config
+    if d == "menu:quiet":
+        await clear_session(redis, chat_id)
+        view = await quiet_mod.load_quiet_hours(db, user_id)
+        return ui.render_quiet_hours(view)
+    if d == "quiet:toggle":
+        view = await quiet_mod.toggle_enabled(db, user_id)
+        return ui.render_quiet_hours(view)
+    if d == "quiet:s+":
+        view = await quiet_mod.step_start_hour(db, user_id, +1)
+        return ui.render_quiet_hours(view)
+    if d == "quiet:s-":
+        view = await quiet_mod.step_start_hour(db, user_id, -1)
+        return ui.render_quiet_hours(view)
+    if d == "quiet:e+":
+        view = await quiet_mod.step_end_hour(db, user_id, +1)
+        return ui.render_quiet_hours(view)
+    if d == "quiet:e-":
+        view = await quiet_mod.step_end_hour(db, user_id, -1)
+        return ui.render_quiet_hours(view)
+    if d == "quiet:noop":
+        # 中间显示时间的按钮 · 点了不做事,只重渲(用户体验上是"占位")
+        view = await quiet_mod.load_quiet_hours(db, user_id)
+        return ui.render_quiet_hours(view)
 
     # ── 下单流程(G4 · 虚拟 · 必经二次确认)──────────────────────────
     if d == "menu:order":
