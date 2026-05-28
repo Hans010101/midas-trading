@@ -100,11 +100,40 @@ START_TIME=$(date +%s)
 # ============================================================
 banner "1/7 · git pull · 拉最新代码"
 # ============================================================
-OLD_HEAD=$(git rev-parse HEAD)
+# ── ADR 0031 · DP1 · fast-path 误判修复(deploy.yml env 注入优先 · 否则 disk 自算)──
+# env 注入场景(deploy.yml SSH 命令在 git reset --hard 之【前】算 OLD_HEAD)
+#   · OLD_HEAD = reset 前的 server HEAD(= 上次部署的 commit)
+#   · NEW_HEAD = reset 后 HEAD(= origin/main · 本次目标 commit)
+#   · 真实反映"server 跑哪个 commit vs origin 想推到哪个 commit"
+#   · 避免 0029 hotfix-2(`git reset --hard origin/main`)让 disk HEAD 在
+#     update.sh 启动前已等于 origin/main · diff 判定恒空 fast-path 误判的副作用
+# disk 自算场景(产品方手动 SSH 跑 `bash update.sh` · env 未注入)
+#   · 退化到原行为 · 与 ADR 0031 之前一致
+#   · ⚠️ 若手动 SSH 前已自行 `git reset --hard origin/main`,会触发 fast-path 误判
+#     (跟修前同款副作用 · banner 会 warn 提示)
+OLD_HEAD_SRC="env"
+NEW_HEAD_SRC="env"
+if [ -z "${OLD_HEAD:-}" ]; then
+  OLD_HEAD=$(git rev-parse HEAD)
+  OLD_HEAD_SRC="disk"
+fi
 echo "  当前 HEAD = $(git rev-parse --short HEAD)"
 [ "$FORCE_REBUILD" = "true" ] && warn "FORCE_REBUILD=true · 跳过 fast-path · 强制走完整流程"
+
+# git fetch:env 模式时 deploy.yml 已 fetch(冗余 no-op);disk 模式时必跑
 git fetch origin main 2>&1 | tail -3
-NEW_HEAD=$(git rev-parse origin/main)
+if [ -z "${NEW_HEAD:-}" ]; then
+  NEW_HEAD=$(git rev-parse origin/main)
+  NEW_HEAD_SRC="disk"
+fi
+
+# Banner 提示来源 · 手动 SSH 场景一眼看出"env 未注入 · 可能误判"
+if [ "$OLD_HEAD_SRC" = "env" ] && [ "$NEW_HEAD_SRC" = "env" ]; then
+  echo "  OLD_HEAD = ${OLD_HEAD:0:8} · NEW_HEAD = ${NEW_HEAD:0:8}(env 注入 · deploy.yml 在 reset 前后算)"
+else
+  echo "  OLD_HEAD = ${OLD_HEAD:0:8} · NEW_HEAD = ${NEW_HEAD:0:8}(disk 自算)"
+  warn "OLD_HEAD/NEW_HEAD env 未注入 · 退化到 disk 自算(手动 SSH 跑场景 · 若已 reset 则 fast-path 可能误判)"
+fi
 
 if [ "$OLD_HEAD" = "$NEW_HEAD" ]; then
   if [ "$FORCE_REBUILD" = "true" ]; then
