@@ -225,12 +225,15 @@ if [ ${#RECREATE_SVCS[@]} -gt 0 ]; then
   # --no-deps       只动列出的无状态服务,绝不触碰它们的依赖(postgres/clickhouse/redis 不重建、数据卷不动)
   # ── ADR 0029 DP2 静默护栏三件套 ──
   # · timeout 900 · 硬上限 15min · 防 docker build 卡死无限挂(2026-05 #57 故障根因 = 无超时)
-  # · --progress=plain · 流式 build log(替代原 `2>&1 | tail -40` 后置吞输出)
+  # · BUILDKIT_PROGRESS=plain env · 流式 build log(替代原 `2>&1 | tail -40` 后置吞输出)
+  #   ⚠️ 注:`docker compose up` 不支持 --progress flag(只 `docker compose build` 支持)
+  #        → 走 BuildKit 客户端层 env var · 对 compose up --build 内部 build 也生效 · Docker 19.03+ 支持
   # · 失败诊断 · trap on_err 自动打出磁盘/缓存/进程快照
   # ✅ 正常路径不变 · 仅在【失败 / 卡死】时显著提速排障
   # 暴露 BuildKit · DOCKER_BUILDKIT=1 是 cache mount + syntax 1.7 必需
   export DOCKER_BUILDKIT=1
-  timeout 900 $COMPOSE up -d --build --force-recreate --no-deps --progress=plain "${RECREATE_SVCS[@]}"
+  export BUILDKIT_PROGRESS=plain
+  timeout 900 $COMPOSE up -d --build --force-recreate --no-deps "${RECREATE_SVCS[@]}"
   ok "force-recreate 完成:${RECREATE_SVCS[*]}(有状态容器未触碰)"
 elif [ "$NEED_COMPOSE_UP" = "true" ]; then
   # 仅 compose yaml 改动(无后端/前端代码改动)→ 普通 up -d 应用配置差异。
