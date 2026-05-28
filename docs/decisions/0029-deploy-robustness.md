@@ -2,7 +2,11 @@
 
 ## 状态
 
-**Draft · 待产品方审**(2026-05-28)· 仅方案,不含实现代码、不改任何运行代码。
+**Approved**(2026-05-28)· 产品方就 §7 全部 7 个决策点拍板,按 §8 分期推进,先做 **N1(代码一波 commit)**。
+实施期走 feature 分支 + 严格审 + 改部署流程影响面大,谨慎落地。
+
+> **实施进度**:N1(Dockerfile + deploy.yml + update.sh 一波)· feature 分支 `feat/deploy-robustness-n1` · 进行中。
+> N2(BuildKit GC daemon.json)· 产品方 SSH 一次性运维 · §8 末附确切配置 + 重载命令。
 
 承接:N1(ADR-0028 告警降噪)部署故障 —— 一次 30min timeout 失败 + 三次假绿 + 一次手动救场,
 攒齐了一串教训,趁热固化成机制。
@@ -399,43 +403,25 @@ git reset --hard origin/main           # 推进
 
 ---
 
-## 7. 决策点(需产品方拍板 · 逐条单列)
+## 7. 决策点 · 最终结论(产品方拍板 · 2026-05-28)
 
-**DP1 · pip 缓存方案**:
-1. ① **A + C 组合**(BuildKit cache mount + PyPI 国内镜像 · 推荐)
-2. ② 只做 A(cache mount · 改 Dockerfile · 不动镜像源)
-3. ③ 只做 C(改镜像源 · 不引入 BuildKit cache)
-4. ④ 都不做 · 保守
+> 7 个决策点全部拍板,结论如下。本表是 N1 实现的契约。
 
-**DP2 · build 静默护栏**:
-1. ① **A + B + C 全做**(主动 timeout + 流式输出 + 失败时诊断 · 推荐)
-2. ② 只做 A(主动 timeout)
-3. ③ 只做 B(流式输出)
+| # | 决策 | **最终结论** | 落地路径 |
+|---|---|---|---|
+| **DP1** | pip 缓存方案 | **A + C 组合** · BuildKit cache mount + 阿里云 PyPI 镜像(`https://mirrors.aliyun.com/pypi/simple/`)· ⚠️ 香港线路实测注意点:若部署后实测阿里云比官方 PyPI 慢(香港→国内绕路),允许产品方一行 Dockerfile 改回直连官方(`-i` 参数删掉),**BuildKit cache mount 保留**(无论用哪个源 cache mount 都加速) | Dockerfile × 2 |
+| **DP2** | build 静默护栏 | **A + B + C 全做** · timeout 900s 主动失败 + `--progress=plain` 流式输出 + 失败时 `df -h /var/lib/docker / docker system df / ps aux 诊断输出` | update.sh |
+| **DP3** | builder cache 清理 | **A + C 组合** · update.sh 部署后(6/6 健康检查通过后的安全时机)温和 `docker builder prune -f --filter "until=168h"` + BuildKit daemon GC 兜底。⚠️ 安全时机:**部署成功后**(无 build 在跑、新容器已 healthy)· **不对运行容器操作**(避免本次手动 prune 踩到的 "rw layer snapshot not found") | update.sh + daemon.json |
+| **DP4** | 三向脱钩防护 | **4A FORCE_REBUILD + 5B trap 回滚** · deploy.yml 加 `workflow_dispatch.inputs.force_rebuild`(boolean default false)· `--field force_rebuild=true` 时绕开 update.sh diff 判定,作为救场总开关 · update.sh `trap on_err ERR` 失败时回滚 git HEAD 防三向脱钩 | deploy.yml + update.sh |
+| **DP5** | BuildKit GC 阈值 | **20GB** | daemon.json |
+| **DP6** | commit 粒度 | **一个 commit 全做**(Dockerfile + deploy.yml + update.sh 一波 · 原子上线) | N1 |
+| **DP7** | 外层 timeout-minutes | **保持 30 分钟**(build 自身已有 15 分钟主动 timeout 护栏 · 外层留余量给 alembic + healthcheck) | deploy.yml(不动) |
 
-**DP3 · builder cache 清理策略**:
-1. ① **A + C 组合**(update.sh 部署后温和清 + BuildKit GC 兜底 · 推荐)
-2. ② 只做 A(update.sh 部署后清)
-3. ③ 只做 C(BuildKit GC 配置)
-4. ④ 都不做 · 出问题手动清
-
-**DP4 · 三向脱钩防护**:
-1. ① **4A FORCE_REBUILD + 5B trap 回滚**(轻量 + 救场开关 · 推荐)
-2. ② 加 4C alembic 自愈(护 DB schema 边)
-3. ③ 加 4B image label 智能检测(智能但复杂)
-4. ④ 长期演进到 5A/5C(git checkout 延后)· 大改
-
-**DP5 · BuildKit GC defaultKeepStorage 阈值**(如 DP3 选 ① 或 ③):
-1. ① 20GB(保守 · 让 cache 多保留点提升命中)
-2. ② 10GB(更紧 · 防爆磁盘)
-3. ③ 30GB(宽松 · 接近本次事故的临界点 · 不推荐)
-
-**DP6 · update.sh 改动是否捆绑成一个 commit 还是分多个 commit**:
-1. ① **一个 commit 全做**(原子上线 · 推荐)
-2. ② 分多个 commit(每个坑独立 · 便于回滚单条)
-
-**DP7 · `deploy.yml timeout-minutes` 是否下调**(若 DP2 加了 docker build 主动 timeout):
-1. ① 保持 30 分钟(留余量 · 推荐)
-2. ② 下调到 20 分钟(更激进失败检测 · 配合主动 timeout)
+**结论提炼(给 N1 实现期当宪法用)**:
+- pip:BuildKit cache mount + 阿里云镜像(香港实测后允许一行回退到官方)· cache mount 必保留
+- 静默:timeout 900s + --progress=plain + 失败 3 项诊断(磁盘/docker df/进程)
+- 清理:6/6 后温和 prune 7 天前 + daemon GC 20GB 兜底
+- 脱钩:FORCE_REBUILD 救场总开关 + trap ERR 时 git reset 回滚(防递归)
 
 ---
 
@@ -454,9 +440,66 @@ git reset --hard origin/main           # 推进
   - 读 `FORCE_REBUILD` env,绕开 1/6 + 2/6 快速路径(强制走完整路径)
 - `deploy.yml`:加 `inputs.force_rebuild` boolean default false,SSH 命令前置 `FORCE_REBUILD='...'`
 
-**N2 · 服务器一次性运维**(产品方做)
-- 写 `/etc/docker/daemon.json` 加 BuildKit GC 配置(DP5 选项)
-- `systemctl restart docker`(夜间低峰执行)
+**N2 · 服务器一次性运维**(产品方做 · 给出确切配置 + 命令)
+
+### N2.1 · /etc/docker/daemon.json 确切配置
+
+如果 `/etc/docker/daemon.json` **不存在**(常见情况),整文件内容为:
+```json
+{
+  "builder": {
+    "gc": {
+      "enabled": true,
+      "defaultKeepStorage": "20GB",
+      "policy": [
+        {
+          "keepStorage": "20GB",
+          "filter": ["unused-for=168h"]
+        }
+      ]
+    }
+  }
+}
+```
+
+如果 `/etc/docker/daemon.json` **已存在**(已有其他配置项),把 `builder` 这段合并进顶层(用 `jq` 或手工合并),不要覆盖原有的 `dns`/`log-driver` 等其他配置。先备份:
+```bash
+sudo cp /etc/docker/daemon.json /etc/docker/daemon.json.bak.$(date +%Y%m%d)
+```
+然后用 jq 合并(把上面的配置存为 `/tmp/buildkit-gc.json`):
+```bash
+sudo jq -s '.[0] * .[1]' /etc/docker/daemon.json /tmp/buildkit-gc.json | sudo tee /etc/docker/daemon.json.new
+sudo mv /etc/docker/daemon.json.new /etc/docker/daemon.json
+```
+
+### N2.2 · 重载命令(夜间低峰执行)
+
+```bash
+# 1. 校验 JSON 语法(防 daemon 起不来)
+sudo python3 -m json.tool /etc/docker/daemon.json > /dev/null && echo "JSON OK"
+
+# 2. 重载 docker daemon · 注意 systemctl reload 不一定生效 · 需 restart
+#    ⚠️ restart 会让所有容器短暂停转(api 健康检查会断 ~10-30s)· 选服务低峰时段
+sudo systemctl restart docker
+
+# 3. 验证 daemon 起来 + BuildKit GC 生效
+sudo systemctl status docker --no-pager | head -3
+docker buildx du   # 看当前 builder cache 大小
+docker info | grep -A 3 "Builder"   # 看 builder GC 配置已加载
+```
+
+### N2.3 · 验证 GC 工作(可选 · 几天后看)
+```bash
+# 几天后看 builder cache 大小是否被 GC 控制在 20GB 以下
+docker system df
+docker buildx du --verbose | head
+```
+
+### N2.4 · 回滚方案(若 daemon 起不来)
+```bash
+sudo mv /etc/docker/daemon.json.bak.<日期> /etc/docker/daemon.json
+sudo systemctl restart docker
+```
 
 **N3 · 验证**
 - 故意触发一次 dispatch + `force_rebuild=true` → 验证强制路径走通
