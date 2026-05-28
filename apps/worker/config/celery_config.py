@@ -60,6 +60,13 @@ beat_schedule = {
         "schedule": crontab(minute="*"),
         "options": {"expires": 50},
     },
+    "perp-cross-liquidation-scan": {
+        "task": "tasks.perp.scan_cross_liquidations",
+        # ADR-0027 MC-3 · 全仓账户级强平监控 · 独立于逐仓那条(只扫 margin_mode='cross')
+        # 60s 一轮 · 只在有 cross 活仓时才有实际工作 · expires 50 同逐仓(不堆任务)
+        "schedule": crontab(minute="*"),
+        "options": {"expires": 50},
+    },
     "perp-funding-settle": {
         "task": "tasks.perp.settle_funding",
         # ADR-0020 Block1 / M2-C.2.2 · 资金费结算 · 每 UTC 整点跑一次,

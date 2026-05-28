@@ -23,6 +23,7 @@ from tasks import (  # noqa: E402, F401
     incremental,
     market_home_ingest,
     notifications,
+    perp_cross_liquidation,
     perp_funding,
     perp_liquidation,
     price_alerts,
