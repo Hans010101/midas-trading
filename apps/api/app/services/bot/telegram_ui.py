@@ -23,6 +23,7 @@ if TYPE_CHECKING:
         SymbolQuote,
         WatchlistRow,
     )
+    from app.services.bot.quiet import QuietHoursView
 
 DISCLAIMER = "仅供参考,不构成投资建议"
 _BRAND = "点金 Midas"
@@ -111,6 +112,8 @@ def main_menu_keyboard() -> Keyboard:
                 {"text": "🛒 下单", "callback_data": "menu:order"},
                 {"text": "🔔 告警规则", "callback_data": "menu:rules"},
             ],
+            # 0028 N3 · 安静时段(查看 + 启停 + 起止小时步进 · 时区切换留网页 DP9)
+            [{"text": "🌙 安静时段", "callback_data": "menu:quiet"}],
         ],
     }
 
@@ -404,6 +407,63 @@ def render_alert_rules(rows: list[AlertRuleRow], *, note: str | None = None) -> 
     else:
         body = "\n\n🔔=启用 / 🔕=停用 · 点规则可切换状态;全量新建在网页端。"
     return BotReply(_tail(head + body), _alert_rules_keyboard(rows))
+
+
+# ── 安静时段(N3 · 查看 + 启停 + 起止小时步进 · 时区切换留网页 DP9)────────
+
+
+def _fmt_hour(h: int) -> str:
+    return f"{h:02d}:00"
+
+
+def _quiet_hours_keyboard(view: QuietHoursView) -> Keyboard:
+    """6 按钮键盘:启停 + 起/止 ±1 + 网页换时区(深链)+ 返回。"""
+    toggle_label = "🔕 关闭安静时段" if view.enabled else "🔔 启用安静时段"
+    # 起止小时步进:把 ±1 放在数值两侧,直观
+    start_label = f"起 {_fmt_hour(view.start_hour)}"
+    end_label = f"止 {_fmt_hour(view.end_hour)}"
+    settings_url = f"{settings.public_web_base_url.rstrip('/')}/settings"
+    return {
+        "inline_keyboard": [
+            [{"text": toggle_label, "callback_data": "quiet:toggle"}],
+            [
+                {"text": "−1h", "callback_data": "quiet:s-"},
+                {"text": start_label, "callback_data": "quiet:noop"},
+                {"text": "+1h", "callback_data": "quiet:s+"},
+            ],
+            [
+                {"text": "−1h", "callback_data": "quiet:e-"},
+                {"text": end_label, "callback_data": "quiet:noop"},
+                {"text": "+1h", "callback_data": "quiet:e+"},
+            ],
+            [{"text": "🌐 时区调整 · 在网页端", "url": settings_url}],
+            [{"text": "⬅️ 返回菜单", "callback_data": "menu:main"}],
+        ],
+    }
+
+
+def render_quiet_hours(view: QuietHoursView) -> BotReply:
+    """显示当前安静时段配置 + 紧急豁免说明(对齐 N2 网页文案)。"""
+    status_icon = "🌙" if view.enabled else "☀️"
+    status_word = "已启用" if view.enabled else "已关闭"
+    cross_night = view.start_hour > view.end_hour
+    end_with_next = (
+        f"次日 {_fmt_hour(view.end_hour)}" if cross_night else _fmt_hour(view.end_hour)
+    )
+
+    lines = [
+        f"*{_BRAND} · 安静时段*",
+        "",
+        f"{status_icon} 状态:{status_word}",
+        f"⏰ 时段:{_fmt_hour(view.start_hour)} – {end_with_next}",
+        f"🌐 时区:{view.tz}",
+        "",
+        "⚠️ 安静时段内仅静默【普通告警】(自选异动 / 规则告警),",
+        "    *成交 / 强平等关键事件照常推送*,夜间不漏。",
+        "",
+        "按下方按钮调整开关 / 起止小时;时区切换请到网页端。",
+    ]
+    return BotReply(_tail("\n".join(lines)), _quiet_hours_keyboard(view))
 
 
 def render_not_bound() -> BotReply:
