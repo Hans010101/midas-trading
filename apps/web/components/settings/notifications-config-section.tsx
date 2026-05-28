@@ -21,8 +21,19 @@ import {
   useSendTestNotification,
 } from '@/hooks/use-notifications'
 import { useCreateBindToken, useUnbindTelegram } from '@/hooks/use-telegram'
+import type { NotificationConfig } from '@/lib/api/notifications'
 import { type BindTokenResult, TelegramApiError } from '@/lib/api/telegram'
 import { cn } from '@/lib/utils'
+
+// 0028 N2 · 时区预设(覆盖主要交易市场 · 后端 zoneinfo 校验通过的 IANA 名)
+const TZ_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'Asia/Shanghai', label: '北京 / 上海 (UTC+8)' },
+  { value: 'Asia/Tokyo', label: '东京 (UTC+9)' },
+  { value: 'Asia/Singapore', label: '新加坡 (UTC+8)' },
+  { value: 'Europe/London', label: '伦敦 (UTC+0/+1)' },
+  { value: 'America/New_York', label: '纽约 (UTC-5/-4)' },
+  { value: 'UTC', label: 'UTC' },
+]
 
 export function NotificationsConfigSection() {
   const { data: config, isLoading } = useNotificationConfig()
@@ -92,6 +103,9 @@ export function NotificationsConfigSection() {
             保存开关
           </SaveButton>
         </div>
+
+        {/* 0028 N2 · 安静时段配置(在该窗口内吞普通告警 · 紧急豁免照发)*/}
+        <QuietHoursCard config={config ?? null} />
       </div>
     </section>
   )
@@ -249,6 +263,180 @@ function BindInstructions({
       </button>
     </div>
   )
+}
+
+// ===== 0028 N2 · 安静时段卡 =====
+
+function QuietHoursCard({ config }: { config: NotificationConfig | null }) {
+  const saveMutation = useSaveNotificationConfig()
+
+  // 本地表单态(载入后 sync,提交时 diff 出真实改动 — 但简单起见全字段一起 PUT)
+  const [enabled, setEnabled] = useState(true)
+  const [startHour, setStartHour] = useState(23)
+  const [endHour, setEndHour] = useState(7)
+  const [tz, setTz] = useState('Asia/Shanghai')
+
+  useEffect(() => {
+    if (config) {
+      setEnabled(config.quiet_hours_enabled)
+      setStartHour(config.quiet_hours_start)
+      setEndHour(config.quiet_hours_end)
+      setTz(config.quiet_hours_tz)
+    }
+  }, [config])
+
+  const crossNight = startHour > endHour
+  const tzLabel =
+    TZ_OPTIONS.find((opt) => opt.value === tz)?.label ?? tz
+
+  async function handleSave() {
+    try {
+      await saveMutation.mutateAsync({
+        quiet_hours_enabled: enabled,
+        quiet_hours_start: startHour,
+        quiet_hours_end: endHour,
+        quiet_hours_tz: tz,
+      })
+      toast.success('安静时段已保存')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '保存失败')
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-paper bg-cream p-5 shadow-sm">
+      <div className="mb-3 flex items-center gap-2">
+        <span className="text-xl" aria-hidden="true">🌙</span>
+        <h3 className="font-serif text-base font-bold text-foreground">
+          告警安静时段
+        </h3>
+        <span
+          className={cn(
+            'rounded border px-1.5 py-0.5 font-mono text-[10px]',
+            enabled
+              ? 'border-gold bg-gold/[0.08] text-gold'
+              : 'border-paper text-muted-foreground/70',
+          )}
+        >
+          {enabled ? '已启用' : '已关闭'}
+        </span>
+      </div>
+
+      <p className="mb-3 text-xs text-muted-foreground">
+        在此时段内,自选异动 / 规则告警等普通推送会被静默。
+        <span className="font-medium text-foreground"> 成交 / 强平等关键事件不受影响</span>
+        ,夜间也会照常推送。
+      </p>
+
+      {/* 总开关 */}
+      <div className="mb-3">
+        <Toggle
+          label="启用安静时段"
+          hint={
+            enabled
+              ? `当前 ${formatHour(startHour)} – ${
+                  crossNight ? '次日 ' : ''
+                }${formatHour(endHour)} · ${tzLabel}`
+              : '关闭后所有时段都会推送(夜间不静默)'
+          }
+          checked={enabled}
+          onChange={setEnabled}
+        />
+      </div>
+
+      {/* 起止 + 时区:仅在启用时显示编辑控件,关闭时只读保留值 */}
+      <fieldset
+        disabled={!enabled}
+        className={cn(
+          'space-y-3 transition-opacity',
+          !enabled && 'pointer-events-none opacity-50',
+        )}
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <HourSelect
+            label="起始时间"
+            value={startHour}
+            onChange={setStartHour}
+          />
+          <HourSelect
+            label={crossNight ? '结束时间(次日)' : '结束时间'}
+            value={endHour}
+            onChange={setEndHour}
+          />
+        </div>
+
+        <div>
+          <label
+            htmlFor="quiet-hours-tz"
+            className="mb-1 block text-xs text-muted-foreground"
+          >
+            时区
+          </label>
+          <select
+            id="quiet-hours-tz"
+            value={tz}
+            onChange={(e) => setTz(e.target.value)}
+            className="w-full rounded-md border border-paper bg-background px-3 py-2 text-sm text-foreground focus:border-midas-red focus:outline-none focus:ring-1 focus:ring-midas-red/30"
+          >
+            {TZ_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {crossNight && (
+          <p className="rounded-md border border-paper bg-background px-3 py-2 text-[11px] text-muted-foreground">
+            ⓘ 起始时间晚于结束时间 → 跨夜窗口(如 23:00 静默到次日 07:00)
+          </p>
+        )}
+      </fieldset>
+
+      <div className="mt-4">
+        <SaveButton onClick={handleSave} pending={saveMutation.isPending}>
+          保存安静时段
+        </SaveButton>
+      </div>
+    </div>
+  )
+}
+
+function HourSelect({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: number
+  onChange: (next: number) => void
+}) {
+  return (
+    <div>
+      <label
+        htmlFor={`hour-${label}`}
+        className="mb-1 block text-xs text-muted-foreground"
+      >
+        {label}
+      </label>
+      <select
+        id={`hour-${label}`}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full rounded-md border border-paper bg-background px-3 py-2 text-sm text-foreground focus:border-midas-red focus:outline-none focus:ring-1 focus:ring-midas-red/30"
+      >
+        {Array.from({ length: 24 }, (_, h) => (
+          <option key={h} value={h}>
+            {formatHour(h)}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+function formatHour(h: number): string {
+  return `${String(h).padStart(2, '0')}:00`
 }
 
 // ===== sub-components =====

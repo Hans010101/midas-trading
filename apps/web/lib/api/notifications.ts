@@ -13,11 +13,23 @@ export interface NotificationConfig {
   trade_alert_enabled: boolean
   price_alert_enabled: boolean
   has_telegram: boolean
+  // 0028 N2 · 安静时段(N1 已落 DB · 本期接前端)
+  quiet_hours_enabled: boolean
+  // 起止小时 0-23 · start > end 表示跨夜(如 23-7)
+  quiet_hours_start: number
+  quiet_hours_end: number
+  // IANA tz 名(如 "Asia/Shanghai")
+  quiet_hours_tz: string
 }
 
 export interface NotificationConfigUpdate {
   trade_alert_enabled?: boolean
   price_alert_enabled?: boolean
+  // 0028 N2 · 4 字段各自可选(undefined = 不动,后端 None 语义)
+  quiet_hours_enabled?: boolean
+  quiet_hours_start?: number
+  quiet_hours_end?: number
+  quiet_hours_tz?: string
 }
 
 export interface NotificationTestResult {
