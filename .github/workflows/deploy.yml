@@ -52,18 +52,22 @@ jobs:
           # FORCE_REBUILD 透传:push 事件 inputs.force_rebuild 为空字符串 →
           # update.sh 的 ${FORCE_REBUILD:-false} 默认为 false · 不影响自动部署
           #
-          # ⚠️ 关键:用 `git reset --hard origin/main` 代替 `git checkout -f main`
-          #   - `git checkout -f main` 仅切到 main 分支 · 【不会 fast-forward 本地 main 到 origin/main】
-          #     → bash 读 disk 上 OLD update.sh · update.sh 改动永远滞后一次部署
-          #   - `git reset --hard origin/main` 强行把本地 main HEAD + 工作树同步到 origin/main
-          #     → bash 读 NEW update.sh · 改动立即生效(不滞后)
-          #   实战故障实证:run 26572016802 / 26572826512 都因 OLD update.sh 跑 --progress=plain 而失败回滚
+          # ── ADR 0029 hotfix-2 · git reset --hard origin/main(替代 checkout -f main) ──
+          # 让 update.sh 自身改动立即生效(disk 同步)· 实战故障实证 N1/N2 部署链
+          #
+          # ── ADR 0031 · fast-path 误判修复(DP1 · 方向 B) ──
+          # 副作用:reset 后 server local main 已 = origin/main · update.sh 1/7 看 HEAD 没动
+          #         → 误判 "无需重建" → fast-path → 普通 push 不真重建(被迫 push 两次)
+          # 修法:在 reset 【之前】算 OLD_HEAD,reset 【之后】算 NEW_HEAD,一起 export 给
+          #       update.sh · 这样 update.sh 1/7 拿到的是 reset 前的真实 server HEAD
+          # 引号:外层 "..." 让 GH Actions 展开 secrets / inputs · 内层 \$(...) 转义避免
+          #       GH runner 本地展开,$ 要由远端 bash 解释(SSH 到远端后才执行)
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=accept-new \
             -o ServerAliveInterval=30 \
             -o ServerAliveCountMax=120 \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "cd /opt/midas && git fetch origin main && git checkout main && git reset --hard origin/main && FORCE_REBUILD='${{ inputs.force_rebuild }}' bash update.sh"
+            "cd /opt/midas && OLD_HEAD=\$(git rev-parse HEAD) && git fetch origin main && git checkout main && git reset --hard origin/main && NEW_HEAD=\$(git rev-parse HEAD) && OLD_HEAD=\$OLD_HEAD NEW_HEAD=\$NEW_HEAD FORCE_REBUILD='${{ inputs.force_rebuild }}' bash update.sh"
 
       # ────────────────────────────────────────────────
       # update.sh 内部已做容器健康检查 · 这里再从 GitHub runner(外网)
