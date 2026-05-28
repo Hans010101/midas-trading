@@ -46,17 +46,24 @@ jobs:
           ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
 
       # ────────────────────────────────────────────────
-      - name: SSH 到服务器 · git checkout main + update.sh
+      - name: SSH 到服务器 · 强行同步本地 main = origin/main + update.sh
         run: |
           set -e
           # FORCE_REBUILD 透传:push 事件 inputs.force_rebuild 为空字符串 →
           # update.sh 的 ${FORCE_REBUILD:-false} 默认为 false · 不影响自动部署
+          #
+          # ⚠️ 关键:用 `git reset --hard origin/main` 代替 `git checkout -f main`
+          #   - `git checkout -f main` 仅切到 main 分支 · 【不会 fast-forward 本地 main 到 origin/main】
+          #     → bash 读 disk 上 OLD update.sh · update.sh 改动永远滞后一次部署
+          #   - `git reset --hard origin/main` 强行把本地 main HEAD + 工作树同步到 origin/main
+          #     → bash 读 NEW update.sh · 改动立即生效(不滞后)
+          #   实战故障实证:run 26572016802 / 26572826512 都因 OLD update.sh 跑 --progress=plain 而失败回滚
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=accept-new \
             -o ServerAliveInterval=30 \
             -o ServerAliveCountMax=120 \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "cd /opt/midas && git fetch origin && git checkout -f main && FORCE_REBUILD='${{ inputs.force_rebuild }}' bash update.sh"
+            "cd /opt/midas && git fetch origin main && git checkout main && git reset --hard origin/main && FORCE_REBUILD='${{ inputs.force_rebuild }}' bash update.sh"
 
       # ────────────────────────────────────────────────
       # update.sh 内部已做容器健康检查 · 这里再从 GitHub runner(外网)
