@@ -2,12 +2,23 @@
 
 ## 状态
 
-**Approved**(2026-05-28)· 产品方就 §6 全部 10 个决策点拍板,按 §7 分期推进,先做 **N1(后端)**。
-实施期走 feature 分支 + 严格审 + 不可逆迁移逐行审。
+**Closed**(2026-05-28)· N1 + N2 + N3 + N4 全期完成并上线 main · DP9 网页 + bot 双通道闭环 ·
+产品方真机走查(N4)通过 · 降噪 ADR 收口。10 个决策点(DP1–DP10)见 §6。
 
-> **实施进度**:N1(后端边沿触发 + 安静时段 + 阈值轻调)· feature 分支
-> `feat/alert-noise-reduction-n1` · 进行中。N2(前端 quiet 配置)/ N3(bot 快速开关)/
-> N4(真机走查 24h 观察)依次推进。N5(D 聚合 digest)本期不做,看 P0 效果再说。
+> **实施进度**(收口):
+> - **N1 后端**(commit `7b40173`)· 边沿触发状态机 + dispatcher quiet 拦截 + price_alerts 改造 + 阈值轻调 + 紧急豁免 ClassVar · pytest 26 项
+> - **N2 网页**(commit `e946876`)· `/settings → 告警安静时段` section · GET/PUT `/notifications/config` 暴露 quiet_hours 4 字段 + zoneinfo 校验 · pytest 16 项(含 6 越界 parametrize)
+> - **N3 bot**(commit `cc52cff`)· 主菜单 [🌙 安静时段] + render_quiet_hours 6 按钮 + 起止小时 mod 24 步进 · 时区切换留网页 · pytest 21 项(★ 含 2 个跨用户隔离 + 10 个边界 parametrize)
+> - **N4 走查**(2026-05-28)· bot 6 按钮 / 网页 section / quiet 时区 / 边沿触发(`alert_rule:state:*` 不卡死)/ 推送通路(下午 16:53 实证)· **全部通过**
+>
+> ★ 关键观察:N4 走查期间产品方"数小时无告警"现象,经 worker 日志查实 `scan_alert_rules` /
+> `scan_price_anomalies` 每分钟健康跑、`triggered=0`、无 `dropped_quiet`、`alert_rule:state:*` 为空 ——
+> **N1 边沿触发降噪生效的正常表现**(不再刷屏)· 不是故障。
+>
+> 后续 backlog(不在本 ADR 内):
+> - N5(D 聚合 digest)· 看 N1-N3 长期效果再评估
+> - render_main_menu 文字部分老旧(G3 时代只列 4 功能)· 并入下次碰 bot 时一起修
+> - 强平 / 成交 TG 通知接入(`TradeFilledEvent` 豁免机制就绪但 emit 入口未接)· 降噪收口后评估
 
 承接:M1-G G6 真机走查反馈("9 条推荐规则跑起来后 TG 信息密度偏高、有刷屏感")。
 触发:ADR-0025(M1-G G2b 告警引擎)+ ADR-0026(M1-G G5 9 条推荐规则)上线后的体验缺陷。
