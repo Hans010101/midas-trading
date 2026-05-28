@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
-from app.models.perp import PerpSide, VirtualPerpPosition
+from app.models.perp import MarginMode, PerpSide, VirtualPerpPosition
 from app.services.clickhouse_crypto import (
     select_premium_index_marks,
     select_tickers_by_symbols,
@@ -73,6 +73,12 @@ async def _scan_and_liquidate() -> dict[str, int]:
                 await session.scalars(
                     select(VirtualPerpPosition).where(
                         VirtualPerpPosition.closed_at.is_(None),
+                        # MC-1(ADR-0027 §3 隔离)· 本 worker 只负责【逐仓】强平:
+                        # 逐仓每仓独立强平价,mark 触价即平。全仓('cross')是账户级
+                        # 强平(MC-3 才落地 · 独立路径),其 per-position liq_price 语义
+                        # 不同,绝不能被这套逐仓比对误杀。现网全 isolated → 此行命中全部
+                        # 现有仓位,对当前行为【零影响】,纯为 MC-2+ 提前隔离。
+                        VirtualPerpPosition.margin_mode == MarginMode.ISOLATED,
                     ),
                 )
             ).all()

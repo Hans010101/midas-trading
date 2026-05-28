@@ -59,10 +59,15 @@ class PerpSide(enum.StrEnum):
 
 
 class MarginMode(enum.StrEnum):
-    """保证金模式 · M2-C.1 只做逐仓(D2)。"""
+    """保证金模式 · 逐仓 / 全仓(ADR-0027)。
+
+    🔴 MC-1 阶段:CROSS 仅【预定义】,本期任何代码路径都不得实际使用
+       (全仓开仓/计算/强平在 MC-2/MC-3/MC-4 才落地)。本期所有写入仍为 ISOLATED。
+    StrEnum 是 str 子类,赋给 String 列存储其 .value('isolated'/'cross')。
+    """
 
     ISOLATED = "isolated"
-    # 全仓 cross 模式留后续(ADR-0019 §10)· M2-C.1 只做逐仓
+    CROSS = "cross"  # MC-1 预定义占位 · 本期不进任何代码路径(MC-2/3/4 才用)
 
 
 class PerpAction(enum.StrEnum):
@@ -106,10 +111,13 @@ class VirtualPerpPosition(Base):
     side: Mapped[PerpSide] = mapped_column(
         Enum(PerpSide, name="perp_side"), nullable=False,
     )
-    margin_mode: Mapped[MarginMode] = mapped_column(
-        Enum(MarginMode, name="margin_mode"),
+    # MC-1(ADR-0027 DP-5):由 PG Enum 改 VARCHAR(16),为全仓 'cross' 扩容,
+    # 免去 ALTER TYPE ADD VALUE 的不可逆与锁表风险。现网行只存 'isolated'。
+    # StrEnum 是 str 子类,写入时引擎赋 MarginMode.ISOLATED 即存其 .value 'isolated'。
+    margin_mode: Mapped[str] = mapped_column(
+        String(16),
         nullable=False,
-        server_default=MarginMode.ISOLATED.name,
+        server_default=text("'isolated'"),
     )
     leverage: Mapped[int] = mapped_column(Integer, nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(20, 8), nullable=False)
