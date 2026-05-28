@@ -49,14 +49,19 @@ async def get_notification_config(
 @router.put(
     "/config",
     response_model=NotificationConfigResponse,
-    summary="更新通知总开关(成交 / 价格异动)· None 保持原值",
+    summary="更新通知总开关 + 安静时段(0028 N2)· None 字段保持原值",
 )
 async def update_notification_config(
     payload: NotificationConfigUpdate,
     current_user: CurrentUserDep,
     db: DbDep,
 ) -> NotificationConfigResponse:
-    """只更新总开关 · lazy create。Telegram 绑定经 bot 内 /start,不在此处理。"""
+    """局部更新通知配置 · lazy create。
+
+    本期(N2)扩展为接受 quiet_hours_* 4 个字段(同样 None=不动)。
+    Telegram 绑定不在此处理 —— 经 bot 内 /start(0025 统一 bot)。
+    🟢 红线:仅写入 quiet_hours 配置字段;不动 dispatcher / alert_scan 求值逻辑。
+    """
     config = await get_config(db, current_user.id)
     if config is None:
         config = NotificationConfig(user_id=current_user.id)
@@ -66,6 +71,16 @@ async def update_notification_config(
         config.trade_alert_enabled = payload.trade_alert_enabled
     if payload.price_alert_enabled is not None:
         config.price_alert_enabled = payload.price_alert_enabled
+
+    # 0028 N2 · quiet_hours 4 字段(各自可选)
+    if payload.quiet_hours_enabled is not None:
+        config.quiet_hours_enabled = payload.quiet_hours_enabled
+    if payload.quiet_hours_start is not None:
+        config.quiet_hours_start = payload.quiet_hours_start
+    if payload.quiet_hours_end is not None:
+        config.quiet_hours_end = payload.quiet_hours_end
+    if payload.quiet_hours_tz is not None:
+        config.quiet_hours_tz = payload.quiet_hours_tz
 
     await db.commit()
     await db.refresh(config)

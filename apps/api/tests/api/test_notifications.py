@@ -135,3 +135,147 @@ async def test_post_test_unbound_returns_error_payload(
     body = r.json()
     assert body["ok"] is False
     assert "未绑定" in (body["error"] or "")
+
+
+# ============================================================
+# 0028 N2 · quiet_hours 4 字段对前端暴露(GET 返 + PUT 接受 + 校验)
+# ============================================================
+
+
+@pytest.mark.asyncio
+async def test_get_config_unconfigured_includes_quiet_hours_defaults(
+    client: AsyncClient, db_session: AsyncSession,
+):
+    """未配置用户 GET → 默认 quiet_hours(对齐 DB server_default · DP4+DP5)。"""
+    user = await make_user(db_session)
+    await db_session.commit()
+
+    r = await client.get(
+        "/api/v1/notifications/config", headers=await _auth(user, db_session),
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["quiet_hours_enabled"] is True
+    assert body["quiet_hours_start"] == 23
+    assert body["quiet_hours_end"] == 7
+    assert body["quiet_hours_tz"] == "Asia/Shanghai"
+
+
+@pytest.mark.asyncio
+async def test_get_config_returns_persisted_quiet_hours(
+    client: AsyncClient, db_session: AsyncSession,
+):
+    """已落 DB 的 quiet_hours 字段被原样返回。"""
+    user = await make_user(db_session)
+    db_session.add(NotificationConfig(
+        user_id=user.id,
+        quiet_hours_enabled=False,
+        quiet_hours_start=22,
+        quiet_hours_end=8,
+        quiet_hours_tz="UTC",
+    ))
+    await db_session.commit()
+
+    r = await client.get(
+        "/api/v1/notifications/config", headers=await _auth(user, db_session),
+    )
+    body = r.json()
+    assert body["quiet_hours_enabled"] is False
+    assert body["quiet_hours_start"] == 22
+    assert body["quiet_hours_end"] == 8
+    assert body["quiet_hours_tz"] == "UTC"
+
+
+@pytest.mark.asyncio
+async def test_put_config_updates_quiet_hours(
+    client: AsyncClient, db_session: AsyncSession,
+):
+    """PUT 局部更新 quiet_hours · 跨夜 + 非默认时区都能落库。"""
+    user = await make_user(db_session)
+    await db_session.commit()
+
+    r = await client.put(
+        "/api/v1/notifications/config",
+        json={
+            "quiet_hours_enabled": True,
+            "quiet_hours_start": 23,
+            "quiet_hours_end": 6,
+            "quiet_hours_tz": "America/New_York",
+        },
+        headers=await _auth(user, db_session),
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["quiet_hours_start"] == 23
+    assert body["quiet_hours_end"] == 6
+    assert body["quiet_hours_tz"] == "America/New_York"
+
+    # DB lazy create + 原值未传字段保持默认(总开关默认 True)
+    config = await db_session.scalar(
+        select(NotificationConfig).where(NotificationConfig.user_id == user.id),
+    )
+    assert config is not None
+    assert config.quiet_hours_start == 23
+    assert config.quiet_hours_end == 6
+    assert config.quiet_hours_tz == "America/New_York"
+    assert config.trade_alert_enabled is True  # 没传 · 保持 server_default
+
+
+@pytest.mark.asyncio
+async def test_put_config_partial_quiet_hours_keeps_unchanged_fields(
+    client: AsyncClient, db_session: AsyncSession,
+):
+    """只传 quiet_hours_enabled · start/end/tz 保持原值。"""
+    user = await make_user(db_session)
+    db_session.add(NotificationConfig(
+        user_id=user.id,
+        quiet_hours_start=22, quiet_hours_end=8, quiet_hours_tz="Asia/Tokyo",
+    ))
+    await db_session.commit()
+
+    r = await client.put(
+        "/api/v1/notifications/config",
+        json={"quiet_hours_enabled": False},
+        headers=await _auth(user, db_session),
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["quiet_hours_enabled"] is False
+    # 其余 quiet_hours 字段未变
+    assert body["quiet_hours_start"] == 22
+    assert body["quiet_hours_end"] == 8
+    assert body["quiet_hours_tz"] == "Asia/Tokyo"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("payload", "field"),
+    [
+        ({"quiet_hours_start": 24}, "quiet_hours_start"),    # > 23
+        ({"quiet_hours_start": -1}, "quiet_hours_start"),    # < 0
+        ({"quiet_hours_end": 99}, "quiet_hours_end"),
+        ({"quiet_hours_end": -5}, "quiet_hours_end"),
+        ({"quiet_hours_tz": "Mars/Olympus"}, "quiet_hours_tz"),  # 非法 IANA
+        ({"quiet_hours_tz": ""}, "quiet_hours_tz"),               # 空串
+    ],
+)
+async def test_put_config_rejects_invalid_quiet_hours(
+    client: AsyncClient, db_session: AsyncSession,
+    payload: dict, field: str,
+):
+    """边界 + 非法时区一律 422 · 不污染 DB。"""
+    user = await make_user(db_session)
+    await db_session.commit()
+
+    r = await client.put(
+        "/api/v1/notifications/config",
+        json=payload,
+        headers=await _auth(user, db_session),
+    )
+    assert r.status_code == 422, f"应拒绝 {field}={payload}"
+
+    # 失败的 PUT 不应 lazy create config(只在合法 PUT 才写)
+    config = await db_session.scalar(
+        select(NotificationConfig).where(NotificationConfig.user_id == user.id),
+    )
+    assert config is None
