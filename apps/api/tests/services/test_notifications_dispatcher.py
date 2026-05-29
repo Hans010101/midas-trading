@@ -114,6 +114,9 @@ async def test_dispatch_price_separate_switch(db_session: AsyncSession):
         NotificationConfig(
             user_id=user.id, tg_chat_id="c",
             trade_alert_enabled=False, price_alert_enabled=True,
+            # 关掉安静时段:price_anomaly 非豁免,默认 23-7 quiet 窗口内会被吞 →
+            # 旧测试漏设此项,在 23:00-07:00 运行时时间依赖失败(与本期飞书无关,顺手修)。
+            quiet_hours_enabled=False,
         ),
     )
     await db_session.commit()
@@ -161,11 +164,15 @@ async def test_send_test_bound_ok(db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_send_test_unknown_channel_rejected(db_session: AsyncSession):
-    """飞书已移除:send_test 对未知通道返回错误(防回归引用旧通道)。"""
+    """未知通道(非 telegram/feishu)返回错误 · 防误调用。
+
+    注:飞书已在 ADR 0032 阶段二回归为受支持通道,故这里用一个真正未知的通道名
+    (wechat)验证兜底;飞书 send_test 的行为见 test_feishu_notify.py。
+    """
     user = await make_user(db_session)
     config = NotificationConfig(user_id=user.id, tg_chat_id="c")
     db_session.add(config)
     await db_session.commit()
-    r = await send_test(config, "feishu")
+    r = await send_test(config, "wechat")
     assert r.ok is False
     assert "未知通道" in (r.error or "")
