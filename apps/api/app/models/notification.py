@@ -38,6 +38,13 @@ class NotificationConfig(Base):
             unique=True,
             postgresql_where=text("tg_chat_id IS NOT NULL"),
         ),
+        # ADR 0032 阶段二:一飞书用户一账号(feishu_open_id 非空时唯一)· partial。
+        Index(
+            "uq_notification_config_feishu_open_id",
+            "feishu_open_id",
+            unique=True,
+            postgresql_where=text("feishu_open_id IS NOT NULL"),
+        ),
     )
 
     user_id: Mapped[UUID] = mapped_column(
@@ -49,6 +56,10 @@ class NotificationConfig(Base):
     # Telegram 统一 bot 绑定的 chat_id(由 /start 绑定写入 · 0025 G1)。
     # 注:统一 bot 的 token 是全局 env(settings.tg_bot_token),不再 per-user。
     tg_chat_id: Mapped[str | None] = mapped_column(String(64))
+
+    # 飞书 open_id(ADR 0032 阶段二 · 绑定后写入;阶段三 bind-token 流程)。
+    # 全局飞书应用 token 走 env(settings.feishu_app_*),不 per-user。
+    feishu_open_id: Mapped[str | None] = mapped_column(String(64))
 
     # 总开关 · 默认开
     trade_alert_enabled: Mapped[bool] = mapped_column(

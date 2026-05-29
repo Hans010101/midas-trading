@@ -15,6 +15,9 @@ dependencies = [
     "celery>=5.4.0",
     "httpx>=0.28.0",
     "python-jose[cryptography]>=3.3.0",
+    # ADR 0032 阶段二:飞书事件 Encrypt Key AES-256-CBC 解密直接 import cryptography ·
+    # 虽 python-jose[cryptography] 已传递引入,但代码直接依赖必须显式列(避免隐形 extra 坑)。
+    "cryptography>=43.0.0",
     "passlib[argon2,bcrypt]>=1.7.4",
     "python-multipart>=0.0.17",
     "akshare>=1.14.0",

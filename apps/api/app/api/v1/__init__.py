@@ -6,6 +6,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.bot_preset import router as bot_preset_router
 from app.api.v1.cn import router as cn_router
 from app.api.v1.crypto import router as crypto_router
+from app.api.v1.feishu import router as feishu_router
 from app.api.v1.market import router as market_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.perp import router as perp_router
@@ -22,6 +23,8 @@ router.include_router(virtual_router)
 router.include_router(perp_router)
 router.include_router(notifications_router)
 router.include_router(telegram_router)
+# ADR 0032 阶段二 · 飞书事件回调(URL 握手 + 验签 + 收事件)
+router.include_router(feishu_router)
 router.include_router(analysis_router)
 router.include_router(alert_rules_router)
 router.include_router(bot_preset_router)

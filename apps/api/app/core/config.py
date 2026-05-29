@@ -48,6 +48,17 @@ class Settings(BaseSettings):
     tg_bind_token_ttl_seconds: int = 600
     # webhook secret 不单独配:由 secret_key 派生(见 telegram_bind.webhook_secret)。
 
+    # 飞书(Lark)企业自建应用 · ADR 0032 多通道 · 阶段二(通知推送)。
+    # ⚠ 敏感:feishu_app_secret / feishu_*_token / encrypt_key 只从 env 读 ·
+    #    绝不进 git/前端/DB · 任一为空 = 飞书未启用(dispatcher 静默跳过)。
+    feishu_app_id: str = ""
+    feishu_app_secret: str = ""
+    # 事件订阅验签:Verification Token(配了才校验)· Encrypt Key(配了才解密事件)。
+    feishu_verification_token: str = ""
+    feishu_encrypt_key: str = ""
+    # 飞书 open API base · 国内租户 open.feishu.cn;海外租户改 open.larksuite.com。
+    feishu_api_base: str = "https://open.feishu.cn"
+
     # AI 决策卡 · 0012 ADR · M1 第二波
     llm_provider: str = "deepseek"           # litellm 命名(deepseek / openai / claude 等)
     llm_model: str = "deepseek/deepseek-chat"

@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.notification import NotificationConfig
+from app.services.notifications.adapters import feishu as feishu_adapter
 from app.services.notifications.adapters import telegram as tg_adapter
 from app.services.notifications.events import (
     NotificationEvent,
@@ -118,6 +119,21 @@ async def dispatch(
                 ChannelResult(channel=tg_adapter.CHANNEL, ok=False, error=str(e)),
             )
 
+    # 飞书(ADR 0032 阶段二):已绑定(feishu_open_id)且飞书应用已配置才发。
+    # 与 TG 独立 · 两通道都绑则【都发】(本期无偏好,后续可加)· 任一通道失败不影响另一个。
+    feishu_open_id = config.feishu_open_id
+    if feishu_open_id and settings.feishu_app_id and settings.feishu_app_secret:
+        try:
+            await feishu_adapter.send_event(feishu_open_id, event, client=client)
+            results.append(ChannelResult(channel=feishu_adapter.CHANNEL, ok=True))
+        except Exception as e:  # noqa: BLE001 · 通道失败独立 · 不影响调用方
+            logger.warning(
+                "[notify] feishu failed · user=%s err=%s", user_id, e,
+            )
+            results.append(
+                ChannelResult(channel=feishu_adapter.CHANNEL, ok=False, error=str(e)),
+            )
+
     return DispatchResult(results=results)
 
 
@@ -127,23 +143,41 @@ async def send_test(
     *,
     client: httpx.AsyncClient | None = None,
 ) -> ChannelResult:
-    """「发送测试消息」按钮入口 · 本期只支持 telegram(统一 bot)。"""
-    if channel != tg_adapter.CHANNEL:
-        return ChannelResult(channel=channel, ok=False, error="未知通道")
-    if not config.tg_chat_id:
-        return ChannelResult(
-            channel=tg_adapter.CHANNEL, ok=False,
-            error="未绑定 Telegram · 请先在 bot 里 /start 绑定",
-        )
-    if not settings.tg_bot_token:
-        return ChannelResult(
-            channel=tg_adapter.CHANNEL, ok=False, error="统一 bot 未配置",
-        )
-    try:
-        await tg_adapter.send_test(config.tg_chat_id, client=client)
-        return ChannelResult(channel=tg_adapter.CHANNEL, ok=True)
-    except Exception as e:  # noqa: BLE001
-        return ChannelResult(channel=tg_adapter.CHANNEL, ok=False, error=str(e))
+    """「发送测试消息」按钮入口 · 支持 telegram / feishu(ADR 0032 阶段二)。"""
+    if channel == tg_adapter.CHANNEL:
+        if not config.tg_chat_id:
+            return ChannelResult(
+                channel=tg_adapter.CHANNEL, ok=False,
+                error="未绑定 Telegram · 请先在 bot 里 /start 绑定",
+            )
+        if not settings.tg_bot_token:
+            return ChannelResult(
+                channel=tg_adapter.CHANNEL, ok=False, error="统一 bot 未配置",
+            )
+        try:
+            await tg_adapter.send_test(config.tg_chat_id, client=client)
+            return ChannelResult(channel=tg_adapter.CHANNEL, ok=True)
+        except Exception as e:  # noqa: BLE001
+            return ChannelResult(channel=tg_adapter.CHANNEL, ok=False, error=str(e))
+
+    if channel == feishu_adapter.CHANNEL:
+        feishu_open_id = config.feishu_open_id
+        if not feishu_open_id:
+            return ChannelResult(
+                channel=feishu_adapter.CHANNEL, ok=False,
+                error="未绑定飞书 · 请先在飞书完成绑定",
+            )
+        if not (settings.feishu_app_id and settings.feishu_app_secret):
+            return ChannelResult(
+                channel=feishu_adapter.CHANNEL, ok=False, error="飞书应用未配置",
+            )
+        try:
+            await feishu_adapter.send_test(feishu_open_id, client=client)
+            return ChannelResult(channel=feishu_adapter.CHANNEL, ok=True)
+        except Exception as e:  # noqa: BLE001
+            return ChannelResult(channel=feishu_adapter.CHANNEL, ok=False, error=str(e))
+
+    return ChannelResult(channel=channel, ok=False, error="未知通道")
 
 
 # Re-export for routes / tasks
