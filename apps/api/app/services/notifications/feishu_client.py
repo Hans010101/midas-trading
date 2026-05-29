@@ -119,21 +119,21 @@ async def get_tenant_access_token(
     return token
 
 
-async def send_text(
+async def _send_message(
     open_id: str,
-    text: str,
+    msg_type: str,
+    content: str,
     *,
-    redis: Redis | None = None,
-    client: httpx.AsyncClient | None = None,
+    redis: Redis | None,
+    client: httpx.AsyncClient | None,
 ) -> None:
-    """发纯文本消息到 open_id · token 失效自动重取一次再发 · 失败抛 FeishuApiError。"""
+    """发消息到 open_id(msg_type=text/interactive)· token 失效自动重取一次再发。
+
+    content 为飞书要求的【JSON 字符串】(text:{"text":..};interactive:卡片 JSON 串)。
+    """
     r = redis if redis is not None else await get_redis()
     url = _api("/open-apis/im/v1/messages?receive_id_type=open_id")
-    payload = {
-        "receive_id": open_id,
-        "msg_type": "text",
-        "content": json.dumps({"text": text}, ensure_ascii=False),
-    }
+    payload = {"receive_id": open_id, "msg_type": msg_type, "content": content}
 
     token = await get_tenant_access_token(redis=r, client=client)
     try:
@@ -155,3 +155,30 @@ async def send_text(
         headers={"Authorization": f"Bearer {token}"},
         timeout=5.0, client=client,
     )
+
+
+async def send_text(
+    open_id: str,
+    text: str,
+    *,
+    redis: Redis | None = None,
+    client: httpx.AsyncClient | None = None,
+) -> None:
+    """发纯文本消息到 open_id · 失败抛 FeishuApiError。"""
+    content = json.dumps({"text": text}, ensure_ascii=False)
+    await _send_message(open_id, "text", content, redis=redis, client=client)
+
+
+async def send_card(
+    open_id: str,
+    card: dict[str, object],
+    *,
+    redis: Redis | None = None,
+    client: httpx.AsyncClient | None = None,
+) -> None:
+    """发交互式卡片(msg_type=interactive)到 open_id · 失败抛 FeishuApiError。
+
+    card 为飞书卡片 JSON(dict)· 这里序列化成 content 串(ADR 0032 阶段三交互渲染)。
+    """
+    content = json.dumps(card, ensure_ascii=False)
+    await _send_message(open_id, "interactive", content, redis=redis, client=client)

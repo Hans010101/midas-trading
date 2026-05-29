@@ -27,8 +27,11 @@ async def resolve_user_id(
     """(channel, channel_uid) → 绑定的 user_id;未绑定 / 通道未支持返回 None。"""
     if channel == "telegram":
         where = NotificationConfig.tg_chat_id == channel_uid
+    elif channel == "feishu":
+        # ADR 0032 阶段三:飞书走 feishu_open_id 列(阶段二迁移已建)
+        where = NotificationConfig.feishu_open_id == channel_uid
     else:
-        # 飞书 / 钉钉:P2 加列后接入(feishu_open_id 等)· 在此之前一律视为未绑定
+        # 钉钉等:加列后接入 · 在此之前一律视为未绑定
         return None
     result: UUID | None = await db.scalar(
         select(NotificationConfig.user_id).where(where),

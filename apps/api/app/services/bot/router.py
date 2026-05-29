@@ -80,13 +80,12 @@ async def handle_inbound(
 ) -> ReplyModel:
     """通道中立入站编排 · 入站 InboundMessage → 出站 ReplyModel。
 
-    阶段一只接 telegram(channel_uid 即 chat_id,数字);飞书 / 钉钉(P2/P3)接入时
-    会把 session / ratelimit 的键改为按 (channel, channel_uid) 命名,届时去掉 int() 假设。
+    ADR 0032 阶段三:session / ratelimit 按 (channel, channel_uid) 键控(去掉阶段一的
+    int(chat_id) 假设)· channel_uid 是字符串(TG=chat_id 串、飞书=open_id),通道无关。
     """
-    chat_id = int(msg.channel_uid)  # 阶段一:telegram channel_uid == chat_id
     if msg.kind == "text":
-        return await _handle_text(db, redis, ch, msg.channel, chat_id, msg.text)
-    return await _handle_button(db, redis, ch, msg.channel, chat_id, msg.action)
+        return await _handle_text(db, redis, ch, msg.channel, msg.channel_uid, msg.text)
+    return await _handle_button(db, redis, ch, msg.channel, msg.channel_uid, msg.action)
 
 
 async def _handle_text(
@@ -94,13 +93,13 @@ async def _handle_text(
     redis: Redis,
     ch: ClickHouseClient,
     channel: str,
-    chat_id: int,
+    uid: str,
     text: str | None,
 ) -> ReplyModel:
-    """消息文本入口(非 /start 绑定)· 返回中立 ReplyModel。"""
-    if not await ratelimit.allow_command(redis, chat_id):
+    """消息文本入口(非绑定)· 返回中立 ReplyModel。"""
+    if not await ratelimit.allow_command(redis, channel, uid):
         return replies.build_rate_limited()
-    user_id = await resolve_user_id(db, channel, str(chat_id))
+    user_id = await resolve_user_id(db, channel, uid)
     if user_id is None:
         return replies.build_not_bound()
 
@@ -108,7 +107,7 @@ async def _handle_text(
 
     # /menu 或裸 /start → 主菜单
     if body in {"/menu", "/start"} or body.startswith("/start@"):
-        await clear_session(redis, chat_id)
+        await clear_session(redis, channel, uid)
         return replies.build_main_menu()
 
     # /price <代码> → 直接查行情(自动猜市场)
@@ -117,16 +116,16 @@ async def _handle_text(
         if len(parts) < 2:  # noqa: PLR2004
             return replies.build_market_picker("quote")
         symbol = parts[1].strip()
-        await clear_session(redis, chat_id)
+        await clear_session(redis, channel, uid)
         return await _do_quote(ch, _guess_market(symbol), symbol)
 
     # 会话态续输代码
-    sess = await get_session(redis, chat_id)
+    sess = await get_session(redis, channel, uid)
     if sess and sess.get("awaiting") in {"quote", "kline"}:
         symbol = body
         market = str(sess.get("market") or _guess_market(symbol))
         intent = str(sess["awaiting"])
-        await clear_session(redis, chat_id)
+        await clear_session(redis, channel, uid)
         if not symbol:
             return replies.build_ask_symbol(intent, market)
         if intent == "kline":
@@ -148,7 +147,7 @@ async def _handle_text(
             # 不静默继续(原会走到撮合才报"无报价")· 直接提示重输 · session 仍停 order_symbol
             return replies.build_order_symbol_invalid(market, raw)
         await set_session(
-            redis, chat_id,
+            redis, channel, uid,
             {"step": "order_direction", "market": market, "symbol": canonical},
         )
         return replies.build_order_directions(market, canonical, float(price))
@@ -167,32 +166,34 @@ async def _handle_button(
     redis: Redis,
     ch: ClickHouseClient,
     channel: str,
-    chat_id: int,
+    uid: str,
     data: str | None,
 ) -> ReplyModel:
     """inline 按钮 / 卡片回调入口 · 返回中立 ReplyModel(TG 用 editMessageText 原地刷新)。"""
-    if not await ratelimit.allow_command(redis, chat_id):
+    if not await ratelimit.allow_command(redis, channel, uid):
         return replies.build_rate_limited()
-    user_id = await resolve_user_id(db, channel, str(chat_id))
+    user_id = await resolve_user_id(db, channel, uid)
     if user_id is None:
         return replies.build_not_bound()
 
     d = (data or "").strip()
 
     if d == "menu:main":
-        await clear_session(redis, chat_id)
+        await clear_session(redis, channel, uid)
         return replies.build_main_menu()
     if d == "menu:quote":
-        await clear_session(redis, chat_id)
+        await clear_session(redis, channel, uid)
         return replies.build_market_picker("quote")
     if d == "menu:kline":
-        await clear_session(redis, chat_id)
+        await clear_session(redis, channel, uid)
         return replies.build_market_picker("kline")
     if d.startswith("ask:"):
         parts = d.split(":")
         if len(parts) == _ASK_PARTS:
             _, intent, market = parts
-            await set_session(redis, chat_id, {"awaiting": intent, "market": market})
+            await set_session(
+                redis, channel, uid, {"awaiting": intent, "market": market},
+            )
             return replies.build_ask_symbol(intent, market)
         return replies.build_main_menu()
     if d == "act:watchlist":
@@ -203,7 +204,7 @@ async def _handle_button(
         return replies.build_positions(pos_rows)
     # ── 告警规则(G5 · 查看 / 启停 / 一键推荐)─────────────────────────
     if d == "menu:rules":
-        await clear_session(redis, chat_id)
+        await clear_session(redis, channel, uid)
         return replies.build_alert_rules(await query_alert_rules(db, user_id))
     if d.startswith("rules:toggle:"):
         return await _handle_rule_toggle(db, user_id, d)
@@ -214,9 +215,9 @@ async def _handle_button(
 
     # ── 安静时段(N3 · 查看 + 启停 + 起止小时步进 · 时区切换留网页 DP9)────
     # 🔴 R1 隔离:user_id 来自顶部 resolve_user_id(channel, channel_uid) · 所有 quiet_mod
-    #    调用都用同一 user_id;quiet_mod 模块层不接受 chat_id / 其他 id · 物理上改不到别人的 config
+    #    调用都用同一 user_id;quiet_mod 模块层不接受 uid · 物理上改不到别人的 config
     if d == "menu:quiet":
-        await clear_session(redis, chat_id)
+        await clear_session(redis, channel, uid)
         view = await quiet_mod.load_quiet_hours(db, user_id)
         return replies.build_quiet_hours(view)
     if d == "quiet:toggle":
@@ -241,20 +242,24 @@ async def _handle_button(
 
     # ── 下单流程(G4 · 虚拟 · 必经二次确认)──────────────────────────
     if d == "menu:order":
-        await clear_session(redis, chat_id)
+        await clear_session(redis, channel, uid)
         return replies.build_order_market_picker()
     if d.startswith("omkt:"):
         market = d.split(":", 1)[1]
         if market not in _VALID_MARKETS:
             return replies.build_main_menu()
-        await set_session(redis, chat_id, {"step": "order_symbol", "market": market})
+        await set_session(
+            redis, channel, uid, {"step": "order_symbol", "market": market},
+        )
         return replies.build_order_ask_symbol(market)
     if d.startswith("odir:"):
-        return await _handle_direction(db, redis, ch, chat_id, user_id, d.split(":", 1)[1])
+        return await _handle_direction(
+            db, redis, ch, channel, uid, user_id, d.split(":", 1)[1],
+        )
     if d == "ordok":
-        return await _handle_confirm(db, redis, ch, chat_id, user_id)
+        return await _handle_confirm(db, redis, ch, channel, uid, user_id)
     if d == "ordno":
-        await clear_session(redis, chat_id)
+        await clear_session(redis, channel, uid)
         return replies.build_order_cancelled()
 
     # 未知回调兜底
@@ -265,12 +270,13 @@ async def _handle_direction(
     db: AsyncSession,
     redis: Redis,
     ch: ClickHouseClient,
-    chat_id: int,
+    channel: str,
+    uid: str,
     user_id: UUID,
     direction: str,
 ) -> ReplyModel:
     """选了方向 → 生成预览 + 进入确认态(会话只存意图,不存身份)。"""
-    sess = await get_session(redis, chat_id)
+    sess = await get_session(redis, channel, uid)
     if not sess or sess.get("step") != "order_direction":
         return replies.build_main_menu()
     market = str(sess.get("market") or "")
@@ -280,10 +286,10 @@ async def _handle_direction(
     intent = order_mod.OrderIntent(market=market, symbol=symbol, direction=direction)
     preview = await order_mod.build_preview(ch, db, user_id, intent)
     if preview is None:
-        await clear_session(redis, chat_id)
+        await clear_session(redis, channel, uid)
         return replies.build_order_unavailable()
     await set_session(
-        redis, chat_id,
+        redis, channel, uid,
         {"step": "order_confirm", "market": market, "symbol": symbol, "direction": direction},
     )
     return replies.build_order_preview(preview)
@@ -293,7 +299,8 @@ async def _handle_confirm(
     db: AsyncSession,
     redis: Redis,
     ch: ClickHouseClient,
-    chat_id: int,
+    channel: str,
+    uid: str,
     user_id: UUID,
 ) -> ReplyModel:
     """点了「确认下单」→ 执行虚拟下单。
@@ -302,15 +309,15 @@ async def _handle_confirm(
     下单永远只作用于绑定账号。下单限流在此计配额。二次确认必经:仅当会话处于
     order_confirm(由 _handle_direction 写入)才执行,任何通道都无法跳过。
     """
-    sess = await get_session(redis, chat_id)
+    sess = await get_session(redis, channel, uid)
     if not sess or sess.get("step") != "order_confirm":
         return replies.build_main_menu()
-    if not await ratelimit.allow_order(redis, chat_id):
+    if not await ratelimit.allow_order(redis, channel, uid):
         return replies.build_rate_limited()
     market = str(sess.get("market") or "")
     symbol = str(sess.get("symbol") or "")
     direction = str(sess.get("direction") or "")
-    await clear_session(redis, chat_id)
+    await clear_session(redis, channel, uid)
     if not symbol or not order_mod.direction_valid(market, direction):
         return replies.build_main_menu()
     intent = order_mod.OrderIntent(market=market, symbol=symbol, direction=direction)

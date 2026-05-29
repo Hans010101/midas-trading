@@ -54,7 +54,7 @@ export function useSaveNotificationConfig() {
 
 export function useSendTestNotification() {
   const { token } = useToken()
-  return useMutation<NotificationTestResult, Error, 'telegram'>({
+  return useMutation<NotificationTestResult, Error, 'telegram' | 'feishu'>({
     mutationFn: (channel) => sendTestNotification(token, channel),
   })
 }
