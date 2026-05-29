@@ -149,11 +149,10 @@ def _quote_keyboard(market: str, symbol: str) -> Keyboard:
 
 
 def render_main_menu() -> BotReply:
+    # 泛化引导:不逐一列功能(以后加按钮无需改文案)· 按钮清单以 main_menu_keyboard 为准
     text = (
         f"*{_BRAND} · 迷你终端*\n\n"
-        "选择功能 ↓\n"
-        "· 📊 行情查询 / 📈 K线图(网页)\n"
-        "· ⭐ 自选 / 💼 持仓\n\n"
+        "点下方按钮选择功能 ↓\n\n"
         "也可直接发送 `/price <代码>` 查行情"
     )
     return BotReply(_tail(text), main_menu_keyboard())
@@ -379,6 +378,20 @@ def render_order_symbol_invalid(market: str, raw: str) -> BotReply:
     text = (
         f"*{_BRAND} · 下单*\n\n"
         f"未找到「{raw}」对应的标的,请重新输入。\n例:{eg}"
+    )
+    return BotReply(_tail(text), _back_keyboard())
+
+
+def render_order_direction_hint() -> BotReply:
+    """选方向那步误输文字时的友好引导(不再泛化推回主菜单)。
+
+    标的已选、上一条「选方向」消息的按钮仍可点 —— 这里只提醒点按钮,
+    或经「🛒 下单」重新开始换标的(不承诺打字换标的 · 那条增强本期未做)。
+    """
+    text = (
+        f"*{_BRAND} · 下单*\n\n"
+        "请点上方按钮选择方向(开多 / 开空 / 平仓)。\n"
+        "如需更换标的,请点「🛒 下单」重新开始。"
     )
     return BotReply(_tail(text), _back_keyboard())
 

@@ -126,6 +126,11 @@ async def handle_command(
         )
         return ui.render_order_directions(market, canonical, float(price))
 
+    # 选方向那步误输文字 → 友好引导(标的已选 · session 不清 · 上条方向按钮仍可点)·
+    # 不再落到泛化 render_hint(把人推回主菜单)
+    if sess and sess.get("step") == "order_direction":
+        return ui.render_order_direction_hint()
+
     # 其它文本 → 提示
     return ui.render_hint()
 
