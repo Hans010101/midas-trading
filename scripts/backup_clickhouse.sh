@@ -14,6 +14,10 @@
 #   - 手动:./scripts/backup_clickhouse.sh
 #   - cron(★ Hans 手动试跑验证通过后再挂 · 跟 PG 的 03:00 错峰 30min):
 #       30 3 * * *  cd /opt/midas && ./scripts/backup_clickhouse.sh >> /var/log/midas-backup.log 2>&1
+#   注意:手动直接跑 ./scripts/backup_clickhouse.sh 时 [backup-ch] 日志只打到屏幕,
+#         不会写进 /var/log/midas-backup.log;只有 cron 那行末尾的
+#         >> /var/log/midas-backup.log 2>&1 重定向才会落盘。手动跑后用 grep 查日志
+#         文件查不到是正常的,不是脚本故障。
 #
 # 依赖:
 #   - docker(用 midas-clickhouse 容器内的 clickhouse-client · 版本天然一致)
