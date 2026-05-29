@@ -180,6 +180,29 @@ def _to_ccxt(binance_symbol: str) -> str:
     return binance_symbol
 
 
+def normalize_symbol(market: str, raw: str) -> str:
+    """规范化 bot 下单输入的标的(#296 改动二 · 只两档,纯字符串 · 可单测)。
+
+    - 大小写无关:btc / BTC / Btc → 同一标的。
+    - crypto 简称 / 缺斜杠:upper + 去 / 和空格;不以 USDT/USDC/BUSD/FDUSD 结尾则补 USDT
+      (加密以永续合约为主体 · 默认指向 perp 交易对)· 对外用 ccxt 风格 BTC/USDT
+      (下游 _to_binance 幂等兼容)。
+    - cn:strip(纯数字代码);us:upper + strip。
+    不做中文别名、不做模糊候选 / 纠错补全(产品定范围)。空输入返回 ""。
+    """
+    s = raw.strip()
+    if not s:
+        return ""
+    if market == "crypto":
+        s = s.upper().replace("/", "").replace(" ", "")
+        if not s.endswith(_PERP_QUOTES):
+            s = f"{s}USDT"
+        return _to_ccxt(s)
+    if market == "us":
+        return s.upper()
+    return s  # cn:数字代码,strip 即可
+
+
 async def _spot_price(ch: ClickHouseClient, market: str, symbol: str) -> Decimal | None:
     rows = await ch.select_kline(
         symbol=symbol, market=cast("Any", market), period=cast("Any", "1d"), limit=1,

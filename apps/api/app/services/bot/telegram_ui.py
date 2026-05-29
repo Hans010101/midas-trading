@@ -369,6 +369,20 @@ def render_order_receipt(body: str) -> BotReply:
     return BotReply(f"✅ {body}", _back_keyboard())
 
 
+def render_order_symbol_invalid(market: str, raw: str) -> BotReply:
+    """下单标的识别失败(#296 改动二)· 不静默继续 · 提示重输 + 示例。"""
+    eg = {
+        "crypto": "BTC / BTCUSDT / BTC/USDT",
+        "us": "NVDA / AAPL",
+        "cn": "600519 / 000001",
+    }.get(market, "BTC / NVDA / 600519")
+    text = (
+        f"*{_BRAND} · 下单*\n\n"
+        f"未找到「{raw}」对应的标的,请重新输入。\n例:{eg}"
+    )
+    return BotReply(_tail(text), _back_keyboard())
+
+
 def render_order_cancelled() -> BotReply:
     return BotReply(_tail(f"*{_BRAND} · 下单*\n\n已取消,未下单。"), main_menu_keyboard())
 
