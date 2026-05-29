@@ -382,6 +382,20 @@ def render_order_symbol_invalid(market: str, raw: str) -> BotReply:
     return BotReply(_tail(text), _back_keyboard())
 
 
+def render_order_direction_hint() -> BotReply:
+    """选方向那步误输文字时的友好引导(不再泛化推回主菜单)。
+
+    标的已选、上一条「选方向」消息的按钮仍可点 —— 这里只提醒点按钮,
+    或经「🛒 下单」重新开始换标的(不承诺打字换标的 · 那条增强本期未做)。
+    """
+    text = (
+        f"*{_BRAND} · 下单*\n\n"
+        "请点上方按钮选择方向(开多 / 开空 / 平仓)。\n"
+        "如需更换标的,请点「🛒 下单」重新开始。"
+    )
+    return BotReply(_tail(text), _back_keyboard())
+
+
 def render_order_cancelled() -> BotReply:
     return BotReply(_tail(f"*{_BRAND} · 下单*\n\n已取消,未下单。"), main_menu_keyboard())
 
