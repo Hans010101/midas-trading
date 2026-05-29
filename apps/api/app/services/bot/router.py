@@ -106,20 +106,25 @@ async def handle_command(
             return ui.render_kline_link(market, symbol)
         return await _do_quote(ch, market, symbol)
 
-    # 下单流程:之前点了「下单 → 选市场」,正在等代码 → 进入方向选择
+    # 下单流程:之前点了「下单 → 选市场」,正在等代码 → 规范化 + 校验 → 方向选择
     if sess and sess.get("step") == "order_symbol":
-        symbol = body
-        market = str(sess.get("market") or _guess_market(symbol))
-        if not symbol:
+        raw = body
+        market = str(sess.get("market") or _guess_market(raw))
+        if not raw:
             return ui.render_order_ask_symbol(market)
-        price = await order_mod.quote_price(ch, market, symbol)
+        # #296 改动二:规范化(大小写无关 + 简称/缺斜杠)+ 存在性校验(crypto 走 perp mark)
+        canonical = order_mod.normalize_symbol(market, raw)
+        price = (
+            await order_mod.quote_price(ch, market, canonical) if canonical else None
+        )
+        if not canonical or price is None:
+            # 不静默继续(原会走到撮合才报"无报价")· 直接提示重输 · session 仍停 order_symbol
+            return ui.render_order_symbol_invalid(market, raw)
         await set_session(
             redis, chat_id,
-            {"step": "order_direction", "market": market, "symbol": symbol},
+            {"step": "order_direction", "market": market, "symbol": canonical},
         )
-        return ui.render_order_directions(
-            market, symbol, float(price) if price is not None else None,
-        )
+        return ui.render_order_directions(market, canonical, float(price))
 
     # 其它文本 → 提示
     return ui.render_hint()
@@ -276,6 +281,9 @@ async def _handle_confirm(
         return ui.render_main_menu()
     intent = order_mod.OrderIntent(market=market, symbol=symbol, direction=direction)
     result = await order_mod.execute(db, ch, user_id, intent)
+    # #296 去重:成交走富回执(单条);拒单 / 异常回落原简版
+    if result.filled and result.body:
+        return ui.render_order_receipt(result.body)
     return ui.render_order_result(result.title, result.detail)
 
 

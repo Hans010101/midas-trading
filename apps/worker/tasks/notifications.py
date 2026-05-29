@@ -24,11 +24,11 @@ from app.services.notifications.events import (
     LiquidationEvent,
     PerpFilledEvent,
     PriceAnomalyEvent,
-    TradeFilledEvent,
 )
 from app.services.notifications.perp_events import (
     build_liquidation_event_single,
     build_perp_filled_event,
+    build_trade_filled_event,
 )
 
 logger = logging.getLogger(__name__)
@@ -58,17 +58,7 @@ async def _async_send_trade(order_id: int) -> dict[str, object]:
                 )
                 return {"skipped": "account_not_found"}
 
-            event = TradeFilledEvent(
-                symbol=order.symbol,
-                market=order.market,
-                side=order.side,
-                quantity=order.quantity,
-                price=order.price or Decimal("0"),
-                notional=order.notional or Decimal("0"),
-                commission=order.commission or Decimal("0"),
-                realized_pnl=order.realized_pnl,
-                currency=account.currency.value,
-            )
+            event = build_trade_filled_event(order, account)
             result = await dispatch(db, account.user_id, event)
             # #296:成功发送补一条 info 日志(方便以后搜"发没发")
             logger.info(

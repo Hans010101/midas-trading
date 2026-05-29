@@ -359,6 +359,30 @@ def render_order_result(title: str, detail: str) -> BotReply:
     return BotReply(_tail(text), _back_keyboard())
 
 
+def render_order_receipt(body: str) -> BotReply:
+    """成交富回执(#296 去重 · 方向③ 合一)。
+
+    body 已是 render_telegram 渲染好的富文本(含品牌标题 + 「本次为模拟交易,不构成
+    投资建议」免责)· 前置 ✅ 成功确认 + 挂返回菜单键盘。不再走 _tail(免责已在 body 内)。
+    bot 成交从此只发这一条(异步推送 A 已在 bot 路径抑制),与网页/异步同一套格式。
+    """
+    return BotReply(f"✅ {body}", _back_keyboard())
+
+
+def render_order_symbol_invalid(market: str, raw: str) -> BotReply:
+    """下单标的识别失败(#296 改动二)· 不静默继续 · 提示重输 + 示例。"""
+    eg = {
+        "crypto": "BTC / BTCUSDT / BTC/USDT",
+        "us": "NVDA / AAPL",
+        "cn": "600519 / 000001",
+    }.get(market, "BTC / NVDA / 600519")
+    text = (
+        f"*{_BRAND} · 下单*\n\n"
+        f"未找到「{raw}」对应的标的,请重新输入。\n例:{eg}"
+    )
+    return BotReply(_tail(text), _back_keyboard())
+
+
 def render_order_cancelled() -> BotReply:
     return BotReply(_tail(f"*{_BRAND} · 下单*\n\n已取消,未下单。"), main_menu_keyboard())
 

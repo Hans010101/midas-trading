@@ -42,7 +42,11 @@ from app.services.clickhouse_crypto import (
     select_premium_index_marks,
     select_tickers_by_symbols,
 )
-from app.services.notifications.emit import emit_perp_order
+from app.services.notifications.perp_events import (
+    build_perp_filled_event,
+    build_trade_filled_event,
+)
+from app.services.notifications.templates import render_telegram
 from app.services.virtual_trading.engine import PlaceOrderRequest, place_market_order
 from app.services.virtual_trading.perp_dispatcher import (
     route_close_perp,
@@ -145,6 +149,9 @@ class OrderResult:
     filled: bool
     title: str
     detail: str
+    # #296 去重:成交时填已渲染的富回执正文(复用 A 的 render_telegram · 含品牌标题+免责)·
+    # router 成交走 render_order_receipt(body);拒单仍用 title/detail。
+    body: str | None = None
 
 
 def directions_for(market: str) -> tuple[str, ...]:
@@ -171,6 +178,29 @@ def _to_ccxt(binance_symbol: str) -> str:
         if binance_symbol.endswith(q) and len(binance_symbol) > len(q):
             return f"{binance_symbol[: -len(q)]}/{q}"
     return binance_symbol
+
+
+def normalize_symbol(market: str, raw: str) -> str:
+    """规范化 bot 下单输入的标的(#296 改动二 · 只两档,纯字符串 · 可单测)。
+
+    - 大小写无关:btc / BTC / Btc → 同一标的。
+    - crypto 简称 / 缺斜杠:upper + 去 / 和空格;不以 USDT/USDC/BUSD/FDUSD 结尾则补 USDT
+      (加密以永续合约为主体 · 默认指向 perp 交易对)· 对外用 ccxt 风格 BTC/USDT
+      (下游 _to_binance 幂等兼容)。
+    - cn:strip(纯数字代码);us:upper + strip。
+    不做中文别名、不做模糊候选 / 纠错补全(产品定范围)。空输入返回 ""。
+    """
+    s = raw.strip()
+    if not s:
+        return ""
+    if market == "crypto":
+        s = s.upper().replace("/", "").replace(" ", "")
+        if not s.endswith(_PERP_QUOTES):
+            s = f"{s}USDT"
+        return _to_ccxt(s)
+    if market == "us":
+        return s.upper()
+    return s  # cn:数字代码,strip 即可
 
 
 async def _spot_price(ch: ClickHouseClient, market: str, symbol: str) -> Decimal | None:
@@ -349,13 +379,28 @@ async def _exec_perp(
         )
     await db.commit()
     if order.status == OrderStatus.FILLED:
-        # #296:commit 之后才 emit(避免"通知发了但事务回滚")· 旁路不影响下单
-        emit_perp_order(order.id)
+        # #296 去重:bot 不再发异步 A(网页 perp.py 的 emit 保留)· 改用富回执:
+        # 复用 A 的事件 + 模板(build_perp_filled_event + render_telegram)· 文案单一事实源。
+        account = await db.scalar(
+            select(VirtualAccount).where(VirtualAccount.id == order.account_id),
+        )
+        position = None
+        if order.position_id is not None:
+            position = await db.scalar(
+                select(VirtualPerpPosition).where(
+                    VirtualPerpPosition.id == order.position_id,
+                ),
+            )
+        body = (
+            render_telegram(build_perp_filled_event(order, position, account))
+            if account is not None
+            else None
+        )
         detail = (
             f"{order.symbol} · {_DIR_LABEL.get(intent.direction, intent.direction)}\n"
             f"数量 {_num(order.quantity)} @ {_num(order.price)}"
         )
-        return OrderResult(filled=True, title="✅ 已成交 · VIRTUAL 模拟", detail=detail)
+        return OrderResult(filled=True, title="✅ 已成交", detail=detail, body=body)
     return OrderResult(
         filled=False, title="⚠️ 已拒绝",
         detail=order.reject_reason or "下单被拒(虚拟)",
@@ -382,16 +427,26 @@ async def _exec_spot(
         PlaceOrderRequest(
             user_id=user_id, symbol=symbol, market=market,
             side=side, quantity=qty, position_side=pside,
+            notify=False,  # #296 去重:bot 走富回执 · 抑制引擎异步成交推送(网页默认 True 不变)
         ),
         fetcher,
     )
     await db.commit()
     if order.status == OrderStatus.FILLED:
+        # #296 去重:复用 A 的事件 + 模板(build_trade_filled_event + render_telegram)
+        account = await db.scalar(
+            select(VirtualAccount).where(VirtualAccount.id == order.account_id),
+        )
+        body = (
+            render_telegram(build_trade_filled_event(order, account))
+            if account is not None
+            else None
+        )
         detail = (
             f"{order.symbol} · {_DIR_LABEL.get(direction, direction)}\n"
             f"数量 {_num(order.quantity)} @ {_num(order.price)}"
         )
-        return OrderResult(filled=True, title="✅ 已成交 · VIRTUAL 模拟", detail=detail)
+        return OrderResult(filled=True, title="✅ 已成交", detail=detail, body=body)
     return OrderResult(
         filled=False, title="⚠️ 已拒绝",
         detail=order.reject_reason or "下单被拒(虚拟)",
