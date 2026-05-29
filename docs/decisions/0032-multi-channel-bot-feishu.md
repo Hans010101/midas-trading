@@ -1,6 +1,6 @@
 # ADR 0032 · 多通道 Bot 架构 + 飞书接入
 
-- 状态:**Proposed**(待 Claude 审 ReplyModel/零回归/分阶段 + 产品负责人拍板;通过后按阶段实施)
+- 状态:**Accepted**(2026-05-29 审过拍板)· **阶段一已落地** main:commit `db178f6`(ReplyModel/InboundMessage 抽象层 + TG renderer + golden 零回归测试)+ `6b0fb01`(router 走 handle_inbound + identity 泛化 + 删 telegram_ui),合并点 `f364b66`;35 条 golden 字节比对全 equal、二次确认 3 条红线锁死、全量 400 绿、webhook 零改动。**阶段二(飞书通知推送)/ 三(飞书交互绑定+行情)/ 四(飞书下单+告警)待开。**
 - 日期:2026-05-29
 - 关联:0024(TG 统一 bot)、0025(通知 v2 · 移除飞书 per-user webhook · 预留 adapter 插槽)、0009(推送)、0028(降噪/安静时段)
 - 决策人:产品负责人(路线一:一步到位做飞书完整交互 bot,并立多通道抽象、为钉钉预留;微信不做)
