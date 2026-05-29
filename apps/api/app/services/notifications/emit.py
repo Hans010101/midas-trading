@@ -44,9 +44,58 @@ def emit_trade_filled(order_id: int) -> None:
             "tasks.notifications.send_trade_notification",
             args=[order_id],
         )
-        logger.debug("[emit] trade filled order_id=%s", order_id)
+        # #296:debug → info,生产 worker 跑 --loglevel=info,方便排查"发没发"
+        logger.info("[emit] trade filled order_id=%s", order_id)
     except Exception as e:  # noqa: BLE001
         logger.warning(
             "[emit] trade filled FAILED order_id=%s err=%s",
             order_id, e,
+        )
+
+
+def emit_perp_order(order_id: int) -> None:
+    """非阻塞 emit · 永续成交 + 逐仓强平(virtual_perp_order)· #296。
+
+    只在调用方 commit 之后调用(commit 后 emit · 避免"通知发了但事务回滚")。
+    走 Celery broker · 失败仅 log · 绝不抛(broker 挂不影响交易/强平主流程)。
+    """
+    try:
+        client = _get_celery_client()
+        client.send_task(
+            "tasks.notifications.send_perp_order_notification",
+            args=[order_id],
+        )
+        logger.info("[emit] perp order order_id=%s", order_id)
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "[emit] perp order FAILED order_id=%s err=%s",
+            order_id, e,
+        )
+
+
+def emit_cross_liquidation(
+    account_id: int,
+    liquidated_count: int,
+    floored: bool,
+    remaining_cash: object,
+) -> None:
+    """非阻塞 emit · 全仓账户级强平(一次性全平 N 仓 · 汇总一条)· #296。
+
+    只在 worker commit 之后调用。remaining_cash 传 Decimal/str 均可(内部 str 化过 JSON)。
+    失败仅 log · 绝不抛。
+    """
+    try:
+        client = _get_celery_client()
+        client.send_task(
+            "tasks.notifications.send_cross_liquidation_notification",
+            args=[account_id, liquidated_count, floored, str(remaining_cash)],
+        )
+        logger.info(
+            "[emit] cross liquidation account_id=%s count=%s",
+            account_id, liquidated_count,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "[emit] cross liquidation FAILED account_id=%s err=%s",
+            account_id, e,
         )

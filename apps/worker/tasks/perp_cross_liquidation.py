@@ -35,6 +35,7 @@ from app.services.clickhouse_crypto import (
     select_premium_index_marks,
     select_tickers_by_symbols,
 )
+from app.services.notifications.emit import emit_cross_liquidation
 from app.services.virtual_trading.perp_cross_liquidation import (
     STATUS_LIQUIDATED,
     liquidate_cross_account,
@@ -141,6 +142,13 @@ async def _scan_and_liquidate_cross() -> dict[str, int]:
                             "floored=%s equity=%s mm=%s",
                             account_id, outcome.liquidated_count, outcome.floored,
                             outcome.equity, outcome.maint_margin,
+                        )
+                        # #296:commit 之后才 emit 全仓强平汇总(账户级一条 · 旁路不影响结算)
+                        emit_cross_liquidation(
+                            account.id,
+                            outcome.liquidated_count,
+                            outcome.floored,
+                            account.cash_balance,
                         )
                 except Exception:
                     await session.rollback()

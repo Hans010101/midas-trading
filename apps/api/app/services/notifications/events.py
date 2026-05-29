@@ -17,6 +17,9 @@ class NotificationKind(StrEnum):
     TRADE_FILLED = "trade_filled"
     PRICE_ANOMALY = "price_anomaly"
     ALERT_TRIGGERED = "alert_triggered"
+    # #296:永续合约成交 / 强平(独立 kind · 便于日志区分;均 quiet_exempt=True)
+    PERP_FILLED = "perp_filled"
+    LIQUIDATION = "liquidation"
 
 
 @dataclass(frozen=True)
@@ -68,4 +71,57 @@ class AlertTriggeredEvent:
     unit: str | None = None
 
 
-NotificationEvent = TradeFilledEvent | PriceAnomalyEvent | AlertTriggeredEvent
+@dataclass(frozen=True)
+class PerpFilledEvent:
+    """永续合约成交通知(#296)· 钱相关 · 不受安静时段限制(0028 DP10)。
+
+    与现货 TradeFilledEvent 分开:perp 有 多空方向 / 杠杆 / 开平动作 / 保证金模式,
+    现货事件塞不下。读 virtual_perp_order 由 worker task 构造(绑定的不是 0008 VirtualOrder)。
+    """
+
+    quiet_exempt: ClassVar[bool] = True
+
+    kind: Literal[NotificationKind.PERP_FILLED] = NotificationKind.PERP_FILLED
+    symbol: str = ""
+    # 动作标识 · 取自 PerpAction 枚举的 value(开多 / 开空 / 平多 / 平空 之一)
+    action: str = ""
+    margin_mode: str = "isolated"  # isolated / cross
+    leverage: int | None = None
+    quantity: Decimal = Decimal("0")
+    price: Decimal = Decimal("0")
+    notional: Decimal = Decimal("0")
+    fee: Decimal = Decimal("0")
+    realized_pnl: Decimal | None = None  # 仅平仓填
+    currency: str = "USDT"
+
+
+@dataclass(frozen=True)
+class LiquidationEvent:
+    """强制平仓通知(#296)· 风控/钱相关 · 不受安静时段限制(0028 DP10)。
+
+    覆盖两种:逐仓单仓(is_cross=False · symbol/side/leverage/liquidation_price 有值)
+    与 全仓账户级(is_cross=True · 一次性全平 N 仓 · symbol 为 None · 用 position_count)。
+    """
+
+    quiet_exempt: ClassVar[bool] = True
+
+    kind: Literal[NotificationKind.LIQUIDATION] = NotificationKind.LIQUIDATION
+    is_cross: bool = False
+    symbol: str | None = None
+    side: Literal["long", "short"] | None = None
+    leverage: int | None = None
+    liquidation_price: Decimal | None = None
+    realized_pnl: Decimal | None = None  # 逐仓:该仓本次已实现
+    position_count: int = 1  # 逐仓=1 · 全仓=N
+    remaining_cash: Decimal | None = None  # 全仓:账户剩余可用
+    floored: bool = False  # 全仓:是否穿仓地板(净亏封顶)
+    currency: str = "USDT"
+
+
+NotificationEvent = (
+    TradeFilledEvent
+    | PriceAnomalyEvent
+    | AlertTriggeredEvent
+    | PerpFilledEvent
+    | LiquidationEvent
+)
