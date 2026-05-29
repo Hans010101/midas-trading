@@ -348,14 +348,19 @@ printf "  main · "; curl -sS -o /dev/null -w "HTTP %{http_code} · %{time_total
 printf "  www  · "; curl -sS -o /dev/null -w "HTTP %{http_code} · %{time_total}s\n" --max-time 10 -L "https://www.midastrade.asia/" || true
 
 # ============================================================
-banner "7/7 · 缓存清理(温和版 · 7 天未用)"
+banner "7/7 · 缓存清理(按大小催收 · 压到 10GB)"
 # ============================================================
-# ADR 0029 DP3:部署成功后清理 7 天未用的 BuildKit 缓存碎片 · 防 30GB 失控(2026-05 #57 故障根因)
-# 温和策略:--filter until=168h · 保 7 天内热缓存 · 不影响下一次部署的 cache mount 命中
-# 兜底层:prune 失败不阻塞 deploy 成功路径(健康检查已过 · 此步纯卫生)
+# ADR 0029 DP3 → 0032 修正(2026-05-29 磁盘满 43GB 复盘):
+#   旧版 `--filter until=168h` 只清【7 天未用】的缓存;但 cache mount(pnpm store /
+#   .next/cache / pip · ADR 0031)天天 build 复用、永远 <7 天 → 这条护栏对热缓存全程空转,
+#   密集部署下堆到 43GB 把磁盘打满。根因是"按年龄"门槛,不是配置丢失。
+# 改为【按大小】催收:--keep-storage 10GB · 与部署频率解耦 · 每次部署都把 BuildKit 缓存
+#   按 LRU 压到 10GB,保留最近的热 cache mount(几百 MB)→ 不伤下次 build 速度,只砍堆积旧层。
+# 兜底层:① daemon.json builder.gc 加【无 filter 的 15GB 硬上限】催收规则(N2 修正 · 服务器侧);
+#         ② prune 失败不阻塞 deploy 成功路径(健康检查已过 · 此步纯卫生)。
 STAGE="7/7 cache prune"
-echo "  清 7 天未用的 BuildKit 缓存..."
-docker builder prune -f --filter "until=168h" 2>&1 | tail -5 || warn "prune 失败 · 不阻塞 deploy(健康检查已过)"
+echo "  按大小催收 BuildKit 缓存(保留最近 10GB)..."
+docker builder prune -f --keep-storage 10GB 2>&1 | tail -5 || warn "prune 失败 · 不阻塞 deploy(健康检查已过)"
 echo ""
 echo "${CYAN}─── 当前缓存占用(prune 后)───${NC}"
 docker system df 2>&1 | head -10 || true
