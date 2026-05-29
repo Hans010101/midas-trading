@@ -40,7 +40,7 @@ from app.services.notifications.telegram_bind import (
 )
 
 if TYPE_CHECKING:
-    from app.services.bot.telegram_ui import BotReply
+    from app.services.bot.renderers.telegram import BotReply
     from app.services.clickhouse_client import ClickHouseClient
 
 logger = logging.getLogger(__name__)

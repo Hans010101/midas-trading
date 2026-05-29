@@ -3,7 +3,8 @@
 只读【已采数据】:K 线走 ClickHouseClient.select_kline,crypto 衍生指标走 clickhouse_crypto
 历史快照,持仓 / 自选走 Postgres。**绝不打实时上游**(0025 R4 · 结构性规避 akshare 卡死)。
 
-返回结构化 dataclass(无任何 Telegram 字符串)· 由 telegram_ui 渲染。飞书将来复用同一查询。
+返回结构化 dataclass(无任何 Telegram 字符串)· 由 replies.build_* → 各通道 renderer 渲染。
+飞书将来复用同一查询(ADR 0032)。
 """
 
 from __future__ import annotations
