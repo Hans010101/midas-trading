@@ -14,7 +14,8 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.virtual import Currency, OrderSide, OrderStatus
-from app.services.bot import telegram_ui as ui
+from app.services.bot import replies
+from app.services.bot.renderers.telegram import render_for_telegram
 from app.services.notifications.perp_events import build_trade_filled_event
 from app.services.virtual_trading.engine import (
     PlaceOrderRequest,
@@ -87,7 +88,7 @@ def test_render_order_receipt_prefix_and_keyboard():
         "*点金 Midas · 合约成交*\n\n📊 BTCUSDT · 永续 · 逐仓 20x\n"
         "_本次为模拟交易,不构成投资建议_"
     )
-    reply = ui.render_order_receipt(body)
+    reply = render_for_telegram(replies.build_order_receipt(body))
     assert reply.text.startswith("✅ ")          # 保留成功确认感
     assert "合约成交" in reply.text               # 复用 A 富文本
     assert "本次为模拟交易" in reply.text          # 免责仅一句(body 内)

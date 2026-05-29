@@ -19,6 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.notification import NotificationConfig
 from app.models.virtual import PositionSide, VirtualPosition
 from app.services.bot import router
+from app.services.bot.renderers.telegram import render_for_telegram
+from app.services.bot.replies import InboundMessage, ReplyModel
 from tests.factories import make_user, make_virtual_account
 
 
@@ -296,3 +298,74 @@ async def test_bot_rule_toggle_cross_user_blocked(db_session: AsyncSession):
     )
     await db_session.refresh(b_rule)
     assert b_rule.enabled == before  # B 的规则没被 A 改
+
+
+# ── 🔴 ADR 0032 阶段一:二次确认必经 红线 + 通道中立核心 ────────────────────
+
+
+@pytest.mark.asyncio
+async def test_ordok_without_confirm_session_does_not_execute(db_session: AsyncSession):
+    """🔴 无 order_confirm 会话直接点 ordok → 绝不成交(撮合只由确认态触发)。"""
+    user = await make_user(db_session)
+    acct = await make_virtual_account(db_session, user_id=user.id, market="us")
+    await _bind(db_session, user.id, 710)
+    redis = _FakeRedis()
+    ch = _FakeCH([_bar(100.0)])
+    reply = await router.handle_callback(db_session, redis, ch, 710, "ordok")  # type: ignore[arg-type]
+    assert not await _positions(db_session, acct.id), "无确认态点 ordok 绝不能成交"
+    assert "成交" not in reply.text  # 兜底回主菜单 · 不报成交
+
+
+@pytest.mark.asyncio
+async def test_ordok_skipping_symbol_and_direction_does_not_execute(
+    db_session: AsyncSession,
+):
+    """🔴 刚选完市场(step=order_symbol)就跳点 ordok(跳过标的/方向/预览)→ 不成交。"""
+    user = await make_user(db_session)
+    acct = await make_virtual_account(db_session, user_id=user.id, market="us")
+    await _bind(db_session, user.id, 711)
+    redis = _FakeRedis()
+    ch = _FakeCH([_bar(100.0)])
+    await router.handle_callback(db_session, redis, ch, 711, "menu:order")  # type: ignore[arg-type]
+    await router.handle_callback(db_session, redis, ch, 711, "omkt:us")  # type: ignore[arg-type]
+    # 跳过输代码 / 选方向 / 预览,直接确认
+    reply = await router.handle_callback(db_session, redis, ch, 711, "ordok")  # type: ignore[arg-type]
+    assert not await _positions(db_session, acct.id), "未到确认态点 ordok 绝不能成交"
+    assert "成交" not in reply.text
+
+
+@pytest.mark.asyncio
+async def test_ordok_at_direction_step_does_not_execute(db_session: AsyncSession):
+    """🔴 选完标的(step=order_direction · 还没选方向/没预览)就跳点 ordok → 不成交。"""
+    user = await make_user(db_session)
+    acct = await make_virtual_account(db_session, user_id=user.id, market="us")
+    await _bind(db_session, user.id, 712)
+    redis = _FakeRedis()
+    ch = _FakeCH([_bar(100.0)])
+    await router.handle_callback(db_session, redis, ch, 712, "menu:order")  # type: ignore[arg-type]
+    await router.handle_callback(db_session, redis, ch, 712, "omkt:us")  # type: ignore[arg-type]
+    await router.handle_command(db_session, redis, ch, 712, "NVDA")  # type: ignore[arg-type]
+    # step 已是 order_direction(预览/确认态尚未建立),跳过 odir 直接 ordok
+    reply = await router.handle_callback(db_session, redis, ch, 712, "ordok")  # type: ignore[arg-type]
+    assert not await _positions(db_session, acct.id), "方向态点 ordok 绝不能成交"
+    assert "成交" not in reply.text
+
+
+@pytest.mark.asyncio
+async def test_handle_inbound_neutral_returns_replymodel(db_session: AsyncSession):
+    """通道中立核心:InboundMessage→ReplyModel(未渲染)· 证 router 已脱离 TG 出参;
+    渲染后才是 TG 成稿。飞书 P3 将复用同一 handle_inbound + 自己的 renderer。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 713)
+    redis = _FakeRedis()
+    ch = _FakeCH([_bar(100.0)])
+    msg = InboundMessage(
+        channel="telegram", channel_uid="713", kind="text", text="/menu",
+    )
+    reply = await router.handle_inbound(db_session, redis, ch, msg)
+    assert isinstance(reply, ReplyModel)
+    assert reply.title == "迷你终端"
+    assert reply.buttons  # 主菜单按钮(通道中立)非空
+    bot = render_for_telegram(reply)  # 渲染成 TG 成稿
+    assert "迷你终端" in bot.text
+    assert bot.keyboard is not None
