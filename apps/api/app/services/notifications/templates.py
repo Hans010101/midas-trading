@@ -11,7 +11,9 @@ from decimal import Decimal
 
 from app.services.notifications.events import (
     AlertTriggeredEvent,
+    LiquidationEvent,
     NotificationEvent,
+    PerpFilledEvent,
     PriceAnomalyEvent,
     TradeFilledEvent,
 )
@@ -49,6 +51,10 @@ def render_telegram(event: NotificationEvent) -> str:
         return _tg_price_anomaly(event)
     if isinstance(event, AlertTriggeredEvent):
         return _tg_alert_triggered(event)
+    if isinstance(event, PerpFilledEvent):
+        return _tg_perp_filled(event)
+    if isinstance(event, LiquidationEvent):
+        return _tg_liquidation(event)
     msg = f"未知事件类型 {type(event)}"
     raise ValueError(msg)
 
@@ -86,6 +92,78 @@ def _tg_trade_filled(event: TradeFilledEvent) -> str:
         f"{side_label} {event.quantity} · 成交价 "
         f"{_fmt_money(event.price, event.currency)}\n"
         f"手续费 {_fmt_money(event.commission, event.currency)}"
+        f"{pnl_line}\n\n"
+        f"_{DISCLAIMER}_"
+    )
+
+
+# ===== 永续合约(#296)=====
+
+PERP_ACTION_LABEL: dict[str, str] = {
+    "open_long": "开多",
+    "open_short": "开空",
+    "close_long": "平多",
+    "close_short": "平空",
+}
+MARGIN_MODE_LABEL: dict[str, str] = {"isolated": "逐仓", "cross": "全仓"}
+PERP_SIDE_LABEL: dict[str, str] = {"long": "多头", "short": "空头"}
+
+
+def _fmt_signed_money(amount: Decimal, currency: str) -> str:
+    """带显式 +/- 号的金额(盈亏用 · 方向一眼可辨,不依赖颜色)。"""
+    sign = "+" if amount >= 0 else "-"
+    return f"{sign}{_fmt_money(abs(amount), currency)}"
+
+
+def _tg_perp_filled(event: PerpFilledEvent) -> str:
+    action = PERP_ACTION_LABEL.get(event.action, event.action)
+    mode = MARGIN_MODE_LABEL.get(event.margin_mode, event.margin_mode)
+    lev = f" {event.leverage}x" if event.leverage else ""
+    pnl_line = ""
+    if event.realized_pnl is not None:
+        pnl_line = f"\n已实现盈亏 {_fmt_signed_money(event.realized_pnl, event.currency)}"
+    return (
+        "*点金 Midas · 合约成交*\n\n"
+        f"📊 {event.symbol} · 永续 · {mode}{lev}\n"
+        f"{action} {event.quantity} · 成交价 "
+        f"{_fmt_money(event.price, event.currency)}\n"
+        f"名义 {_fmt_money(event.notional, event.currency)} · "
+        f"手续费 {_fmt_money(event.fee, event.currency)}"
+        f"{pnl_line}\n\n"
+        f"_{DISCLAIMER}_"
+    )
+
+
+def _tg_liquidation(event: LiquidationEvent) -> str:
+    if event.is_cross:
+        floored_line = "\n该账户已穿仓(净亏已封顶)" if event.floored else ""
+        remaining = (
+            f"\n剩余可用 {_fmt_money(event.remaining_cash, event.currency)}"
+            if event.remaining_cash is not None
+            else ""
+        )
+        return (
+            "*点金 Midas · 全仓强制平仓*\n\n"
+            "⚠️ 全仓合约账户触发强平\n"
+            f"{event.position_count} 个仓位已全部强制平仓"
+            f"{remaining}{floored_line}\n\n"
+            f"_{DISCLAIMER}_"
+        )
+    # 逐仓单仓
+    side = PERP_SIDE_LABEL.get(event.side or "", event.side or "")
+    lev = f" {event.leverage}x" if event.leverage else ""
+    liq = (
+        f"触及强平价 {_fmt_money(event.liquidation_price, event.currency)} · "
+        if event.liquidation_price is not None
+        else ""
+    )
+    pnl_line = ""
+    if event.realized_pnl is not None:
+        pnl_line = f"\n已实现盈亏 {_fmt_signed_money(event.realized_pnl, event.currency)}"
+    return (
+        "*点金 Midas · 强制平仓*\n\n"
+        f"⚠️ {event.symbol} · 永续 · 逐仓{lev}\n"
+        f"{side}{liq}已强制平仓"
         f"{pnl_line}\n\n"
         f"_{DISCLAIMER}_"
     )

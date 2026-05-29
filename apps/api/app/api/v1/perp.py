@@ -30,7 +30,7 @@ from app.models.perp import (
     VirtualPerpOrder,
     VirtualPerpPosition,
 )
-from app.models.virtual import VirtualAccount
+from app.models.virtual import OrderStatus, VirtualAccount
 from app.schemas.perp import (
     PerpFundingResponse,
     PerpOrderPlaceIn,
@@ -42,6 +42,7 @@ from app.services.clickhouse_crypto import (
     select_premium_index_marks,
     select_tickers_by_symbols,
 )
+from app.services.notifications.emit import emit_perp_order
 from app.services.virtual_trading.perp_dispatcher import (
     route_close_perp,
     route_open_perp,
@@ -150,6 +151,9 @@ async def place_perp_order(
         "[perp.order] user=%s symbol=%s intent=%s status=%s",
         current_user.id, payload.symbol, payload.intent, order.status,
     )
+    # #296:commit 之后才 emit(避免"通知发了但事务回滚")· 仅成交单 · 旁路不影响下单
+    if order.status == OrderStatus.FILLED:
+        emit_perp_order(order.id)
     return _serialize_order(order)
 
 

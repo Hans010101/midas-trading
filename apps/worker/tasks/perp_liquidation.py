@@ -32,6 +32,7 @@ from app.services.clickhouse_crypto import (
     select_premium_index_marks,
     select_tickers_by_symbols,
 )
+from app.services.notifications.emit import emit_perp_order
 from app.services.virtual_trading.perp_engine import liquidate_position
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,7 @@ async def _scan_and_liquidate() -> dict[str, int]:
     ch: Any = None
     checked = 0
     liquidated = 0
+    liq_order_ids: list[int] = []  # #296:本轮强平的订单 id · commit 后 emit 通知
     try:
         async with session_maker() as session:
             positions = (
@@ -123,8 +125,9 @@ async def _scan_and_liquidate() -> dict[str, int]:
                 )
                 if locked is None:
                     continue  # 已被用户平掉
-                await liquidate_position(session, locked, mark)
+                liq_order = await liquidate_position(session, locked, mark)
                 liquidated += 1
+                liq_order_ids.append(liq_order.id)
                 logger.warning(
                     "[perp.liquidation] 强平虚拟仓 id=%s symbol=%s side=%s "
                     "mark=%s liq=%s",
@@ -133,6 +136,9 @@ async def _scan_and_liquidate() -> dict[str, int]:
                 )
 
             await session.commit()
+            # #296:commit 之后才 emit 逐仓强平通知(旁路 · emit 内部吞异常 · 不影响强平结算)
+            for oid in liq_order_ids:
+                emit_perp_order(oid)
         return {"checked": checked, "liquidated": liquidated}
     finally:
         if ch is not None:

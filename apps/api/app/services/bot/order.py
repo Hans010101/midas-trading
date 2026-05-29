@@ -42,6 +42,7 @@ from app.services.clickhouse_crypto import (
     select_premium_index_marks,
     select_tickers_by_symbols,
 )
+from app.services.notifications.emit import emit_perp_order
 from app.services.virtual_trading.engine import PlaceOrderRequest, place_market_order
 from app.services.virtual_trading.perp_dispatcher import (
     route_close_perp,
@@ -348,6 +349,8 @@ async def _exec_perp(
         )
     await db.commit()
     if order.status == OrderStatus.FILLED:
+        # #296:commit 之后才 emit(避免"通知发了但事务回滚")· 旁路不影响下单
+        emit_perp_order(order.id)
         detail = (
             f"{order.symbol} · {_DIR_LABEL.get(intent.direction, intent.direction)}\n"
             f"数量 {_num(order.quantity)} @ {_num(order.price)}"

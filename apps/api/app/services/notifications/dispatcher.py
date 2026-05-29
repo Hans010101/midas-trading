@@ -65,7 +65,12 @@ async def get_config(
 
 
 def _kind_enabled(event: NotificationEvent, config: NotificationConfig) -> bool:
-    if event.kind == NotificationKind.TRADE_FILLED:
+    # #296:perp 成交 / 强平 复用现有「成交通知」总开关(不新增列/迁移)
+    if event.kind in (
+        NotificationKind.TRADE_FILLED,
+        NotificationKind.PERP_FILLED,
+        NotificationKind.LIQUIDATION,
+    ):
         return config.trade_alert_enabled
     if event.kind == NotificationKind.PRICE_ANOMALY:
         return config.price_alert_enabled
