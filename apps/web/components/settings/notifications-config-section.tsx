@@ -20,7 +20,9 @@ import {
   useSaveNotificationConfig,
   useSendTestNotification,
 } from '@/hooks/use-notifications'
+import { useCreateFeishuBindToken, useUnbindFeishu } from '@/hooks/use-feishu'
 import { useCreateBindToken, useUnbindTelegram } from '@/hooks/use-telegram'
+import { type FeishuBindTokenResult, FeishuApiError } from '@/lib/api/feishu'
 import type { NotificationConfig } from '@/lib/api/notifications'
 import { type BindTokenResult, TelegramApiError } from '@/lib/api/telegram'
 import { cn } from '@/lib/utils'
@@ -66,6 +68,7 @@ export function NotificationsConfigSection() {
   }
 
   const bound = config?.has_telegram ?? false
+  const feishuBound = config?.has_feishu ?? false
 
   return (
     <section className="mb-10">
@@ -73,12 +76,15 @@ export function NotificationsConfigSection() {
         消息推送
       </h2>
       <p className="mb-4 text-sm text-muted-foreground">
-        绑定 Telegram 后,成交通知 / 价格异动会推送到你的 Telegram · 未绑定只有站内提示
+        绑定 Telegram / 飞书后,成交通知 / 价格异动会推送到对应渠道 · 未绑定只有站内提示
       </p>
 
       <div className="space-y-4">
         {/* Telegram 绑定(G3 · deep link + 二维码 + 解绑 + 重绑提示)*/}
         <TelegramCard bound={bound} />
+
+        {/* 飞书绑定(ADR 0032 阶段三 · 绑定码 + 解绑)*/}
+        <FeishuCard bound={feishuBound} />
 
         {/* 事件总开关 */}
         <div className="rounded-lg border border-paper bg-cream p-5 shadow-sm">
@@ -253,6 +259,137 @@ function BindInstructions({
       )}
       <p className="text-center text-[11px] text-muted-foreground/80">
         链接 {minutes} 分钟内有效 · 在 bot 里完成 /start 后点下方刷新
+      </p>
+      <button
+        type="button"
+        onClick={onRefresh}
+        className="w-full rounded-md border border-paper bg-background px-4 py-2 text-sm text-foreground transition-colors hover:bg-cream"
+      >
+        我已完成绑定 · 刷新状态
+      </button>
+    </div>
+  )
+}
+
+// ===== 飞书绑定卡(ADR 0032 阶段三 · 对称 Telegram)=====
+
+function FeishuCard({ bound }: { bound: boolean }) {
+  const createToken = useCreateFeishuBindToken()
+  const unbind = useUnbindFeishu()
+  const queryClient = useQueryClient()
+  const [bindInfo, setBindInfo] = useState<FeishuBindTokenResult | null>(null)
+  const [appUnavailable, setAppUnavailable] = useState(false)
+
+  async function handleBind() {
+    setAppUnavailable(false)
+    try {
+      setBindInfo(await createToken.mutateAsync())
+    } catch (e) {
+      if (e instanceof FeishuApiError && e.status === 503) {
+        setAppUnavailable(true)
+      } else {
+        toast.error(e instanceof Error ? e.message : '生成绑定码失败')
+      }
+    }
+  }
+
+  async function handleUnbind() {
+    try {
+      await unbind.mutateAsync()
+      setBindInfo(null)
+      toast.success('已解绑飞书')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '解绑失败')
+    }
+  }
+
+  function handleRefresh() {
+    void queryClient.invalidateQueries({ queryKey: NOTIFICATIONS_KEY.config })
+  }
+
+  return (
+    <div className="rounded-lg border border-paper bg-cream p-5 shadow-sm">
+      <div className="mb-3 flex items-center gap-2">
+        <span className="text-xl" aria-hidden="true">🪶</span>
+        <h3 className="font-serif text-base font-bold text-foreground">飞书</h3>
+        <span
+          className={cn(
+            'rounded border px-1.5 py-0.5 font-mono text-[10px]',
+            bound
+              ? 'border-gold bg-gold/[0.08] text-gold'
+              : 'border-paper text-muted-foreground/70',
+          )}
+        >
+          {bound ? '✓ 已绑定' : '未绑定'}
+        </span>
+      </div>
+
+      {bound ? (
+        <>
+          <p className="mb-3 text-xs text-muted-foreground">
+            已绑定到你的飞书 · 成交 / 价格异动 / 告警会推送到这里。
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <TestButton disabled={false} channel="feishu" channelLabel="飞书" />
+            <button
+              type="button"
+              onClick={handleUnbind}
+              disabled={unbind.isPending}
+              className="inline-flex items-center gap-1.5 rounded-md border border-midas-red/40 bg-background px-4 py-2 text-sm text-midas-red transition-colors hover:bg-midas-red/[0.06] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {unbind.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              解绑
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          {!bindInfo && !appUnavailable && (
+            <button
+              type="button"
+              onClick={handleBind}
+              disabled={createToken.isPending}
+              className="inline-flex items-center gap-1.5 rounded-md bg-midas-red px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-midas-red-deep disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {createToken.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              绑定飞书
+            </button>
+          )}
+
+          {appUnavailable && (
+            <p className="text-xs text-muted-foreground">
+              飞书绑定即将开放(等待应用配置)· 稍后再来。
+            </p>
+          )}
+
+          {bindInfo && (
+            <FeishuBindInstructions info={bindInfo} onRefresh={handleRefresh} />
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function FeishuBindInstructions({
+  info,
+  onRefresh,
+}: {
+  info: FeishuBindTokenResult
+  onRefresh: () => void
+}) {
+  const minutes = Math.max(1, Math.round(info.expires_in / 60))
+  return (
+    <div className="space-y-3">
+      <div className="rounded-md border border-paper bg-background p-3 text-xs">
+        <p className="mb-1 text-muted-foreground">在飞书里打开点金 Midas 应用,发送下面这串绑定码:</p>
+        <code className="break-all font-mono text-foreground">{info.token}</code>
+        <p className="mt-1 text-muted-foreground/80">
+          (也可发「/bind {info.token}」· 直接粘贴绑定码同样可绑)
+        </p>
+      </div>
+      <p className="text-center text-[11px] text-muted-foreground/80">
+        绑定码 {minutes} 分钟内有效 · 在飞书里发送后点下方刷新
       </p>
       <button
         type="button"
@@ -461,14 +598,22 @@ function SaveButton({ onClick, pending, children }: SaveButtonProps) {
   )
 }
 
-function TestButton({ disabled }: { disabled: boolean }) {
+function TestButton({
+  disabled,
+  channel = 'telegram',
+  channelLabel = 'Telegram',
+}: {
+  disabled: boolean
+  channel?: 'telegram' | 'feishu'
+  channelLabel?: string
+}) {
   const testMutation = useSendTestNotification()
 
   async function handleClick() {
     try {
-      const result = await testMutation.mutateAsync('telegram')
+      const result = await testMutation.mutateAsync(channel)
       if (result.ok) {
-        toast.success('Telegram 测试消息已发送')
+        toast.success(`${channelLabel} 测试消息已发送`)
       } else {
         toast.error(`推送失败 · ${result.error ?? '未知原因'}`)
       }
@@ -482,7 +627,7 @@ function TestButton({ disabled }: { disabled: boolean }) {
       type="button"
       onClick={handleClick}
       disabled={disabled || testMutation.isPending}
-      title={disabled ? '绑定 Telegram 后可用' : undefined}
+      title={disabled ? `绑定 ${channelLabel} 后可用` : undefined}
       className="inline-flex items-center gap-1.5 rounded-md border border-paper bg-background px-4 py-2 text-sm text-foreground transition-colors hover:bg-cream disabled:cursor-not-allowed disabled:opacity-50"
     >
       {testMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

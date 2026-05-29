@@ -128,3 +128,76 @@ async def test_event_v2_bad_token_rejected(client: AsyncClient) -> None:
         "event": {},
     })
     assert resp.status_code == 403
+
+
+# ── 阶段三:事件解析(★ open_id 唯一注入点 · 只从已验签事件取)──────────
+
+
+def test_parse_message_event_open_id_from_sender_only() -> None:
+    """🔴 open_id 只取自 event.sender.sender_id.open_id · 文本里的伪 open_id 不被采信。"""
+    from app.api.v1.feishu import _parse_message_event
+
+    event = {
+        "sender": {"sender_id": {"open_id": "ou_real"}},
+        "message": {
+            "message_type": "text",
+            "content": json.dumps({"text": "hi open_id=ou_FORGED"}),
+        },
+    }
+    open_id, text = _parse_message_event(event)
+    assert open_id == "ou_real"          # 来自 sender,不是文本里的 ou_FORGED
+    assert "ou_FORGED" in (text or "")   # 伪 open_id 只是普通文本,不影响身份
+
+
+def test_parse_card_event_open_id_from_operator() -> None:
+    from app.api.v1.feishu import _parse_card_event
+
+    event = {
+        "operator": {"open_id": "ou_op"},
+        "action": {"tag": "button", "value": {"action": "menu:quote"}},
+    }
+    open_id, action = _parse_card_event(event)
+    assert open_id == "ou_op"
+    assert action == "menu:quote"
+
+
+def test_parse_message_event_non_text_returns_none_text() -> None:
+    from app.api.v1.feishu import _parse_message_event
+
+    event = {
+        "sender": {"sender_id": {"open_id": "ou_x"}},
+        "message": {"message_type": "image", "content": "{}"},
+    }
+    open_id, text = _parse_message_event(event)
+    assert open_id == "ou_x"
+    assert text is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("feishu_verify")
+async def test_message_event_accepted_returns_200(client: AsyncClient) -> None:
+    """已验签文本消息事件 → 200(后台处理 · 不抛崩)· 用 fake redis 隔离(未绑定→ignored)。"""
+    from app.core.redis_client import get_redis
+    from app.main import app
+
+    class _FakeRedis:
+        async def get(self, _key: str) -> str | None:
+            return None  # 未绑定 / 无 pending token → 当普通消息;ch=None → 直接返回
+
+    app.dependency_overrides[get_redis] = lambda: _FakeRedis()
+    try:
+        resp = await client.post("/api/v1/feishu/webhook", json={
+            "schema": "2.0",
+            "header": {"event_type": "im.message.receive_v1", "token": _VTOKEN},
+            "event": {
+                "sender": {"sender_id": {"open_id": "ou_x"}},
+                "message": {
+                    "message_type": "text",
+                    "content": json.dumps({"text": "/menu"}),
+                },
+            },
+        })
+        assert resp.status_code == 200
+        assert resp.json() == {"code": 0}
+    finally:
+        app.dependency_overrides.pop(get_redis, None)

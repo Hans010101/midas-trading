@@ -1,16 +1,18 @@
-"""飞书事件回调入站 · /api/v1/feishu/* · ADR 0032 阶段二。
+"""飞书事件回调 + 绑定 · /api/v1/feishu/* · ADR 0032 阶段二(通知)+ 阶段三(交互)。
 
-POST /feishu/webhook —— 飞书开放平台事件订阅回调:
-1. ★ URL 验证握手:配事件订阅时飞书发 {"type":"url_verification","challenge":...},原样回 challenge。
-2. 验签:Verification Token(必配,常量时间比较)+ 可选 Encrypt Key(AES-256-CBC 解密事件体)
-   + 可选 X-Lark-Signature(配了 Encrypt Key 时,对 timestamp+nonce+key+body 做 sha256 校验)。
-3. 阶段二只【收事件 + 记日志】(交互:收消息→handle_inbound 是阶段三的事)。
+- POST /feishu/bind-token · 登录态 · 生成一次性绑定码(对称 TG · 用户在飞书发码完成绑定)
+- POST /feishu/webhook    · 飞书事件回调:
+  1. ★ URL 验证握手:配事件订阅时回 challenge
+  2. 验签:Verification Token(必配,常量时间)+ 可选 Encrypt Key(AES-256-CBC)+ 可选签名
+  3. 阶段三:im.message.receive_v1 / card.action.trigger → InboundMessage → handle_inbound
+     (复用阶段一中立核心 · 飞书不另写交互逻辑)→ render_for_feishu → 后台发卡。
 
 🔴 红线:
-- 身份只从【已验签事件】的 open_id 取(阶段三 handle_inbound 用)· 绝不从消息文本取。
-  本阶段不解析 open_id 业务,但验签是阶段三身份注入的前提,这里先把"握手+验签"做扎实。
-- 凭证(verification_token / encrypt_key)只从 env 读 · 不进日志(只记 event_type / 结果)。
-- 验签未配置(verification_token 为空)→ 一律 403(拒绝未验明真伪的请求)。
+- 身份只从【已验签事件体】的 open_id 取(_parse_message_event / _parse_card_event 是唯一注入点)·
+  绝不从消息文本取(文本里写的任何 open_id 都不被采信)。
+- 验签未配置(verification_token 空)→ 一律 403。
+- 凭证只从 env 读 · 日志只记 event_type / 结果,不记消息内容 / open_id。
+- 阶段三只读交互,不含下单;execute 仍只由 router order_confirm 态的 ordok 触发(飞书无法绕过)。
 """
 
 from __future__ import annotations
@@ -20,22 +22,92 @@ import hashlib
 import hmac
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field
+from redis.asyncio import Redis
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import CurrentUserDep, OptionalClickHouseDep
 from app.core.config import settings
+from app.core.database import get_db
+from app.core.redis_client import get_redis
+from app.models.notification import NotificationConfig
+from app.services.bot.renderers.feishu import render_for_feishu
+from app.services.bot.replies import InboundMessage
+from app.services.bot.router import handle_inbound
+from app.services.notifications import feishu_client
+from app.services.notifications.feishu_bind import (
+    create_bind_token,
+    handle_feishu_bind,
+)
+
+if TYPE_CHECKING:
+    from app.services.clickhouse_client import ClickHouseClient
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/feishu", tags=["feishu"])
 
+DbDep = Annotated[AsyncSession, Depends(get_db)]
+RedisDep = Annotated[Redis, Depends(get_redis)]
+
 _AES_BLOCK = 16
 _FORBIDDEN = JSONResponse(
     status_code=status.HTTP_403_FORBIDDEN, content={"detail": "invalid feishu request"},
 )
+
+
+# ── 绑定码端点(登录态)──────────────────────────────────────────────
+
+
+class FeishuBindTokenResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(description="一次性绑定码 · 在飞书发给 bot(可直接粘贴或 /bind <码>)")
+    expires_in: int = Field(description="绑定码有效秒数")
+
+
+@router.post(
+    "/bind-token",
+    response_model=FeishuBindTokenResponse,
+    summary="生成飞书绑定一次性码(登录态)",
+)
+async def create_feishu_bind_token(
+    current_user: CurrentUserDep, redis: RedisDep,
+) -> FeishuBindTokenResponse:
+    if not (settings.feishu_app_id and settings.feishu_app_secret):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="飞书应用未配置(FEISHU_APP_ID/SECRET 未设)",
+        )
+    token = await create_bind_token(redis, current_user.id)
+    return FeishuBindTokenResponse(
+        token=token, expires_in=settings.tg_bind_token_ttl_seconds,
+    )
+
+
+@router.post("/unbind", summary="解绑当前账号的飞书(清空 feishu_open_id · 登录态)")
+async def unbind_feishu(
+    current_user: CurrentUserDep, db: DbDep,
+) -> dict[str, bool]:
+    """解绑 · 清空当前用户自己的 feishu_open_id · 幂等 · 不碰其它字段 / 无迁移。"""
+    config = await db.scalar(
+        select(NotificationConfig).where(
+            NotificationConfig.user_id == current_user.id,
+        ),
+    )
+    if config is not None and config.feishu_open_id is not None:
+        config.feishu_open_id = None
+        await db.commit()
+    return {"unbound": True}
+
+
+# ── 验签 / 解密(阶段二)─────────────────────────────────────────────
 
 
 def _decrypt_event(encrypt_b64: str, encrypt_key: str) -> dict[str, Any]:
@@ -56,7 +128,7 @@ def _signature_ok(req_headers: Any, raw_body: bytes, encrypt_key: str) -> bool:
     timestamp = req_headers.get("X-Lark-Request-Timestamp")
     nonce = req_headers.get("X-Lark-Request-Nonce")
     if not (signature and timestamp and nonce):
-        return True  # 未带签名头(明文/未开签名)→ 由 Verification Token 兜底
+        return True
     base = timestamp.encode() + nonce.encode() + encrypt_key.encode() + raw_body
     expected = hashlib.sha256(base).hexdigest()
     return hmac.compare_digest(expected, signature)
@@ -66,22 +138,79 @@ def _token_ok(payload: dict[str, Any]) -> bool:
     """Verification Token 校验:v2 在 header.token,v1/握手在顶层 token · 常量时间比较。"""
     configured = settings.feishu_verification_token
     if not configured:
-        return False  # 未配置验签 → 拒绝(不接受无法验明真伪的请求)
+        return False
     token = payload.get("token") or (payload.get("header") or {}).get("token") or ""
     return hmac.compare_digest(str(token), configured)
 
 
+# ── 事件体解析(★ open_id 唯一注入点 · 只从已验签事件取)──────────────
+
+
+def _parse_message_event(event: dict[str, Any]) -> tuple[str | None, str | None]:
+    """im.message.receive_v1 → (open_id, text)。
+
+    🔴 open_id 只取自 event.sender.sender_id.open_id(已验签事件体)· 绝不从消息内容取。
+    """
+    sender_id = (event.get("sender") or {}).get("sender_id") or {}
+    open_id = sender_id.get("open_id")
+    message = event.get("message") or {}
+    text: str | None = None
+    if message.get("message_type") == "text":
+        try:
+            text = json.loads(message.get("content") or "{}").get("text")
+        except (ValueError, TypeError):
+            text = None
+    return (open_id, text)
+
+
+def _parse_card_event(event: dict[str, Any]) -> tuple[str | None, str | None]:
+    """card.action.trigger → (open_id, action)。
+
+    🔴 open_id 只取自 event.operator.open_id(已验签事件体)· action 取自按钮 value.action。
+    """
+    open_id = (event.get("operator") or {}).get("open_id")
+    value = (event.get("action") or {}).get("value") or {}
+    action = value.get("action") if isinstance(value, dict) else None
+    return (open_id, action)
+
+
+# ── 后台发送(fail-soft · 不影响已返回的 200)─────────────────────────
+
+
+async def _send_card_safe(open_id: str, card: dict[str, Any]) -> None:
+    try:
+        await feishu_client.send_card(open_id, card)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[feishu-webhook] 发卡失败:%s", e)
+
+
+async def _send_text_safe(open_id: str, text: str) -> None:
+    try:
+        await feishu_client.send_text(open_id, text)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[feishu-webhook] 发文本失败:%s", e)
+
+
+# ── webhook 主入口 ───────────────────────────────────────────────────
+
+
 @router.post(
     "/webhook",
-    summary="飞书事件回调(URL 握手 + 验签 + 收事件)",
-    include_in_schema=False,  # 内部端点 · 不进公开 OpenAPI
+    summary="飞书事件回调(URL 握手 + 验签 + 收消息/卡片回调)",
+    include_in_schema=False,
 )
-async def feishu_webhook(request: Request) -> JSONResponse:
+async def feishu_webhook(
+    request: Request,
+    db: DbDep,
+    redis: RedisDep,
+    ch: OptionalClickHouseDep,
+    background: BackgroundTasks,
+) -> JSONResponse:
     raw_body = await request.body()
     try:
         body: dict[str, Any] = json.loads(raw_body) if raw_body else {}
     except (ValueError, UnicodeDecodeError):
-        return JSONResponse(content={"code": 0})  # 非 JSON · 回 200 避免飞书重试风暴
+        return JSONResponse(content={"code": 0})
 
     # 1. 解密(若配置了 Encrypt Key 且事件体加密)
     if "encrypt" in body:
@@ -100,7 +229,7 @@ async def feishu_webhook(request: Request) -> JSONResponse:
     else:
         payload = body
 
-    # 2. ★ URL 验证握手:校验 token 后原样回 challenge(飞书后台配事件订阅的前提)
+    # 2. ★ URL 验证握手
     if payload.get("type") == "url_verification":
         if not _token_ok(payload):
             logger.warning("[feishu-webhook] url_verification token 校验失败 · 拒绝")
@@ -108,14 +237,70 @@ async def feishu_webhook(request: Request) -> JSONResponse:
         logger.info("[feishu-webhook] url_verification 握手成功")
         return JSONResponse(content={"challenge": payload.get("challenge", "")})
 
-    # 3. 事件:校验 Verification Token
+    # 3. 校验 Verification Token
     if not _token_ok(payload):
         logger.warning("[feishu-webhook] 事件 token 校验失败 · 拒绝")
         return _FORBIDDEN
 
-    # 4. 阶段二:已验签事件 → 先记日志(交互 handle_inbound 留阶段三)。
-    #    只记 event_type · 不记消息内容 / 用户标识(隐私 + 红线)。
+    # 4. 路由事件(已验签)
     header = payload.get("header") or {}
     event_type = header.get("event_type") or payload.get("type") or "unknown"
-    logger.info("[feishu-webhook] 已验签事件 event_type=%s(阶段二仅记录,未处理)", event_type)
+    event = payload.get("event") or {}
+
+    if event_type == "im.message.receive_v1":
+        await _handle_message(db, redis, ch, background, event)
+    elif event_type == "card.action.trigger":
+        await _handle_card_action(db, redis, ch, background, event)
+    else:
+        logger.info("[feishu-webhook] 忽略事件 event_type=%s", event_type)
+
     return JSONResponse(content={"code": 0})
+
+
+async def _handle_message(
+    db: AsyncSession,
+    redis: Redis,
+    ch: ClickHouseClient | None,
+    background: BackgroundTasks,
+    event: dict[str, Any],
+) -> None:
+    """文本消息:先尝试绑定,否则归一为 InboundMessage 走 handle_inbound。"""
+    open_id, text = _parse_message_event(event)
+    if open_id is None:
+        return
+
+    # 1. 绑定优先(对称 TG /start)· open_id 来自已验签事件
+    bind = await handle_feishu_bind(db, redis, open_id=open_id, text=text)
+    if bind.kind != "ignored":
+        if bind.reply_text:
+            background.add_task(_send_text_safe, open_id, bind.reply_text)
+        return
+
+    # 2. 非绑定 → handle_inbound(中立核心 · 需 CH 查询;prod 必有,本地无则跳过)
+    if ch is None:
+        return
+    msg = InboundMessage(
+        channel="feishu", channel_uid=open_id, kind="text", text=text,
+    )
+    reply = await handle_inbound(db, redis, ch, msg)
+    background.add_task(_send_card_safe, open_id, render_for_feishu(reply))
+
+
+async def _handle_card_action(
+    db: AsyncSession,
+    redis: Redis,
+    ch: ClickHouseClient | None,
+    background: BackgroundTasks,
+    event: dict[str, Any],
+) -> None:
+    """卡片按钮回调 → InboundMessage(kind=button)→ handle_inbound。"""
+    open_id, action = _parse_card_event(event)
+    if open_id is None or not action:
+        return
+    if ch is None:
+        return
+    msg = InboundMessage(
+        channel="feishu", channel_uid=open_id, kind="button", action=action,
+    )
+    reply = await handle_inbound(db, redis, ch, msg)
+    background.add_task(_send_card_safe, open_id, render_for_feishu(reply))

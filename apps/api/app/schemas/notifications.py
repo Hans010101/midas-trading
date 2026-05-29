@@ -25,6 +25,8 @@ class NotificationConfigResponse(BaseModel):
     price_alert_enabled: bool
     # 服务端只读 · 给前端展示是否已绑定 Telegram
     has_telegram: bool
+    # ADR 0032 阶段三 · 是否已绑定飞书(feishu_open_id 非空)
+    has_feishu: bool = False
     # 0028 N2 · 安静时段(N1 已落 DB 字段 · 本期暴露给前端)
     # 在该窗口内吞掉普通告警;紧急豁免事件(成交 / 强平 · quiet_exempt=True)照常发。
     quiet_hours_enabled: bool
@@ -82,6 +84,7 @@ def serialize_config_response(config) -> NotificationConfigResponse:  # type: ig
         trade_alert_enabled=config.trade_alert_enabled,
         price_alert_enabled=config.price_alert_enabled,
         has_telegram=bool(config.tg_chat_id),
+        has_feishu=bool(config.feishu_open_id),
         quiet_hours_enabled=config.quiet_hours_enabled,
         quiet_hours_start=config.quiet_hours_start,
         quiet_hours_end=config.quiet_hours_end,

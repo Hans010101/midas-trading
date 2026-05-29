@@ -13,6 +13,8 @@ export interface NotificationConfig {
   trade_alert_enabled: boolean
   price_alert_enabled: boolean
   has_telegram: boolean
+  // ADR 0032 阶段三 · 是否已绑定飞书
+  has_feishu: boolean
   // 0028 N2 · 安静时段(N1 已落 DB · 本期接前端)
   quiet_hours_enabled: boolean
   // 起止小时 0-23 · start > end 表示跨夜(如 23-7)
@@ -84,7 +86,7 @@ export async function updateNotificationConfig(
 }
 
 export async function sendTestNotification(
-  token: string, channel: 'telegram' = 'telegram',
+  token: string, channel: 'telegram' | 'feishu' = 'telegram',
 ): Promise<NotificationTestResult> {
   const r = await fetch(
     `${API_BASE}/api/v1/notifications/test?channel=${channel}`,
