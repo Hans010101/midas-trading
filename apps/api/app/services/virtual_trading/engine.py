@@ -52,6 +52,9 @@ class PlaceOrderRequest:
     # 3.4 · 持仓方向 · 默认 LONG(现货做多 · A股/加密/美股做多 不传即原行为)。
     # SHORT 仅美股卖空:side=SELL+SHORT=开空,side=BUY+SHORT=平空(买回)。
     position_side: PositionSide = PositionSide.LONG
+    # #296 去重:bot 下单走自己的富回执,传 notify=False 抑制异步成交推送(避免双发);
+    # 网页 / 默认 True 行为不变。仅控通知开关 · 不影响撮合 / 结算 / 下单计算任何逻辑。
+    notify: bool = True
 
 
 async def place_market_order(
@@ -476,7 +479,9 @@ async def _record_filled(
 
     # 0009 § 3 · 异步 emit · 绝不阻塞下单主链路
     # broker IO ~5ms · broker 挂了 emit 内部捕获不抛
-    emit_trade_filled(order.id)
+    # #296:bot 路径传 req.notify=False 抑制(走自己的富回执去重)· 默认 True 行为不变
+    if req.notify:
+        emit_trade_filled(order.id)
 
     return order
 

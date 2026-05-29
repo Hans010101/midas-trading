@@ -1,9 +1,11 @@
-"""永续合约订单 → 通知事件 的纯函数 builder(#296)。
+"""订单 → 通知事件 的纯函数 builder(#296)。
 
-放在 notifications 层(而非 worker)以便 apps/api 单测直接导入验证。
-worker task(send_perp_order_notification)读 DB 后调用这里的 builder。
+放在 notifications 层(而非 worker)以便 apps/api 单测直接导入验证,且 bot 富回执
+(改动一去重)与 worker 异步推送共用同一套构造逻辑 —— 文案/字段单一事实源。
 
 纯函数:入参是已读好的 ORM 对象,出参是 frozen 事件 · 无 DB / IO · 可单测。
+- build_perp_filled_event / build_liquidation_event_single:永续(perp)
+- build_trade_filled_event:现货(spot · 抽自 worker send_trade_notification)
 """
 
 from __future__ import annotations
@@ -12,11 +14,15 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, cast
 
 from app.models.perp import PerpAction
-from app.services.notifications.events import LiquidationEvent, PerpFilledEvent
+from app.services.notifications.events import (
+    LiquidationEvent,
+    PerpFilledEvent,
+    TradeFilledEvent,
+)
 
 if TYPE_CHECKING:
     from app.models.perp import VirtualPerpOrder, VirtualPerpPosition
-    from app.models.virtual import VirtualAccount
+    from app.models.virtual import VirtualAccount, VirtualOrder
 
 _CLOSE_ACTIONS = (PerpAction.CLOSE_LONG, PerpAction.CLOSE_SHORT)
 
@@ -63,5 +69,23 @@ def build_liquidation_event_single(
         ),
         realized_pnl=order.realized_pnl,
         position_count=1,
+        currency=account.currency.value,
+    )
+
+
+def build_trade_filled_event(
+    order: VirtualOrder,
+    account: VirtualAccount,
+) -> TradeFilledEvent:
+    """现货成交订单 → TradeFilledEvent(抽自 worker · bot 富回执 + 异步推送共用)。"""
+    return TradeFilledEvent(
+        symbol=order.symbol,
+        market=order.market,
+        side=order.side,  # type: ignore[arg-type]
+        quantity=order.quantity,
+        price=order.price or Decimal("0"),
+        notional=order.notional or Decimal("0"),
+        commission=order.commission or Decimal("0"),
+        realized_pnl=order.realized_pnl,
         currency=account.currency.value,
     )

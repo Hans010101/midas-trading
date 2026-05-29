@@ -276,6 +276,9 @@ async def _handle_confirm(
         return ui.render_main_menu()
     intent = order_mod.OrderIntent(market=market, symbol=symbol, direction=direction)
     result = await order_mod.execute(db, ch, user_id, intent)
+    # #296 去重:成交走富回执(单条);拒单 / 异常回落原简版
+    if result.filled and result.body:
+        return ui.render_order_receipt(result.body)
     return ui.render_order_result(result.title, result.detail)
 
 
