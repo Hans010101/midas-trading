@@ -149,11 +149,10 @@ def _quote_keyboard(market: str, symbol: str) -> Keyboard:
 
 
 def render_main_menu() -> BotReply:
+    # 泛化引导:不逐一列功能(以后加按钮无需改文案)· 按钮清单以 main_menu_keyboard 为准
     text = (
         f"*{_BRAND} · 迷你终端*\n\n"
-        "选择功能 ↓\n"
-        "· 📊 行情查询 / 📈 K线图(网页)\n"
-        "· ⭐ 自选 / 💼 持仓\n\n"
+        "点下方按钮选择功能 ↓\n\n"
         "也可直接发送 `/price <代码>` 查行情"
     )
     return BotReply(_tail(text), main_menu_keyboard())
