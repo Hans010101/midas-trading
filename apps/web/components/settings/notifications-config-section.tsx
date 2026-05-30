@@ -414,7 +414,7 @@ function FeishuBindInstructions({
         </a>
       )}
       <p className="text-center text-[11px] text-muted-foreground/80">
-        先复制绑定码 · 点上方按钮直达会话 · 粘贴发送 · 完成后点下方刷新
+        绑定码 {minutes} 分钟内有效 · 先复制 · 点「在飞书中打开」直达会话 · 粘贴发送 · 完成后点下方刷新
       </p>
       <button
         type="button"
