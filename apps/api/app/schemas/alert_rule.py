@@ -11,7 +11,7 @@ from typing import Literal
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 Operator = Literal["gt", "gte", "lt", "lte"]
-RuleMarket = Literal["cn", "us", "crypto"]
+RuleMarket = Literal["cn", "us", "crypto", "hk"]
 
 
 class AlertRuleCreate(BaseModel):

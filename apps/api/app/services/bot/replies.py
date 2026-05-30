@@ -43,8 +43,8 @@ TRADE_DISCLAIMER = "本次为模拟交易,不构成投资建议"
 # 🔴 合规红线:默认 disclaimer=DISCLAIMER(fail-safe · 漏设也带免责);交易类必带、不可误删
 #   (守卫测试 test_bot_golden 钉死方向)。
 _BRAND = "点金 Midas"
-_MARKET_LABEL: dict[str, str] = {"cn": "A股", "us": "美股", "crypto": "加密"}
-_CCY_SYMBOL: dict[str, str] = {"CNY": "¥", "USD": "$", "USDT": ""}
+_MARKET_LABEL: dict[str, str] = {"cn": "A股", "us": "美股", "crypto": "加密", "hk": "港股"}
+_CCY_SYMBOL: dict[str, str] = {"CNY": "¥", "USD": "$", "USDT": "", "HKD": "HK$"}
 _PREVIEW_PATH: dict[str, str] = {
     "cn": "cn-preview", "us": "us-preview", "crypto": "crypto-preview",
 }
@@ -148,7 +148,7 @@ def _fmt_qty(v: float) -> str:
 
 
 def _market_ccy(market: str) -> str:
-    return {"cn": "CNY", "us": "USD", "crypto": "USDT"}.get(market, "USD")
+    return {"cn": "CNY", "us": "USD", "crypto": "USDT", "hk": "HKD"}.get(market, "USD")
 
 
 def web_chart_url(market: str, symbol: str) -> str:
@@ -289,7 +289,7 @@ def build_market_picker(intent: str) -> ReplyModel:
 
 
 def build_ask_symbol(intent: str, market: str) -> ReplyModel:
-    examples = {"cn": "600519", "us": "NVDA", "crypto": "BTC/USDT"}
+    examples = {"cn": "600519", "us": "NVDA", "crypto": "BTC/USDT", "hk": "00700"}
     what = "查行情" if intent == "quote" else "看K线"
     mlabel = _MARKET_LABEL.get(market, market)
     text = (
@@ -383,7 +383,7 @@ def build_order_market_picker() -> ReplyModel:
 
 
 def build_order_ask_symbol(market: str) -> ReplyModel:
-    examples = {"cn": "600519", "us": "NVDA", "crypto": "BTC/USDT"}
+    examples = {"cn": "600519", "us": "NVDA", "crypto": "BTC/USDT", "hk": "00700"}
     mlabel = _MARKET_LABEL.get(market, market)
     extra = "(加密为永续合约 · 逐仓)" if market == "crypto" else ""
     text = f"{mlabel} · 请发送要下单的代码,例如 `{examples.get(market, 'BTC/USDT')}`"

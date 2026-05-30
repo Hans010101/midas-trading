@@ -13,8 +13,9 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
-# 本期只 cn / us(crypto 有独立 /crypto/* 通道 · 不复用本契约)
-MarketKind = Literal["cn", "us"]
+# cn / us 有市场首页;hk 当前仅用于交易日历状态机(无独立首页 · 阶段四再加榜单)
+# crypto 有独立 /crypto/* 通道 · 不复用本契约
+MarketKind = Literal["cn", "us", "hk"]
 
 # 状态机(0023 §3)· canonical 枚举供前端上色;label 文案可更细(午间休市 / 待开盘)
 MarketStatusCode = Literal[

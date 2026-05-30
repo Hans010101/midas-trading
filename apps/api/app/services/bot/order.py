@@ -104,7 +104,7 @@ async def load_preset(db: AsyncSession, user_id: UUID) -> PresetValues:
         spot_notional_usd=Decimal(row.spot_notional_usd),
     )
 
-_MARKET_CCY: dict[str, str] = {"cn": "CNY", "us": "USD", "crypto": "USDT"}
+_MARKET_CCY: dict[str, str] = {"cn": "CNY", "us": "USD", "crypto": "USDT", "hk": "HKD"}
 _PERP_QUOTES = ("USDT", "USDC", "BUSD", "FDUSD")
 _QTY_Q = Decimal("0.00000001")  # 8 位 · 开仓量量化(ROUND_DOWN 防超支)
 

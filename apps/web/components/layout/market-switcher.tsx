@@ -37,12 +37,20 @@ export function MarketSwitcher({ className }: { className?: string }) {
       ? 'us'
       : pathname?.startsWith('/crypto-market')
         ? 'crypto'
-        : null
+        : pathname?.startsWith('/hk-market')
+          ? 'hk'
+          : null
   // 自选汇总页(3.6)· 第四 Tab · 非市场,单独高亮
   const onWatchlist = pathname === '/watchlist'
   const active: Market | null = onWatchlist ? null : (homeMarket ?? storeMarket)
 
   function handleSelect(m: Market) {
+    // 港股(hk)阶段一:暂无市场首页 + 数据未上线(P1-3 采集后才有)→ 统一去港股占位页。
+    // 不进工作台 K 线流(避免请求未上线的 hk 数据)· 数据上线后再接工作台。
+    if (m === 'hk') {
+      router.push('/hk-market')
+      return
+    }
     // 在任一市场首页:点市场 → 跳对应市场首页(已在本页则 no-op)
     if (homeMarket) {
       if (m === homeMarket) return

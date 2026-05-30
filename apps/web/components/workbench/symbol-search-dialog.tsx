@@ -28,6 +28,7 @@ const MARKET_LABEL: Record<Market, string> = {
   cn: 'A 股',
   us: '美股',
   crypto: '加密',
+  hk: '港股',
 }
 
 const MARKET_ORDER: Market[] = ['crypto', 'us', 'cn']
@@ -149,6 +150,6 @@ function groupByMarket(results: SymbolMeta[]): Record<Market, SymbolMeta[]> {
       acc[r.market].push(r)
       return acc
     },
-    { cn: [], us: [], crypto: [] },
+    { cn: [], us: [], crypto: [], hk: [] },
   )
 }

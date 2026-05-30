@@ -31,6 +31,7 @@ const MARKET_EMOJI: Record<Market, string> = {
   cn: '🇨🇳',
   us: '🇺🇸',
   crypto: '₿',
+  hk: '🇭🇰',
 }
 
 export function WalletSection() {
