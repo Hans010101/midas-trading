@@ -40,9 +40,12 @@ export function MarketSwitcher({ className }: { className?: string }) {
         : pathname?.startsWith('/hk-market')
           ? 'hk'
           : null
-  // 自选汇总页(3.6)· 第四 Tab · 非市场,单独高亮
+  // 全球概览(ADR 0035)· 排最前的入口 + 默认落地页 · 非交易市场,单独高亮
+  const onGlobal = pathname?.startsWith('/global') ?? false
+  // 自选汇总页(3.6)· 末位 Tab · 非市场,单独高亮
   const onWatchlist = pathname === '/watchlist'
-  const active: Market | null = onWatchlist ? null : (homeMarket ?? storeMarket)
+  // 在全球/自选页时不高亮任何交易市场 Tab(否则会回退到 storeMarket 误亮)
+  const active: Market | null = onGlobal || onWatchlist ? null : (homeMarket ?? storeMarket)
 
   function handleSelect(m: Market) {
     // 港股(hk)阶段一:暂无市场首页 + 数据未上线(P1-3 采集后才有)→ 统一去港股占位页。
@@ -51,8 +54,8 @@ export function MarketSwitcher({ className }: { className?: string }) {
       router.push('/hk-market')
       return
     }
-    // 在任一市场首页:点市场 → 跳对应市场首页(已在本页则 no-op)
-    if (homeMarket) {
+    // 在任一市场首页 / 全球概览(ADR 0035):点市场 → 跳对应市场首页(已在本页则 no-op)
+    if (homeMarket || onGlobal) {
       if (m === homeMarket) return
       if (m === 'cn') router.push('/cn-market')
       else if (m === 'us') router.push('/us-market')
@@ -70,6 +73,18 @@ export function MarketSwitcher({ className }: { className?: string }) {
 
   return (
     <nav className={cn('flex items-center gap-1', className)} aria-label="市场切换">
+      <button
+        type="button"
+        onClick={() => router.push('/global')}
+        className={cn(
+          'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+          onGlobal
+            ? 'bg-midas-red text-primary-foreground'
+            : 'text-muted-foreground hover:bg-midas-red-glow hover:text-foreground',
+        )}
+      >
+        全球
+      </button>
       {MARKETS.map((m) => (
         <button
           key={m}

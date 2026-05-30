@@ -15,18 +15,16 @@ import { useQuery } from '@tanstack/react-query'
 import { MarketSwitcher } from '@/components/layout/market-switcher'
 import { TopNav } from '@/components/layout/top-nav'
 import { CnSections } from '@/components/market-home/cn-sections'
+import { QuoteCard } from '@/components/market-home/index-card'
 import { UsSections } from '@/components/market-home/us-sections'
 import { StatusPill } from '@/components/ui/direction-badge'
-import { Panel } from '@/components/ui/panel'
 import { EmptyState, LoadingNote } from '@/components/ui/state'
 import {
   fetchMarketOverview,
-  type IndexQuote,
   type MarketKind,
   type MarketStatusCode,
   type MarketStatusInfo,
 } from '@/lib/api/market-home'
-import { cn } from '@/lib/utils'
 
 const MARKET_NAME: Record<MarketKind, string> = { cn: 'A 股', us: '美股' }
 
@@ -38,15 +36,6 @@ const STATUS_TONE: Record<MarketStatusCode, 'success' | 'warn' | 'muted' | 'neut
   closed_holiday: 'neutral',
 }
 
-function fmtPoint(n: number): string {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-function fmtPct(n: number): string {
-  return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`
-}
-function fmtPoints(n: number): string {
-  return `${n >= 0 ? '+' : ''}${n.toFixed(2)}`
-}
 function fmtTime(iso: string | null): string {
   if (!iso) return ''
   try {
@@ -89,7 +78,13 @@ export function MarketHomePage({ market }: { market: MarketKind }) {
           {q.isSuccess && indices.length > 0 && (
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               {indices.map((idx) => (
-                <IndexCard key={idx.symbol} idx={idx} />
+                <QuoteCard
+                  key={idx.symbol}
+                  name={idx.name}
+                  lastPoint={idx.last_point}
+                  changePoint={idx.change_point}
+                  changePct={idx.change_pct}
+                />
               ))}
             </div>
           )}
@@ -128,17 +123,4 @@ function StatusBanner({
   )
 }
 
-function IndexCard({ idx }: { idx: IndexQuote }) {
-  const up = idx.change_pct >= 0
-  return (
-    <Panel padding="md">
-      <div className="truncate text-xs text-muted-foreground">{idx.name}</div>
-      <div className={cn('mt-1 font-mono text-2xl font-bold', up ? 'text-up' : 'text-down')}>
-        {fmtPoint(idx.last_point)}
-      </div>
-      <div className={cn('mt-0.5 font-mono text-xs', up ? 'text-up' : 'text-down')}>
-        {fmtPoints(idx.change_point)} ({fmtPct(idx.change_pct)})
-      </div>
-    </Panel>
-  )
-}
+// IndexCard 已抽到 components/market-home/index-card.tsx 的 QuoteCard(共用 · 单位感知)。
