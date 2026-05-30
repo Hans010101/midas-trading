@@ -60,7 +60,7 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
  'quote_full': {'text': '*点金 Midas · 行情*\n'
                         '\n'
                         '📊 BTC/USDT · 加密\n'
-                        '最新价 63,200.5000 USDT\n'
+                        '最新价 63,200 USDT\n'
                         '涨跌幅 🔴 +2.34%\n'
                         '成交量 12,345.678\n'
                         '资金费率 +0.0100%\n'
@@ -71,7 +71,7 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                                                    'url': 'http://localhost:3000/crypto-preview?symbol=BTCUSDT'}],
                                                  [{'text': '⬅️ 返回菜单',
                                                    'callback_data': 'menu:main'}]]}},
- 'quote_min': {'text': '*点金 Midas · 行情*\n\n📊 600519 · A股\n最新价 ¥1,688.00\n涨跌幅 🟢 -1.20%\n成交量 98,765',
+ 'quote_min': {'text': '*点金 Midas · 行情*\n\n📊 600519 · A股\n最新价 ¥1,688\n涨跌幅 🟢 -1.20%\n成交量 98,765',
                'keyboard': {'inline_keyboard': [[{'text': '📈 网页看K线',
                                                   'url': 'http://localhost:3000/cn-preview?symbol=600519'}],
                                                 [{'text': '⬅️ 返回菜单',
@@ -92,7 +92,7 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
  'watchlist_empty': {'text': '*点金 Midas · 自选*\n\n你还没有自选标的。\n在网页端工作台用 Cmd/Ctrl+K 添加。',
                      'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                         'callback_data': 'menu:main'}]]}},
- 'watchlist_rows': {'text': '*点金 Midas · 自选*\n\nNVDA · 美股  $145.00  🔴 +1.20%\nMU/USDT · 加密  —  —',
+ 'watchlist_rows': {'text': '*点金 Midas · 自选*\n\nNVDA · 美股  $145.0  🔴 +1.20%\nMU/USDT · 加密  —  —',
                     'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                        'callback_data': 'menu:main'}]]}},
  'positions_empty': {'text': '*点金 Midas · 持仓*\n\n当前没有活仓。\n所有交易均为 VIRTUAL · 模拟。',
@@ -100,8 +100,8 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                                                         'callback_data': 'menu:main'}]]}},
  'positions_rows': {'text': '*点金 Midas · 持仓* (VIRTUAL · 模拟)\n'
                             '\n'
-                            'NVDA · 美股 · 多  10 @ $140.00\n'
-                            'BTC/USDT · 永续20x · 空  0.5 @ 63,000.0000 USDT',
+                            'NVDA · 美股 · 多  10 @ $140.0\n'
+                            'BTC/USDT · 永续20x · 空  0.5 @ 63,000 USDT',
                     'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                        'callback_data': 'menu:main'}]]}},
  'order_market_picker': {'text': '*点金 Midas · 下单* (VIRTUAL · 模拟)\n\n🛒 全程虚拟资金 · 先选市场:',
@@ -124,7 +124,7 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
  'order_directions_perp': {'text': '*点金 Midas · 下单* (VIRTUAL · 模拟)\n'
                                    '\n'
                                    'BTC/USDT · 加密\n'
-                                   '当前价 63,200.0000 USDT\n'
+                                   '当前价 63,200 USDT\n'
                                    '\n'
                                    '选择操作:',
                            'keyboard': {'inline_keyboard': [[{'text': '开多',
@@ -149,9 +149,9 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
  'order_preview_perp': {'text': '*点金 Midas · 下单确认* (VIRTUAL · 模拟)\n'
                                 '\n'
                                 '开多 · BTC/USDT · 加密\n'
-                                '预估价 63,200.0000 USDT\n'
+                                '预估价 63,200 USDT\n'
                                 '数量 ~0.5\n'
-                                '名义 ~31,600.0000 USDT\n'
+                                '名义 ~31,600 USDT\n'
                                 '杠杆 20x · 逐仓\n'
                                 '\n'
                                 '⚠️ 确认后立即以【虚拟资金】下单,不可撤销。\n'
@@ -164,9 +164,9 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
  'order_preview_spot': {'text': '*点金 Midas · 下单确认* (VIRTUAL · 模拟)\n'
                                 '\n'
                                 '买入 · NVDA · 美股\n'
-                                '预估价 $145.00\n'
+                                '预估价 $145.0\n'
                                 '数量 ~10\n'
-                                '名义 ~$1,450.00\n'
+                                '名义 ~$1,450\n'
                                 '\n'
                                 '⚠️ 确认后立即以【虚拟资金】下单,不可撤销。\n'
                                 '\n'

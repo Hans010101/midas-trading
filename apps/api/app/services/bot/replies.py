@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 from app.core.config import settings
+from app.core.formatting import price_decimals
 from app.services.bot import order as order_mod
 
 if TYPE_CHECKING:
@@ -113,8 +114,10 @@ class InboundMessage:
 
 
 def _fmt_price(v: float, currency: str) -> str:
+    # 价格动态精度(ADR 金额精度规格)· 规则单一事实源见 app.core.formatting.price_decimals
+    # (旧:USDT 4 位 / 其余 2 位 → 改为按数量级动态)· 仅价格类,不碰盈亏/手续费。
     sym = _CCY_SYMBOL.get(currency, "")
-    decimals = 4 if currency == "USDT" else 2
+    decimals = price_decimals(v)
     body = f"{v:,.{decimals}f}"
     return f"{sym}{body}" if sym else f"{body} {currency}".strip()
 
