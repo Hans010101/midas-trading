@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input'
 function LoginInner() {
   const router = useRouter()
   const params = useSearchParams()
-  const nextPath = params.get('next') ?? '/cn-market'
+  const nextPath = params.get('next') ?? '/global'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)

@@ -116,7 +116,7 @@ docker-compose.override.yaml
 # =====================
 # AI / 编辑器辅助
 # =====================
-.claude/cache/
+.claude/
 .cursor/
 
 # =====================

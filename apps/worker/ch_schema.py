@@ -162,10 +162,21 @@ TTL ingested_at + INTERVAL 2 DAY
 SETTINGS index_granularity = 8192
 """
 
+# ADR 0035 阶段 A · market_index_snapshot 幂等加列(复用本表装全球指标概览 · 零迁移 · 非破坏)·
+#   与 docker/clickhouse-init.sql 保持一致 · 老库靠 ALTER IF NOT EXISTS,新库靠 init.sql
+_ALTER_OVERVIEW_CATEGORY = (
+    "ALTER TABLE market_index_snapshot ADD COLUMN IF NOT EXISTS category String DEFAULT ''"
+)
+_ALTER_OVERVIEW_UNIT = (
+    "ALTER TABLE market_index_snapshot ADD COLUMN IF NOT EXISTS unit String DEFAULT 'point'"
+)
+
 # 未来新增 CH 表 → 往这个 list 里加一条幂等 DDL 即可
 _DDL_STATEMENTS: tuple[str, ...] = (
     _CREATE_PREMIUM_INDEX,
     _CREATE_MARKET_INDEX_SNAPSHOT,
+    _ALTER_OVERVIEW_CATEGORY,
+    _ALTER_OVERVIEW_UNIT,
     _CREATE_MARKET_TRADE_CALENDAR,
     _CREATE_CN_SPOT_SNAPSHOT,
     _CREATE_CN_MARKET_BREADTH,

@@ -26,8 +26,8 @@ interface NavItem {
   matchPrefix?: string
 }
 
-// 三市场首页路径(0023 阶段③ · 市场首页为产品主入口)
-const MARKET_HOME_PATHS = ['/cn-market', '/us-market', '/crypto-market'] as const
+// 市场主入口路径(全球概览默认 + 三市场首页 · ADR 0035 起全球概览为默认落地页)
+const MARKET_HOME_PATHS = ['/global', '/cn-market', '/us-market', '/crypto-market'] as const
 
 const NAV_ITEMS: NavItem[] = [
   { href: '/account', label: '我的账户' },
@@ -38,8 +38,8 @@ export function TopNav() {
   const pathname = usePathname()
   const { data: session, status } = useSession()
 
-  // "市场" 进当前所在市场首页(产品主入口),不在任一市场首页时默认 A 股。
-  const marketHref = MARKET_HOME_PATHS.find((p) => pathname?.startsWith(p)) ?? '/cn-market'
+  // "市场" 进当前所在市场页(产品主入口),不在任一市场页时默认全球概览(ADR 0035)。
+  const marketHref = MARKET_HOME_PATHS.find((p) => pathname?.startsWith(p)) ?? '/global'
   const onMarketHome = MARKET_HOME_PATHS.some((p) => pathname?.startsWith(p))
 
   return (

@@ -35,10 +35,12 @@ from app.services.clickhouse_market_home import (
     insert_index_snapshots,
     insert_trade_calendar,
 )
+from app.services.clickhouse_overview import insert_overview_quotes
 from app.services.clickhouse_us_market import insert_us_sectors, insert_us_spot
 from app.services.cn_market import aggregate_breadth
 from app.services.data_sources.cn_source import AKShareCnSource
 from app.services.data_sources.us_source import YFinanceUsSource
+from app.services.global_overview_config import GLOBAL_OVERVIEW_YF
 from app.services.market_home_config import CN_INDEX_CODES, US_INDICES
 from app.services.us_market import aggregate_sectors
 from app.services.us_pool import US_POOL
@@ -100,6 +102,33 @@ async def _us_index_scan_async() -> dict[str, Any]:
         items = await source.fetch_indices(US_INDICES)
         n = await insert_index_snapshots(ch, items)
         logger.info("[market.us_index_scan] indices written=%d", n)
+        return {"written": n}
+    finally:
+        await ch.close()
+
+
+# ============================================================================
+# 2b · 全球指标概览 · 每 10min · yfinance(ADR 0035 阶段 A · 加密由 API 读 crypto_ticker_24h)
+# ============================================================================
+
+
+@shared_task(name="tasks.market.global_overview_scan")
+def global_overview_scan() -> dict[str, Any]:
+    return asyncio.run(_global_overview_scan_async())
+
+
+async def _global_overview_scan_async() -> dict[str, Any]:
+    """yfinance 拉全球指标(指数/商品/外汇/债券)→ market_index_snapshot(category 标记)。
+
+    加密不在此采(复用现有 ccxt 的 crypto_ticker_24h · 由 /overview/global API 读时合并)。
+    单个 symbol 失败不致命(fetch_overview_quotes 内部跳过)· 红线:只 GET + INSERT。
+    """
+    source = YFinanceUsSource()
+    ch = await _get_ch_client()
+    try:
+        items = await source.fetch_overview_quotes(GLOBAL_OVERVIEW_YF)
+        n = await insert_overview_quotes(ch, items)
+        logger.info("[market.global_overview_scan] overview written=%d", n)
         return {"written": n}
     finally:
         await ch.close()

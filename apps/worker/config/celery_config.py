@@ -90,6 +90,12 @@ beat_schedule = {
         "schedule": crontab(minute="*/2", hour="20-23,0-5"),
         "options": {"expires": 110},
     },
+    "market-global-overview-scan": {
+        "task": "tasks.market.global_overview_scan",
+        # 全球指标跨时区(指数/商品/外汇/债券)· 每 10 分钟刷一次 · 概览容忍 ~15min 延迟(ADR 0035)。
+        "schedule": crontab(minute="*/10"),
+        "options": {"expires": 590},
+    },
     "market-cn-calendar-refresh": {
         "task": "tasks.market.cn_calendar_refresh",
         # 交易日历慢变 · 每日 08:00 CST 开盘前刷一次(全年交易日 · 给状态机判交易日)。

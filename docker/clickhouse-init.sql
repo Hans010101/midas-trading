@@ -223,6 +223,12 @@ ORDER BY (market, symbol, ts)
 TTL ingested_at + INTERVAL 7 DAY
 SETTINGS index_granularity = 8192;
 
+-- ADR 0035 阶段 A · 复用本表装全球指标概览(指数/商品/外汇/债券)· 幂等加列(非破坏):
+--   category 分类(index/commodity/forex/bond/crypto)· unit 显示单位 · market 列存地区码
+--   cn/us 市场首页旧行 category='' 默认值 · 旧读路径(WHERE market IN ('cn','us'))不受影响
+ALTER TABLE market_index_snapshot ADD COLUMN IF NOT EXISTS category String DEFAULT '';
+ALTER TABLE market_index_snapshot ADD COLUMN IF NOT EXISTS unit String DEFAULT 'point';
+
 -- market_trade_calendar · 交易日历(目前仅 cn · AKShare tool_trade_date_hist_sina)
 --   给市场状态机判「今天是不是交易日」· 美股用 market_calendar 硬编码节假日,不入此表
 CREATE TABLE IF NOT EXISTS market_trade_calendar (
