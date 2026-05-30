@@ -25,6 +25,7 @@ import yfinance as yf
 
 from app.schemas.market import Kline, Period, SymbolMeta
 from app.schemas.market_home import IndexQuote
+from app.schemas.overview import OverviewQuote
 from app.schemas.us_market import UsSpotRow
 from app.services.data_sources.base import BaseDataSource
 from app.services.data_sources.exceptions import (
@@ -148,6 +149,56 @@ class YFinanceUsSource(BaseDataSource):
             out.append(
                 IndexQuote(
                     market="us", symbol=symbol, name=name, ts=now_utc,
+                    last_point=last, prev_close=prev,
+                    change_point=last - prev,
+                    change_pct=((last - prev) / prev * 100) if prev > 0 else 0.0,
+                ),
+            )
+        return out
+
+    # ===========================
+    # 全球指标概览(ADR 0035 阶段 A)· 通用 ticker 报价 · 地区感知 · 解耦交易维度
+    # ===========================
+
+    async def fetch_overview_quotes(
+        self, targets: tuple[tuple[str, str, str, str, str], ...],
+    ) -> list[OverviewQuote]:
+        """全球指标快照 · yfinance 通用 ticker · targets=(symbol, 名, 地区码, category, unit)。
+
+        单个失败不致命 · 跳过(其余仍展示)· 与 fetch_indices 同款 history 取 last/prev。
+        """
+
+        async def _do() -> list[OverviewQuote]:
+            return await self._run_blocking(self._fetch_overview_sync, targets)
+
+        return await self._retry(op="fetch_overview", symbol="<overview>", coro_factory=_do)
+
+    def _fetch_overview_sync(
+        self, targets: tuple[tuple[str, str, str, str, str], ...],
+    ) -> list[OverviewQuote]:
+        now_utc = datetime.now(tz=UTC)
+        out: list[OverviewQuote] = []
+        for symbol, name, region, category, unit in targets:
+            try:
+                df = yf.Ticker(symbol).history(period="5d", interval="1d", auto_adjust=True)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("[yfinance] 概览 %s 拉取失败 · 跳过:%s", symbol, e)
+                continue
+            if df is None or df.empty or "Close" not in df.columns:
+                logger.warning("[yfinance] 概览 %s 无数据 · 跳过", symbol)
+                continue
+            df = df.dropna(subset=["Close"])
+            closes = [float(x) for x in df["Close"].tolist()]
+            if not closes:
+                continue
+            last = closes[-1]
+            prev = closes[-2] if len(closes) > 1 else last  # noqa: PLR2004
+            if last <= 0:
+                continue
+            out.append(
+                OverviewQuote(
+                    market=region, symbol=symbol, name=name,
+                    category=category, unit=unit, ts=now_utc,
                     last_point=last, prev_close=prev,
                     change_point=last - prev,
                     change_pct=((last - prev) / prev * 100) if prev > 0 else 0.0,
