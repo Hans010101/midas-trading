@@ -4,7 +4,7 @@
 - |v| ≥ 1000        → 0 位(整数,如 BTC 95234)
 - 100 ≤ |v| < 1000  → 1 位
 - 1   ≤ |v| < 100   → 2 位
-- |v| < 1           → 8 位(小币种细粒度)
+- |v| < 1           → 最多 8 位、去尾零(0.5→0.5;0.00012345→0.00012345)
 
 ★ 只作用于「价格」类显示(行情价 / 预估价 / 成交价 / 强平价 / 名义 等)。
 盈亏(pnl)/ 手续费(fee)/ 账户余额是「金额类」,固定精度、不走本规则。
@@ -40,3 +40,19 @@ def price_decimals(value: float) -> int:
     if magnitude >= _PRICE_2DP_FROM:
         return _DECIMALS_2DP
     return _DECIMALS_SUB1
+
+
+def format_price_number(value: float) -> str:
+    """价格数字串(千分位 + 动态小数位)· 单一事实源 · 不含币种符号。
+
+    两个通道的价格格式化(replies._fmt_price / templates._fmt_price)都套这一函数,
+    只在外层补各自的币种符号 / 后缀 —— 改这里,TG + 飞书 + 推送同步生效。
+
+    <1 档(8 位)去掉末尾多余的 0(0.50000000 → 0.5;0.00012345 完整保留);
+    ≥1 各档(0 / 1 / 2 位)按位数原样保留、不去零(95234 / 523.4 / 12.35)。
+    """
+    decimals = price_decimals(value)
+    text = f"{value:,.{decimals}f}"
+    if decimals == _DECIMALS_SUB1:  # 仅 <1 档去尾零;其余档整数 / 定位小数不动
+        text = text.rstrip("0").rstrip(".")
+    return text

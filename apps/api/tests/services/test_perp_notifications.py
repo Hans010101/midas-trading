@@ -45,6 +45,8 @@ def test_perp_filled_open_template() -> None:
     assert "逐仓 20x" in text
     assert "开多" in text
     assert "已实现盈亏" not in text  # 开仓不显示盈亏
+    assert "成交价 63,200 USDT" in text  # 价格动态精度:63200 → 0 位
+    assert "手续费 25.28 USDT" in text  # 🔴 USDT 手续费固定 2 位(收尾调整 · 旧为 4 位)
     assert DISCLAIMER in text
 
 
@@ -59,7 +61,8 @@ def test_perp_filled_close_template_shows_pnl() -> None:
     )
     assert "平多" in text
     assert "全仓 10x" in text
-    assert "已实现盈亏 +" in text  # 盈利带 + 号
+    assert "已实现盈亏 +374.72 USDT" in text  # 🔴 USDT 盈亏固定 2 位(收尾调整)· 盈利带 + 号
+    assert "手续费 3.20 USDT" in text  # USDT 手续费 2 位(3.2 → 3.20)
     assert DISCLAIMER in text
 
 
@@ -74,8 +77,8 @@ def test_liquidation_isolated_template() -> None:
     assert "强制平仓" in text
     assert "BTCUSDT" in text
     assert "多头" in text
-    assert "强平价" in text
-    assert "已实现盈亏 -" in text  # 亏损带 - 号
+    assert "强平价 60,100 USDT" in text  # 价格动态精度:60100 → 0 位
+    assert "已实现盈亏 -1,580.00 USDT" in text  # 🔴 USDT 盈亏固定 2 位(收尾调整)· 亏损带 - 号
     assert DISCLAIMER in text
 
 

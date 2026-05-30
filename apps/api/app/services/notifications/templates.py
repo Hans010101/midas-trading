@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from app.core.formatting import price_decimals
+from app.core.formatting import format_price_number
 from app.services.notifications.events import (
     AlertTriggeredEvent,
     LiquidationEvent,
@@ -29,21 +29,22 @@ _OP_SYMBOL: dict[str, str] = {"gt": ">", "gte": "≥", "lt": "<", "lte": "≤"}
 
 
 def _fmt_money(amount: Decimal, currency: str) -> str:
-    """金额类(盈亏 / 手续费 / 余额)· 固定精度(USDT 4 位 / 其余 2 位)· 不走动态。"""
-    decimals = 4 if currency == "USDT" else 2
-    formatted = f"{amount:,.{decimals}f}"
+    """金额类(盈亏 / 手续费 / 余额)· 全币种固定 2 位 · 不走动态(价格才走 _fmt_price)。
+
+    产品定调:USDT 也统一 2 位(虚拟交易、手续费象征性,接受极小值显示 0.00)。
+    """
+    formatted = f"{amount:,.2f}"
     if currency == "USDT":
         return f"{formatted} USDT"
     return f"{CURRENCY_SYMBOL.get(currency, currency)}{formatted}"
 
 
 def _fmt_price(amount: Decimal, currency: str) -> str:
-    """价格类(成交价 / 强平价 / 现价 / 名义)· 动态精度(规则同 bot · price_decimals)。
+    """价格类(成交价 / 强平价 / 现价 / 名义)· 动态精度 + <1 去尾零(单一事实源 format_price_number)。
 
-    ★ 只换「小数位」,币种符号 / 千分位包装与 _fmt_money 保持一致 → 非价格行字节不变。
+    ★ 只换「数字串」,币种符号 / 千分位包装与 _fmt_money 一致 → 非价格行字节不变。
     """
-    decimals = price_decimals(float(amount))
-    formatted = f"{amount:,.{decimals}f}"
+    formatted = format_price_number(float(amount))
     if currency == "USDT":
         return f"{formatted} USDT"
     return f"{CURRENCY_SYMBOL.get(currency, currency)}{formatted}"
