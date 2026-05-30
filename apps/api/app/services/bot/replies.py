@@ -34,6 +34,13 @@ if TYPE_CHECKING:
     from app.services.bot.quiet import QuietHoursView
 
 DISCLAIMER = "仅供参考,不构成投资建议"
+# ADR 0032 阶段四-A · 交易类免责口径(下单确认 / 成交 / 拒单)· 对齐 templates 成交回执。
+TRADE_DISCLAIMER = "本次为模拟交易,不构成投资建议"
+# 免责分级(阶段四-A · 同时作用于 TG + 飞书,因共享 ReplyModel.disclaimer):
+#   · 展示/导航/配置/系统提示 → disclaimer=None(去免责)
+#   · 交易动作(下单确认 / 成交 / 拒单)→ 保留(确认+结果用 TRADE_DISCLAIMER · 回执 body 自带)
+# 🔴 合规红线:默认 disclaimer=DISCLAIMER(fail-safe · 漏设也带免责);交易类必带、不可误删
+#   (守卫测试 test_bot_golden 钉死方向)。
 _BRAND = "点金 Midas"
 _MARKET_LABEL: dict[str, str] = {"cn": "A股", "us": "美股", "crypto": "加密"}
 _CCY_SYMBOL: dict[str, str] = {"CNY": "¥", "USD": "$", "USDT": ""}
@@ -266,12 +273,17 @@ def build_main_menu() -> ReplyModel:
         "点下方按钮选择功能 ↓\n\n"
         "也可直接发送 `/price <代码>` 查行情"
     )
-    return ReplyModel(text=text, title="迷你终端", buttons=_main_menu_buttons())
+    return ReplyModel(
+        text=text, title="迷你终端", disclaimer=None, buttons=_main_menu_buttons(),
+    )
 
 
 def build_market_picker(intent: str) -> ReplyModel:
     what = "查行情" if intent == "quote" else "看K线"
-    return ReplyModel(text=f"{what} —— 先选市场:", buttons=_market_picker_buttons(intent))
+    return ReplyModel(
+        text=f"{what} —— 先选市场:", disclaimer=None,
+        buttons=_market_picker_buttons(intent),
+    )
 
 
 def build_ask_symbol(intent: str, market: str) -> ReplyModel:
@@ -282,7 +294,7 @@ def build_ask_symbol(intent: str, market: str) -> ReplyModel:
         f"{mlabel} · {what}\n"
         f"请发送代码,例如 `{examples.get(market, 'BTC/USDT')}`"
     )
-    return ReplyModel(text=text, buttons=_back_buttons())
+    return ReplyModel(text=text, disclaimer=None, buttons=_back_buttons())
 
 
 def build_quote(quote: SymbolQuote) -> ReplyModel:
@@ -304,6 +316,7 @@ def build_quote(quote: SymbolQuote) -> ReplyModel:
     return ReplyModel(
         text="\n".join(lines),
         title="行情",
+        disclaimer=None,
         buttons=_quote_buttons(quote.market, quote.symbol),
     )
 
@@ -314,7 +327,7 @@ def build_symbol_not_found(market: str, symbol: str) -> ReplyModel:
         f"未找到 {symbol}({mlabel})的数据。\n"
         "请确认代码,或换一个再试(只查已采集标的)。"
     )
-    return ReplyModel(text=text, buttons=_back_buttons())
+    return ReplyModel(text=text, disclaimer=None, buttons=_back_buttons())
 
 
 def build_kline_link(market: str, symbol: str) -> ReplyModel:
@@ -323,25 +336,30 @@ def build_kline_link(market: str, symbol: str) -> ReplyModel:
         f"📈 {symbol} · {mlabel}\n"
         "点下方按钮在网页打开完整 K 线图(含缠论 / 指标)。"
     )
-    return ReplyModel(text=text, title="K线", buttons=_quote_buttons(market, symbol))
+    return ReplyModel(
+        text=text, title="K线", disclaimer=None,
+        buttons=_quote_buttons(market, symbol),
+    )
 
 
 def build_watchlist(rows: list[WatchlistRow]) -> ReplyModel:
     if not rows:
         text = "你还没有自选标的。\n在网页端工作台用 Cmd/Ctrl+K 添加。"
-        return ReplyModel(text=text, title="自选", buttons=_back_buttons())
+        return ReplyModel(text=text, title="自选", disclaimer=None, buttons=_back_buttons())
     lines = []
     for r in rows:
         mlabel = _MARKET_LABEL.get(r.market, r.market)
         price = "—" if r.price is None else _fmt_price(r.price, _market_ccy(r.market))
         lines.append(f"{r.symbol} · {mlabel}  {price}  {_fmt_pct(r.change_pct)}")
-    return ReplyModel(text="\n".join(lines), title="自选", buttons=_back_buttons())
+    return ReplyModel(
+        text="\n".join(lines), title="自选", disclaimer=None, buttons=_back_buttons(),
+    )
 
 
 def build_positions(rows: list[PositionRow]) -> ReplyModel:
     if not rows:
         text = "当前没有活仓。\n所有交易均为 VIRTUAL · 模拟。"
-        return ReplyModel(text=text, title="持仓", buttons=_back_buttons())
+        return ReplyModel(text=text, title="持仓", disclaimer=None, buttons=_back_buttons())
     lines = []
     for r in rows:
         mlabel = _MARKET_LABEL.get(r.market, r.market)
@@ -351,14 +369,14 @@ def build_positions(rows: list[PositionRow]) -> ReplyModel:
         lines.append(f"{r.symbol} · {tag} · {side_cn}  {_fmt_qty(r.quantity)} @ {entry}")
     return ReplyModel(
         text="\n".join(lines), title="持仓", badge=_VIRTUAL_BADGE,
-        buttons=_back_buttons(),
+        disclaimer=None, buttons=_back_buttons(),
     )
 
 
 def build_order_market_picker() -> ReplyModel:
     return ReplyModel(
         text="🛒 全程虚拟资金 · 先选市场:", title="下单", badge=_VIRTUAL_BADGE,
-        buttons=_order_market_buttons(),
+        disclaimer=None, buttons=_order_market_buttons(),
     )
 
 
@@ -368,7 +386,10 @@ def build_order_ask_symbol(market: str) -> ReplyModel:
     extra = "(加密为永续合约 · 逐仓)" if market == "crypto" else ""
     text = f"{mlabel} · 请发送要下单的代码,例如 `{examples.get(market, 'BTC/USDT')}`"
     # 旧实现 header 为 f"... 下单* {extra}" · 非 crypto 时 extra="" 留一个尾随空格(字节级保真)
-    return ReplyModel(text=text, title="下单", badge=f" {extra}", buttons=_back_buttons())
+    return ReplyModel(
+        text=text, title="下单", badge=f" {extra}", disclaimer=None,
+        buttons=_back_buttons(),
+    )
 
 
 def build_order_directions(market: str, symbol: str, price: float | None) -> ReplyModel:
@@ -378,7 +399,7 @@ def build_order_directions(market: str, symbol: str, price: float | None) -> Rep
     )
     text = f"{symbol} · {mlabel}\n{price_line}\n\n选择操作:"
     return ReplyModel(
-        text=text, title="下单", badge=_VIRTUAL_BADGE,
+        text=text, title="下单", badge=_VIRTUAL_BADGE, disclaimer=None,
         buttons=_order_direction_buttons(market),
     )
 
@@ -395,9 +416,10 @@ def build_order_preview(preview: OrderPreview) -> ReplyModel:
         lines.append(f"杠杆 {preview.leverage}x · 逐仓")
     lines.append("")
     lines.append("⚠️ 确认后立即以【虚拟资金】下单,不可撤销。")
+    # 🔴 交易类:下单确认卡保留免责(决策 ②:交易口径「本次为模拟交易,不构成投资建议」)
     return ReplyModel(
         text="\n".join(lines), title="下单确认", badge=_VIRTUAL_BADGE,
-        buttons=_order_confirm_buttons(),
+        disclaimer=TRADE_DISCLAIMER, buttons=_order_confirm_buttons(),
     )
 
 
@@ -406,11 +428,14 @@ def build_order_unavailable() -> ReplyModel:
         "无法下单:可能暂无最新报价,或(平仓时)当前没有可平持仓。\n"
         "请确认代码 / 持仓后再试。"
     )
-    return ReplyModel(text=text, title="下单", buttons=_back_buttons())
+    return ReplyModel(text=text, title="下单", disclaimer=None, buttons=_back_buttons())
 
 
 def build_order_result(title: str, detail: str) -> ReplyModel:
-    return ReplyModel(text=detail, title=title, buttons=_back_buttons())
+    # 🔴 交易类:成交 / 拒单结果保留免责(交易口径)
+    return ReplyModel(
+        text=detail, title=title, disclaimer=TRADE_DISCLAIMER, buttons=_back_buttons(),
+    )
 
 
 def build_order_receipt(body: str) -> ReplyModel:
@@ -432,7 +457,7 @@ def build_order_symbol_invalid(market: str, raw: str) -> ReplyModel:
         "cn": "600519 / 000001",
     }.get(market, "BTC / NVDA / 600519")
     text = f"未找到「{raw}」对应的标的,请重新输入。\n例:{eg}"
-    return ReplyModel(text=text, title="下单", buttons=_back_buttons())
+    return ReplyModel(text=text, title="下单", disclaimer=None, buttons=_back_buttons())
 
 
 def build_order_direction_hint() -> ReplyModel:
@@ -441,15 +466,18 @@ def build_order_direction_hint() -> ReplyModel:
         "请点上方按钮选择方向(开多 / 开空 / 平仓)。\n"
         "如需更换标的,请点「🛒 下单」重新开始。"
     )
-    return ReplyModel(text=text, title="下单", buttons=_back_buttons())
+    return ReplyModel(text=text, title="下单", disclaimer=None, buttons=_back_buttons())
 
 
 def build_order_cancelled() -> ReplyModel:
-    return ReplyModel(text="已取消,未下单。", title="下单", buttons=_main_menu_buttons())
+    return ReplyModel(
+        text="已取消,未下单。", title="下单", disclaimer=None,
+        buttons=_main_menu_buttons(),
+    )
 
 
 def build_rate_limited() -> ReplyModel:
-    return ReplyModel(text="操作过于频繁,请稍后再试(防滥用限流)。")
+    return ReplyModel(text="操作过于频繁,请稍后再试(防滥用限流)。", disclaimer=None)
 
 
 def build_alert_rules(rows: list[AlertRuleRow], *, note: str | None = None) -> ReplyModel:
@@ -461,7 +489,10 @@ def build_alert_rules(rows: list[AlertRuleRow], *, note: str | None = None) -> R
     else:
         body = "🔔=启用 / 🔕=停用 · 点规则可切换状态;全量新建在网页端。"
     text = f"{note}\n\n{body}" if note else body
-    return ReplyModel(text=text, title="告警规则", buttons=_alert_rules_buttons(rows))
+    return ReplyModel(
+        text=text, title="告警规则", disclaimer=None,
+        buttons=_alert_rules_buttons(rows),
+    )
 
 
 def build_quiet_hours(view: QuietHoursView) -> ReplyModel:
@@ -483,7 +514,8 @@ def build_quiet_hours(view: QuietHoursView) -> ReplyModel:
         "按下方按钮调整开关 / 起止小时;时区切换请到网页端。",
     ]
     return ReplyModel(
-        text="\n".join(lines), title="安静时段", buttons=_quiet_hours_buttons(view),
+        text="\n".join(lines), title="安静时段", disclaimer=None,
+        buttons=_quiet_hours_buttons(view),
     )
 
 
@@ -492,9 +524,9 @@ def build_not_bound() -> ReplyModel:
         "你的 Telegram 还没绑定 Midas 账号。\n"
         "请到网页端【设置 → 消息推送】点「绑定 Telegram」,按提示完成绑定后再用。"
     )
-    return ReplyModel(text=text)
+    return ReplyModel(text=text, disclaimer=None)
 
 
 def build_hint() -> ReplyModel:
     text = "发送 /menu 打开功能菜单,或 `/price <代码>` 直接查行情。"
-    return ReplyModel(text=text, buttons=_main_menu_buttons())
+    return ReplyModel(text=text, disclaimer=None, buttons=_main_menu_buttons())
