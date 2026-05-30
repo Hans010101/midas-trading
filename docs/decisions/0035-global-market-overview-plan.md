@@ -1,6 +1,8 @@
 # ADR 0035 · 全球指标概览模块 · 实施细案
 
-- 状态:**Proposed(待审)**
+- 状态:**阶段A 已实施并上线**(2026-05-30 · merge `8fb3b30` + hotfix `0ee1d8a` · 部署 run 26685966333 绿 · prod `/api/v1/overview/global` 200 实测有数据)· 阶段B(地图)待开工
+  - 阶段A 落地:CH 幂等加 category/unit 列 · yfinance 采集(每 10min · 20 标的)+ 加密复用 ccxt · 只读 API `/overview/global` · 前端 QuoteCard 抽取 + `/global` 响应式卡片页 + 切换器「全球」入口 + 默认落地页改 `/global`(四市场零回归实证)。
+  - ⚠️ 阶段A 上线后真机抽查翻车 2 处(已修 · 详见文末「阶段A 实施记录」):① 读路径误传 ClickHouseClient 包装层(应传 `._client`,沿用 cn/us 约定)② category/unit 列只靠 worker `worker_ready` 信号建 → 跨服务竞态 → 改 API lifespan 自保幂等建列。
 - 关联:`docs/research/global-market-overview-feasibility.md`(正文 + 附录 D 地图)· 复用 0023 阶段③ 市场首页基建
 - 决策背景:回测暂不做 / 港股暂停等延迟补测 → 集中做全球指标概览。
 - 模块目标:**一页全球核心市场指标概览**。Web 宽屏 = 左世界地图(各市场标关键指标)+ 右指标列表;移动端 = 富途式卡片网格。
@@ -151,3 +153,20 @@ overview 行的 `market` 是**地区码**(us/jp/hk/de/global/fx/crypto),**不是
 
 > 待审重点:**§1 数据层(零迁移复用 + 加 category/unit 列)** · **§1.4 不碰交易维度(独立红线)** · **§3 前端务实路径(先卡片基座、地图后置)** · **§5 分阶段(A 能独立上线)**。
 > 审过 + 拍板(尤其 §6 的清单 + 地图选型)→ 按**阶段 A** 先写代码。本轮只出细案。
+
+---
+
+## 阶段A 实施记录(2026-05-30 · 已上线)
+
+落地版本对 §6 拍板做了 1 处收窄:首批清单 = 20 个 yfinance 标的(8 指数 / 5 商品 / 4 外汇 / 3 债券)+ 2 加密(BTC/ETH),**无指数期货 / 无天然气 / 无英镑**(产品负责人拍板收窄版)。债券 unit=yield_pct 涨跌 bp;加密复用 ccxt;入口设为默认落地页 `/global`。
+
+### ⚠️ 上线后真机抽查翻车 2 处(均「接缝处必有翻车」· 模块单测全过但集成层没测 · 0002 教训)
+
+合 main 部署绿、容器重建 healthy,但真机抽查 `GET /api/v1/overview/global` 返 **500**(四市场 + `/global` 页壳都正常)。两个根因叠加:
+
+1. **读路径误传包装层**:`ClickHouseClient`(`app.state.clickhouse`)是包装类,**不暴露通用 `.query()`**;既有 cn.py/us.py 约定是把 `ch._client`(底层 `AsyncClient`)传给 service 函数。overview.py 直接传了 `ch` → `client.query(...)` AttributeError → 500。**根因**:read 路径只测了 config/schema + 裸 SQL,从没走真实 wrapper 的集成测试。**修**:`select_*_overview(ch._client)`。
+2. **schema 依赖赌 worker 时序**:`category`/`unit` 列原本只靠 worker `worker_ready` 信号 `ensure_crypto_ch_tables()` 建 → 跨服务竞态(worker 未起 / DDL 列表中途某条失败会 abort 整个循环)→ API 查 `category` 列 CH Code 47 UNKNOWN_IDENTIFIER → 二次 500。**修**:API lifespan 自保幂等 `ensure_overview_columns()`(`ADD COLUMN IF NOT EXISTS` · 吞异常不阻断启动)——**reader 自己保证 schema 依赖,不赌别的服务时序**。
+
+**修复闭环**(hotfix `0ee1d8a`):补回集成测试(真实 wrapper→`._client`→读路径打本地 CH + 真实端点函数返合法响应)· 全量回归 540 passed · 部署 run 26685966333 绿 · prod 端点转 200 且有实数据(标普/纳指/道指…)。
+
+> 教训沉淀:**只读端点接 CH 必须走 `ch._client`(包装层无通用 query);跨服务的 schema 依赖,消费方(API)自己 lifespan 幂等保证,绝不赌生产方(worker)信号时序。**
