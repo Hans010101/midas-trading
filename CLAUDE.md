@@ -67,6 +67,8 @@ M0 验收标准:陌生人能注册 → 看跨市场 K 线 → 建虚拟单 → �
 - 卡在同一个错误超过 3 次才升级给我
 - 不要把验证责任丢给我(例如:"请你跑一下试试" → 错。应该是"我跑了,输出是 X,通过")
 - 报告里说"完成"必须等于"实测通过",写完没跑不算完成
+- **自验绝不接会吞退出码的管道**(`命令 2>&1 | tail` 让退出码 = `tail` 的 0,吞掉真实 exit 1)。lint / build / test 必须直接取命令真实退出码:`命令 > 日志; EXIT=$?` 或 `set -o pipefail`,非零即失败、如实报。详见 docs/decisions/0033 翻车。
+- **部署成功以三者为准,绝不凭「代码已合 main」就报成功**:① GitHub Actions 状态绿(`gh run watch --exit-status` / `gh run view` conclusion=success)· ② 服务器 `docker compose ps` 容器真重建(CREATED 是本次 + healthy)· ③ 改了显示的话真机抽查。详见 docs/decisions/0033。
 
 ### 3. 自主决策 · 事后审计
 - 默认自己决策,不要每个小事都问
@@ -133,6 +135,8 @@ M0 验收标准:陌生人能注册 → 看跨市场 K 线 → 建虚拟单 → �
   详见 docs/decisions/0002-data-sources-pitfalls.md § 翻车 9/10 —— `pydantic[email]` / `passlib[bcrypt,argon2]` 这类括号写法,在代码用了非 default backend 时必须更新 deps;docker build 阶段加冒烟 import test 提早暴露。
 - **SQL `ORDER BY ... LIMIT N` 凡涉及「最新 / 最旧」语义,必须显式 `DESC` + Python reverse,不依赖排序方向的偶然。**
   详见 docs/decisions/0010-data-accuracy-diagnosis.md —— `select_kline` 用了 `ORDER BY ts ASC LIMIT N`,语义是「最早 N 根」而不是「最近 N 根」;`limit=1` 时取到 2018-06 NVDA $3.15(后复权古价),撮合 / 30s 报价 / 价格异动 / 浮盈估值整条链路全错,显示成 NVDA $6.55 / BTC $26K。修法:DB 端 `DESC LIMIT N` + Python `list.reverse()` 还原调用方期待的 ASC 升序契约。任何「最新 / 最近 / 最旧 / 最早」语义的窗口查询都必须走这套显式模式,绝不依赖隐式排序。
+- **自验脚本绝不用 `| tail` / `| head` 等吞退出码的管道判断成败 —— 必须直接取命令真实 exit code。**
+  详见 docs/decisions/0033-self-verify-exit-code-swallow.md —— `pnpm lint 2>&1 | tail -5 && pnpm build 2>&1 | tail -4` 让管道退出码 = `tail` 的 0,把 `pnpm` 的 exit 1 吞成 0,误报「build 过」;实则 web 镜像 `next build` 因一个未用变量(`minutes` 改文案后失去引用)lint error 失败,合 main 后 update.sh 在 build 步(3/7)退出、回滚到上一稳定版,新代码没真正上线。本地其实也会失败(非环境差异);CI / update.sh 回滚都正常,纯粹是自验吞了退出码。正确写法:`命令 > 日志; EXIT=$?`(redirect 保留退出码)或 `set -o pipefail`,非零即失败、如实报;且部署成功必以 Actions 绿 + docker ps 真重建为准(协作铁律 §2)。
 
 ## 待用环境变量(后续阶段才接,当前 Task 不动)
 
