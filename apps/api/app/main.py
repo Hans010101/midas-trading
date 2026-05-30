@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.core.logging import configure_logging
 from app.core.redis_client import close_redis
 from app.services.clickhouse_client import ClickHouseClient
+from app.services.clickhouse_overview import ensure_overview_columns
 from app.services.data_sources.binance_futures_source import BinanceFuturesSource
 from app.services.data_sources.cn_source import AKShareCnSource
 from app.services.data_sources.crypto_source import CcxtBinanceCryptoSource
@@ -30,6 +31,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     挂到 app.state;关停时按 LIFO 顺序释放。
     """
     app.state.clickhouse = await ClickHouseClient.create()
+    # ADR 0035 阶段A · reader 自保:幂等保证 overview 读依赖的 category/unit 列存在
+    # (不依赖 worker worker_ready 时序 · 内部吞异常不阻断启动)
+    await ensure_overview_columns(app.state.clickhouse._client)  # noqa: SLF001
     app.state.ccxt_binance = ccxt_async.binance({"enableRateLimit": True, "timeout": 30_000})
     app.state.cn_source = AKShareCnSource()
     app.state.us_source = YFinanceUsSource()

@@ -25,6 +25,26 @@ _OVERVIEW_COLUMNS = (
     "last_point", "prev_close", "change_point", "change_pct",
 )
 
+# market_index_snapshot 幂等加列(与 worker ch_schema.py / docker/clickhouse-init.sql 一致)
+_ENSURE_OVERVIEW_DDL = (
+    "ALTER TABLE market_index_snapshot ADD COLUMN IF NOT EXISTS category String DEFAULT ''",
+    "ALTER TABLE market_index_snapshot ADD COLUMN IF NOT EXISTS unit String DEFAULT 'point'",
+)
+
+
+async def ensure_overview_columns(client: AsyncClient) -> None:
+    """API 启动幂等保证 market_index_snapshot 有 category/unit 列(ADR 0035 阶段A)。
+
+    读路径 select_latest_overview 依赖这两列。不能只靠 worker 的 worker_ready 信号建列:
+    跨服务竞态(worker 未起 / DDL 中途失败)→ API 查 category 列直接 500。
+    reader 自保 · 幂等 ADD COLUMN IF NOT EXISTS · 失败只告警不阻断 API 启动。
+    """
+    try:
+        for ddl in _ENSURE_OVERVIEW_DDL:
+            await client.command(ddl)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[overview] 保证 category/unit 列失败(忽略 · 不阻断启动):%s", exc)
+
 
 def _aware_utc(dt: datetime) -> datetime:
     if dt.tzinfo is None:

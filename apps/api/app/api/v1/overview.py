@@ -40,8 +40,9 @@ _CRYPTO_SYMBOLS = tuple(sym for sym, _ in CRYPTO_OVERVIEW)
     "纯展示不涉及交易,行情仅供参考。",
 )
 async def global_overview(ch: ClickHouseDep) -> GlobalOverviewResponse:
-    yf_items = await select_latest_overview(ch)
-    crypto_items = await select_crypto_overview(ch, _CRYPTO_SYMBOLS)
+    # ch 是 ClickHouseClient 包装层(不暴露通用 query)· 传底层 AsyncClient(沿用 cn.py/us.py 约定)
+    yf_items = await select_latest_overview(ch._client)  # noqa: SLF001
+    crypto_items = await select_crypto_overview(ch._client, _CRYPTO_SYMBOLS)  # noqa: SLF001
     all_items = [*yf_items, *crypto_items]
 
     groups: list[OverviewGroup] = []
