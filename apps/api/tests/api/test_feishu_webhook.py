@@ -13,12 +13,17 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+from typing import Any
 
 import pytest
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.feishu import _card_update_response, _handle_card_action
 from app.core.config import settings
+from app.models.notification import NotificationConfig
+from tests.factories import make_user
 
 _VTOKEN = "vtok_test_123"
 _EKEY = "ekey_test_abcdef"
@@ -201,3 +206,94 @@ async def test_message_event_accepted_returns_200(client: AsyncClient) -> None:
         assert resp.json() == {"code": 0}
     finally:
         app.dependency_overrides.pop(get_redis, None)
+
+
+# ── 阶段四-B:card.action.trigger 原地刷新(点按钮 → HTTP 响应返回新卡)──────
+
+
+class _FakeRedis:
+    def __init__(self) -> None:
+        self._d: dict[str, str] = {}
+        self._c: dict[str, int] = {}
+
+    async def get(self, k: str) -> str | None:
+        return self._d.get(k)
+
+    async def setex(self, k: str, _t: int, v: str) -> None:
+        self._d[k] = v
+
+    async def delete(self, k: str) -> None:
+        self._d.pop(k, None)
+
+    async def incr(self, k: str) -> int:
+        self._c[k] = self._c.get(k, 0) + 1
+        return self._c[k]
+
+    async def expire(self, _k: str, _t: int) -> None:
+        return None
+
+
+class _FakeCH:
+    def __init__(self) -> None:
+        self._client = object()
+
+    async def select_kline(self, **_kw: Any) -> list[Any]:
+        return []
+
+
+def _card_action_event(open_id: str, action: str) -> dict[str, Any]:
+    return {"operator": {"open_id": open_id}, "action": {"value": {"action": action}}}
+
+
+def test_card_update_response_structure() -> None:
+    """原地更新响应信封:{"card": {"type": "raw", "data": <卡片>}}。"""
+    card: dict[str, Any] = {"config": {}, "header": {}, "elements": []}
+    assert _card_update_response(card) == {"card": {"type": "raw", "data": card}}
+
+
+@pytest.mark.asyncio
+async def test_card_action_returns_inplace_update(db_session: AsyncSession) -> None:
+    """点卡片按钮 → 返回【原地更新】响应(非 None=不发新卡)· 卡片是对应业务结果。"""
+    user = await make_user(db_session)
+    db_session.add(NotificationConfig(user_id=user.id, feishu_open_id="ou_z"))
+    await db_session.commit()
+    resp = await _handle_card_action(
+        db_session, _FakeRedis(), _FakeCH(), _card_action_event("ou_z", "menu:quote"),  # type: ignore[arg-type]
+    )
+    assert resp is not None
+    assert resp["card"]["type"] == "raw"
+    body = resp["card"]["data"]["elements"][0]["text"]["content"]
+    assert "先选市场" in body  # menu:quote → 选市场卡(复用 handle_inbound)
+
+
+@pytest.mark.asyncio
+async def test_card_action_multistep_each_returns_card(
+    db_session: AsyncSession,
+) -> None:
+    """🔴 多步:连续点按钮每步都【原地返回卡】(非 None)· 即不堆新卡、逐步演进。"""
+    user = await make_user(db_session)
+    db_session.add(NotificationConfig(user_id=user.id, feishu_open_id="ou_m"))
+    await db_session.commit()
+    redis, ch = _FakeRedis(), _FakeCH()
+    r1 = await _handle_card_action(
+        db_session, redis, ch, _card_action_event("ou_m", "menu:order"),  # type: ignore[arg-type]
+    )
+    r2 = await _handle_card_action(
+        db_session, redis, ch, _card_action_event("ou_m", "omkt:us"),  # type: ignore[arg-type]
+    )
+    assert r1 is not None
+    assert r2 is not None
+    assert r1["card"]["data"]["elements"]  # 选市场卡
+    assert r2["card"]["data"]["elements"]  # 输代码卡
+    # 会话原地推进:omkt:us 后停在 order_symbol(同一 feishu 前缀键)
+    assert "feishu_session:ou_m" in redis._d
+
+
+@pytest.mark.asyncio
+async def test_card_action_no_open_id_returns_none(db_session: AsyncSession) -> None:
+    """🔴 身份红线:事件无 operator.open_id → None(不处理)。"""
+    resp = await _handle_card_action(
+        db_session, _FakeRedis(), _FakeCH(),  # type: ignore[arg-type]
+        {"action": {"value": {"action": "menu:quote"}}},
+    )
+    assert resp is None
