@@ -22,7 +22,11 @@ import {
 } from '@/hooks/use-notifications'
 import { useCreateFeishuBindToken, useUnbindFeishu } from '@/hooks/use-feishu'
 import { useCreateBindToken, useUnbindTelegram } from '@/hooks/use-telegram'
-import { type FeishuBindTokenResult, FeishuApiError } from '@/lib/api/feishu'
+import {
+  type FeishuBindTokenResult,
+  FeishuApiError,
+  feishuBotOpenLink,
+} from '@/lib/api/feishu'
 import type { NotificationConfig } from '@/lib/api/notifications'
 import { type BindTokenResult, TelegramApiError } from '@/lib/api/telegram'
 import { cn } from '@/lib/utils'
@@ -399,8 +403,18 @@ function FeishuBindInstructions({
           (也可发「/bind {info.token}」· 直接粘贴绑定码同样可绑)
         </p>
       </div>
+      {info.app_id && (
+        <a
+          href={feishuBotOpenLink(info.app_id)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-midas-red px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-midas-red-deep"
+        >
+          🪶 在飞书中打开 → 粘贴绑定码
+        </a>
+      )}
       <p className="text-center text-[11px] text-muted-foreground/80">
-        绑定码 {minutes} 分钟内有效 · 在飞书里发送后点下方刷新
+        先复制绑定码 · 点上方按钮直达会话 · 粘贴发送 · 完成后点下方刷新
       </p>
       <button
         type="button"
