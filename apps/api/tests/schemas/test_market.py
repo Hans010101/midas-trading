@@ -75,8 +75,9 @@ class TestKlineResponse:
         assert len(resp.items) == 1
 
     def test_invalid_market(self) -> None:
+        # 用一个确实不在 Market Literal 里的值(hk 自 feat/hk-phase1-config 起已是合法市场)
         with pytest.raises(ValidationError):
-            KlineResponse(symbol="600519", market="hk", period="1d", items=[])  # type: ignore[arg-type]
+            KlineResponse(symbol="600519", market="xx", period="1d", items=[])  # type: ignore[arg-type]
 
     def test_invalid_period(self) -> None:
         with pytest.raises(ValidationError):
