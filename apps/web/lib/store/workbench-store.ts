@@ -19,6 +19,7 @@ export const DEFAULT_SYMBOLS_BY_MARKET: Record<Market, string> = {
   cn: '600519',
   us: 'NVDA',
   crypto: 'BTC/USDT',
+  hk: '00700',
 }
 
 /** 当前市场可选的 demo 标的列表(M0 写死,Task 4 完整自选股) */
@@ -26,6 +27,7 @@ export const DEMO_SYMBOLS_BY_MARKET: Record<Market, ReadonlyArray<{ symbol: stri
   cn: [{ symbol: '600519', name: '贵州茅台' }],
   us: [{ symbol: 'NVDA', name: 'NVIDIA' }],
   crypto: [{ symbol: 'BTC/USDT', name: 'Bitcoin' }],
+  hk: [{ symbol: '00700', name: '腾讯控股' }],
 }
 
 export type IndicatorName = 'MA' | 'MACD' | 'RSI' | 'BOLL'

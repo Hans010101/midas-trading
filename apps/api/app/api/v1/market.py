@@ -66,6 +66,12 @@ async def get_kline(
             detail=f"instrument=perp 只支持 market=crypto · 当前 market={market}",
         )
 
+    # 港股(hk)阶段一 guard:数据未上线(CH 迁移 + P1-3 采集之前)。
+    # 直接返回空,避免用 market='hk' 触达【尚未含 hk 的 Enum8】导致 CH 报错。
+    # ★ P1-3 接入 hk_source + 完成生产迁移后,移除此 guard。
+    if market == "hk":
+        return KlineResponse(symbol=symbol, market=market, period=period, items=[])
+
     # 1. 缓存命中:CH 已有 ≥ limit 条 → 直接返回(最近 limit 条)
     cached = await ch.select_kline(
         symbol=symbol, market=market, period=period, limit=limit, instrument=instrument,
@@ -136,6 +142,9 @@ async def search_symbols(
     market: Market | None = Query(None, description="限定市场(可选)"),
     limit: int = Query(50, ge=1, le=200),
 ) -> list[SymbolMeta]:
+    # 港股(hk)阶段一 guard:标的库未上线(CH 迁移 + P1-3 采集前)· 返回空避免触达未含 hk 的 Enum8。
+    if market == "hk":
+        return []
     return await ch.search_symbols(query=q, market=market, limit=limit)
 
 

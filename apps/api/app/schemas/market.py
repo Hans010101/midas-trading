@@ -12,7 +12,7 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
-Market = Literal["cn", "us", "crypto"]
+Market = Literal["cn", "us", "crypto", "hk"]
 Period = Literal["1m", "5m", "15m", "30m", "1h", "1d", "1w"]
 
 

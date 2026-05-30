@@ -49,7 +49,7 @@ if TYPE_CHECKING:
 
 _CN_CODE_LEN = 6
 _ASK_PARTS = 3  # ask:<intent>:<market>
-_VALID_MARKETS = {"cn", "us", "crypto"}
+_VALID_MARKETS = {"cn", "us", "crypto", "hk"}
 
 
 def _guess_market(symbol: str) -> str:

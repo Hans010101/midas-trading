@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from app.services.clickhouse_client import ClickHouseClient
 
 # 市场 → 计价货币(对齐 models.virtual.MARKET_CURRENCY · 这里要 str 给渲染层)
-_MARKET_CURRENCY: dict[str, str] = {"cn": "CNY", "us": "USD", "crypto": "USDT"}
+_MARKET_CURRENCY: dict[str, str] = {"cn": "CNY", "us": "USD", "crypto": "USDT", "hk": "HKD"}
 _WATCHLIST_QUERY_LIMIT = 30  # 自选查询单次最多显示(防超长消息 / 过多 CH 往返)
 
 

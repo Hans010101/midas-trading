@@ -40,6 +40,7 @@ class Currency(enum.StrEnum):
     CNY = "CNY"
     USD = "USD"
     USDT = "USDT"
+    HKD = "HKD"  # 港股(阶段一接入 · 数据/下单待 P1-3+)
 
 
 class OrderSide(enum.StrEnum):
@@ -80,6 +81,7 @@ MARKET_CURRENCY: dict[str, Currency] = {
     "cn": Currency.CNY,
     "us": Currency.USD,
     "crypto": Currency.USDT,
+    "hk": Currency.HKD,
 }
 
 

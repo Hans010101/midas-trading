@@ -8,10 +8,10 @@ export const SHARED_PACKAGE_VERSION = '0.1.0' as const
 // 市场与周期(Pydantic Literal 类型对应)
 // =====================
 
-export type Market = 'cn' | 'us' | 'crypto'
+export type Market = 'cn' | 'us' | 'crypto' | 'hk'
 export type Period = '1m' | '5m' | '15m' | '30m' | '1h' | '1d' | '1w'
 
-export const MARKETS = ['cn', 'us', 'crypto'] as const satisfies readonly Market[]
+export const MARKETS = ['cn', 'us', 'crypto', 'hk'] as const satisfies readonly Market[]
 export const PERIODS = ['1m', '5m', '15m', '30m', '1h', '1d', '1w'] as const satisfies readonly Period[]
 
 // =====================

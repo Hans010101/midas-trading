@@ -9,7 +9,7 @@ import type { Market } from '@midas/shared'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
-export type Currency = 'CNY' | 'USD' | 'USDT'
+export type Currency = 'CNY' | 'USD' | 'USDT' | 'HKD'
 export type OrderSide = 'buy' | 'sell'
 export type OrderType = 'market'
 export type OrderStatus = 'filled' | 'rejected'
