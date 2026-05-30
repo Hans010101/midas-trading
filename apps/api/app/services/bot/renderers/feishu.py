@@ -29,6 +29,16 @@ def _header_text(reply: ReplyModel) -> str:
     return f"{_BRAND} · {reply.title}{reply.badge}"
 
 
+def _lark_text(text: str) -> str:
+    """剥 TG Markdown 强调标记(* _ `)→ 飞书卡片 lark_md 干净文本。
+
+    阶段四-D:成交回执(prerendered)body 是 render_telegram 的 TG Markdown(*粗体* / _斜体_),
+    飞书 lark_md 用 **粗体**,单星不渲染会露出星号 → 统一剥成纯文本(对齐 adapters/feishu)。
+    中立 build_* 的正文本不含这些标记,剥除对其无副作用(no-op)。
+    """
+    return text.replace("*", "").replace("`", "").replace("_", "")
+
+
 def _button_element(btn: Button) -> dict[str, Any]:
     el: dict[str, Any] = {
         "tag": "button",
@@ -47,9 +57,11 @@ def render_for_feishu(reply: ReplyModel) -> dict[str, Any]:
     """ReplyModel → 飞书 interactive card(dict)· feishu_client.send_card 序列化发出。"""
     elements: list[dict[str, Any]] = []
 
-    # 正文(prerendered 成稿也直接放正文 · 阶段三只读不产生成稿,这里只做兜底)
+    # 正文 · 剥 TG Markdown(成交回执 prerendered body 是 TG 富文本 · 见 _lark_text)
     if reply.text:
-        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": reply.text}})
+        elements.append({
+            "tag": "div", "text": {"tag": "lark_md", "content": _lark_text(reply.text)},
+        })
 
     # 按钮:每行一个 action 模块(保留 ReplyModel 的行分组)
     for row in reply.buttons:
@@ -67,11 +79,12 @@ def render_for_feishu(reply: ReplyModel) -> dict[str, Any]:
             "elements": [{"tag": "plain_text", "content": reply.disclaimer}],
         })
 
-    return {
-        "config": {"wide_screen_mode": True},
-        "header": {
+    card: dict[str, Any] = {"config": {"wide_screen_mode": True}, "elements": elements}
+    # 成交回执(prerendered)body 自带品牌标题 → 不重复加 card header(避免品牌出现两次);
+    # 其余卡片正常加 red 模板 header。
+    if not reply.prerendered:
+        card["header"] = {
             "template": _HEADER_TEMPLATE,
             "title": {"tag": "plain_text", "content": _header_text(reply)},
-        },
-        "elements": elements,
-    }
+        }
+    return card
