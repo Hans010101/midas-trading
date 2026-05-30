@@ -5,6 +5,11 @@
 # 给 kline + symbol_meta 的 market 列加 'hk'=4(保留 cn=1/us=2/crypto=3 不变)。
 # ★★ 只动 market 列【定义】· 绝不 INSERT/DELETE/DROP 任何数据行 ★★
 #
+# 为什么本脚本(UP=加值)安全、但回滚(收窄)不行(已在 CH 26.4.2.10 实测):
+#   market 在 kline 是【分区键】、在 symbol_meta 是【排序键】。CH 允许给 key 列枚举【加值】
+#   (3→4 · metadata-only · 不改旧值表示 · 旧数据/分区 mtime 不变),但【禁止收窄】(4→3 会
+#   报 Code 524,因可能改变 key 表示)。→ 故 UP 走 MODIFY、回滚【不能】走 MODIFY(见 rollback 脚本)。
+#
 # 先决条件(★ 脚本会提醒并要你二次确认,但不自动判定 —— 你负责确认):
 #   ① 已在 midas_test 跑过 rehearse_ch_migration_testdb.sh,证可逆
 #   ② 低峰窗口(A股/美股/港股都收盘)· 决策⑤
@@ -23,7 +28,10 @@ CH_PASSWORD="${CLICKHOUSE_PASSWORD:-}"
 ENUM4="Enum8('cn' = 1, 'us' = 2, 'crypto' = 3, 'hk' = 4)"
 
 [ -z "$CH_PASSWORD" ] && { echo "用法:CLICKHOUSE_PASSWORD=xxx bash $0"; exit 1; }
-chq() { docker exec -i "$CH_CONTAINER" clickhouse-client --user "$CH_USER" --password "$CH_PASSWORD" --database "$CH_DB" --query "$1"; }
+# ★ 故意【不加】docker exec 的 -i:-i 会接一个 stdin 流,CH 26.4.2.10 在 async_insert=1(生产默认)
+#   下会把它当 external data,与内联 VALUES 冲突报 Code 48;且 -i 会抢占终端 stdin、干扰下面的 read -rp YES。
+#   本脚本无 INSERT(只 ALTER + SELECT),但不接 stdin 仍是正确做法 + 保护交互确认。query 全走 --query 内联。
+chq() { docker exec "$CH_CONTAINER" clickhouse-client --user "$CH_USER" --password "$CH_PASSWORD" --database "$CH_DB" --query "$1"; }
 line() { printf '\n──── %s ────\n' "$1"; }
 
 TMP="$(mktemp -d)"

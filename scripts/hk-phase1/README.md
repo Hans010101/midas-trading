@@ -6,8 +6,12 @@
 |---|---|---|
 | `probe_hk_latency.py` | 工作日实时延迟补测 | **只读**(只拉上游) |
 | `rehearse_ch_migration_testdb.sh` | midas_test 迁移可逆演练 | 只动**临时库**(结束 DROP,不碰真实表) |
-| `migrate_ch_market_enum.sh` | ★ **生产迁移**(执行 ALTER) | 只改 kline/symbol_meta 的 **market 列定义**,不碰数据行 |
-| `rollback_ch_market_enum.sh` | 回滚 | MODIFY market 列回三值(有 hk 数据则中止+指引) |
+| `migrate_ch_market_enum.sh` | ★ **生产迁移**(执行 ALTER · 只 UP 加值) | 只改 kline/symbol_meta 的 **market 列定义**,不碰数据行 |
+| `rollback_ch_market_enum.sh` | 回滚【指引】(只读 + 打印,不自动改库) | 不改库(打印「留着 4 值」+ 整表重建指引) |
+
+> **目标 CH 版本 = 26.4.2.10**,所有写法已在该版本容器实测。两条关键兼容性结论:
+> ① `docker exec` 调 clickhouse-client **不加 `-i`**(加了会在 `async_insert=1` 下让内联 `INSERT VALUES` 撞 Code 48)。
+> ② `market` 在 kline 是分区键、在 symbol_meta 是排序键 → **加值(UP 3→4)允许且 metadata-only,收窄(4→3)被 CH 禁(Code 524)** → 迁移走 ALTER,**回滚不能走 ALTER**(只能整表重建,见下)。
 
 ---
 
@@ -39,11 +43,15 @@ docker compose -f <prod compose 文件> start worker
 脚本自动验证:① market 类型含 hk ② 旧数据 market 分布前后一致(旧数据没动)
 ③ 旧分区 modification_time 前后一致(= metadata-only,没重写)。
 
-### 回滚(出问题时)
+### 回滚(几乎用不到 · 加值无害)
 ```bash
 CLICKHOUSE_PASSWORD='<CH密码>' bash scripts/hk-phase1/rollback_ch_market_enum.sh
 ```
-无 hk 数据 → 输 YES 直接 MODIFY 回三值;有 hk 数据 → 脚本中止 + 给「先删 hk 分区」指引。
+脚本**只读 + 打印指引,不自动改库**。两条路:
+- **① 推荐:什么都不做**。加 `hk=4` 是 metadata-only,无 hk 数据时零影响,留着即可。
+- **② 确需抹掉 `hk=4`**:CH 禁止 `MODIFY` 收窄 key 列(Code 524)→ 只能**整表重建**
+  (`CREATE` 3值表 → `INSERT SELECT` 排除 hk → `EXCHANGE TABLES` 原子换 → `DROP` 旧表)。
+  脚本会打印 kline / symbol_meta 各自的命令;**手动逐条执行**(重、低峰、先备份)。
 
 ---
 
@@ -51,8 +59,9 @@ CLICKHOUSE_PASSWORD='<CH密码>' bash scripts/hk-phase1/rollback_ch_market_enum.
 - **`migrate` 只 ALTER market 列定义**,全文无 `INSERT/DELETE/DROP` 数据行;唯一写动作是两条 `MODIFY COLUMN`。
 - **二次确认**:`migrate` 必须手输大写 `YES` 才执行 ALTER(防误触)。
 - **后验证**:migrate 用「前/后快照 diff」证明旧数据 + 分区 modification_time 没变(metadata-only)。
-- **rehearse 全在临时库** `hk_migrate_rehearsal`,结束 `DROP DATABASE`,**零触碰真实 kline/symbol_meta**。
-- **rollback 有 hk 数据保护**:不会盲目 MODIFY 回导致失败,先提示删分区。
+- **rehearse 全在临时库** `hk_migrate_rehearsal`(忠实复刻 kline 分区键 + symbol_meta 排序键两形态),结束 `DROP DATABASE`,**零触碰真实表**;演练含「UP 安全 / 旧数据未动 / hk 可写 / 幂等 / MODIFY 收窄被拒(预期 Code 524)/ 整表重建回退可行」全链路。
+- **rollback 不自动改库**:只读 + 打印「留着 4 值(推荐)」与「整表重建(确需)」两套指引,破坏性重建交人手动。
+- **不加 `-i` + 无任何 `| tail`**:`chq` 全走 `docker exec`(无 `-i`)防 Code 48;自验取真实 exit code。
 - CH 密码只从命令行 env 传,**不写进脚本、不提交**。
 
 ## 通过判定 → 进 P1-2
