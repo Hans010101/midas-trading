@@ -16,7 +16,7 @@
 ## 0. 阶段一【写代码前】的两个前置(必须先过)
 - **P0-补测 · 工作日实时延迟**:港股交易时段(09:30–16:00 HKT)重跑 `scripts/hk-phase0/probe_hk_data.py`,
   确认 akshare 实时延迟 **≤ 15min**(决策③可接受线)。不过 → 回产品负责人(换源 / 调预期)。
-- **P0-演练 · CH 迁移 midas_test**:在 midas_test 库走 up→插 hk 测试行→down→up 验可逆(见 §1.3)。
+- **P0-演练 · CH 迁移 midas_test**:在 midas_test 库演练 UP 加值(两表)→ 插 hk 测试行 → 验 MODIFY 收窄被 CH 拒(Code 524 · 预期)→ 整表重建回退可行(见 §1.3 · ★ 已在 CH 26.4.2.10 实跑全绿)。
 两个都过,才进 P1 写生产代码。
 
 ---
@@ -38,12 +38,17 @@ ALTER TABLE symbol_meta MODIFY COLUMN market Enum8('cn'=1,'us'=2,'crypto'=3,'hk'
   → 干净分离:**先手动迁移(Hans)→ 再正常 deploy 代码(hk_source / init.sql 同步)**。
 - ⚠ 顺序硬约束:**ALTER 必须先于 hk 采集代码上线**(否则插 `market='hk'` 被 CH 拒)。
 
-### 1.3 上生产前 · midas_test 演练(可逆证明)
+### 1.3 上生产前 · midas_test 演练(★ 已在 CH 26.4.2.10 实跑全绿 · `scripts/hk-phase1/rehearse_ch_migration_testdb.sh`)
+**★ 实测修正(26.4.2.10)**:`market` 在 kline 是【分区键】、在 symbol_meta 是【排序键】→
+加值 UP(3→4)允许且 **metadata-only**(旧数据 / 分区 mtime 不变);**收窄 DOWN(4→3)被 CH 禁**
+(`Code 524 ALTER_OF_COLUMN_IS_FORBIDDEN`,两表都禁)。所以"可逆"的真相 =
+**迁移单向加值、无害;没有 MODIFY-down 回退路径**(回退见 §1.5)。演练实证的链路:
 ```
-up:   ALTER … 'hk'=4(两表)
-test: INSERT 一条 market='hk' 测试 kline 行 → SELECT 查出来确认
-down: DELETE 测试行 → ALTER … 回 Enum8('cn'=1,'us'=2,'crypto'=3)
-up:   再 ALTER … 'hk'=4 → 确认可逆 + 幂等
+up:    ALTER … 'hk'=4(两表 · 分区键 + 排序键都验)
+verify: 旧 cn/us 数据未动(行数一致)→ INSERT 一条 market='hk' → SELECT 确认可写
+幂等:  再 ALTER … 'hk'=4 = no-op
+收窄:  ALTER … 回 3 值 → ★【预期被 CH 拒 Code 524】= 证明回滚不能靠 MODIFY
+重建:  CREATE 3值表 + INSERT SELECT 排除 hk + EXCHANGE 原子交换 → 真·回退可行
 ```
 (★ 仅 midas_test 插测试行;生产迁移**不插任何测试数据**。)
 
@@ -55,10 +60,14 @@ up:   再 ALTER … 'hk'=4 → 确认可逆 + 幂等
 5. `docker compose start worker` 恢复。
 6. 盯 worker 日志正常 + 现有 cn/us/crypto 采集不受影响。
 
-### 1.5 回滚预案
-- **无 hk 数据**(迁移后还没采港股)→ `ALTER … MODIFY COLUMN market Enum8('cn'=1,'us'=2,'crypto'=3)`(两表)。
-- **已有 hk 数据** → 先 `ALTER TABLE kline DROP PARTITION <hk 分区>` 再 MODIFY 回。
-- 迁移脚本写成**幂等**(重复跑不报错;ALTER 到同一 Enum8 是 no-op)。
+### 1.5 回滚预案(★ 实测修正:回退不能靠 MODIFY-down)
+`market` 是 kline 分区键 / symbol_meta 排序键 → CH 禁止 MODIFY 收窄枚举(`Code 524`)。
+而加 `'hk'=4` 是加值 · metadata-only · 无害,所以:
+- **① 推荐:什么都不做**。无 hk 数据时留着 4 值零影响;后续要用 hk 也省得再迁。**不要也不能** MODIFY 回三值。
+- **② 确需抹掉 `'hk'=4`**(严格洁癖)→ 只能**整表重建**:CREATE 3 值表 → `INSERT SELECT … WHERE
+  market != 'hk'` → `EXCHANGE TABLES` 原子交换 → DROP 旧表(两表同法)。重 + 有风险 → 低峰 + 停
+  worker + 先备份;脚本 `rollback_ch_market_enum.sh` 只读 + 打印各表命令、**手动逐条执行**。
+- 迁移脚本(UP)写成**幂等**(重复跑不报错;ALTER 到同一 Enum8 是 no-op)。
 
 ### 1.6 init.sql 同步
 `clickhouse-init.sql` 的 kline + symbol_meta 的 Enum8 改成含 hk(**给将来新环境干净建库**);
@@ -129,7 +138,7 @@ up:   再 ALTER … 'hk'=4 → 确认可逆 + 幂等
 - **虚拟资金**:数据层不碰交易,纯采集 / 存储。
 - **只读 CH 为主**:warm 是 cache miss 时低频回源(非高频轮询);实时最新价按需取 + 降级兜底(§2.3)。
 - **不碰 cn/us/crypto**:`_source_for` 加一行、Enum8 加一值、init.sql 加配置 —— 现有市场行为零变。
-- **迁移可回滚**(§1.5)· **顺序硬约束**(ALTER 先于 hk 采集代码上线)。
+- **迁移单向加值 · 无害**(收窄被 CH 禁 Code 524 · 回退靠"留着 4 值"或整表重建 · §1.5)· **顺序硬约束**(ALTER 先于 hk 采集代码上线)。
 - **TG 零回归**:数据层完全不碰 bot 渲染(replies/renderers)→ golden 天然不受影响(数据层 PR 不动 bot 文件)。
 
 ---
@@ -137,7 +146,7 @@ up:   再 ALTER … 'hk'=4 → 确认可逆 + 幂等
 ## 6. 阶段一内部拆分(小步 · 每步 feature 分支 + 审 + 验收 + 合 main)
 | 子步 | 范围 | 风险 | 验收点 | 分支 |
 |---|---|---|---|---|
-| **P1-1 · CH 迁移先行**(单独验)| 迁移脚本(执行 ALTER · 幂等 + 停 worker 护栏)+ init.sql 同步 + midas_test 演练 up/down/up + **Hans 生产手动迁移** + 回滚预案文档 | 中(改存储)| `SHOW CREATE` 确认 hk + 可逆 + 现有采集不受影响 · 按 0033 盯 ops 确认 | feat/hk-1a-ch-migrate |
+| **P1-1 · CH 迁移先行**(单独验)| 迁移脚本(执行 ALTER · 幂等 + 停 worker 护栏)+ init.sql 同步 + midas_test 演练(UP加值/旧数据未动/hk可写/幂等/收窄被拒/重建回退)+ **Hans 生产手动迁移** + 回滚指引文档 | 中(改存储)| `SHOW CREATE` 确认 hk + 收窄被 CH 拒(预期 Code 524)+ 重建回退可行 + 现有采集不受影响 · 按 0033 盯 ops 确认 | feat/hk-1a-ch-migrate |
 | **P1-2 · hk_source 适配** | `hk_source.py`(fetch_kline akshare + qfq 复权 + normalize + 实时降级)+ `_source_for` 接入 + deps + `hk_pool.py` 壳 | 低(纯新增)| `HkSource.fetch_kline("00700", "1d")` 返数据 · 单测(mock akshare)· 现有源零回归 | feat/hk-1b-source |
 | **P1-3 · 采集打通**(端到端)| 无新代码(验证现有 market.py 链路对 hk 生效)+ 必要的 normalize 接入点 | 低 | `/market/kline?market=hk&symbol=00700&period=1d` → 读 CH miss → hk_source 回源 → insert → 再读命中;00700 日 K 进 CH 可读出 | feat/hk-1c-collect |
 
@@ -155,7 +164,7 @@ up:   再 ALTER … 'hk'=4 → 确认可逆 + 幂等
    P1-1 产出可执行迁移脚本(`scripts/hk-phase1/` · 执行 ALTER + 最高规格护栏 + 回滚 + midas_test 演练)给 Hans。
 
 > 前置(写生产代码前 / 真改库前必须过):**① 工作日实时延迟补测**(`scripts/hk-phase0/probe_hk_latency.py`)·
-> **② midas_test 迁移可逆演练**(`scripts/hk-phase1/rehearse_ch_migration_testdb.sh`)。两个都过 → 才真在生产改库。
+> **② midas_test 迁移演练**(`scripts/hk-phase1/rehearse_ch_migration_testdb.sh` · 验 UP 加值安全 + 收窄被拒预期 + 重建回退,★ 已在 CH 26.4.2.10 实跑全绿)。两个都过 → 才真在生产改库。
 
 ---
 > 待审重点:**§1 迁移方案(机制解耦 + 可逆演练 + 回滚)**· **§2.3 实时降级**· **§6 子步拆分(P1-1 迁移单独先行)**。
