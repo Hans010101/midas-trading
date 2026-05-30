@@ -9,12 +9,21 @@
  */
 
 import { useQuery } from '@tanstack/react-query'
+import dynamic from 'next/dynamic'
+import { useMemo } from 'react'
 
 import { MarketSwitcher } from '@/components/layout/market-switcher'
 import { TopNav } from '@/components/layout/top-nav'
 import { QuoteCard } from '@/components/market-home/index-card'
+import type { MapQuote } from '@/components/market-home/world-map'
 import { EmptyState, LoadingNote } from '@/components/ui/state'
 import { fetchGlobalOverview } from '@/lib/api/overview'
+
+// 阶段 B 世界地图 · 纯前端视觉增强 · ssr:false 懒加载(含 ~34KB 点阵数据,不进首屏 SSR)
+const WorldMap = dynamic(
+  () => import('@/components/market-home/world-map').then((m) => m.WorldMap),
+  { ssr: false, loading: () => <div className="h-[160px] md:h-[300px]" /> },
+)
 
 export default function GlobalOverviewPage() {
   const q = useQuery({
@@ -26,6 +35,16 @@ export default function GlobalOverviewPage() {
   })
 
   const groups = q.data?.groups ?? []
+
+  // 世界地图读同一份数据:symbol → {名称, 涨跌幅}(地图按 symbol 取主要股指)
+  // 依赖 q.data(TanStack 稳定引用)· 不依赖每渲染都新建的 groups 数组
+  const quoteMap = useMemo(() => {
+    const m = new Map<string, MapQuote>()
+    for (const group of q.data?.groups ?? []) {
+      for (const it of group.items) m.set(it.symbol, { name: it.name, changePct: it.change_pct })
+    }
+    return m
+  }, [q.data])
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
@@ -45,6 +64,15 @@ export default function GlobalOverviewPage() {
           {q.isError && <EmptyState title="暂时无法读取行情" hint="后端不可达 · 稍后自动重试" />}
           {q.isSuccess && groups.length === 0 && (
             <EmptyState title="全球指标数据待采集" hint="采集任务每 10 分钟写入快照" />
+          )}
+
+          {/* 阶段 B · 世界地图视觉(整条在卡片网格上方 · 读同一份数据 · 上下布局宽窄屏一致) */}
+          {groups.length > 0 && (
+            <div className="mb-6 md:mb-8">
+              <div className="mx-auto max-w-[1200px]">
+                <WorldMap quotes={quoteMap} />
+              </div>
+            </div>
           )}
 
           {groups.map((group) => (
