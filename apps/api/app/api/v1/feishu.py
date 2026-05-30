@@ -4,8 +4,9 @@
 - POST /feishu/webhook    · 飞书事件回调:
   1. ★ URL 验证握手:配事件订阅时回 challenge
   2. 验签:Verification Token(必配,常量时间)+ 可选 Encrypt Key(AES-256-CBC)+ 可选签名
-  3. 阶段三:im.message.receive_v1 / card.action.trigger → InboundMessage → handle_inbound
-     (复用阶段一中立核心 · 飞书不另写交互逻辑)→ render_for_feishu → 后台发卡。
+  3. 阶段三/四:im.message.receive_v1 / card.action.trigger / application.bot.menu_v6
+     → InboundMessage → handle_inbound(复用阶段一中立核心 · 飞书不另写交互逻辑)
+     → render_for_feishu → 发卡(菜单/文本走后台发新卡;卡片按钮原地刷新)。
 
 🔴 红线:
 - 身份只从【已验签事件体】的 open_id 取(_parse_message_event / _parse_card_event 是唯一注入点)·
@@ -70,6 +71,12 @@ class FeishuBindTokenResponse(BaseModel):
 
     token: str = Field(description="一次性绑定码 · 在飞书发给 bot(可直接粘贴或 /bind <码>)")
     expires_in: int = Field(description="绑定码有效秒数")
+    app_id: str = Field(
+        description=(
+            "飞书应用 App ID(公开标识 · 非密钥)· 前端用它拼 applink"
+            " 一键打开机器人会话。app_secret 绝不下发。"
+        ),
+    )
 
 
 @router.post(
@@ -86,8 +93,11 @@ async def create_feishu_bind_token(
             detail="飞书应用未配置(FEISHU_APP_ID/SECRET 未设)",
         )
     token = await create_bind_token(redis, current_user.id)
+    # app_id 是公开标识(applink 用)· 这里随绑定码一起下发;app_secret 绝不出后端。
     return FeishuBindTokenResponse(
-        token=token, expires_in=settings.tg_bind_token_ttl_seconds,
+        token=token,
+        expires_in=settings.tg_bind_token_ttl_seconds,
+        app_id=settings.feishu_app_id,
     )
 
 
@@ -174,6 +184,19 @@ def _parse_card_event(event: dict[str, Any]) -> tuple[str | None, str | None]:
     return (open_id, action)
 
 
+def _parse_menu_event(event: dict[str, Any]) -> tuple[str | None, str | None]:
+    """application.bot.menu_v6(机器人常驻菜单点击)→ (open_id, event_key)。
+
+    🔴 open_id 只取自 event.operator.operator_id.open_id(已验签事件体)——
+       注意菜单事件是【嵌套 operator_id】,与 card 事件的扁平 operator.open_id 不同。
+    event_key 是飞书后台为菜单项配置的自定义标识(我们让它复用现有 action 命名)。
+    """
+    operator_id = (event.get("operator") or {}).get("operator_id") or {}
+    open_id = operator_id.get("open_id")
+    event_key = event.get("event_key")
+    return (open_id, event_key)
+
+
 # ── 后台发送(fail-soft · 不影响已返回的 200)─────────────────────────
 
 
@@ -255,6 +278,9 @@ async def feishu_webhook(
         card_resp = await _handle_card_action(db, redis, ch, event)
         if card_resp is not None:
             return JSONResponse(content=card_resp)
+    elif event_type == "application.bot.menu_v6":
+        # 点常驻菜单 → 异步事件 → 后台发【新卡】(event_key 当 action 走 handle_inbound)
+        await _handle_menu_action(db, redis, ch, background, event)
     else:
         logger.info("[feishu-webhook] 忽略事件 event_type=%s", event_type)
 
@@ -321,3 +347,31 @@ async def _handle_card_action(
     )
     reply = await handle_inbound(db, redis, ch, msg)
     return _card_update_response(render_for_feishu(reply))
+
+
+async def _handle_menu_action(
+    db: AsyncSession,
+    redis: Redis,
+    ch: ClickHouseClient | None,
+    background: BackgroundTasks,
+    event: dict[str, Any],
+) -> None:
+    """常驻菜单点击(application.bot.menu_v6)· event_key 复用现有 action 命名 →
+    归一为 InboundMessage(kind=button)→ handle_inbound → 发【新消息卡】。
+
+    菜单事件是异步事件(非 card.action.trigger 的原地回调),故走后台发新卡(对齐 _handle_message)。
+    🔴 身份只从 _parse_menu_event(已验签 operator.operator_id.open_id)取;event_key 当 action,
+       业务全走 handle_inbound —— 菜单点击 ≡ 点了对应按钮,核心层零改动。
+    🔴 下单二次确认不被弱化:即便 event_key 配成 ordok,execute 仍只由 order_confirm 态触发
+       (无会话 → 回主菜单,不成交)· 见 _handle_confirm gate。
+    """
+    open_id, event_key = _parse_menu_event(event)
+    if open_id is None or not event_key:
+        return
+    if ch is None:
+        return
+    msg = InboundMessage(
+        channel="feishu", channel_uid=open_id, kind="button", action=event_key,
+    )
+    reply = await handle_inbound(db, redis, ch, msg)
+    background.add_task(_send_card_safe, open_id, render_for_feishu(reply))

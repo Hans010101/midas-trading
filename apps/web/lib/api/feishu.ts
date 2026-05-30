@@ -11,6 +11,13 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 export interface FeishuBindTokenResult {
   token: string
   expires_in: number
+  /** 飞书应用 App ID(公开标识 · 非密钥)· 用于拼 applink 一键打开机器人会话。 */
+  app_id: string
+}
+
+/** applink:一键在飞书中打开机器人会话(飞书 3.40.0+ · 只带 appId,不能带 token)。 */
+export function feishuBotOpenLink(appId: string): string {
+  return `https://applink.feishu.cn/client/bot/open?appId=${encodeURIComponent(appId)}`
 }
 
 export class FeishuApiError extends Error {
