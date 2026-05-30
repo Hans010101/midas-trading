@@ -9,7 +9,7 @@
  */
 
 import { useQueryClient } from '@tanstack/react-query'
-import { Loader2 } from 'lucide-react'
+import { Check, Copy, Loader2 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -252,9 +252,15 @@ function BindInstructions({
       ) : (
         <div className="rounded-md border border-paper bg-background p-3 text-xs">
           <p className="mb-1 text-muted-foreground">在官方 bot 里发送:</p>
-          <code className="break-all font-mono text-foreground">
-            /start {info.token}
-          </code>
+          <div className="flex items-center gap-2">
+            <code className="min-w-0 flex-1 break-all font-mono text-foreground">
+              /start {info.token}
+            </code>
+            <CopyButton
+              value={`/start ${info.token}`}
+              copiedLabel="已复制绑定指令"
+            />
+          </div>
         </div>
       )}
       <p className="text-center text-[11px] text-muted-foreground/80">
@@ -383,7 +389,12 @@ function FeishuBindInstructions({
     <div className="space-y-3">
       <div className="rounded-md border border-paper bg-background p-3 text-xs">
         <p className="mb-1 text-muted-foreground">在飞书里打开点金 Midas 应用,发送下面这串绑定码:</p>
-        <code className="break-all font-mono text-foreground">{info.token}</code>
+        <div className="flex items-center gap-2">
+          <code className="min-w-0 flex-1 break-all font-mono text-foreground">
+            {info.token}
+          </code>
+          <CopyButton value={info.token} copiedLabel="已复制绑定码" />
+        </div>
         <p className="mt-1 text-muted-foreground/80">
           (也可发「/bind {info.token}」· 直接粘贴绑定码同样可绑)
         </p>
@@ -594,6 +605,52 @@ function SaveButton({ onClick, pending, children }: SaveButtonProps) {
     >
       {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
       {children}
+    </button>
+  )
+}
+
+/**
+ * 绑定码一键复制按钮 · 纯前端(navigator.clipboard)· 无后端 / 业务逻辑。
+ * 成功反馈用帝王金 ✓(视觉系统:成功帝王金);clipboard 不可用时降级 error toast。
+ */
+function CopyButton({
+  value,
+  copiedLabel = '已复制',
+}: {
+  value: string
+  copiedLabel?: string
+}) {
+  const [copied, setCopied] = useState(false)
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      toast.success(copiedLabel)
+      window.setTimeout(() => setCopied(false), 1500)
+    } catch {
+      toast.error('复制失败 · 请手动选择复制')
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      aria-label={copied ? '已复制' : '复制'}
+      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-paper bg-background px-2.5 py-1 text-xs text-foreground transition-colors hover:bg-cream"
+    >
+      {copied ? (
+        <>
+          <Check className="h-3 w-3 text-gold" aria-hidden="true" />
+          已复制
+        </>
+      ) : (
+        <>
+          <Copy className="h-3 w-3" aria-hidden="true" />
+          复制
+        </>
+      )}
     </button>
   )
 }
