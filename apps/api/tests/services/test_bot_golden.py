@@ -22,13 +22,7 @@ from app.services.bot.query import (
 from app.services.bot.quiet import QuietHoursView
 from app.services.bot.renderers.telegram import render_for_telegram
 
-GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 迷你终端*\n'
-                       '\n'
-                       '点下方按钮选择功能 ↓\n'
-                       '\n'
-                       '也可直接发送 `/price <代码>` 查行情\n'
-                       '\n'
-                       '_仅供参考,不构成投资建议_',
+GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 迷你终端*\n\n点下方按钮选择功能 ↓\n\n也可直接发送 `/price <代码>` 查行情',
                'keyboard': {'inline_keyboard': [[{'text': '📊 行情查询', 'callback_data': 'menu:quote'},
                                                  {'text': '📈 K线图', 'callback_data': 'menu:kline'}],
                                                 [{'text': '⭐ 我的自选',
@@ -39,7 +33,7 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                                                  {'text': '🔔 告警规则', 'callback_data': 'menu:rules'}],
                                                 [{'text': '🌙 安静时段',
                                                   'callback_data': 'menu:quiet'}]]}},
- 'market_picker_quote': {'text': '*点金 Midas*\n\n查行情 —— 先选市场:\n\n_仅供参考,不构成投资建议_',
+ 'market_picker_quote': {'text': '*点金 Midas*\n\n查行情 —— 先选市场:',
                          'keyboard': {'inline_keyboard': [[{'text': 'A股',
                                                             'callback_data': 'ask:quote:cn'},
                                                            {'text': '美股',
@@ -48,7 +42,7 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                                                             'callback_data': 'ask:quote:crypto'}],
                                                           [{'text': '⬅️ 返回菜单',
                                                             'callback_data': 'menu:main'}]]}},
- 'market_picker_kline': {'text': '*点金 Midas*\n\n看K线 —— 先选市场:\n\n_仅供参考,不构成投资建议_',
+ 'market_picker_kline': {'text': '*点金 Midas*\n\n看K线 —— 先选市场:',
                          'keyboard': {'inline_keyboard': [[{'text': 'A股',
                                                             'callback_data': 'ask:kline:cn'},
                                                            {'text': '美股',
@@ -57,15 +51,10 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                                                             'callback_data': 'ask:kline:crypto'}],
                                                           [{'text': '⬅️ 返回菜单',
                                                             'callback_data': 'menu:main'}]]}},
- 'ask_symbol_quote_cn': {'text': '*点金 Midas*\n\nA股 · 查行情\n请发送代码,例如 `600519`\n\n_仅供参考,不构成投资建议_',
+ 'ask_symbol_quote_cn': {'text': '*点金 Midas*\n\nA股 · 查行情\n请发送代码,例如 `600519`',
                          'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                             'callback_data': 'menu:main'}]]}},
- 'ask_symbol_kline_crypto': {'text': '*点金 Midas*\n'
-                                     '\n'
-                                     '加密 · 看K线\n'
-                                     '请发送代码,例如 `BTC/USDT`\n'
-                                     '\n'
-                                     '_仅供参考,不构成投资建议_',
+ 'ask_symbol_kline_crypto': {'text': '*点金 Midas*\n\n加密 · 看K线\n请发送代码,例如 `BTC/USDT`',
                              'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                                 'callback_data': 'menu:main'}]]}},
  'quote_full': {'text': '*点金 Midas · 行情*\n'
@@ -77,80 +66,45 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                         '资金费率 +0.0100%\n'
                         '未平仓额 $1.23B\n'
                         '多空比(大户) 1.85\n'
-                        '基差 +0.123%\n'
-                        '\n'
-                        '_仅供参考,不构成投资建议_',
+                        '基差 +0.123%',
                 'keyboard': {'inline_keyboard': [[{'text': '📈 网页看K线',
                                                    'url': 'http://localhost:3000/crypto-preview?symbol=BTCUSDT'}],
                                                  [{'text': '⬅️ 返回菜单',
                                                    'callback_data': 'menu:main'}]]}},
- 'quote_min': {'text': '*点金 Midas · 行情*\n'
-                       '\n'
-                       '📊 600519 · A股\n'
-                       '最新价 ¥1,688.00\n'
-                       '涨跌幅 🟢 -1.20%\n'
-                       '成交量 98,765\n'
-                       '\n'
-                       '_仅供参考,不构成投资建议_',
+ 'quote_min': {'text': '*点金 Midas · 行情*\n\n📊 600519 · A股\n最新价 ¥1,688.00\n涨跌幅 🟢 -1.20%\n成交量 98,765',
                'keyboard': {'inline_keyboard': [[{'text': '📈 网页看K线',
                                                   'url': 'http://localhost:3000/cn-preview?symbol=600519'}],
                                                 [{'text': '⬅️ 返回菜单',
                                                   'callback_data': 'menu:main'}]]}},
- 'quote_noprice': {'text': '*点金 Midas · 行情*\n\n📊 NVDA · 美股\n涨跌幅 —\n\n_仅供参考,不构成投资建议_',
+ 'quote_noprice': {'text': '*点金 Midas · 行情*\n\n📊 NVDA · 美股\n涨跌幅 —',
                    'keyboard': {'inline_keyboard': [[{'text': '📈 网页看K线',
                                                       'url': 'http://localhost:3000/us-preview?symbol=NVDA'}],
                                                     [{'text': '⬅️ 返回菜单',
                                                       'callback_data': 'menu:main'}]]}},
- 'symbol_not_found': {'text': '*点金 Midas*\n'
-                              '\n'
-                              '未找到 600519(A股)的数据。\n'
-                              '请确认代码,或换一个再试(只查已采集标的)。\n'
-                              '\n'
-                              '_仅供参考,不构成投资建议_',
+ 'symbol_not_found': {'text': '*点金 Midas*\n\n未找到 600519(A股)的数据。\n请确认代码,或换一个再试(只查已采集标的)。',
                       'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                          'callback_data': 'menu:main'}]]}},
- 'kline_link': {'text': '*点金 Midas · K线*\n'
-                        '\n'
-                        '📈 NVDA · 美股\n'
-                        '点下方按钮在网页打开完整 K 线图(含缠论 / 指标)。\n'
-                        '\n'
-                        '_仅供参考,不构成投资建议_',
+ 'kline_link': {'text': '*点金 Midas · K线*\n\n📈 NVDA · 美股\n点下方按钮在网页打开完整 K 线图(含缠论 / 指标)。',
                 'keyboard': {'inline_keyboard': [[{'text': '📈 网页看K线',
                                                    'url': 'http://localhost:3000/us-preview?symbol=NVDA'}],
                                                  [{'text': '⬅️ 返回菜单',
                                                    'callback_data': 'menu:main'}]]}},
- 'watchlist_empty': {'text': '*点金 Midas · 自选*\n'
-                             '\n'
-                             '你还没有自选标的。\n'
-                             '在网页端工作台用 Cmd/Ctrl+K 添加。\n'
-                             '\n'
-                             '_仅供参考,不构成投资建议_',
+ 'watchlist_empty': {'text': '*点金 Midas · 自选*\n\n你还没有自选标的。\n在网页端工作台用 Cmd/Ctrl+K 添加。',
                      'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                         'callback_data': 'menu:main'}]]}},
- 'watchlist_rows': {'text': '*点金 Midas · 自选*\n'
-                            '\n'
-                            'NVDA · 美股  $145.00  🔴 +1.20%\n'
-                            'MU/USDT · 加密  —  —\n'
-                            '\n'
-                            '_仅供参考,不构成投资建议_',
+ 'watchlist_rows': {'text': '*点金 Midas · 自选*\n\nNVDA · 美股  $145.00  🔴 +1.20%\nMU/USDT · 加密  —  —',
                     'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                        'callback_data': 'menu:main'}]]}},
- 'positions_empty': {'text': '*点金 Midas · 持仓*\n\n当前没有活仓。\n所有交易均为 VIRTUAL · 模拟。\n\n_仅供参考,不构成投资建议_',
+ 'positions_empty': {'text': '*点金 Midas · 持仓*\n\n当前没有活仓。\n所有交易均为 VIRTUAL · 模拟。',
                      'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                         'callback_data': 'menu:main'}]]}},
  'positions_rows': {'text': '*点金 Midas · 持仓* (VIRTUAL · 模拟)\n'
                             '\n'
                             'NVDA · 美股 · 多  10 @ $140.00\n'
-                            'BTC/USDT · 永续20x · 空  0.5 @ 63,000.0000 USDT\n'
-                            '\n'
-                            '_仅供参考,不构成投资建议_',
+                            'BTC/USDT · 永续20x · 空  0.5 @ 63,000.0000 USDT',
                     'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                        'callback_data': 'menu:main'}]]}},
- 'order_market_picker': {'text': '*点金 Midas · 下单* (VIRTUAL · 模拟)\n'
-                                 '\n'
-                                 '🛒 全程虚拟资金 · 先选市场:\n'
-                                 '\n'
-                                 '_仅供参考,不构成投资建议_',
+ 'order_market_picker': {'text': '*点金 Midas · 下单* (VIRTUAL · 模拟)\n\n🛒 全程虚拟资金 · 先选市场:',
                          'keyboard': {'inline_keyboard': [[{'text': 'A股',
                                                             'callback_data': 'omkt:cn'},
                                                            {'text': '美股',
@@ -161,12 +115,10 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                                                             'callback_data': 'menu:main'}]]}},
  'order_ask_symbol_crypto': {'text': '*点金 Midas · 下单* (加密为永续合约 · 逐仓)\n'
                                      '\n'
-                                     '加密 · 请发送要下单的代码,例如 `BTC/USDT`\n'
-                                     '\n'
-                                     '_仅供参考,不构成投资建议_',
+                                     '加密 · 请发送要下单的代码,例如 `BTC/USDT`',
                              'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                                 'callback_data': 'menu:main'}]]}},
- 'order_ask_symbol_cn': {'text': '*点金 Midas · 下单* \n\nA股 · 请发送要下单的代码,例如 `600519`\n\n_仅供参考,不构成投资建议_',
+ 'order_ask_symbol_cn': {'text': '*点金 Midas · 下单* \n\nA股 · 请发送要下单的代码,例如 `600519`',
                          'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                             'callback_data': 'menu:main'}]]}},
  'order_directions_perp': {'text': '*点金 Midas · 下单* (VIRTUAL · 模拟)\n'
@@ -174,9 +126,7 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                                    'BTC/USDT · 加密\n'
                                    '当前价 63,200.0000 USDT\n'
                                    '\n'
-                                   '选择操作:\n'
-                                   '\n'
-                                   '_仅供参考,不构成投资建议_',
+                                   '选择操作:',
                            'keyboard': {'inline_keyboard': [[{'text': '开多',
                                                               'callback_data': 'odir:open_long'},
                                                              {'text': '开空',
@@ -185,14 +135,7 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                                                               'callback_data': 'odir:close'}],
                                                             [{'text': '⬅️ 返回菜单',
                                                               'callback_data': 'menu:main'}]]}},
- 'order_directions_noprice': {'text': '*点金 Midas · 下单* (VIRTUAL · 模拟)\n'
-                                      '\n'
-                                      'NVDA · 美股\n'
-                                      '—\n'
-                                      '\n'
-                                      '选择操作:\n'
-                                      '\n'
-                                      '_仅供参考,不构成投资建议_',
+ 'order_directions_noprice': {'text': '*点金 Midas · 下单* (VIRTUAL · 模拟)\n\nNVDA · 美股\n—\n\n选择操作:',
                               'keyboard': {'inline_keyboard': [[{'text': '买入',
                                                                  'callback_data': 'odir:buy'},
                                                                 {'text': '卖出',
@@ -213,7 +156,7 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                                 '\n'
                                 '⚠️ 确认后立即以【虚拟资金】下单,不可撤销。\n'
                                 '\n'
-                                '_仅供参考,不构成投资建议_',
+                                '_本次为模拟交易,不构成投资建议_',
                         'keyboard': {'inline_keyboard': [[{'text': '✅ 确认下单',
                                                            'callback_data': 'ordok'},
                                                           {'text': '✖️ 取消',
@@ -227,20 +170,15 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                                 '\n'
                                 '⚠️ 确认后立即以【虚拟资金】下单,不可撤销。\n'
                                 '\n'
-                                '_仅供参考,不构成投资建议_',
+                                '_本次为模拟交易,不构成投资建议_',
                         'keyboard': {'inline_keyboard': [[{'text': '✅ 确认下单',
                                                            'callback_data': 'ordok'},
                                                           {'text': '✖️ 取消',
                                                            'callback_data': 'ordno'}]]}},
- 'order_unavailable': {'text': '*点金 Midas · 下单*\n'
-                               '\n'
-                               '无法下单:可能暂无最新报价,或(平仓时)当前没有可平持仓。\n'
-                               '请确认代码 / 持仓后再试。\n'
-                               '\n'
-                               '_仅供参考,不构成投资建议_',
+ 'order_unavailable': {'text': '*点金 Midas · 下单*\n\n无法下单:可能暂无最新报价,或(平仓时)当前没有可平持仓。\n请确认代码 / 持仓后再试。',
                        'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                           'callback_data': 'menu:main'}]]}},
- 'order_result': {'text': '*点金 Midas · 已拒绝*\n\n余额不足,无法下单。\n\n_仅供参考,不构成投资建议_',
+ 'order_result': {'text': '*点金 Midas · 已拒绝*\n\n余额不足,无法下单。\n\n_本次为模拟交易,不构成投资建议_',
                   'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                      'callback_data': 'menu:main'}]]}},
  'order_receipt': {'text': '✅ *点金 Midas · 合约成交*\n'
@@ -254,20 +192,16 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
  'order_symbol_invalid': {'text': '*点金 Midas · 下单*\n'
                                   '\n'
                                   '未找到「xyz」对应的标的,请重新输入。\n'
-                                  '例:BTC / BTCUSDT / BTC/USDT\n'
-                                  '\n'
-                                  '_仅供参考,不构成投资建议_',
+                                  '例:BTC / BTCUSDT / BTC/USDT',
                           'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                              'callback_data': 'menu:main'}]]}},
  'order_direction_hint': {'text': '*点金 Midas · 下单*\n'
                                   '\n'
                                   '请点上方按钮选择方向(开多 / 开空 / 平仓)。\n'
-                                  '如需更换标的,请点「🛒 下单」重新开始。\n'
-                                  '\n'
-                                  '_仅供参考,不构成投资建议_',
+                                  '如需更换标的,请点「🛒 下单」重新开始。',
                           'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                              'callback_data': 'menu:main'}]]}},
- 'order_cancelled': {'text': '*点金 Midas · 下单*\n\n已取消,未下单。\n\n_仅供参考,不构成投资建议_',
+ 'order_cancelled': {'text': '*点金 Midas · 下单*\n\n已取消,未下单。',
                      'keyboard': {'inline_keyboard': [[{'text': '📊 行情查询',
                                                         'callback_data': 'menu:quote'},
                                                        {'text': '📈 K线图',
@@ -282,22 +216,16 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                                                         'callback_data': 'menu:rules'}],
                                                       [{'text': '🌙 安静时段',
                                                         'callback_data': 'menu:quiet'}]]}},
- 'rate_limited': {'text': '*点金 Midas*\n\n操作过于频繁,请稍后再试(防滥用限流)。\n\n_仅供参考,不构成投资建议_', 'keyboard': None},
+ 'rate_limited': {'text': '*点金 Midas*\n\n操作过于频繁,请稍后再试(防滥用限流)。', 'keyboard': None},
  'alert_rules_empty': {'text': '*点金 Midas · 告警规则*\n'
                                '\n'
                                '你还没有告警规则。\n'
-                               '点「✨ 一键应用推荐规则」快速开始,或在网页端【设置 → 告警规则】自定义。\n'
-                               '\n'
-                               '_仅供参考,不构成投资建议_',
+                               '点「✨ 一键应用推荐规则」快速开始,或在网页端【设置 → 告警规则】自定义。',
                        'keyboard': {'inline_keyboard': [[{'text': '✨ 一键应用推荐规则',
                                                           'callback_data': 'rules:apply'}],
                                                         [{'text': '⬅️ 返回菜单',
                                                           'callback_data': 'menu:main'}]]}},
- 'alert_rules_rows': {'text': '*点金 Midas · 告警规则*\n'
-                              '\n'
-                              '🔔=启用 / 🔕=停用 · 点规则可切换状态;全量新建在网页端。\n'
-                              '\n'
-                              '_仅供参考,不构成投资建议_',
+ 'alert_rules_rows': {'text': '*点金 Midas · 告警规则*\n\n🔔=启用 / 🔕=停用 · 点规则可切换状态;全量新建在网页端。',
                       'keyboard': {'inline_keyboard': [[{'text': '🔔 价格>70,000 · BTC/USDT',
                                                          'callback_data': 'rules:toggle:1'}],
                                                        [{'text': '🔕 涨跌幅≤-5% · 美股',
@@ -310,9 +238,7 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                               '\n'
                               '已应用推荐:新增 2 条 · 跳过 1 条\n'
                               '\n'
-                              '🔔=启用 / 🔕=停用 · 点规则可切换状态;全量新建在网页端。\n'
-                              '\n'
-                              '_仅供参考,不构成投资建议_',
+                              '🔔=启用 / 🔕=停用 · 点规则可切换状态;全量新建在网页端。',
                       'keyboard': {'inline_keyboard': [[{'text': '🔔 价格>70,000 · BTC/USDT',
                                                          'callback_data': 'rules:toggle:1'}],
                                                        [{'text': '✨ 一键应用推荐规则',
@@ -328,9 +254,7 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                             '⚠️ 安静时段内仅静默【普通告警】(自选异动 / 规则告警),\n'
                             '    *成交 / 强平等关键事件照常推送*,夜间不漏。\n'
                             '\n'
-                            '按下方按钮调整开关 / 起止小时;时区切换请到网页端。\n'
-                            '\n'
-                            '_仅供参考,不构成投资建议_',
+                            '按下方按钮调整开关 / 起止小时;时区切换请到网页端。',
                     'keyboard': {'inline_keyboard': [[{'text': '🔕 关闭安静时段',
                                                        'callback_data': 'quiet:toggle'}],
                                                      [{'text': '−1h', 'callback_data': 'quiet:s-'},
@@ -354,9 +278,7 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                              '⚠️ 安静时段内仅静默【普通告警】(自选异动 / 规则告警),\n'
                              '    *成交 / 强平等关键事件照常推送*,夜间不漏。\n'
                              '\n'
-                             '按下方按钮调整开关 / 起止小时;时区切换请到网页端。\n'
-                             '\n'
-                             '_仅供参考,不构成投资建议_',
+                             '按下方按钮调整开关 / 起止小时;时区切换请到网页端。',
                      'keyboard': {'inline_keyboard': [[{'text': '🔔 启用安静时段',
                                                         'callback_data': 'quiet:toggle'}],
                                                       [{'text': '−1h', 'callback_data': 'quiet:s-'},
@@ -376,11 +298,9 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
  'not_bound': {'text': '*点金 Midas*\n'
                        '\n'
                        '你的 Telegram 还没绑定 Midas 账号。\n'
-                       '请到网页端【设置 → 消息推送】点「绑定 Telegram」,按提示完成绑定后再用。\n'
-                       '\n'
-                       '_仅供参考,不构成投资建议_',
+                       '请到网页端【设置 → 消息推送】点「绑定 Telegram」,按提示完成绑定后再用。',
                'keyboard': None},
- 'hint': {'text': '*点金 Midas*\n\n发送 /menu 打开功能菜单,或 `/price <代码>` 直接查行情。\n\n_仅供参考,不构成投资建议_',
+ 'hint': {'text': '*点金 Midas*\n\n发送 /menu 打开功能菜单,或 `/price <代码>` 直接查行情。',
           'keyboard': {'inline_keyboard': [[{'text': '📊 行情查询', 'callback_data': 'menu:quote'},
                                             {'text': '📈 K线图', 'callback_data': 'menu:kline'}],
                                            [{'text': '⭐ 我的自选', 'callback_data': 'act:watchlist'},
@@ -388,7 +308,6 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                                            [{'text': '🛒 下单', 'callback_data': 'menu:order'},
                                             {'text': '🔔 告警规则', 'callback_data': 'menu:rules'}],
                                            [{'text': '🌙 安静时段', 'callback_data': 'menu:quiet'}]]}}}
-
 
 # ── fixtures(与 _dump_golden 一致 · 决定 GOLDEN 的输入)────────────────
 _Q_FULL = SymbolQuote(
@@ -490,3 +409,26 @@ def test_telegram_render_byte_identical(key: str) -> None:
     reply = render_for_telegram(CASES[key])
     assert reply.text == GOLDEN[key]["text"], f"[{key}] text 字节级回归"
     assert reply.keyboard == GOLDEN[key]["keyboard"], f"[{key}] keyboard 结构回归"
+
+
+# ── 🔴 免责分级守卫(阶段四-A · 独立于 GOLDEN · 防误删交易类免责)──────────
+_TRADE_KEYS = {
+    "order_preview_perp", "order_preview_spot", "order_result", "order_receipt",
+}
+_DISPLAY_KEYS = sorted(set(GOLDEN) - _TRADE_KEYS)
+_TRADE_DISCLAIMER = "本次为模拟交易,不构成投资建议"
+
+
+@pytest.mark.parametrize("key", _DISPLAY_KEYS)
+def test_display_messages_have_no_disclaimer(key: str) -> None:
+    """🔴 展示/导航/配置类:不带任何免责声明(分级:去掉)。"""
+    text = render_for_telegram(CASES[key]).text
+    assert "仅供参考" not in text, f"[{key}] 展示类不应含免责"
+    assert _TRADE_DISCLAIMER not in text, f"[{key}] 展示类不应含交易免责"
+
+
+@pytest.mark.parametrize("key", sorted(_TRADE_KEYS))
+def test_trade_messages_keep_trade_disclaimer(key: str) -> None:
+    """🔴 交易类(下单确认/成交/拒单/回执):必带「本次为模拟交易,不构成投资建议」· 不可误删。"""
+    text = render_for_telegram(CASES[key]).text
+    assert _TRADE_DISCLAIMER in text, f"[{key}] 交易类必须含交易口径免责"

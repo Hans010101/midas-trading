@@ -251,7 +251,10 @@ async def test_webhook_command_menu_bound(
     assert chat_id == "987"
     assert markup is not None
     assert "inline_keyboard" in markup
-    assert "不构成投资建议" in text  # 红线:免责
+    # ADR 0032 阶段四-A 免责分级:主菜单是【展示类】→ 不带免责(交易类才带)·
+    # 交易类必带免责由 test_bot_golden 守卫钉死。
+    assert "不构成投资建议" not in text
+    assert "迷你终端" in text  # 仍是主菜单
 
 
 @pytest.mark.asyncio
