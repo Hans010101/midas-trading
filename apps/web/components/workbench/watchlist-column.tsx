@@ -48,6 +48,7 @@ const MARKET_LABEL: Record<Market, string> = {
   cn: 'A 股',
   us: '美股',
   crypto: '加密',
+  hk: '港股',
 }
 
 function chipClass(m: Market): string {

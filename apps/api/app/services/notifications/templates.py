@@ -19,8 +19,8 @@ from app.services.notifications.events import (
     TradeFilledEvent,
 )
 
-MARKET_LABEL: dict[str, str] = {"cn": "A 股", "us": "美股", "crypto": "加密"}
-CURRENCY_SYMBOL: dict[str, str] = {"CNY": "¥", "USD": "$", "USDT": "USDT"}
+MARKET_LABEL: dict[str, str] = {"cn": "A 股", "us": "美股", "crypto": "加密", "hk": "港股"}
+CURRENCY_SYMBOL: dict[str, str] = {"CNY": "¥", "USD": "$", "USDT": "USDT", "HKD": "HK$"}
 
 DISCLAIMER = "本次为模拟交易,不构成投资建议"
 # 告警类不是交易,用「仅供参考」免责(红线:bot 文案必带免责)

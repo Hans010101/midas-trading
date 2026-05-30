@@ -25,16 +25,18 @@ import { currencyOf, formatMoney } from '@/lib/format-money'
 import { cn } from '@/lib/utils'
 import type { Market } from '@midas/shared'
 
-const MARKET_LABEL: Record<Market, string> = { cn: 'A 股', us: '美股', crypto: '加密' }
+const MARKET_LABEL: Record<Market, string> = { cn: 'A 股', us: '美股', crypto: '加密', hk: '港股' }
 const MARKET_BADGE: Record<Market, string> = {
   cn: 'border-midas-red/40 text-midas-red',
   us: 'border-gold/50 text-gold',
   crypto: 'border-paper text-muted-foreground',
+  hk: 'border-paper text-muted-foreground',
 }
 const PREVIEW_PATH: Record<Market, string> = {
   cn: '/cn-preview',
   us: '/us-preview',
   crypto: '/crypto-preview',
+  hk: '/hk-market', // 港股暂无个股详情页 · 指向占位页(数据 P1-3 后再做 hk-preview)
 }
 
 function openDetail(market: Market, symbol: string) {

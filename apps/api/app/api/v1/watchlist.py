@@ -52,7 +52,7 @@ OptionalCryptoSourceDep = Annotated[
 
 # 首次登录预填三市场代表标的(0007 第 6 节)
 # 顺序固定:加密在最上(变动最频繁,看着像「活着的产品」)→ 美股 → A 股
-DEMO_WATCHLIST: tuple[tuple[str, Literal["cn", "us", "crypto"]], ...] = (
+DEMO_WATCHLIST: tuple[tuple[str, Literal["cn", "us", "crypto", "hk"]], ...] = (
     ("BTC/USDT", "crypto"),
     ("NVDA", "us"),
     ("600519", "cn"),
