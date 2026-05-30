@@ -248,13 +248,27 @@ async def feishu_webhook(
     event = payload.get("event") or {}
 
     if event_type == "im.message.receive_v1":
+        # 用户发文本(如输标的)→ 发【新消息卡】(本就该新消息,不原地刷新)
         await _handle_message(db, redis, ch, background, event)
     elif event_type == "card.action.trigger":
-        await _handle_card_action(db, redis, ch, background, event)
+        # 点按钮 → 在 HTTP 响应里【原地返回新卡】· 飞书替换当前卡(对齐 TG editMessageText)
+        card_resp = await _handle_card_action(db, redis, ch, event)
+        if card_resp is not None:
+            return JSONResponse(content=card_resp)
     else:
         logger.info("[feishu-webhook] 忽略事件 event_type=%s", event_type)
 
     return JSONResponse(content={"code": 0})
+
+
+def _card_update_response(card: dict[str, Any]) -> dict[str, Any]:
+    """card.action.trigger 回调的【原地更新】响应体。
+
+    飞书规范:回调响应里带 card → 替换触发该回调的那张卡(无需另发新消息)。
+    用 type=raw 直接塞我们 render_for_feishu 产出的卡片 JSON。
+    待真机确认:若飞书要求其它信封键,这里是唯一改动点(业务逻辑不受影响)。
+    """
+    return {"card": {"type": "raw", "data": card}}
 
 
 async def _handle_message(
@@ -290,17 +304,20 @@ async def _handle_card_action(
     db: AsyncSession,
     redis: Redis,
     ch: ClickHouseClient | None,
-    background: BackgroundTasks,
     event: dict[str, Any],
-) -> None:
-    """卡片按钮回调 → InboundMessage(kind=button)→ handle_inbound。"""
+) -> dict[str, Any] | None:
+    """卡片按钮回调 → InboundMessage(kind=button)→ handle_inbound → 【原地更新】响应。
+
+    返回 card-update 响应体(飞书原地替换当前卡);无法处理(缺 open_id/action/CH)→ None。
+    🔴 open_id 仍只从 _parse_card_event(已验签事件)取 · 业务全走 handle_inbound(不另写)。
+    """
     open_id, action = _parse_card_event(event)
     if open_id is None or not action:
-        return
+        return None
     if ch is None:
-        return
+        return None
     msg = InboundMessage(
         channel="feishu", channel_uid=open_id, kind="button", action=action,
     )
     reply = await handle_inbound(db, redis, ch, msg)
-    background.add_task(_send_card_safe, open_id, render_for_feishu(reply))
+    return _card_update_response(render_for_feishu(reply))
