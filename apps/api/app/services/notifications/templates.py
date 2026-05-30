@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from app.core.formatting import format_price_number
 from app.services.notifications.events import (
     AlertTriggeredEvent,
     LiquidationEvent,
@@ -28,8 +29,22 @@ _OP_SYMBOL: dict[str, str] = {"gt": ">", "gte": "≥", "lt": "<", "lte": "≤"}
 
 
 def _fmt_money(amount: Decimal, currency: str) -> str:
-    decimals = 4 if currency == "USDT" else 2
-    formatted = f"{amount:,.{decimals}f}"
+    """金额类(盈亏 / 手续费 / 余额)· 全币种固定 2 位 · 不走动态(价格才走 _fmt_price)。
+
+    产品定调:USDT 也统一 2 位(虚拟交易、手续费象征性,接受极小值显示 0.00)。
+    """
+    formatted = f"{amount:,.2f}"
+    if currency == "USDT":
+        return f"{formatted} USDT"
+    return f"{CURRENCY_SYMBOL.get(currency, currency)}{formatted}"
+
+
+def _fmt_price(amount: Decimal, currency: str) -> str:
+    """价格类(成交价 / 强平价 / 现价 / 名义)· 动态精度 + <1 去尾零(单一事实源 format_price_number)。
+
+    ★ 只换「数字串」,币种符号 / 千分位包装与 _fmt_money 一致 → 非价格行字节不变。
+    """
+    formatted = format_price_number(float(amount))
     if currency == "USDT":
         return f"{formatted} USDT"
     return f"{CURRENCY_SYMBOL.get(currency, currency)}{formatted}"
@@ -90,7 +105,7 @@ def _tg_trade_filled(event: TradeFilledEvent) -> str:
         "*点金 Midas · 成交通知*\n\n"
         f"📊 {event.symbol} · {MARKET_LABEL.get(event.market, event.market)}\n"
         f"{side_label} {event.quantity} · 成交价 "
-        f"{_fmt_money(event.price, event.currency)}\n"
+        f"{_fmt_price(event.price, event.currency)}\n"
         f"手续费 {_fmt_money(event.commission, event.currency)}"
         f"{pnl_line}\n\n"
         f"_{DISCLAIMER}_"
@@ -126,8 +141,8 @@ def _tg_perp_filled(event: PerpFilledEvent) -> str:
         "*点金 Midas · 合约成交*\n\n"
         f"📊 {event.symbol} · 永续 · {mode}{lev}\n"
         f"{action} {event.quantity} · 成交价 "
-        f"{_fmt_money(event.price, event.currency)}\n"
-        f"名义 {_fmt_money(event.notional, event.currency)} · "
+        f"{_fmt_price(event.price, event.currency)}\n"
+        f"名义 {_fmt_price(event.notional, event.currency)} · "
         f"手续费 {_fmt_money(event.fee, event.currency)}"
         f"{pnl_line}\n\n"
         f"_{DISCLAIMER}_"
@@ -153,7 +168,7 @@ def _tg_liquidation(event: LiquidationEvent) -> str:
     side = PERP_SIDE_LABEL.get(event.side or "", event.side or "")
     lev = f" {event.leverage}x" if event.leverage else ""
     liq = (
-        f"触及强平价 {_fmt_money(event.liquidation_price, event.currency)} · "
+        f"触及强平价 {_fmt_price(event.liquidation_price, event.currency)} · "
         if event.liquidation_price is not None
         else ""
     )
@@ -177,8 +192,8 @@ def _tg_price_anomaly(event: PriceAnomalyEvent) -> str:
         "*点金 Midas · 价格异动*\n\n"
         f"{icon} {event.symbol} · {MARKET_LABEL.get(event.market, event.market)}\n"
         f"{direction} {_fmt_pct(event.change_pct)}\n"
-        f"现价 {_fmt_money(event.current_price, event.currency)} · "
-        f"参考 {_fmt_money(event.reference_price, event.currency)}\n\n"
+        f"现价 {_fmt_price(event.current_price, event.currency)} · "
+        f"参考 {_fmt_price(event.reference_price, event.currency)}\n\n"
         f"_{DISCLAIMER}_"
     )
 
