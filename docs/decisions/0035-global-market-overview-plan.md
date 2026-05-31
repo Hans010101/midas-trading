@@ -210,3 +210,29 @@ docker logs --since 40m midas-worker 2>&1 | grep -E 'global_overview_scan|overvi
 docker exec midas-worker celery -A celery_app call tasks.market.global_overview_scan
 ```
 > CH 是有状态容器,以上命令全只读,绝不动数据卷。`market_index_snapshot` 有 `TTL 7 DAY`,采到的行会留 7 天,期间某轮 scan 偶发漏采也不会立刻消失。
+
+---
+
+## 修复 + 运维记录 · 精选扩充 59 指标(2026-05-31 · 已上线)
+
+精选扩充把采集清单从 24 → **52 yfinance**(22 指数 / 13 商品 / 9 外汇 / 4 债券 / **4 市场情绪 sentiment(全新 category)**)+ 加密 2 → 7,合计 **59 指标**。两件事沉淀存档。
+
+### 1. 加密组修复 · `select_crypto_overview` 读 `instrument='perp'`(原读 `'spot'`)
+
+**现象**:精选扩充前真机抽查,`/global` **加密组整组消失**(只剩 index/commodity/forex/bond 四组,crypto 组空)。比阶段A 的 500 更隐蔽 —— **不报错、静默消失**。
+
+**根因**:`select_crypto_overview` 原查 `crypto_ticker_24h WHERE instrument='spot'`,但**现货采集从未常态化** —— 只有 M2 早期一次性种子行(2026-05-23),`crypto_ticker_24h` 的 `TTL 2 DAY` 早把过期种子清光 → spot 行全无 → 加密组查不到任何行 → 空组。
+
+**修**(`clickhouse_overview.py` `select_crypto_overview`):改读 `instrument='perp'`(永续)。perp 是 `crypto_metrics_ingest`(`_all_usdt_perp_symbols()` · 全市场 ~300 USDT 永续)的 **bulk 常态采集**,每轮刷新、数据新鲜、覆盖全部主流币;**对齐产品「加密以合约(perp)为主体、现货为辅」定位基调**(产品负责人拍板)。永续价对主流币 ≈ 现货价(基差极小),概览「仅供参考」展示足够。
+
+**验证**:改后部署即恢复 7 币(BTC / ETH / SOL / BNB / XRP / TRX / DOGE),`last_point` 实数据合理(BTC ~74k / ETH ~2k …)。
+
+**后续**:若将来概览要展示**真现货价**,须**新建独立现货采集任务**(spot ingest 常态化),不能再靠 perp 通道顶替 —— 永续 ≈ 现货只在「仅供参考」精度下成立。
+
+### 2. 首轮采集延迟 · 再证(含全新分类)
+
+上面「§ 运维备注 · 首轮采集延迟」的机制,这次扩 59 指标**又验一次**,补一条新 nuance:
+
+- 采集清单 24 → 52,单轮 `global_overview_scan` 抓 52 个 yfinance(耗时随之略增),仍是 :00/:10/:20… **每 10min 一轮**;**扩充后数据要等下一轮 scan 跑完才进库**,首轮跑完前 `/global` 新指标暂无数据 = **正常**。
+- **新分类同样要等一轮**:本次新增 `sentiment`(市场情绪)是**全新 category**,首轮 scan 跑完前,`/global` 上「市场情绪」**整个分组都不出现** = 正常 —— 前端按 API 返回的 category **动态分组**,API 没这组就没这组(不是前端漏渲染)。
+- 结论不变:**「新指标 / 新分类不显示」永远先怀疑采集没跑完,而不是前端**;想立刻看用上面的手动触发命令(`celery … call tasks.market.global_overview_scan`),等约 90s。
