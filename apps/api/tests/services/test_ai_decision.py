@@ -232,7 +232,7 @@ async def test_workflow_end_to_end_with_mock_llm(monkeypatch):
     assert len(card.agent_scores) == 1
     assert card.agent_scores[0].name == "technical"
     assert 0.0 <= card.agent_scores[0].confidence <= 1.0
-    assert card.disclaimer == "仅供参考,不构成投资建议"
+    assert card.disclaimer == ""
     assert not has_imperative(card.narrative), (
         f"narrative 不应含祈使句,实际:{card.narrative!r}"
     )

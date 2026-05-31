@@ -65,5 +65,5 @@ class ChanAnalysisResponse(BaseModel):
     zhongshus: list[ZhongshuResponse]
     # M1 第二波填充 · czsc 6 类买卖点(B1-3 / S1-3)· 详见 0012 § 缠论买卖点提取
     buy_sell_points: list[BuySellPointResponse] = Field(default_factory=list)
-    # 红线 · 缠论 / AI 输出必带
-    disclaimer: str = "仅供参考,不构成投资建议"
+    # disclaimer 字段保留(API 契约不破)· 产品决策置空
+    disclaimer: str = ""

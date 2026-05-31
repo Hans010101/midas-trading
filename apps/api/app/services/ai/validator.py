@@ -82,14 +82,6 @@ def rewrite_imperatives(text: str) -> str:
     return out
 
 
-def ensure_disclaimer(text: str) -> str:
-    """确保文本末尾带 disclaimer · 给某些场景兜底用(API response 字段是主防线)。"""
-    disclaimer = "仅供参考,不构成投资建议"
-    if disclaimer in text:
-        return text
-    return f"{text.rstrip()}\n\n{disclaimer}"
-
-
 # regex 版本(辅助 · 用于将来扩展更复杂模式)· M1 二波先用上面的简单 str.replace
 _VERB_IMPERATIVE_RE = re.compile(
     r"(?<![分析显示可能存在])(?:买入|卖出|清仓|加仓|减仓)(?=[!,。;])",
@@ -152,7 +144,6 @@ def validate_advisory(text: str) -> str:
 
 
 __all__ = [
-    "ensure_disclaimer",
     "has_imperative",
     "has_marketing_violation",
     "has_naked_imperative_verb",
