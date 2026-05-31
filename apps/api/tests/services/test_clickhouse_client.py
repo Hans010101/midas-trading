@@ -92,6 +92,40 @@ class TestKlineRoundTrip:
         fetched = await ch.select_kline(symbol=sym, market="cn", period="1d", since=since)
         assert len(fetched) == 3  # day 2/3/4
 
+    async def test_select_first_kline_at_or_after(self, ch: ClickHouseClient) -> None:
+        """0036 批次乙 · reflection 回填用 · 取 ts >= 给定时刻的【最早一根】。
+
+        ★ 验证语义精确(ASC LIMIT 1)· 不像 select_kline 的 DESC LIMIT 取最新根。
+        """
+        sym = _test_symbol()
+        ts0 = datetime(2026, 5, 1, 0, 0, 0, tzinfo=UTC)
+        # day0..day9 · close = 100+i +2(_make_kline base+2)
+        rows = [_make_kline(ts0 + timedelta(days=i), 100.0 + i) for i in range(10)]
+        await ch.insert_kline(rows, symbol=sym, market="cn", period="1d")
+
+        # 恰好落在某根上(day3 · close=105)
+        k = await ch.select_first_kline_at_or_after(
+            symbol=sym, market="cn", period="1d", at_or_after=ts0 + timedelta(days=3),
+        )
+        assert k is not None
+        assert k.ts == ts0 + timedelta(days=3)
+        assert k.close == 105.0  # 103 + 2
+
+        # 落在两根之间(day3 12:00)→ 取下一根 day4(首个 >= 门槛)· 非最新根
+        k2 = await ch.select_first_kline_at_or_after(
+            symbol=sym, market="cn", period="1d",
+            at_or_after=ts0 + timedelta(days=3, hours=12),
+        )
+        assert k2 is not None
+        assert k2.ts == ts0 + timedelta(days=4)
+        assert k2.close == 106.0  # 104 + 2 · 证明取的是首根而非 day9 最新根
+
+        # 门槛超过最后一根 → None(horizon 未到 · CH 无数据)
+        k3 = await ch.select_first_kline_at_or_after(
+            symbol=sym, market="cn", period="1d", at_or_after=ts0 + timedelta(days=99),
+        )
+        assert k3 is None
+
 
 class TestSymbolMeta:
     async def test_upsert_then_search(self, ch: ClickHouseClient) -> None:

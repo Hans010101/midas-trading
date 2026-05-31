@@ -6,9 +6,12 @@ GET /chan?symbol=&market=&period=&limit= · 缠论分析(笔 + 分型 + 中枢)
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
     BinanceFuturesSourceDep,
@@ -17,6 +20,8 @@ from app.api.deps import (
     CryptoSourceDep,
     UsSourceDep,
 )
+from app.core.database import get_db
+from app.schemas.ai_accuracy import AiAccuracyResponse
 from app.schemas.ai_decision import DecisionCardResponse
 from app.schemas.chan import (
     BiResponse,
@@ -26,11 +31,16 @@ from app.schemas.chan import (
     ZhongshuResponse,
 )
 from app.schemas.market import Market, Period
+from app.services.ai.accuracy import compute_accuracy
 from app.services.ai.actionable import with_actionable
 from app.services.ai.cache import get_cached_card, set_cached_card
+from app.services.ai.memory import record_decision
 from app.services.ai.workflow import run_decision_workflow
 from app.services.analysis.chan import analyze as analyze_chan
 from app.services.data_sources.base import BaseDataSource
+
+# 仅本路由用 · 不放 deps.py 避免对其他路由产生隐式依赖(virtual.py 已自定义本地 DbDep)
+DbDep = Annotated[AsyncSession, Depends(get_db)]
 
 # M2-B(0017 ADR)· 缠论 + 决策卡都加 instrument 参数 · perp K 线分析
 Instrument = Literal["spot", "perp"]
@@ -174,6 +184,7 @@ async def get_decision_card(
     us: UsSourceDep,
     crypto: CryptoSourceDep,
     binance_futures: BinanceFuturesSourceDep,
+    db: DbDep,
     symbol: str = Query(..., min_length=1, examples=["BTC/USDT", "NVDA", "600519", "BTCUSDT"]),
     market: Market = Query(...),
     period: Period = Query("1d"),
@@ -238,5 +249,45 @@ async def get_decision_card(
     # 4. 写缓存(不含 actionable · 由下方派生)· 失败不阻塞
     await set_cached_card(card)
 
-    # 5. 派生 actionable 可下单建议(0036 批次甲 · API 层 · 不改 AI 管线)
+    # 5. 旁路记录决策卡历史(0036 批次乙 · best-effort · 永不阻塞响应)
+    # price_at 用 klines[-1].close · 跟 workflow 内部 last_close 同源;
+    # 失败已在 record_decision 内吞掉(只记 warning),此处不需 try/except。
+    await record_decision(
+        db, card=card, instrument=instrument, price_at=Decimal(str(klines[-1].close)),
+    )
+
+    # 6. 派生 actionable 可下单建议(0036 批次甲 · API 层 · 不改 AI 管线)
     return with_actionable(card)
+
+
+# ===== AI 历史命中率 · 0036 批次乙 sub-unit C(自学习闭环呈现层后端)=====
+
+
+@router.get(
+    "/ai-accuracy",
+    response_model=AiAccuracyResponse,
+    summary="AI 历史命中率 · 总体 + 市场 / 方向 / 置信度分桶(0036 批次乙)",
+    description=(
+        "返回 AI 决策卡历史命中率统计:基于 reflection 事后实测涨跌验证的记录"
+        "(was_correct)聚合。总体 + 按市场 / 方向 / 置信度三维分桶,每桶带样本数。"
+        "★ 纯只读统计(读 PG · 不打实时上游 · 不碰下单)。"
+        "★ 小样本桶(sample_count < min_reliable_sample · reliable=false)命中率仅供参考。"
+    ),
+)
+async def get_ai_accuracy(
+    db: DbDep,
+    since_days: Annotated[
+        int | None,
+        Query(ge=1, le=3650, description="只统计最近 N 天分析(analyzed_at)的记录 · 不传=全部历史"),
+    ] = None,
+    llm_mode: Annotated[
+        Literal["mock", "real"] | None,
+        Query(description="按 LLM 模式过滤 · 不传=全部(未来切真实模型后可只看 real)"),
+    ] = None,
+) -> AiAccuracyResponse:
+    since = (
+        datetime.now(UTC) - timedelta(days=since_days) if since_days is not None else None
+    )
+    return await compute_accuracy(
+        db, since=since, since_days=since_days, llm_mode=llm_mode,
+    )

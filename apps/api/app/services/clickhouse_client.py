@@ -245,6 +245,54 @@ class ClickHouseClient:
         klines.reverse()
         return klines
 
+    async def select_first_kline_at_or_after(
+        self,
+        *,
+        symbol: str,
+        market: Market,
+        period: Period,
+        at_or_after: datetime,
+        instrument: str = KLINE_INSTRUMENT_DEFAULT,
+    ) -> Kline | None:
+        """查 `ts >= at_or_after` 的**最早一根** K 线(ASC LIMIT 1)· 无则 None。
+
+        用途:reflection 回填(0036 批次乙)· 找 AI 分析 horizon 后的首根实测价。
+
+        ★ 红线:只读 CH 已采历史 · 纯 SELECT · 绝不触发实时上游采集。
+
+        为什么不复用 select_kline:select_kline 是 `ORDER BY ts DESC LIMIT N`
+        (取最新 N 根 · 0010 教训),用它找「horizon 后首根」需 N 覆盖到 now,小周期
+        (1h/5m)gap 大时会被 LIMIT 截断 → 取到偏晚的 K 线 → 错误回填。本方法
+        `ASC LIMIT 1` 语义精确、不受窗口大小影响,是「某时刻之后首根」的正确查询。
+        """
+        result = await self._client.query(
+            "SELECT ts, open, high, low, close, volume, amount FROM kline "
+            "WHERE symbol = %(symbol)s AND market = %(market)s "
+            "AND instrument = %(instrument)s AND period = %(period)s "
+            "AND ts >= %(at_or_after)s "
+            "ORDER BY ts ASC LIMIT 1",
+            parameters={
+                "symbol": symbol,
+                "market": market,
+                "instrument": instrument,
+                "period": period,
+                "at_or_after": self._to_aware_utc(at_or_after),
+            },
+        )
+        rows = result.result_rows
+        if not rows:
+            return None
+        row = rows[0]
+        return Kline(
+            ts=row[0].replace(tzinfo=UTC),
+            open=row[1],
+            high=row[2],
+            low=row[3],
+            close=row[4],
+            volume=row[5],
+            amount=row[6] if row[6] > 0 else None,
+        )
+
     async def count_kline(
         self,
         *,

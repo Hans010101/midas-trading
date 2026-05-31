@@ -40,6 +40,14 @@ beat_schedule = {
         # 时区按 Asia/Shanghai · A 股日盘已收 + 美股次日早盘前 · 合理快照点
         "schedule": crontab(hour="23", minute="59"),
     },
+    "daily-ai-reflection": {
+        "task": "tasks.ai.reflect_decisions",
+        # ADR 0036 批次乙 · 每日 04:30 CST 回填 N 天前 AI 历史判断的实测涨跌验证。
+        # 夜间低峰 · 只读已采 CH 历史价(不打实时上游)· reflect_pending 幂等(reflected_at
+        # 标记)· expires 3600:没及时领走就丢,下一天再跑(积压一天无害,幂等防重)。
+        "schedule": crontab(hour="4", minute="30"),
+        "options": {"expires": 3600},
+    },
     "scan-price-anomalies": {
         "task": "tasks.price_alerts.scan_price_anomalies",
         # 0009 § 4 · 每 1 分钟扫所有自选股 · 涨跌 ±5% 触发 · Redis 5 分钟去重

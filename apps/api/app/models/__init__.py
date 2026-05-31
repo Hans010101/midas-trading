@@ -1,4 +1,5 @@
 from app.core.database import Base  # noqa: F401
+from app.models.ai_analysis_memory import AIAnalysisMemory  # noqa: F401
 from app.models.ai_usage import AIUsageLog  # noqa: F401
 from app.models.bot_order_preset import BotOrderPreset  # noqa: F401
 from app.models.notification import NotificationConfig  # noqa: F401
