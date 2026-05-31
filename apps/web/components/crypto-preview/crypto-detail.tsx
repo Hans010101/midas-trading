@@ -55,7 +55,8 @@ export function CryptoDetail() {
     () => deriveSymbols(searchParams.get('symbol')),
     [searchParams],
   )
-  const [period, setPeriod] = useState<Period>('1d')
+  // 默认周期 1h(全市场详情页统一 · 15m/1h/1d 可切 · K线/缠论/AI卡跟随)
+  const [period, setPeriod] = useState<Period>('1h')
 
   return (
     <main className="min-h-screen bg-background text-foreground">
