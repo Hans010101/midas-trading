@@ -102,7 +102,7 @@ async def test_callback_positions_bound(db_session: AsyncSession):
         db_session, _FakeRedis(), _FakeCH(), 222, "act:positions",  # type: ignore[arg-type]
     )
     assert "NVDA" in reply.text
-    assert "模拟" in reply.text  # VIRTUAL 徽章 / 免责语境
+    assert "VIRTUAL" not in reply.text  # 产品决策:不再带 VIRTUAL 徽章
 
 
 @pytest.mark.asyncio
@@ -192,7 +192,7 @@ async def test_order_requires_confirm_then_fills(db_session: AsyncSession):
     # 点「确认下单」→ 真正成交
     result = await router.handle_callback(db_session, redis, ch, 700, "ordok")  # type: ignore[arg-type]
     assert "成交" in result.text
-    assert "模拟" in result.text  # VIRTUAL 标识
+    assert "VIRTUAL" not in result.text  # 产品决策:不再带 VIRTUAL 徽章
     assert len(await _positions(db_session, acct.id)) == 1
 
 

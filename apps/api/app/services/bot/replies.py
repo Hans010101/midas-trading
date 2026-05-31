@@ -9,7 +9,7 @@
 🔴 红线(随多通道继承):
 - action 命名空间 = 原 Telegram callback_data 原样冻结(零回归基石,见 ADR 0032 §3)。
 - 下单(G4)全程 VIRTUAL·模拟 + 必经二次确认(确认按钮 action="ordok",见 router)。
-- 每条消息尾部免责;成交类用「本次为模拟交易」(在回执 body 内),其余「仅供参考」。
+- 输出不带免责尾 / VIRTUAL 徽章噪音(平台层已说明全程虚拟)。
 
 数值格式化 helper 属"中立呈现"(数字→展示串),放这里供 build_* 复用;Markdown 粗体 /
 斜体等 TG 专属修饰只在 renderers/telegram.py 处理。
@@ -34,21 +34,14 @@ if TYPE_CHECKING:
     )
     from app.services.bot.quiet import QuietHoursView
 
-DISCLAIMER = "仅供参考,不构成投资建议"
-# ADR 0032 阶段四-A · 交易类免责口径(下单确认 / 成交 / 拒单)· 对齐 templates 成交回执。
-TRADE_DISCLAIMER = "本次为模拟交易,不构成投资建议"
-# 免责分级(阶段四-A · 同时作用于 TG + 飞书,因共享 ReplyModel.disclaimer):
-#   · 展示/导航/配置/系统提示 → disclaimer=None(去免责)
-#   · 交易动作(下单确认 / 成交 / 拒单)→ 保留(确认+结果用 TRADE_DISCLAIMER · 回执 body 自带)
-# 🔴 合规红线:默认 disclaimer=DISCLAIMER(fail-safe · 漏设也带免责);交易类必带、不可误删
-#   (守卫测试 test_bot_golden 钉死方向)。
+# 产品决策:bot 输出不再带免责句 / VIRTUAL 徽章噪音(平台层已说明全程虚拟)。
+# disclaimer / badge 字段保留(供未来用),默认空 —— 渲染器条件渲染,空则不输出。
 _BRAND = "点金 Midas"
 _MARKET_LABEL: dict[str, str] = {"cn": "A股", "us": "美股", "crypto": "加密", "hk": "港股"}
 _CCY_SYMBOL: dict[str, str] = {"CNY": "¥", "USD": "$", "USDT": "", "HKD": "HK$"}
 _PREVIEW_PATH: dict[str, str] = {
     "cn": "cn-preview", "us": "us-preview", "crypto": "crypto-preview",
 }
-_VIRTUAL_BADGE = " (VIRTUAL · 模拟)"  # 视觉系统强制 · 帝王金模拟徽章(下单全程)
 
 
 # ── 中立出站模型 ──────────────────────────────────────────────────────
@@ -71,7 +64,7 @@ class ReplyModel:
     """一次 bot 响应(通道中立)。
 
     - title:语义标题(无品牌前缀 / 无 Markdown);None = 仅品牌头。
-    - badge:标题行尾的非加粗徽章(如 " (VIRTUAL · 模拟)")· 含前导空格 · 默认无。
+    - badge:标题行尾的非加粗徽章 · 含前导空格 · 默认无(产品决策:不再用)。
     - text:正文(无标题行 / 无免责尾)· 偏中立(emoji + 纯文本 + 数字)。
     - buttons:按钮行×列(空 = 无键盘)。
     - disclaimer:免责尾(renderer 追加);None = 不追加(如成交回执已自带)。
@@ -85,7 +78,7 @@ class ReplyModel:
     title: str | None = None
     badge: str = ""
     buttons: tuple[tuple[Button, ...], ...] = ()
-    disclaimer: str | None = DISCLAIMER
+    disclaimer: str | None = None
     kind: Literal["text", "card"] = "card"
     force_new: bool = False
     prerendered: bool = False
@@ -360,8 +353,8 @@ def build_watchlist(rows: list[WatchlistRow]) -> ReplyModel:
 
 def build_positions(rows: list[PositionRow]) -> ReplyModel:
     if not rows:
-        text = "当前没有活仓。\n所有交易均为 VIRTUAL · 模拟。"
-        return ReplyModel(text=text, title="持仓", disclaimer=None, buttons=_back_buttons())
+        text = "当前没有活仓。"
+        return ReplyModel(text=text, title="持仓", buttons=_back_buttons())
     lines = []
     for r in rows:
         mlabel = _MARKET_LABEL.get(r.market, r.market)
@@ -370,15 +363,14 @@ def build_positions(rows: list[PositionRow]) -> ReplyModel:
         entry = _fmt_price(r.avg_entry_price, r.currency)
         lines.append(f"{r.symbol} · {tag} · {side_cn}  {_fmt_qty(r.quantity)} @ {entry}")
     return ReplyModel(
-        text="\n".join(lines), title="持仓", badge=_VIRTUAL_BADGE,
-        disclaimer=None, buttons=_back_buttons(),
+        text="\n".join(lines), title="持仓", buttons=_back_buttons(),
     )
 
 
 def build_order_market_picker() -> ReplyModel:
     return ReplyModel(
-        text="🛒 全程虚拟资金 · 先选市场:", title="下单", badge=_VIRTUAL_BADGE,
-        disclaimer=None, buttons=_order_market_buttons(),
+        text="🛒 先选市场:", title="下单",
+        buttons=_order_market_buttons(),
     )
 
 
@@ -401,7 +393,7 @@ def build_order_directions(market: str, symbol: str, price: float | None) -> Rep
     )
     text = f"{symbol} · {mlabel}\n{price_line}\n\n选择操作:"
     return ReplyModel(
-        text=text, title="下单", badge=_VIRTUAL_BADGE, disclaimer=None,
+        text=text, title="下单",
         buttons=_order_direction_buttons(market),
     )
 
@@ -417,11 +409,10 @@ def build_order_preview(preview: OrderPreview) -> ReplyModel:
     if preview.leverage is not None:
         lines.append(f"杠杆 {preview.leverage}x · 逐仓")
     lines.append("")
-    lines.append("⚠️ 确认后立即以【虚拟资金】下单,不可撤销。")
-    # 🔴 交易类:下单确认卡保留免责(决策 ②:交易口径「本次为模拟交易,不构成投资建议」)
+    lines.append("⚠️ 确认后立即以【账户资金】下单,不可撤销。")
     return ReplyModel(
-        text="\n".join(lines), title="下单确认", badge=_VIRTUAL_BADGE,
-        disclaimer=TRADE_DISCLAIMER, buttons=_order_confirm_buttons(),
+        text="\n".join(lines), title="下单确认",
+        buttons=_order_confirm_buttons(),
     )
 
 
@@ -434,16 +425,15 @@ def build_order_unavailable() -> ReplyModel:
 
 
 def build_order_result(title: str, detail: str) -> ReplyModel:
-    # 🔴 交易类:成交 / 拒单结果保留免责(交易口径)
     return ReplyModel(
-        text=detail, title=title, disclaimer=TRADE_DISCLAIMER, buttons=_back_buttons(),
+        text=detail, title=title, buttons=_back_buttons(),
     )
 
 
 def build_order_receipt(body: str) -> ReplyModel:
     """成交富回执(#296 去重 · 方向③ 合一)。
 
-    body 已是 render_telegram 渲染好的富文本(含品牌标题 + 「本次为模拟交易」免责)·
+    body 已是 render_telegram 渲染好的富文本(含品牌标题)·
     前置 ✅ + 挂返回菜单键盘 · prerendered=True 让 renderer 原样输出(不加品牌头/免责尾)。
     """
     return ReplyModel(

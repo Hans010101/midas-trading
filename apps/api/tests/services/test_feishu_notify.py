@@ -56,13 +56,13 @@ def feishu_creds(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_to_plain_text_strips_markers() -> None:
-    md = "*点金 Midas · 成交通知*\n\n📊 NVDA\n_本次为模拟交易,不构成投资建议_"
+    md = "*点金 Midas · 成交通知*\n\n📊 NVDA\n_永续 · 逐仓_"
     plain = feishu_adapter._to_plain_text(md)
     assert "*" not in plain
     assert "_" not in plain
     assert "`" not in plain
     assert "点金 Midas · 成交通知" in plain
-    assert "本次为模拟交易,不构成投资建议" in plain
+    assert "永续 · 逐仓" in plain
 
 
 # ── token 缓存:命中复用 / force_refresh 重取 ─────────────────────────

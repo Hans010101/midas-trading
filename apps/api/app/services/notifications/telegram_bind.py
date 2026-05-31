@@ -7,7 +7,7 @@
   · 「一 chat 一账号」应用层校验(G2 会加 DB 唯一索引)。
 - 启动后台自动 setWebhook(配了 token + https 公网 URL 才跑 · fail-soft)。
 
-红线:所有 bot 回执必带「仅供参考,不构成投资建议」· 只虚拟交易。
+红线:只虚拟交易。
 """
 
 from __future__ import annotations
@@ -33,7 +33,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _BIND_KEY_PREFIX = "tg_bind:"
-_DISCLAIMER = "仅供参考,不构成投资建议。"
 
 # G5 DP-G5-5:bot 命令菜单(启动期 setMyCommands · 随代码同步)
 _BOT_COMMANDS: list[dict[str, str]] = [
@@ -152,7 +151,7 @@ async def handle_start(
     if user_id_str is None:
         return StartResult(
             kind="invalid_token",
-            reply_text=f"绑定链接无效或已过期,请回设置页重新生成。\n{_DISCLAIMER}",
+            reply_text="绑定链接无效或已过期,请回设置页重新生成。",
         )
     user_id = UUID(user_id_str)
     chat_id_str = str(chat_id)
@@ -167,7 +166,7 @@ async def handle_start(
     if other is not None:
         return StartResult(
             kind="chat_taken",
-            reply_text=f"该 Telegram 已绑定其他账号,请先在原账号解绑。\n{_DISCLAIMER}",
+            reply_text="该 Telegram 已绑定其他账号,请先在原账号解绑。",
         )
 
     config = await db.scalar(
@@ -185,8 +184,8 @@ async def handle_start(
         kind="bound",
         user_id=user_id,
         reply_text=(
-            f"✅ 绑定成功 · 点金 Midas\n\n"
-            f"以后成交 / 价格异动提醒会推送到这里。\n{_DISCLAIMER}"
+            "✅ 绑定成功 · 点金 Midas\n\n"
+            "以后成交 / 价格异动提醒会推送到这里。"
         ),
     )
 

@@ -95,16 +95,16 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
  'watchlist_rows': {'text': '*点金 Midas · 自选*\n\nNVDA · 美股  $145.0  🔴 +1.20%\nMU/USDT · 加密  —  —',
                     'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                        'callback_data': 'menu:main'}]]}},
- 'positions_empty': {'text': '*点金 Midas · 持仓*\n\n当前没有活仓。\n所有交易均为 VIRTUAL · 模拟。',
+ 'positions_empty': {'text': '*点金 Midas · 持仓*\n\n当前没有活仓。',
                      'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                         'callback_data': 'menu:main'}]]}},
- 'positions_rows': {'text': '*点金 Midas · 持仓* (VIRTUAL · 模拟)\n'
+ 'positions_rows': {'text': '*点金 Midas · 持仓*\n'
                             '\n'
                             'NVDA · 美股 · 多  10 @ $140.0\n'
                             'BTC/USDT · 永续20x · 空  0.5 @ 63,000 USDT',
                     'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                        'callback_data': 'menu:main'}]]}},
- 'order_market_picker': {'text': '*点金 Midas · 下单* (VIRTUAL · 模拟)\n\n🛒 全程虚拟资金 · 先选市场:',
+ 'order_market_picker': {'text': '*点金 Midas · 下单*\n\n🛒 先选市场:',
                          'keyboard': {'inline_keyboard': [[{'text': 'A股',
                                                             'callback_data': 'omkt:cn'},
                                                            {'text': '美股',
@@ -121,12 +121,7 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
  'order_ask_symbol_cn': {'text': '*点金 Midas · 下单* \n\nA股 · 请发送要下单的代码,例如 `600519`',
                          'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                             'callback_data': 'menu:main'}]]}},
- 'order_directions_perp': {'text': '*点金 Midas · 下单* (VIRTUAL · 模拟)\n'
-                                   '\n'
-                                   'BTC/USDT · 加密\n'
-                                   '当前价 63,200 USDT\n'
-                                   '\n'
-                                   '选择操作:',
+ 'order_directions_perp': {'text': '*点金 Midas · 下单*\n\nBTC/USDT · 加密\n当前价 63,200 USDT\n\n选择操作:',
                            'keyboard': {'inline_keyboard': [[{'text': '开多',
                                                               'callback_data': 'odir:open_long'},
                                                              {'text': '开空',
@@ -135,7 +130,7 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                                                               'callback_data': 'odir:close'}],
                                                             [{'text': '⬅️ 返回菜单',
                                                               'callback_data': 'menu:main'}]]}},
- 'order_directions_noprice': {'text': '*点金 Midas · 下单* (VIRTUAL · 模拟)\n\nNVDA · 美股\n—\n\n选择操作:',
+ 'order_directions_noprice': {'text': '*点金 Midas · 下单*\n\nNVDA · 美股\n—\n\n选择操作:',
                               'keyboard': {'inline_keyboard': [[{'text': '买入',
                                                                  'callback_data': 'odir:buy'},
                                                                 {'text': '卖出',
@@ -146,7 +141,7 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                                                                  'callback_data': 'odir:cover'}],
                                                                [{'text': '⬅️ 返回菜单',
                                                                  'callback_data': 'menu:main'}]]}},
- 'order_preview_perp': {'text': '*点金 Midas · 下单确认* (VIRTUAL · 模拟)\n'
+ 'order_preview_perp': {'text': '*点金 Midas · 下单确认*\n'
                                 '\n'
                                 '开多 · BTC/USDT · 加密\n'
                                 '预估价 63,200 USDT\n'
@@ -154,23 +149,19 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                                 '名义 ~31,600 USDT\n'
                                 '杠杆 20x · 逐仓\n'
                                 '\n'
-                                '⚠️ 确认后立即以【虚拟资金】下单,不可撤销。\n'
-                                '\n'
-                                '_本次为模拟交易,不构成投资建议_',
+                                '⚠️ 确认后立即以【账户资金】下单,不可撤销。',
                         'keyboard': {'inline_keyboard': [[{'text': '✅ 确认下单',
                                                            'callback_data': 'ordok'},
                                                           {'text': '✖️ 取消',
                                                            'callback_data': 'ordno'}]]}},
- 'order_preview_spot': {'text': '*点金 Midas · 下单确认* (VIRTUAL · 模拟)\n'
+ 'order_preview_spot': {'text': '*点金 Midas · 下单确认*\n'
                                 '\n'
                                 '买入 · NVDA · 美股\n'
                                 '预估价 $145.0\n'
                                 '数量 ~10\n'
                                 '名义 ~$1,450\n'
                                 '\n'
-                                '⚠️ 确认后立即以【虚拟资金】下单,不可撤销。\n'
-                                '\n'
-                                '_本次为模拟交易,不构成投资建议_',
+                                '⚠️ 确认后立即以【账户资金】下单,不可撤销。',
                         'keyboard': {'inline_keyboard': [[{'text': '✅ 确认下单',
                                                            'callback_data': 'ordok'},
                                                           {'text': '✖️ 取消',
@@ -178,15 +169,13 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
  'order_unavailable': {'text': '*点金 Midas · 下单*\n\n无法下单:可能暂无最新报价,或(平仓时)当前没有可平持仓。\n请确认代码 / 持仓后再试。',
                        'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                           'callback_data': 'menu:main'}]]}},
- 'order_result': {'text': '*点金 Midas · 已拒绝*\n\n余额不足,无法下单。\n\n_本次为模拟交易,不构成投资建议_',
+ 'order_result': {'text': '*点金 Midas · 已拒绝*\n\n余额不足,无法下单。',
                   'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                      'callback_data': 'menu:main'}]]}},
  'order_receipt': {'text': '✅ *点金 Midas · 合约成交*\n'
                            '\n'
                            '📊 BTC/USDT · 永续 · 逐仓 20x\n'
-                           '开多 0.5 · 成交价 63,200 USDT\n'
-                           '\n'
-                           '_本次为模拟交易,不构成投资建议_',
+                           '开多 0.5 · 成交价 63,200 USDT',
                    'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                       'callback_data': 'menu:main'}]]}},
  'order_symbol_invalid': {'text': '*点金 Midas · 下单*\n'
@@ -309,6 +298,7 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                                             {'text': '🔔 告警规则', 'callback_data': 'menu:rules'}],
                                            [{'text': '🌙 安静时段', 'callback_data': 'menu:quiet'}]]}}}
 
+
 # ── fixtures(与 _dump_golden 一致 · 决定 GOLDEN 的输入)────────────────
 _Q_FULL = SymbolQuote(
     market="crypto", symbol="BTC/USDT", currency="USDT", price=63200.5,
@@ -354,8 +344,7 @@ _QV_ON = QuietHoursView(enabled=True, start_hour=23, end_hour=7, tz="Asia/Shangh
 _QV_OFF = QuietHoursView(enabled=False, start_hour=8, end_hour=22, tz="America/New_York")
 _RECEIPT_BODY = (
     "*点金 Midas · 合约成交*\n\n"
-    "📊 BTC/USDT · 永续 · 逐仓 20x\n开多 0.5 · 成交价 63,200 USDT\n\n"
-    "_本次为模拟交易,不构成投资建议_"
+    "📊 BTC/USDT · 永续 · 逐仓 20x\n开多 0.5 · 成交价 63,200 USDT"
 )
 
 # key → 新链路 ReplyModel(交给 render_for_telegram 后比对 GOLDEN[key])
@@ -411,24 +400,11 @@ def test_telegram_render_byte_identical(key: str) -> None:
     assert reply.keyboard == GOLDEN[key]["keyboard"], f"[{key}] keyboard 结构回归"
 
 
-# ── 🔴 免责分级守卫(阶段四-A · 独立于 GOLDEN · 防误删交易类免责)──────────
-_TRADE_KEYS = {
-    "order_preview_perp", "order_preview_spot", "order_result", "order_receipt",
-}
-_DISPLAY_KEYS = sorted(set(GOLDEN) - _TRADE_KEYS)
-_TRADE_DISCLAIMER = "本次为模拟交易,不构成投资建议"
-
-
-@pytest.mark.parametrize("key", _DISPLAY_KEYS)
-def test_display_messages_have_no_disclaimer(key: str) -> None:
-    """🔴 展示/导航/配置类:不带任何免责声明(分级:去掉)。"""
+# ── 🔴 免责全清守卫(产品决策:bot 输出不再带免责句 / VIRTUAL 徽章噪音)──────
+@pytest.mark.parametrize("key", list(GOLDEN))
+def test_no_message_has_disclaimer_or_badge(key: str) -> None:
+    """🔴 全部消息(展示 + 交易)一律不带免责声明 / VIRTUAL 徽章。"""
     text = render_for_telegram(CASES[key]).text
-    assert "仅供参考" not in text, f"[{key}] 展示类不应含免责"
-    assert _TRADE_DISCLAIMER not in text, f"[{key}] 展示类不应含交易免责"
-
-
-@pytest.mark.parametrize("key", sorted(_TRADE_KEYS))
-def test_trade_messages_keep_trade_disclaimer(key: str) -> None:
-    """🔴 交易类(下单确认/成交/拒单/回执):必带「本次为模拟交易,不构成投资建议」· 不可误删。"""
-    text = render_for_telegram(CASES[key]).text
-    assert _TRADE_DISCLAIMER in text, f"[{key}] 交易类必须含交易口径免责"
+    assert "仅供参考" not in text, f"[{key}] 不应含「仅供参考」免责"
+    assert "本次为模拟交易" not in text, f"[{key}] 不应含「本次为模拟交易」免责"
+    assert "VIRTUAL" not in text, f"[{key}] 不应含 VIRTUAL 徽章"

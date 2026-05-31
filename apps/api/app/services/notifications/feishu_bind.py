@@ -32,7 +32,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _BIND_KEY_PREFIX = "feishu_bind:"
-_DISCLAIMER = "仅供参考,不构成投资建议。"
 # 显式绑定意图前缀(去掉后即 token);其余单词(无空格)按隐式粘贴码尝试。
 _EXPLICIT_PREFIXES = ("/bind ", "/绑定 ", "绑定 ", "/start ")
 
@@ -105,7 +104,7 @@ async def handle_feishu_bind(
         if explicit:  # 显式意图但漏 token
             return FeishuBindResult(
                 kind="invalid_token",
-                reply_text=f"请在绑定指令后带上绑定码,例如「/bind 你的码」。\n{_DISCLAIMER}",
+                reply_text="请在绑定指令后带上绑定码,例如「/bind 你的码」。",
             )
         return FeishuBindResult(kind="ignored")
 
@@ -115,7 +114,7 @@ async def handle_feishu_bind(
         if explicit:
             return FeishuBindResult(
                 kind="invalid_token",
-                reply_text=f"绑定码无效或已过期,请回设置页重新生成。\n{_DISCLAIMER}",
+                reply_text="绑定码无效或已过期,请回设置页重新生成。",
             )
         return FeishuBindResult(kind="ignored")
 
@@ -131,7 +130,7 @@ async def handle_feishu_bind(
     if other is not None:
         return FeishuBindResult(
             kind="open_id_taken",
-            reply_text=f"该飞书已绑定其他账号,请先在原账号解绑。\n{_DISCLAIMER}",
+            reply_text="该飞书已绑定其他账号,请先在原账号解绑。",
         )
 
     config = await db.scalar(
@@ -150,6 +149,6 @@ async def handle_feishu_bind(
         user_id=user_id,
         reply_text=(
             "✅ 绑定成功 · 点金 Midas\n\n"
-            f"以后成交 / 价格异动提醒会推送到这里,也可发 /menu 打开功能菜单。\n{_DISCLAIMER}"
+            "以后成交 / 价格异动提醒会推送到这里,也可发 /menu 打开功能菜单。"
         ),
     )
