@@ -23,7 +23,9 @@ from app.services.ai import indicators as ind
 from app.services.ai.cache import compute_trading_day, make_cache_key
 from app.services.ai.validator import (
     has_imperative,
+    has_marketing_violation,
     rewrite_imperatives,
+    validate_advisory,
 )
 from app.services.ai.workflow import run_decision_workflow
 from app.services.analysis.chan import analyze as analyze_chan
@@ -129,6 +131,29 @@ def test_validator_idempotent():
     assert not has_imperative(twice)
 
 
+# ===== validator · 0036 批次甲 校验器放松(advisory · 拍板②)=====
+
+
+def test_marketing_violation_detected():
+    """违规营销话术(稳赚 / 保证收益)被检出 · 正常分析措辞不误伤。"""
+    assert has_marketing_violation("本策略稳赚不赔") is True
+    assert has_marketing_violation("保证收益翻倍") is True
+    assert has_marketing_violation("结构偏多,可关注买入信号") is False
+
+
+def test_validate_advisory_allows_actionable_but_blocks_marketing():
+    """advisory:★放开 actionable(不改写祈使句)· 但清除违规营销话术。"""
+    # actionable 措辞保留(不像 strict 那样被改写)
+    assert "建议买入" in validate_advisory("建议买入,信号明确")
+    # 违规营销话术被清除
+    assert not has_marketing_violation(validate_advisory("稳赚不赔,保证收益"))
+
+
+def test_strict_narrator_unchanged_still_rewrites():
+    """零回归:strict(现有只读卡 narrator)仍改写祈使句、行为不变。"""
+    assert "建议买入" not in rewrite_imperatives("建议买入")
+
+
 # ===== cache · trading_day 计算 =====
 
 
@@ -228,7 +253,7 @@ async def test_workflow_validator_rewrites_imperative_in_narrative(monkeypatch):
         '{"score": 50, "confidence": 0.7, '
         '"rationale": "结构良好,建议买入,目标 120。", "key_levels": [110.0, 120.0]}'
     )
-    async def fake_ainvoke(prompt, **kwargs):  # type: ignore[no-untyped-def]
+    async def fake_ainvoke(prompt, **kwargs):  # type: ignore[no-untyped-def]  # noqa: ARG001
         return llm_mod.LLMResponse(
             content=fake_jsonl,
             prompt_tokens=100, completion_tokens=50, total_tokens=150,

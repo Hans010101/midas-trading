@@ -20,7 +20,6 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from app.schemas.market import Market, Period
 
-
 # ===== 技术快照(DataPrepareNode → Agent A 输入)=====
 
 
@@ -83,6 +82,32 @@ class ChanBuySellPoint(BaseModel):
 CompositeLabel = Literal["强多", "弱多", "中性", "弱空", "强空"]
 
 
+# ===== 可下单建议(0036 批次甲 · actionable 适配层 · 纯派生自结构化字段)=====
+
+
+ActionableDirection = Literal[
+    "buy", "sell", "hold", "open_long", "open_short", "close",
+]
+
+
+class ActionableAdvice(BaseModel):
+    """AI 观点 → 模拟可下单建议 · 纯派生自决策卡结构化字段(不调 LLM · 不改 AI 管线)。
+
+    ★ 红线:仅【模拟】参考。direction 只是建议方向;真要下单仍走虚拟撮合引擎 + 二次确认
+      + VIRTUAL 徽章,绝不接真实交易。现货 sell 见拍板④(有持仓建议平 / 无持仓建议观望)。
+    拍板③:仓位第一层固定走用户下单预设(size_note 给口径 · 不含具体数额)。
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    direction: ActionableDirection
+    actionable: bool                          # direction != hold(前端是否出「一键模拟下单」)
+    basis: str = Field(max_length=120)        # 模板化依据(派生自 label / 评分 / 置信)
+    size_note: str = Field(max_length=60)     # 仓位口径(拍板③ · 固定下单预设)
+    hint: str = Field(max_length=160)         # 操作提示(模拟语境)
+    disclaimer: str = "仅供参考,不构成投资建议"
+
+
 class DecisionCardResponse(BaseModel):
     """GET /api/v1/analysis/decision-card 响应。
 
@@ -112,6 +137,9 @@ class DecisionCardResponse(BaseModel):
 
     # 缠论近期买卖点摘要
     chan_signals: list[ChanBuySellPoint] = Field(default_factory=list)
+
+    # 可下单建议(0036 批次甲)· 由 actionable 适配层在 API 层派生填充(workflow 不设 · 不改 AI 管线)
+    actionable: ActionableAdvice | None = None
 
     # 红线 · 强制 disclaimer · API + UI 双层兜底
     disclaimer: str = "仅供参考,不构成投资建议"

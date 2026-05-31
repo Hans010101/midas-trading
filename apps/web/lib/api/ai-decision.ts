@@ -28,6 +28,19 @@ export interface AgentScore {
 
 export type CompositeLabel = '强多' | '弱多' | '中性' | '弱空' | '强空'
 
+// 可下单建议(0036 批次甲)· 镜像后端 ActionableAdvice
+export type ActionableDirection =
+  | 'buy' | 'sell' | 'hold' | 'open_long' | 'open_short' | 'close'
+
+export interface ActionableAdvice {
+  direction: ActionableDirection
+  actionable: boolean        // direction !== hold(前端是否出「一键模拟下单」)
+  basis: string              // 模板化依据
+  size_note: string          // 仓位口径(固定下单预设)
+  hint: string               // 操作提示(模拟语境)
+  disclaimer: string
+}
+
 export interface DecisionCard {
   symbol: string
   market: Market
@@ -43,6 +56,9 @@ export interface DecisionCard {
 
   narrative: string
   chan_signals: BuySellPoint[]
+
+  // 可下单建议(0036 批次甲)· 后端 actionable 适配层派生 · null 表示无(老缓存/中性)
+  actionable: ActionableAdvice | null
 
   disclaimer: string
   cached: boolean

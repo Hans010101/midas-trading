@@ -190,6 +190,33 @@ export async function placeOrder(
   return (await r.json()) as VirtualOrder
 }
 
+// AI 一键模拟下单(0036 批次甲)· POST /virtual/ai-order · 走同一虚拟撮合引擎 · source=ai_signal
+export interface AiOrderInput {
+  symbol: string
+  market: Market
+  // 仅 4 个可下单方向 · cn/us=buy/sell · crypto=open_long/open_short(合约)
+  direction: 'buy' | 'sell' | 'open_long' | 'open_short'
+}
+
+export interface AiOrderResult {
+  filled: boolean
+  title: string
+  detail: string
+  source: string
+}
+
+export async function placeAiOrder(
+  token: string, input: AiOrderInput,
+): Promise<AiOrderResult> {
+  const r = await fetch(`${API_BASE}/api/v1/virtual/ai-order`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(input),
+  })
+  if (!r.ok) throw new VirtualApiError(r.status, await readDetail(r))
+  return (await r.json()) as AiOrderResult
+}
+
 export async function fetchOrders(
   token: string,
   opts: { market?: Market; limit?: number; beforeId?: number } = {},

@@ -20,12 +20,13 @@
  */
 
 import { Loader2 } from 'lucide-react'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 
+import { AiOrderConfirmDialog } from '@/components/workbench/ai-order-confirm-dialog'
 import { DisclaimerStrip } from '@/components/workbench/disclaimer-strip'
 import { VirtualBadge } from '@/components/ui/virtual-badge'
 import { useAiDecision } from '@/hooks/use-ai-decision'
-import type { CompositeLabel, DecisionCard } from '@/lib/api/ai-decision'
+import type { ActionableDirection, CompositeLabel, DecisionCard } from '@/lib/api/ai-decision'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
 import { cn } from '@/lib/utils'
 import type { Market, Period } from '@midas/shared'
@@ -79,6 +80,10 @@ export function AiDecisionCard({
 
 function CardBody({ card }: { card: DecisionCard }) {
   const labelColor = useMemo(() => composeLabelColor(card.composite_label), [card.composite_label])
+  const [orderOpen, setOrderOpen] = useState(false)
+  const adv = card.actionable
+  // 仅 4 个可下单方向出按钮(hold/close 不出)· tradeDir 收窄类型给确认模态
+  const tradeDir = adv && adv.actionable && isTradeDir(adv.direction) ? adv.direction : null
 
   return (
     <div className="space-y-3">
@@ -129,6 +134,29 @@ function CardBody({ card }: { card: DecisionCard }) {
         </p>
       </div>
 
+      {/* AI 操作建议 + 一键模拟下单(0036 批次甲 · 走 ai-order → 同一虚拟撮合引擎)*/}
+      {adv && (
+        <div className="border-t border-paper pt-2">
+          <p className="mb-1 text-[10px] text-muted-foreground/70">操作建议</p>
+          <p className="text-xs leading-relaxed text-foreground">{adv.hint}</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground/60">
+            {adv.basis} · 仓位:{adv.size_note}
+          </p>
+          {tradeDir && (
+            <button
+              type="button"
+              onClick={() => setOrderOpen(true)}
+              className={cn(
+                'mt-2 inline-flex items-center rounded-md bg-midas-red px-3 py-1.5',
+                'text-xs font-medium text-white transition-colors hover:bg-midas-red-deep',
+              )}
+            >
+              一键模拟下单 · {TRADE_DIR_LABEL[tradeDir]}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* 缠论买卖点列表 */}
       {card.chan_signals.length > 0 && (
         <div className="border-t border-paper pt-2">
@@ -172,6 +200,19 @@ function CardBody({ card }: { card: DecisionCard }) {
           </span>
         )}
       </div>
+
+      {/* AI 一键模拟下单 · 二次确认模态(复用手动下单口径 · 路由 ai-order)*/}
+      {adv && tradeDir && (
+        <AiOrderConfirmDialog
+          open={orderOpen}
+          onClose={() => setOrderOpen(false)}
+          symbol={card.symbol}
+          market={card.market}
+          direction={tradeDir}
+          basis={adv.basis}
+          sizeNote={adv.size_note}
+        />
+      )}
     </div>
   )
 }
@@ -209,6 +250,17 @@ function CardError({ onRetry }: { onRetry: () => void }) {
 
 
 // ===== Helpers =====
+
+
+const TRADE_DIR_LABEL: Record<'buy' | 'sell' | 'open_long' | 'open_short', string> = {
+  buy: '买入', sell: '卖出', open_long: '开多', open_short: '开空',
+}
+
+function isTradeDir(
+  d: ActionableDirection,
+): d is 'buy' | 'sell' | 'open_long' | 'open_short' {
+  return d === 'buy' || d === 'sell' || d === 'open_long' || d === 'open_short'
+}
 
 
 function composeLabelColor(label: CompositeLabel): string {

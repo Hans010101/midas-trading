@@ -195,6 +195,12 @@ class VirtualPerpOrder(Base):
     is_liquidation: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false"),
     )
+    # 下单来源(0036 U0 · AI 模拟交易)· manual=网页手动 / bot=Telegram / ai_signal=AI 建议单
+    # / ai_strategy=AI 策略单。★ perp 引擎/dispatcher【不设】此列(引擎零改动),由 facade / 路由标记;
+    # 存量行 + 网页手动单走 server_default 'manual'。纯元数据 · 不参与撮合/保证金/强平任何计算。
+    source: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'manual'"), default="manual",
+    )
     placed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(),
     )

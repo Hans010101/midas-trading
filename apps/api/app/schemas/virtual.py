@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
@@ -133,6 +134,36 @@ class OrderResponse(BaseModel):
     reject_reason: str | None
     placed_at: AwareDatetime | None
     filled_at: AwareDatetime | None
+
+
+# ===== AI 模拟下单(0036 批次甲)=====
+
+
+class AiOrderRequest(BaseModel):
+    """POST /virtual/ai-order 入参 · AI 建议一键模拟下单。
+
+    ★ 红线:只走现有虚拟撮合引擎(execute → place_market_order / route_open/close_perp),
+      绝不接真实交易。direction 来自 AI 决策卡 actionable 建议(hold/close 不经此端点)。
+    仓位不传:由 execute 内部按用户 BotOrderPreset 派生(拍板③)。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str = Field(min_length=1, max_length=64)
+    market: Market
+    # 仅 4 个可下单方向 · cn/us 用 buy/sell · crypto 用 open_long/open_short(合约)
+    direction: Literal["buy", "sell", "open_long", "open_short"]
+
+
+class AiOrderResponse(BaseModel):
+    """AI 模拟下单结果 · 与手动下单同一虚拟引擎成交 · 标 source=ai_signal。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    filled: bool
+    title: str
+    detail: str
+    source: str = "ai_signal"
 
 
 # ===== Equity curve =====

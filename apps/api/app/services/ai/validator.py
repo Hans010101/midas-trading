@@ -101,9 +101,62 @@ def has_naked_imperative_verb(text: str) -> bool:
     return bool(_VERB_IMPERATIVE_RE.search(text))
 
 
+# ===== 0036 批次甲:校验器放松(advisory 模式 · 允许 actionable · 但仍禁违规营销话术)=====
+# 设计(拍板②):
+#   - 现有只读决策卡 narrator 继续用 rewrite_imperatives(strict · 改写祈使句)· ★行为零变化。
+#   - AI 模拟交易 advisory 路径用 validate_advisory:★放开 actionable(不改写祈使句),
+#     但【违规营销话术】(稳赚 / 保证收益 / 无风险 / 诱导)任何模式都清除 —— 这是真红线、不放松。
+#   - strict 与 advisory 显式区分(两个函数),不靠隐式默认;现有 narrator 永远走 strict。
+
+# 违规营销话术 → 中性表述 · 长串优先匹配
+_MARKETING_REPLACEMENTS: list[tuple[str, str]] = [
+    ("稳赚不赔", "存在波动风险"),
+    ("保证收益", "收益不确定"),
+    ("保证盈利", "盈亏不确定"),
+    ("一夜暴富", "理性看待收益"),
+    ("稳定盈利", "盈亏不确定"),
+    ("零风险", "有风险"),
+    ("无风险", "有风险"),
+    ("稳赚", "有波动"),
+    ("保本", "本金有风险"),
+    ("包赚", "盈亏自负"),
+    ("躺赚", "需自行判断"),
+    ("必涨", "可能上涨"),
+    ("必跌", "可能下跌"),
+    ("百分百", "并非确定"),
+]
+
+_MARKETING_KEYWORDS: tuple[str, ...] = tuple(k for k, _ in _MARKETING_REPLACEMENTS)
+
+
+def has_marketing_violation(text: str) -> bool:
+    """检测违规营销话术(稳赚 / 保证收益 / 无风险 / 诱导等)· 任何模式都禁。"""
+    return any(kw in text for kw in _MARKETING_KEYWORDS)
+
+
+def scrub_marketing(text: str) -> str:
+    """清除违规营销话术 → 中性表述 · 幂等。"""
+    out = text
+    for needle, repl in _MARKETING_REPLACEMENTS:
+        out = out.replace(needle, repl)
+    return out
+
+
+def validate_advisory(text: str) -> str:
+    """AI 模拟交易 advisory 模式(0036 批次甲拍板②):
+
+    ★ 放开 actionable —— 不改写祈使句(与 strict 的 rewrite_imperatives 区分);
+    但仍清除违规营销话术(红线不放松)。现有只读决策卡 narrator 不走这条、保持 strict。
+    """
+    return scrub_marketing(text)
+
+
 __all__ = [
     "ensure_disclaimer",
     "has_imperative",
+    "has_marketing_violation",
     "has_naked_imperative_verb",
     "rewrite_imperatives",
+    "scrub_marketing",
+    "validate_advisory",
 ]

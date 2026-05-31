@@ -16,6 +16,8 @@ import { useSession } from 'next-auth/react'
 
 import {
   type AccountSummary,
+  type AiOrderInput,
+  type AiOrderResult,
   type EquityCurves,
   type Position,
   type PlaceOrderInput,
@@ -28,6 +30,7 @@ import {
   fetchOrders,
   fetchPortfolio,
   fetchPositions,
+  placeAiOrder,
   placeOrder,
 } from '@/lib/api/virtual'
 import type { Market } from '@midas/shared'
@@ -101,6 +104,19 @@ export function usePlaceOrder() {
   const { token } = useToken()
   return useMutation<VirtualOrder, Error, PlaceOrderInput>({
     mutationFn: (input) => placeOrder(token, input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['virtual'] })
+    },
+  })
+}
+
+// AI 一键模拟下单(0036 批次甲)· 走 ai-order 端点(source=ai_signal · 同一虚拟撮合引擎)
+// 成交后刷新 virtual 查询(持仓 / 账户 / 流水),与手动下单一致。
+export function useAiOrder() {
+  const queryClient = useQueryClient()
+  const { token } = useToken()
+  return useMutation<AiOrderResult, Error, AiOrderInput>({
+    mutationFn: (input) => placeAiOrder(token, input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['virtual'] })
     },

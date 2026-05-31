@@ -30,6 +30,8 @@ from app.schemas.virtual import (
     AccountActivateIn,
     AccountResponse,
     AccountSummaryResponse,
+    AiOrderRequest,
+    AiOrderResponse,
     EquityCurvesResponse,
     EquitySnapshotResponse,
     OrderPlaceIn,
@@ -37,6 +39,7 @@ from app.schemas.virtual import (
     PositionResponse,
     PositionWithQuoteResponse,
 )
+from app.services.bot import order as bot_order
 from app.services.clickhouse_client import ClickHouseClient
 from app.services.virtual_trading.engine import (
     PlaceOrderRequest,
@@ -249,6 +252,49 @@ async def place_order(
     order = await place_market_order(db, req, fetcher)
     await db.commit()
     return _serialize_order(order)
+
+
+@router.post(
+    "/ai-order",
+    response_model=AiOrderResponse,
+    summary="AI 建议一键模拟下单 · source=ai_signal · 同一虚拟撮合引擎",
+)
+async def place_ai_order(
+    payload: AiOrderRequest,
+    ch: ClickHouseDep,
+    current_user: CurrentUserDep,
+    db: DbDep,
+) -> AiOrderResponse:
+    """AI 决策卡「一键模拟下单」· 构造 source='ai_signal' 的 OrderIntent → 复用 U0 的 execute。
+
+    🔴 红线:AI 下单【只能】走现有虚拟撮合引擎(execute → place_market_order /
+       route_open_perp / route_close_perp),不新开下单出口、绝不接真实交易通道。
+    二次确认:由前端 AiOrderConfirmDialog 保证(与手动下单同口径)· 本端点只在确认后被调用。
+    仓位:execute 内部按用户 BotOrderPreset 派生(拍板③),本端点不收数量。
+    现货 sell(拍板④):execute → 有持仓才平、无持仓返回「无可平持仓」· 绝不裸做空。
+    """
+    # 港股待阶段三接入数据与下单,本期一律拒绝
+    if payload.market == "hk":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="港股 AI 模拟下单待阶段三接入",
+        )
+    # 方向必须是该市场合法方向(cn/us=buy/sell · crypto=open_long/open_short)
+    if not bot_order.direction_valid(payload.market, payload.direction):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"市场 {payload.market} 不支持方向 {payload.direction}",
+        )
+    intent = bot_order.OrderIntent(
+        market=payload.market,
+        symbol=payload.symbol,
+        direction=payload.direction,
+        source="ai_signal",
+    )
+    # ★ 走 U0 的 execute(db, ch, user_id, intent)· 与手动单 / bot 单同一虚拟撮合引擎
+    #   execute 内部按市场分流(现货 place_market_order / 加密 perp_dispatcher)并 commit。
+    result = await bot_order.execute(db, ch, current_user.id, intent)
+    return AiOrderResponse(filled=result.filled, title=result.title, detail=result.detail)
 
 
 @router.get(

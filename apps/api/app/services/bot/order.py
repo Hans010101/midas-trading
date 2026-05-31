@@ -128,6 +128,9 @@ class OrderIntent:
     market: str
     symbol: str  # 用户输入;crypto 会归一到 Binance 风格
     direction: str
+    # 下单来源(0036 U0)· 落到订单行 source 列 · bot 路由传 'bot'、未来 AI 端点传 'ai_signal'。
+    # 默认 'manual' 与 DB server_default 一致(老调用方不传也安全 · 零回归)。
+    source: str = "manual"
 
 
 @dataclass(frozen=True)
@@ -377,6 +380,7 @@ async def _exec_perp(
             preferred_mode=MarginMode(preset.perp_margin_mode),
             get_mark_price=fetcher,
         )
+    order.source = intent.source  # 0036 U0:来源标记 · 引擎不设、facade 在 commit 前标
     await db.commit()
     if order.status == OrderStatus.FILLED:
         # #296 去重:bot 不再发异步 A(网页 perp.py 的 emit 保留)· 改用富回执:
@@ -431,6 +435,7 @@ async def _exec_spot(
         ),
         fetcher,
     )
+    order.source = intent.source  # 0036 U0:来源标记 · 引擎不设、facade 在 commit 前标
     await db.commit()
     if order.status == OrderStatus.FILLED:
         # #296 去重:复用 A 的事件 + 模板(build_trade_filled_event + render_telegram)
