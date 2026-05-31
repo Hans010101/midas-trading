@@ -30,13 +30,16 @@ const VB_Y = 26
 const VB_W = 1000
 const VB_H = 388
 
-// 陆地点中性冷灰(非暖粉褐 · 非缠论中枢专用色)· 对齐白底卡片的克制清爽
-const LAND = '#c4ccd4'
+// 陆地点 = 浅红「灰粉」(与品牌红 #C8102E / 红涨 #DC143C 同色系 · 但极低饱和 + 高明度)。
+// 设计意图:整图色觉与品牌统一,但底图是【背景】要退到后面 —— 饱和度仅约 22%、明度约 86%,
+// 与饱和的「红涨」标记点(sat≈76% · light≈47%)在色度/明度上拉开大差,标记点稳稳浮在前景、绝不抢色。
+const LAND = '#e7d3d6'
 
 /**
- * 市场地理配置(静态 · 前端)。symbol 对应阶段 A 数据里的指数。
- * (lx, ly) = 标签锚点(viewBox 单位)· 从标记点拉引导线到此,东亚密集区靠它防重叠。
- * priority 1 = 主要/地理孤立市场(窄屏也显示标签);2 = 密集区次要(窄屏只留点、隐藏标签)。
+ * 市场地理配置(静态 · 前端)· 阶段B 迭代扩成 10 个(都有明确地理归属)。
+ * (lx, ly) = 标签锚点(viewBox 单位)· 从标记点拉引导线到此 · 密集簇(欧洲 3 / 东亚 4)用 callout 竖排防重叠。
+ * priority 1 = 地理孤立的主要市场(窄屏也显示标签);2 = 密集簇次要(★ 窄屏只留标记点、隐藏标签防糊)。
+ * ★ 窄屏策略(市场变多后):所有标记点全留(颜色仍显地理涨跌),标签只留 4 个地理分散的 priority 1。
  */
 type MarketGeo = {
   symbol: string
@@ -50,12 +53,21 @@ type MarketGeo = {
 }
 
 const MARKET_GEO: readonly MarketGeo[] = [
-  { symbol: '^GSPC', short: '标普', lng: -74, lat: 40.7, lx: 250, ly: 196, align: 'center', priority: 1 },
-  { symbol: '^FTSE', short: '富时', lng: -0.1, lat: 51.5, lx: 452, ly: 64, align: 'right', priority: 1 },
-  { symbol: '^GDAXI', short: 'DAX', lng: 8.7, lat: 50.1, lx: 566, ly: 60, align: 'left', priority: 2 },
-  { symbol: '^N225', short: '日经', lng: 139.7, lat: 35.7, lx: 930, ly: 118, align: 'right', priority: 1 },
-  { symbol: '000001.SS', short: '上证', lng: 121.5, lat: 31.2, lx: 930, ly: 150, align: 'right', priority: 2 },
-  { symbol: '^HSI', short: '恒生', lng: 114.2, lat: 22.3, lx: 930, ly: 182, align: 'right', priority: 2 },
+  // 美洲
+  { symbol: '^GSPC', short: '标普', lng: -74, lat: 40.7, lx: 248, ly: 198, align: 'center', priority: 1 },
+  // 欧洲簇(伦敦/巴黎/法兰克福很挤)· 伦敦+巴黎向左上 callout,DAX 往右上分流
+  { symbol: '^FTSE', short: '富时', lng: -0.1, lat: 51.5, lx: 442, ly: 52, align: 'right', priority: 1 },
+  { symbol: '^FCHI', short: '法CAC', lng: 2.35, lat: 48.86, lx: 442, ly: 80, align: 'right', priority: 2 },
+  { symbol: '^GDAXI', short: 'DAX', lng: 8.7, lat: 50.1, lx: 588, ly: 54, align: 'left', priority: 2 },
+  // 东亚簇(东京/首尔/上海/香港很挤)· 向右(太平洋)callout 竖排
+  { symbol: '^N225', short: '日经', lng: 139.7, lat: 35.7, lx: 946, ly: 110, align: 'right', priority: 1 },
+  { symbol: '^KS11', short: '韩KOSPI', lng: 127, lat: 37.57, lx: 946, ly: 140, align: 'right', priority: 2 },
+  { symbol: '000001.SS', short: '上证', lng: 121.5, lat: 31.2, lx: 946, ly: 170, align: 'right', priority: 2 },
+  { symbol: '^HSI', short: '恒生', lng: 114.2, lat: 22.3, lx: 946, ly: 200, align: 'right', priority: 2 },
+  // 东南亚(新加坡 · 偏南、单独标)
+  { symbol: '^STI', short: '新STI', lng: 103.8, lat: 1.35, lx: 718, ly: 268, align: 'right', priority: 2 },
+  // 大洋洲(悉尼 · 右下、孤立)
+  { symbol: '^AXJO', short: '澳ASX', lng: 151.2, lat: -33.87, lx: 858, ly: 362, align: 'right', priority: 1 },
 ]
 
 export type MapQuote = { name: string; changePct: number }
@@ -71,14 +83,14 @@ export function WorldMap({ quotes }: { quotes: Map<string, MapQuote> }) {
   }
 
   return (
-    <div className="relative w-full overflow-hidden rounded-lg border border-paper bg-background">
+    <div className="relative w-full">
       <svg
         viewBox={`${VB_X} ${VB_Y} ${VB_W} ${VB_H}`}
         className="block h-auto w-full"
         role="img"
         aria-label="全球主要股指地理分布"
       >
-        {/* 陆地点阵(中性冷灰) */}
+        {/* 陆地点阵(浅红灰粉 · 退到背景) */}
         <g fill={LAND}>
           {WORLD_DOTS.map(([x, y], i) => (
             <circle key={i} cx={x} cy={y} r={1.5} />

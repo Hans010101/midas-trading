@@ -12,7 +12,7 @@ from __future__ import annotations
 # (yfinance ticker, 中文名, 地区码, category, unit)
 # unit:point 点位 / price 价格 / rate 汇率 / yield_pct 收益率%(涨跌用 bp)
 GLOBAL_OVERVIEW_YF: tuple[tuple[str, str, str, str, str], ...] = (
-    # ── 环球指数(8)──────────────────────────────
+    # ── 环球指数(12)─────────────────────────────
     ("^GSPC", "标普500", "us", "index", "point"),
     ("^IXIC", "纳斯达克", "us", "index", "point"),
     ("^DJI", "道琼斯", "us", "index", "point"),
@@ -21,6 +21,11 @@ GLOBAL_OVERVIEW_YF: tuple[tuple[str, str, str, str, str], ...] = (
     ("000001.SS", "上证指数", "cn", "index", "point"),
     ("^GDAXI", "德国DAX", "de", "index", "point"),
     ("^FTSE", "英国富时100", "uk", "index", "point"),
+    # 阶段B 迭代扩充(地图更饱满 · 都有明确地理归属 · 复用 yfinance · 零迁移)
+    ("^KS11", "韩国KOSPI", "kr", "index", "point"),
+    ("^STI", "新加坡STI", "sg", "index", "point"),
+    ("^FCHI", "法国CAC40", "fr", "index", "point"),
+    ("^AXJO", "澳洲ASX200", "au", "index", "point"),
     # ── 商品期货(5)──────────────────────────────
     ("GC=F", "黄金", "global", "commodity", "price"),
     ("SI=F", "白银", "global", "commodity", "price"),
