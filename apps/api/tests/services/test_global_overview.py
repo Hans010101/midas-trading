@@ -26,17 +26,18 @@ _FRONTEND_QUOTE_UNITS = {"point", "price", "rate", "yield_pct"}
 
 class TestConfigConsistency:
     def test_first_batch_counts(self) -> None:
-        # 阶段B 迭代后:12 指数(8+4 扩充)+ 5 商品 + 4 外汇 + 3 债券 = 24 yfinance + 2 加密
-        assert len(GLOBAL_OVERVIEW_YF) == 24
-        assert len(CRYPTO_OVERVIEW) == 2
+        # 精选扩充后:22 指数 + 13 商品 + 9 外汇 + 4 债券 + 4 市场情绪 = 52 yfinance + 7 加密
+        assert len(GLOBAL_OVERVIEW_YF) == 52
+        assert len(CRYPTO_OVERVIEW) == 7
         by_cat = dict.fromkeys(CATEGORY_ORDER, 0)
         for _sym, _name, _region, category, _unit in GLOBAL_OVERVIEW_YF:
             by_cat[category] += 1
         assert by_cat == {
-            "index": 12,
-            "commodity": 5,
-            "forex": 4,
-            "bond": 3,
+            "index": 22,
+            "commodity": 13,
+            "forex": 9,
+            "bond": 4,
+            "sentiment": 4,
             "crypto": 0,  # 加密走 CRYPTO_OVERVIEW · 不在 yfinance 表
         }
 
@@ -80,7 +81,9 @@ class TestConfigConsistency:
             assert sym in OVERVIEW_SYMBOL_ORDER
 
     def test_crypto_name_map(self) -> None:
-        assert CRYPTO_NAME == {"BTC/USDT": "比特币", "ETH/USDT": "以太坊"}
+        assert CRYPTO_NAME["BTC/USDT"] == "比特币"
+        assert CRYPTO_NAME["ETH/USDT"] == "以太坊"
+        assert len(CRYPTO_NAME) == len(CRYPTO_OVERVIEW) == 7  # BTC/ETH + 精选 5
 
 
 class TestOverviewQuoteSchema:

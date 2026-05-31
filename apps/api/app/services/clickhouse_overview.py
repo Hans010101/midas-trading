@@ -106,8 +106,11 @@ async def select_latest_overview(client: AsyncClient) -> list[OverviewQuote]:
 async def select_crypto_overview(
     client: AsyncClient, symbols: tuple[str, ...],
 ) -> list[OverviewQuote]:
-    """读加密概览 · 复用 `crypto_ticker_24h`(ccxt 已采)· spot · 每 symbol 最新一行。
+    """读加密概览 · 复用 `crypto_ticker_24h`(ccxt 已采)· 每 symbol 最新一行。
 
+    ★ 读 instrument='perp'(永续):bulk 全市场永续是常态采集(crypto_metrics_ingest · 每轮刷新),
+      覆盖全部主流币、数据新鲜;spot 采集未常态化(只剩 M2 早期种子、TTL 2d 已过期 → 加密组曾消失)。
+      永续价对主流币 ≈ 现货价(基差极小),用于概览「仅供参考」展示足够。
     crypto_ticker_24h 只有 last_price + change_pct_24h → 反推 prev_close / change_point。
     """
     if not symbols:
@@ -118,7 +121,7 @@ async def select_crypto_overview(
             SELECT *,
                    ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY ts DESC) AS rn
             FROM crypto_ticker_24h FINAL
-            WHERE instrument = 'spot' AND symbol IN %(syms)s
+            WHERE instrument = 'perp' AND symbol IN %(syms)s
         )
         WHERE rn = 1
     """
