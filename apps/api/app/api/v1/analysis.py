@@ -26,6 +26,7 @@ from app.schemas.chan import (
     ZhongshuResponse,
 )
 from app.schemas.market import Market, Period
+from app.services.ai.actionable import with_actionable
 from app.services.ai.cache import get_cached_card, set_cached_card
 from app.services.ai.workflow import run_decision_workflow
 from app.services.analysis.chan import analyze as analyze_chan
@@ -134,7 +135,7 @@ async def get_chan_analysis(
         buy_sell_points=[
             BuySellPointResponse(
                 ts=p.ts, price=p.price,
-                kind=p.kind,  # type: ignore[arg-type]
+                kind=p.kind,
                 description=p.description,
             )
             for p in result.buy_sell_points
@@ -199,7 +200,8 @@ async def get_decision_card(
             "[decision-card] CACHE HIT symbol=%s market=%s instrument=%s period=%s",
             symbol, market, instrument, period,
         )
-        return cached
+        # 0036 批次甲:对缓存卡片补算 actionable(对旧缓存也鲁棒 · 幂等)
+        return with_actionable(cached)
 
     # 2. 拿 K 线(跟 /chan 同源,先 CH 后回源)
     klines = await ch.select_kline(
@@ -235,7 +237,8 @@ async def get_decision_card(
         len(card.chan_signals), card.llm_mode,
     )
 
-    # 4. 写缓存 · 失败不阻塞
+    # 4. 写缓存(不含 actionable · 由下方派生)· 失败不阻塞
     await set_cached_card(card)
 
-    return card
+    # 5. 派生 actionable 可下单建议(0036 批次甲 · API 层 · 不改 AI 管线)
+    return with_actionable(card)
