@@ -62,6 +62,27 @@ async def test_ai_order_spot_buy_tags_ai_signal(db_session: AsyncSession) -> Non
 
 
 @pytest.mark.asyncio
+async def test_ai_order_cn_buy_tags_ai_signal(db_session: AsyncSession) -> None:
+    """A股 buy → 成交 · 订单标 source='ai_signal'(与美股同一现货撮合路径)。"""
+    user = await make_user(db_session)
+    await make_virtual_account(db_session, user_id=user.id, market="cn")
+    await db_session.commit()
+    ch = _FakeCH([_bar(1800.0)])
+
+    resp = await place_ai_order(
+        AiOrderRequest(symbol="600519", market="cn", direction="buy"),
+        ch,  # type: ignore[arg-type]
+        user,  # type: ignore[arg-type]
+        db_session,
+    )
+    assert resp.filled is True
+    assert resp.source == "ai_signal"
+    order = await db_session.scalar(select(VirtualOrder).where(VirtualOrder.symbol == "600519"))
+    assert order is not None
+    assert order.source == "ai_signal"
+
+
+@pytest.mark.asyncio
 async def test_ai_order_spot_sell_no_position_rejected(db_session: AsyncSession) -> None:
     """★拍板④:现货 sell 无持仓 → 拒单(无可平持仓)· 绝不裸做空。"""
     user = await make_user(db_session)
