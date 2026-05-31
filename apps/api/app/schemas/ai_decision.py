@@ -94,7 +94,7 @@ class ActionableAdvice(BaseModel):
     """AI 观点 → 模拟可下单建议 · 纯派生自决策卡结构化字段(不调 LLM · 不改 AI 管线)。
 
     ★ 红线:仅【模拟】参考。direction 只是建议方向;真要下单仍走虚拟撮合引擎 + 二次确认
-      + VIRTUAL 徽章,绝不接真实交易。现货 sell 见拍板④(有持仓建议平 / 无持仓建议观望)。
+,绝不接真实交易。现货 sell 见拍板④(有持仓建议平 / 无持仓建议观望)。
     拍板③:仓位第一层固定走用户下单预设(size_note 给口径 · 不含具体数额)。
     """
 
@@ -105,7 +105,7 @@ class ActionableAdvice(BaseModel):
     basis: str = Field(max_length=120)        # 模板化依据(派生自 label / 评分 / 置信)
     size_note: str = Field(max_length=60)     # 仓位口径(拍板③ · 固定下单预设)
     hint: str = Field(max_length=160)         # 操作提示(模拟语境)
-    disclaimer: str = "仅供参考,不构成投资建议"
+    disclaimer: str = ""
 
 
 class DecisionCardResponse(BaseModel):
@@ -141,8 +141,8 @@ class DecisionCardResponse(BaseModel):
     # 可下单建议(0036 批次甲)· 由 actionable 适配层在 API 层派生填充(workflow 不设 · 不改 AI 管线)
     actionable: ActionableAdvice | None = None
 
-    # 红线 · 强制 disclaimer · API + UI 双层兜底
-    disclaimer: str = "仅供参考,不构成投资建议"
+    # disclaimer 字段保留(API 契约不破)· 产品决策置空(平台层已说明全程虚拟)
+    disclaimer: str = ""
 
     # 元信息
     cached: bool = False

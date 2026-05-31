@@ -70,7 +70,7 @@ def test_basis_hint_no_marketing_violation() -> None:
             assert not has_marketing_violation(adv.basis)
             assert not has_marketing_violation(adv.hint)
     # disclaimer 始终在
-    assert to_actionable(_card("强多", "us")).disclaimer == "仅供参考,不构成投资建议"
+    assert to_actionable(_card("强多", "us")).disclaimer == ""
 
 
 def test_with_actionable_attaches_and_idempotent() -> None:

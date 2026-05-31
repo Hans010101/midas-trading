@@ -47,7 +47,6 @@ router = APIRouter(prefix="/analysis", tags=["analysis"])
     description=(
         "返回笔(BI)/ 顶底分型(FX)/ 中枢(简化版 · 连续 3 笔重叠)。"
         "段 / 买卖点 / 多周期联动 在 M1 第二波 AI 决策卡里扩展。"
-        "**结果仅供参考,不构成投资建议。**"
     ),
 )
 async def get_chan_analysis(
@@ -165,8 +164,7 @@ def _source_for(
     summary="AI 决策卡 · 技术面单 Agent + 缠论买卖点(M1 第二波)",
     description=(
         "返回结构化 AI 决策卡:综合评分(M1 二波 = 技术面分)/ 解读 / 关键位 / "
-        "缠论近期买卖点 / disclaimer 双层兜底。"
-        "**结果仅供参考,不构成投资建议。** "
+        "缠论近期买卖点。"
         "当 DEEPSEEK_API_KEY 未配置时,llm_mode='mock' · 返回固定假分析以保持 UI 可用。"
     ),
 )
