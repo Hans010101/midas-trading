@@ -1,7 +1,7 @@
 # 0036 · AI 模拟交易模块(AI-Assisted Simulated Trading)设计
 
 ## 状态
-**草案**(2026-05-31 · 待产品负责人审 —— 重点审 ① 虚拟红线焊死 ② 校验器放松边界 ③ 现有交易零回归)
+**Accepted**(2026-05-31 · 产品负责人审过 + 拍板 §8 七点,见下)· 实施按批次甲先起步、批次乙并行;批次甲走 feature 分支 + 审 + 验收,守「撮合引擎一行不改 + 现有交易零回归」。
 
 > 调研基线:[docs/research/ai-simulated-trading-feasibility.md](../research/ai-simulated-trading-feasibility.md)(已读源码核实复用度)。
 > 本 ADR 只出设计,不含实现代码。审过 + 拍板 → 按批次甲先起步、批次乙并行开工。
@@ -238,16 +238,25 @@ AI 下单**只走 `services/virtual_trading/*` 引擎**,与手动单同一条路
 
 ---
 
-## 8. 需产品负责人拍板的点(审本 ADR 时一并定)
+## 8. 产品负责人拍板结论(2026-05-31 · 已定 · ADR 转 Accepted)
 
-1. **二次确认**:AI 建议下单是否必走二次确认?**(建议:是,必走,复用 R6 模态)**
-2. **校验器放松边界确认**:结构化 actionable 放开(必须);narrator 散文是否也切 advisory 措辞,还是保持现有 strict 不动?**(建议:结构化 actionable 放开;narrator 默认保持 strict 以零回归,advisory 仅 AI 模拟交易新路径可选)**
-3. **actionable 放哪**:决策卡加 `actionable` 子字段(建议,单一事实源)vs 独立 endpoint?
-4. **现货弱空/强空处理**:现货不裸做空 —— 弱空/强空时「有持仓则建议平、无持仓则观望」?**(建议:是)**
-5. **`source` 值域**:`manual` / `bot` / `ai_signal` / `ai_strategy` 够用?现有 bot 单标 `bot`、网页手动标 `manual`?
-6. **AI 历史命中率展示位置**:决策卡内 vs 独立面板?
-7. **仓位 confidence 缩放**:第一层固定 `BotOrderPreset`(拍板③确认),缩放留批次乙?**(建议:是)**
+| # | 议题 | ★ 拍板 |
+|---|---|---|
+| ① | AI 建议下单是否必走二次确认 | **是,必走**(复用 R6 模态) |
+| ② | narrator 散文 strict vs advisory | **narrator 散文保持 strict(零回归),只放开结构化 actionable 字段** |
+| ③ | actionable 放哪 | **放决策卡子字段**(不另起 endpoint) |
+| ④ | 现货弱空/强空处理 | **有持仓建议平、无持仓建议观望** |
+| ⑤ | `source` 值域 | **`manual` / `bot` / `ai_signal` / `ai_strategy` 够用**(网页手动=manual · bot=bot · AI 建议单=ai_signal · AI 策略单=ai_strategy) |
+| ⑥ | AI 历史命中率展示位置 | **留批次乙做时再定**(不阻塞批次甲) |
+| ⑦ | 仓位是否第一层固定 preset | **是,第一层固定 `BotOrderPreset`,confidence 缩放留批次乙** |
+
+> **实施节奏(拍板⑤补充)**:批次甲 **U0 底座先起**(最底层、其他都依赖它)、产品负责人审过红线 + 零回归,**再考虑并行铺开批次乙**,避免一次摊太大。
+
+### 拍板②对 §2.3 的收口(精确边界)
+- **放开**:仅 `DecisionCardResponse` 新增的结构化 `actionable` 子字段(typed `direction` + 仓位),它是结构化数据、不过 prose 校验。
+- **不动**:`validator.py` 的 narrator 散文校验**保持现有 strict 行为**(祈使句仍改写)→ 现有只读决策卡 narrator 字节级零回归。
+- **不放松**:违规营销话术过滤(保证收益/稳赚/无风险/诱导)始终生效。
 
 ---
 
-> 本 ADR 为设计草案,不含实现代码。产品负责人审过(尤其 §1 虚拟红线焊死、§2.3 校验器放松边界、§6 零回归)+ 拍板 §8 → 按批次甲先起步、批次乙并行开工。每批次走 feature 分支 + 自验闭环 + 验收点,守"撮合引擎一行不改 + 现有交易零回归"。
+> 本 ADR 已 Accepted。产品负责人审过(§1 虚拟红线焊死、§2.3 校验器放松边界、§6 零回归)+ 拍板 §8 七点。按批次甲(U0 底座先起)+ 批次乙并行开工;每批次走 feature 分支 + 自验闭环 + 验收点,守"撮合引擎一行不改 + 现有交易零回归"。
