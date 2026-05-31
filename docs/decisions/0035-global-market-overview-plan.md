@@ -170,3 +170,43 @@ overview 行的 `market` 是**地区码**(us/jp/hk/de/global/fx/crypto),**不是
 **修复闭环**(hotfix `0ee1d8a`):补回集成测试(真实 wrapper→`._client`→读路径打本地 CH + 真实端点函数返合法响应)· 全量回归 540 passed · 部署 run 26685966333 绿 · prod 端点转 200 且有实数据(标普/纳指/道指…)。
 
 > 教训沉淀:**只读端点接 CH 必须走 `ch._client`(包装层无通用 query);跨服务的 schema 依赖,消费方(API)自己 lifespan 幂等保证,绝不赌生产方(worker)信号时序。**
+
+---
+
+## 运维备注 · 扩市场后「首轮采集延迟」(2026-05-31 · 阶段B 迭代实证)
+
+阶段B 迭代扩 4 市场(韩国KOSPI / 新加坡STI / 法国CAC / 澳洲ASX)上线后,真机抽查 `/global` 一度看不到新市场点 —— **不是 bug,是采集时序**,虚惊一场。沉淀如下,免得以后再扩市场又惊。
+
+**机制**:`global_overview_scan`(Celery beat · 每 10 分钟 · 在 :00/:10/:20… 触发)抓全部 yfinance 代码(当前 24 个 · 约 78s)后才写进 `market_index_snapshot`。所以:
+- **新增采集市场后,数据要等下一轮 scan 跑完才进库**;首轮跑完前 `/global` 地图/卡片上新市场暂无数据 = **正常**。
+- 实证:阶段B 迭代部署 01:06 完成、worker 01:05 重建,首轮 scan 01:10 触发、**01:11:18 才写完** 12 指数。中间窗口查只看到上一轮的 8 个;写完后 prod API 立即返 12、地图立即 10 点(前端有数据就显示,MARKET_GEO 无需改)。
+- 前端读 CH 现状,有数据即显示;**「API 不返回新市场」永远先怀疑采集没跑完,而不是前端**(API 返回 = 采到了 → 才是前端问题)。
+
+**想立刻看效果**(不等 10 分钟):手动触发一轮,等约 90s:
+```bash
+docker exec midas-worker celery -A celery_app call tasks.market.global_overview_scan
+```
+
+### 只读诊断套路(查表 / 查日志 / 手动触发 · 全只读 · 不改库不改配置)
+
+```bash
+# 最简单:不进服务器,直接打 API 看指数组有几个、含不含新代码
+curl -s https://api.midastrade.asia/api/v1/overview/global \
+  | python3 -c "import sys,json;g=[x for x in json.load(sys.stdin)['groups'] if x['category']=='index'][0];print(len(g['items']),[i['symbol'] for i in g['items']])"
+
+# 进服务器(/opt/midas)三连:
+cd /opt/midas && source .env
+
+# A) 查表:新市场进 CH 没?(有行=采到 · 空=没采到)
+docker exec midas-clickhouse clickhouse-client \
+  --user "${CLICKHOUSE_USER:-midas}" --password "${CLICKHOUSE_PASSWORD:-midas_dev}" --query "
+  SELECT symbol, market, last_point, ts FROM market_index_snapshot FINAL
+  WHERE category='index' AND symbol IN ('^KS11','^STI','^FCHI','^AXJO') ORDER BY symbol"
+
+# B) 查 worker 采集跑没 + 写了几条(看到 overview written=20 = 成功 · N=12指数+5商品+4外汇+3债券,加密走另表不计)
+docker logs --since 40m midas-worker 2>&1 | grep -E 'global_overview_scan|overview written'
+
+# C) 手动触发一轮(只是提前跑采集 · 不改库结构/配置)· 等 ~90s 再跑 A)
+docker exec midas-worker celery -A celery_app call tasks.market.global_overview_scan
+```
+> CH 是有状态容器,以上命令全只读,绝不动数据卷。`market_index_snapshot` 有 `TTL 7 DAY`,采到的行会留 7 天,期间某轮 scan 偶发漏采也不会立刻消失。
