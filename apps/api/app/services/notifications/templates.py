@@ -1,7 +1,7 @@
 """消息模板渲染 · 0009 § 5 → 0025 G2a(移除飞书 · 仅 Telegram)。
 
 Telegram Markdown 渲染(属 Telegram 适配层的「渲染」部分)。
-所有模板必带「点金 Midas」字样 + 「不构成投资建议」尾。
+所有模板带「点金 Midas」字样(不再带免责尾噪音)。
 成交通知不用绿色;价格异动用 🔴/🟢 emoji 标方向(不依赖颜色)。
 """
 
@@ -22,9 +22,6 @@ from app.services.notifications.events import (
 MARKET_LABEL: dict[str, str] = {"cn": "A 股", "us": "美股", "crypto": "加密", "hk": "港股"}
 CURRENCY_SYMBOL: dict[str, str] = {"CNY": "¥", "USD": "$", "USDT": "USDT", "HKD": "HK$"}
 
-DISCLAIMER = "本次为模拟交易,不构成投资建议"
-# 告警类不是交易,用「仅供参考」免责(红线:bot 文案必带免责)
-ALERT_DISCLAIMER = "仅供参考,不构成投资建议"
 _OP_SYMBOL: dict[str, str] = {"gt": ">", "gte": "≥", "lt": "<", "lte": "≤"}
 
 
@@ -89,8 +86,7 @@ def _tg_alert_triggered(event: AlertTriggeredEvent) -> str:
         "*点金 Midas · 告警触发*\n\n"
         f"🔔 {target} · {MARKET_LABEL.get(event.market, event.market)}\n"
         f"{event.indicator_label}  {op} {_fmt_num(event.threshold)}{unit}\n"
-        f"当前 {_fmt_num(event.value)}{unit}\n\n"
-        f"_{ALERT_DISCLAIMER}_"
+        f"当前 {_fmt_num(event.value)}{unit}"
     )
 
 
@@ -107,8 +103,7 @@ def _tg_trade_filled(event: TradeFilledEvent) -> str:
         f"{side_label} {event.quantity} · 成交价 "
         f"{_fmt_price(event.price, event.currency)}\n"
         f"手续费 {_fmt_money(event.commission, event.currency)}"
-        f"{pnl_line}\n\n"
-        f"_{DISCLAIMER}_"
+        f"{pnl_line}"
     )
 
 
@@ -144,8 +139,7 @@ def _tg_perp_filled(event: PerpFilledEvent) -> str:
         f"{_fmt_price(event.price, event.currency)}\n"
         f"名义 {_fmt_price(event.notional, event.currency)} · "
         f"手续费 {_fmt_money(event.fee, event.currency)}"
-        f"{pnl_line}\n\n"
-        f"_{DISCLAIMER}_"
+        f"{pnl_line}"
     )
 
 
@@ -161,8 +155,7 @@ def _tg_liquidation(event: LiquidationEvent) -> str:
             "*点金 Midas · 全仓强制平仓*\n\n"
             "⚠️ 全仓合约账户触发强平\n"
             f"{event.position_count} 个仓位已全部强制平仓"
-            f"{remaining}{floored_line}\n\n"
-            f"_{DISCLAIMER}_"
+            f"{remaining}{floored_line}"
         )
     # 逐仓单仓
     side = PERP_SIDE_LABEL.get(event.side or "", event.side or "")
@@ -179,8 +172,7 @@ def _tg_liquidation(event: LiquidationEvent) -> str:
         "*点金 Midas · 强制平仓*\n\n"
         f"⚠️ {event.symbol} · 永续 · 逐仓{lev}\n"
         f"{side}{liq}已强制平仓"
-        f"{pnl_line}\n\n"
-        f"_{DISCLAIMER}_"
+        f"{pnl_line}"
     )
 
 
@@ -193,8 +185,7 @@ def _tg_price_anomaly(event: PriceAnomalyEvent) -> str:
         f"{icon} {event.symbol} · {MARKET_LABEL.get(event.market, event.market)}\n"
         f"{direction} {_fmt_pct(event.change_pct)}\n"
         f"现价 {_fmt_price(event.current_price, event.currency)} · "
-        f"参考 {_fmt_price(event.reference_price, event.currency)}\n\n"
-        f"_{DISCLAIMER}_"
+        f"参考 {_fmt_price(event.reference_price, event.currency)}"
     )
 
 
@@ -202,6 +193,5 @@ def render_telegram_test() -> str:
     return (
         "*点金 Midas · 测试消息*\n\n"
         "✓ Telegram 推送已连通\n\n"
-        "之后你的成交通知和价格异动会推到这里。\n\n"
-        f"_{DISCLAIMER}_"
+        "之后你的成交通知和价格异动会推到这里。"
     )

@@ -1,6 +1,6 @@
 """#296 · 永续成交 + 强平 通知 单测。
 
-覆盖:模板渲染(perp 成交开/平 + 强平逐仓/全仓)、DISCLAIMER 红线、quiet_exempt 豁免、
+覆盖:模板渲染(perp 成交开/平 + 强平逐仓/全仓)、无免责噪音、quiet_exempt 豁免、
 dispatcher 新 kind 受 trade_alert_enabled 控制、纯 builder 字段映射、emit helper(mock broker)。
 全部纯函数 / mock · 不打 DB / 网络。
 """
@@ -26,7 +26,7 @@ from app.services.notifications.perp_events import (
     build_liquidation_event_single,
     build_perp_filled_event,
 )
-from app.services.notifications.templates import DISCLAIMER, render_telegram
+from app.services.notifications.templates import render_telegram
 
 # ===== 模板渲染 =====
 
@@ -47,7 +47,7 @@ def test_perp_filled_open_template() -> None:
     assert "已实现盈亏" not in text  # 开仓不显示盈亏
     assert "成交价 63,200 USDT" in text  # 价格动态精度:63200 → 0 位
     assert "手续费 25.28 USDT" in text  # 🔴 USDT 手续费固定 2 位(收尾调整 · 旧为 4 位)
-    assert DISCLAIMER in text
+    assert "不构成投资建议" not in text  # 产品决策:推送不再带免责噪音
 
 
 def test_perp_filled_close_template_shows_pnl() -> None:
@@ -63,7 +63,7 @@ def test_perp_filled_close_template_shows_pnl() -> None:
     assert "全仓 10x" in text
     assert "已实现盈亏 +374.72 USDT" in text  # 🔴 USDT 盈亏固定 2 位(收尾调整)· 盈利带 + 号
     assert "手续费 3.20 USDT" in text  # USDT 手续费 2 位(3.2 → 3.20)
-    assert DISCLAIMER in text
+    assert "不构成投资建议" not in text  # 产品决策:推送不再带免责噪音
 
 
 def test_liquidation_isolated_template() -> None:
@@ -79,7 +79,7 @@ def test_liquidation_isolated_template() -> None:
     assert "多头" in text
     assert "强平价 60,100 USDT" in text  # 价格动态精度:60100 → 0 位
     assert "已实现盈亏 -1,580.00 USDT" in text  # 🔴 USDT 盈亏固定 2 位(收尾调整)· 亏损带 - 号
-    assert DISCLAIMER in text
+    assert "不构成投资建议" not in text  # 产品决策:推送不再带免责噪音
 
 
 def test_liquidation_cross_template() -> None:
@@ -93,7 +93,7 @@ def test_liquidation_cross_template() -> None:
     assert "3 个仓位" in text
     assert "剩余可用" in text
     assert "穿仓" in text  # floored=True
-    assert DISCLAIMER in text
+    assert "不构成投资建议" not in text  # 产品决策:推送不再带免责噪音
 
 
 # ===== quiet_exempt 豁免(钱相关 · 安静时段照发)=====

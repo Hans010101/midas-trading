@@ -86,10 +86,9 @@ def test_build_trade_filled_event_fields():
 def test_render_order_receipt_prefix_and_keyboard():
     body = (
         "*点金 Midas · 合约成交*\n\n📊 BTCUSDT · 永续 · 逐仓 20x\n"
-        "_本次为模拟交易,不构成投资建议_"
+        "开多 0.5 · 成交价 63,200 USDT"
     )
     reply = render_for_telegram(replies.build_order_receipt(body))
     assert reply.text.startswith("✅ ")          # 保留成功确认感
     assert "合约成交" in reply.text               # 复用 A 富文本
-    assert "本次为模拟交易" in reply.text          # 免责仅一句(body 内)
     assert reply.keyboard is not None             # 「返回菜单」键盘在
