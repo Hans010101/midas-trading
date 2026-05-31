@@ -6,6 +6,7 @@ GET /chan?symbol=&market=&period=&limit= · 缠论分析(笔 + 分型 + 中枢)
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Literal
 
@@ -20,6 +21,7 @@ from app.api.deps import (
     UsSourceDep,
 )
 from app.core.database import get_db
+from app.schemas.ai_accuracy import AiAccuracyResponse
 from app.schemas.ai_decision import DecisionCardResponse
 from app.schemas.chan import (
     BiResponse,
@@ -29,6 +31,7 @@ from app.schemas.chan import (
     ZhongshuResponse,
 )
 from app.schemas.market import Market, Period
+from app.services.ai.accuracy import compute_accuracy
 from app.services.ai.actionable import with_actionable
 from app.services.ai.cache import get_cached_card, set_cached_card
 from app.services.ai.memory import record_decision
@@ -255,3 +258,36 @@ async def get_decision_card(
 
     # 6. 派生 actionable 可下单建议(0036 批次甲 · API 层 · 不改 AI 管线)
     return with_actionable(card)
+
+
+# ===== AI 历史命中率 · 0036 批次乙 sub-unit C(自学习闭环呈现层后端)=====
+
+
+@router.get(
+    "/ai-accuracy",
+    response_model=AiAccuracyResponse,
+    summary="AI 历史命中率 · 总体 + 市场 / 方向 / 置信度分桶(0036 批次乙)",
+    description=(
+        "返回 AI 决策卡历史命中率统计:基于 reflection 事后实测涨跌验证的记录"
+        "(was_correct)聚合。总体 + 按市场 / 方向 / 置信度三维分桶,每桶带样本数。"
+        "★ 纯只读统计(读 PG · 不打实时上游 · 不碰下单)。"
+        "★ 小样本桶(sample_count < min_reliable_sample · reliable=false)命中率仅供参考。"
+    ),
+)
+async def get_ai_accuracy(
+    db: DbDep,
+    since_days: Annotated[
+        int | None,
+        Query(ge=1, le=3650, description="只统计最近 N 天分析(analyzed_at)的记录 · 不传=全部历史"),
+    ] = None,
+    llm_mode: Annotated[
+        Literal["mock", "real"] | None,
+        Query(description="按 LLM 模式过滤 · 不传=全部(未来切真实模型后可只看 real)"),
+    ] = None,
+) -> AiAccuracyResponse:
+    since = (
+        datetime.now(UTC) - timedelta(days=since_days) if since_days is not None else None
+    )
+    return await compute_accuracy(
+        db, since=since, since_days=since_days, llm_mode=llm_mode,
+    )
