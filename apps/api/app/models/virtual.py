@@ -203,6 +203,12 @@ class VirtualOrder(Base):
         Enum(OrderStatus, name="order_status"), nullable=False,
     )
     reject_reason: Mapped[str | None] = mapped_column(String(128))
+    # 下单来源(0036 U0 · AI 模拟交易)· manual=网页手动 / bot=Telegram / ai_signal=AI 建议单
+    # / ai_strategy=AI 策略单。★ 撮合引擎【不设】此列(引擎零改动),由下单 facade / 路由按来源标记;
+    # 存量行 + 网页手动单走 server_default 'manual'。纯元数据 · 不参与撮合/余额/强平任何计算。
+    source: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'manual'"), default="manual",
+    )
     placed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(),
     )

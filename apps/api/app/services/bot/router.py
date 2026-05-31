@@ -283,7 +283,7 @@ async def _handle_direction(
     symbol = str(sess.get("symbol") or "")
     if not symbol or not order_mod.direction_valid(market, direction):
         return replies.build_main_menu()
-    intent = order_mod.OrderIntent(market=market, symbol=symbol, direction=direction)
+    intent = order_mod.OrderIntent(market=market, symbol=symbol, direction=direction, source="bot")
     preview = await order_mod.build_preview(ch, db, user_id, intent)
     if preview is None:
         await clear_session(redis, channel, uid)
@@ -320,7 +320,7 @@ async def _handle_confirm(
     await clear_session(redis, channel, uid)
     if not symbol or not order_mod.direction_valid(market, direction):
         return replies.build_main_menu()
-    intent = order_mod.OrderIntent(market=market, symbol=symbol, direction=direction)
+    intent = order_mod.OrderIntent(market=market, symbol=symbol, direction=direction, source="bot")
     result = await order_mod.execute(db, ch, user_id, intent)
     # #296 去重:成交走富回执(单条);拒单 / 异常回落原简版
     if result.filled and result.body:
