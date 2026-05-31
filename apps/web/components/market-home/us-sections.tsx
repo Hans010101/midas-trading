@@ -6,7 +6,7 @@
  * 决策⑥:策展池(重点关注池 · 非全市场)· 顶部诚实标注。
  * 三块:重点关注池 涨幅/跌幅/成交额 3 榜单 Tab + 行业板块 + 中概股板块(板块表里高亮)。
  * 用 0022 阶段② 共用组件。成交额为美元估(close×volume)· 盘前盘后异动本期不做。
- * 个股详情页 3.4 上线(本期行不可点)· 红线:只读行情 · 仅供参考,不构成投资建议。
+ * 个股详情页 3.4 上线(本期行不可点)· 红线:只读行情。
  */
 
 import { useState } from 'react'
@@ -117,7 +117,7 @@ export function UsSections() {
                     key={r.symbol}
                     onClick={() => openDetail(r.symbol, r.name)}
                     className="cursor-pointer transition-colors hover:bg-midas-red-glow/30"
-                    title="点击查看详情 · 做多 / 卖空模拟下单"
+                    title="点击查看详情 · 做多 / 卖空下单"
                   >
                     <TCell align="center" mono className="text-xs text-muted-foreground/70">
                       {i + 1}
@@ -139,8 +139,7 @@ export function UsSections() {
               </tbody>
             </DataTable>
             <p className="mt-2 text-[11px] text-muted-foreground/60">
-              重点关注池排行(非全市场)· 成交额为美元估(现价 × 成交量)· 点击个股看详情 / 做多 · 卖空模拟下单 ·
-              仅供参考,不构成投资建议
+              重点关注池排行(非全市场)· 成交额为美元估(现价 × 成交量)· 点击个股看详情 / 做多 · 卖空下单
             </p>
           </>
         )}

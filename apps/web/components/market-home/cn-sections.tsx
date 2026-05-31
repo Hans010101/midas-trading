@@ -6,7 +6,7 @@
  * 三块:市场情绪条(涨跌平家数 + 涨跌停估)+ 3 榜单 Tab(涨幅/跌幅/成交额)+ 行业板块。
  * 用 0022 阶段② 共用组件(Panel / DataTable / EmptyState / LoadingNote)。
  * 换手率/量比本期不渲染(Sina 无字段 · 东财不可达)· 个股详情页 3.4 上线(本期行不可点)。
- * 红线:只读行情 · 仅供参考,不构成投资建议。
+ * 红线:只读行情。
  */
 
 import { useState } from 'react'
@@ -122,7 +122,7 @@ export function CnSections() {
                   key={r.symbol}
                   onClick={() => openDetail(r.symbol, r.name)}
                   className="cursor-pointer transition-colors hover:bg-midas-red-glow/30"
-                  title="点击查看详情 · 模拟下单"
+                  title="点击查看详情 · 下单"
                 >
                   <TCell align="center" mono className="text-xs text-muted-foreground/70">
                     {i + 1}
@@ -143,7 +143,7 @@ export function CnSections() {
             </tbody>
           </DataTable>
           <p className="mt-2 text-[11px] text-muted-foreground/60">
-            点击个股看详情 / 模拟下单 · 数据 Sina 实时快照 · 仅供参考,不构成投资建议
+            点击个股看详情 / 下单 · 数据 Sina 实时快照
           </p>
         </section>
       )}

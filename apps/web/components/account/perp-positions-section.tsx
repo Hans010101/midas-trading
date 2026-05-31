@@ -17,7 +17,6 @@ import { useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 
-import { VirtualBadge } from '@/components/ui/virtual-badge'
 import {
   usePerpFunding,
   usePerpOrders,
@@ -121,13 +120,12 @@ export function PerpPositionsSection() {
   return (
     <section className="mb-10">
       <div className="mb-3 flex items-center gap-2">
-        <h2 className="font-serif text-xl font-bold text-foreground">加密合约(永续)· 虚拟</h2>
-        <VirtualBadge size="sm" />
+        <h2 className="font-serif text-xl font-bold text-foreground">加密合约(永续)</h2>
       </div>
 
       {account == null ? (
         <div className="rounded-lg border border-dashed border-gold/50 bg-gold/5 p-4 text-sm text-muted-foreground">
-          先在上方「虚拟资金设置」激活「加密」USDT,再去{' '}
+          先在上方「账户资金设置」激活「加密」USDT,再去{' '}
           <Link href="/crypto-market" className="text-midas-red underline">加密市场</Link>{' '}
           选币种,在详情页右栏「下单指导」开合约仓(开多 / 开空)。
         </div>
@@ -362,7 +360,7 @@ export function PerpPositionsSection() {
                 </table>
               </div>
               <p className="mt-2 text-[10px] text-muted-foreground/60">
-                资金费率为正:多头付、空头收 · 每币按各自结算周期(8h/4h…)在整点结算 · 只扣虚拟现金 · 全程虚拟
+                资金费率为正:多头付、空头收 · 每币按各自结算周期(8h/4h…)在整点结算 · 只扣虚拟现金
               </p>
             </>
           )}
@@ -394,8 +392,7 @@ function PerpCloseConfirm({
       onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}
     >
       <div className="w-full max-w-sm rounded-lg border border-midas-red bg-cream p-6 shadow-xl">
-        <div className="mb-3 flex justify-center"><VirtualBadge size="sm" /></div>
-        <h3 className="mb-5 text-center font-serif text-lg font-bold">确认平仓(虚拟)</h3>
+        <h3 className="mb-5 text-center font-serif text-lg font-bold">确认平仓</h3>
         <dl className="space-y-2.5 text-sm">
           <div className="flex justify-between"><dt className="text-xs text-muted-foreground">标的</dt><dd className="font-mono">{pos.symbol}</dd></div>
           <div className="flex items-center justify-between"><dt className="text-xs text-muted-foreground">方向</dt><dd><SideBadge side={pos.side} leverage={pos.leverage} /></dd></div>
@@ -407,7 +404,6 @@ function PerpCloseConfirm({
             </div>
           )}
         </dl>
-        <p className="mt-4 text-center text-[10px] text-muted-foreground/70">本次为模拟交易,不构成投资建议 · 全程虚拟资金</p>
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={onCancel} className="rounded-md border border-paper bg-background px-4 py-2 text-sm hover:bg-cream">取消</button>
           <button type="button" onClick={onConfirm} disabled={pending}

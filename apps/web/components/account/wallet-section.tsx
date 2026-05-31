@@ -12,7 +12,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 
-import { VirtualBadge } from '@/components/ui/virtual-badge'
 import {
   useAccount,
   useActivateAccount,
@@ -39,9 +38,8 @@ export function WalletSection() {
     <section className="mb-10">
       <div className="mb-4 flex items-center gap-3">
         <h2 className="font-serif text-xl font-bold text-foreground">
-          虚拟资金设置
+          账户资金设置
         </h2>
-        <VirtualBadge size="sm" />
       </div>
       <p className="mb-4 text-sm text-muted-foreground">
         三个市场各用各的货币,绝不折算合计 · 没设置的市场无法下单
@@ -237,7 +235,7 @@ function ResetConfirmDialog({
     >
       <div className="w-full max-w-md rounded-lg border border-midas-red bg-cream p-6 shadow-lg">
         <h3 className="mb-2 font-serif text-lg font-bold text-foreground">
-          重置{MARKET_LABEL[market]}虚拟资金?
+          重置{MARKET_LABEL[market]}账户资金?
         </h3>
         <p className="mb-4 text-sm text-foreground">这会清空该市场的:</p>
         <ul className="mb-4 list-inside list-disc space-y-1 text-sm text-muted-foreground">

@@ -3,7 +3,7 @@
 /**
  * 设置页 · Bot 下单默认参数(后台预设)· 0026 G5 / 0027 MC-4(放开全仓选择)。
  *
- * bot 里「开多/开空」(永续)/「买入/卖出」(现货)用这套默认参数下单(全程 VIRTUAL·模拟)。
+ * bot 里「开多/开空」(永续)/「买入/卖出」(现货)用这套默认参数下单(全程虚拟)。
  * MC-4 起保证金模式 isolated / cross 可选 · 无预设行 = 默认逐仓(= G4/MC-3 行为)。
  */
 
@@ -67,8 +67,7 @@ export function BotOrderPresetSection() {
         Bot 下单默认参数
       </h2>
       <p className="mb-4 text-sm text-muted-foreground">
-        在 Telegram bot 里下单时套用这套默认参数(永续「开多/开空」· 现货「买入/卖出」)·
-        全程 VIRTUAL · 模拟,仅供参考不构成投资建议
+        在 Telegram bot 里下单时套用这套默认参数(永续「开多/开空」· 现货「买入/卖出」)
       </p>
 
       <div className="space-y-3 rounded-lg border border-paper bg-cream p-5 shadow-sm">

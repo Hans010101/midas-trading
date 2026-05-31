@@ -10,7 +10,6 @@
  * 接不上的字段一律显示「—」· 不伪造数值(CLAUDE.md 红线)。
  */
 
-import { VirtualBadge } from '@/components/ui/virtual-badge'
 import { WatchlistToggleButton } from '@/components/watchlist/watchlist-toggle-button'
 import { useFuturesInfo } from '@/hooks/use-crypto'
 import { useKline } from '@/hooks/use-kline'
@@ -67,7 +66,6 @@ export function CryptoHeader({
           <span className="text-[10px] text-muted-foreground/50">日涨跌</span>
         </div>
 
-        <VirtualBadge size="sm" />
         <WatchlistToggleButton symbol={klineSymbol} market="crypto" />
 
         {/* 现货 / 合约 tab · 本页聚焦合约 · 现货切换 M2-B 待接 */}

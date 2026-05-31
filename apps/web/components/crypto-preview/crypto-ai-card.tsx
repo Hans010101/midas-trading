@@ -15,7 +15,7 @@
  *     · 只列【真实指标值】+【简单规则标签】· 不编造一个合约面综合评分
  *     · 合约面评分算法 = M2-B/M2-C 待定义(如实标注)· 绝不硬编假公式
  *
- * 红线:仅供参考,不构成投资建议 · 全程虚拟。
+ * 红线:全程虚拟。
  */
 
 import { Loader2 } from 'lucide-react'
@@ -79,7 +79,7 @@ export function CryptoAiCard({ klineSymbol, futuresSymbol, period }: CryptoAiCar
                 'text-xs font-medium text-white transition-colors hover:bg-midas-red-deep',
               )}
             >
-              一键模拟下单 · {TRADE_DIR_LABEL[tradeDir]}
+              一键下单 · {TRADE_DIR_LABEL[tradeDir]}
             </button>
           )}
         </div>
@@ -88,9 +88,6 @@ export function CryptoAiCard({ klineSymbol, futuresSymbol, period }: CryptoAiCar
       {/* B · 多空研判(合约面)· 实时指标 + 规则解读 */}
       <ContractRead futuresSymbol={futuresSymbol} />
 
-      <p className="mt-3 border-t border-paper pt-2 text-[10px] text-muted-foreground/70">
-        仅供参考,不构成投资建议 · 虚拟模拟
-      </p>
 
       {/* AI 一键模拟下单 · 二次确认模态(复用手动口径 · 路由 ai-order · crypto→perp open_long/open_short)*/}
       {adv && tradeDir && (

@@ -10,7 +10,6 @@
 import { useState } from 'react'
 
 import { OrderConfirmDialog } from '@/components/workbench/order-confirm-dialog'
-import { VirtualBadge } from '@/components/ui/virtual-badge'
 import { usePortfolio } from '@/hooks/use-virtual'
 import { currencyOf, formatMoney, formatPct } from '@/lib/format-money'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
@@ -42,7 +41,6 @@ export function CurrentPositionCard() {
     <section className="m-3 rounded-md border-2 border-gold bg-cream p-3 shadow-sm">
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <VirtualBadge size="sm" />
           <span className="font-mono text-xs font-medium text-foreground">
             {position.symbol}
           </span>

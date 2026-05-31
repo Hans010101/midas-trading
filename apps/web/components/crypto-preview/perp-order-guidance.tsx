@@ -8,7 +8,7 @@
  *   · 当前活仓卡(浮盈/强平价/强平距离/ROE)· 平仓 · 确认模态必经 · sonner toast。
  *
  * 🔴 红线:全程【虚拟资金】· 绝不接真实交易所下单。所有动作走点金虚拟撮合引擎。
- *   策略只读提示绝不自动下单。带「VIRTUAL·模拟」徽章 + 「仅供参考,不构成投资建议」。
+ *   策略只读提示绝不自动下单。
  *
  * 价源:perp 日 K 末根 close(预估用)· 真正成交价以后端 perp ticker 为准(D7/§4.1)。
  */
@@ -18,7 +18,6 @@ import { useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 
-import { VirtualBadge } from '@/components/ui/virtual-badge'
 import { useKline } from '@/hooks/use-kline'
 import { usePerpPositions, usePlacePerpOrder } from '@/hooks/use-perp'
 import { useAccount } from '@/hooks/use-virtual'
@@ -147,7 +146,6 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
     <div className="rounded-lg border border-dashed border-gold/60 bg-gold/5 p-4">
       <div className="mb-3 flex items-center justify-between">
         <span className="font-serif text-base font-bold">下单指导</span>
-        <VirtualBadge size="sm" />
       </div>
 
       {/* 当前活仓卡 */}
@@ -314,11 +312,6 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
         </p>
       )}
 
-      <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground/70">
-        全程虚拟资金 · 绝不接真实交易所下单 · 杠杆/做空/强平均为模拟教学 ·
-        所有动作走点金虚拟撮合 · 仅供参考,不构成投资建议
-      </p>
-
       {confirm && estimate != null && (
         <PerpConfirmModal
           intent={confirm}
@@ -427,7 +420,6 @@ function PerpConfirmModal({
       onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}
     >
       <div className="w-full max-w-sm rounded-lg border border-midas-red bg-cream p-6 shadow-xl">
-        <div className="mb-3 flex justify-center"><VirtualBadge size="sm" /></div>
         <h3 className="mb-5 text-center font-serif text-lg font-bold">{title}</h3>
         <dl className="space-y-2.5 text-sm">
           <ModalRow label="标的"><span className="font-mono">{symbol}</span></ModalRow>
@@ -487,9 +479,6 @@ function PerpConfirmModal({
             </>
           )}
         </dl>
-        <p className="mt-4 text-center text-[10px] text-muted-foreground/70">
-          本次为模拟交易,不构成投资建议 · 全程虚拟资金
-        </p>
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={onCancel} className="rounded-md border border-paper bg-background px-4 py-2 text-sm hover:bg-cream">
             取消

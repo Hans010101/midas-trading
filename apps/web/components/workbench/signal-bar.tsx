@@ -8,14 +8,12 @@
  *   - 信号强度(综合评分大字 + 5 档标签)
  *   - 趋势方向:近期笔方向 + 中枢数量
  *   - mock 标记(若 llm_mode='mock')
- *   - DisclaimerStrip(compact)
  *
  * 数据来源:复用 useAiDecision · 跟右栏 AI 决策卡共享 cache · 不发额外请求。
  */
 
 import { useMemo } from 'react'
 
-import { DisclaimerStrip } from '@/components/workbench/disclaimer-strip'
 import { useAiDecision } from '@/hooks/use-ai-decision'
 import type { CompositeLabel, DecisionCard } from '@/lib/api/ai-decision'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
@@ -43,7 +41,6 @@ export function SignalBar() {
         )}
         {query.status === 'success' && <SignalBarBody card={query.data} />}
       </div>
-      <DisclaimerStrip compact />
     </div>
   )
 }

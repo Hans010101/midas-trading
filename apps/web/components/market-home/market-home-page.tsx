@@ -7,7 +7,7 @@
  * 3.1 内容:顶部市场切换 + 市场状态条(交易时段)+ 大盘指数卡(4 张)+ 榜单占位(3.2 / 3.3)。
  *
  * 数据走只读端点 /api/v1/{cn|us}/overview(lib/api/market-home.ts)。
- * 红线:大盘指数为真实行情快照(只读)· 非交易时段为最新收盘快照 · 仅供参考,不构成投资建议。
+ * 红线:大盘指数为真实行情快照(只读)· 非交易时段为最新收盘快照。
  */
 
 import { useQuery } from '@tanstack/react-query'
@@ -93,8 +93,7 @@ export function MarketHomePage({ market }: { market: MarketKind }) {
 
           <p className="mt-6 text-[11px] text-muted-foreground/60">
             大盘指数为{MARKET_NAME[market]}实时快照(
-            {market === 'cn' ? 'Sina · 交易时段刷新' : 'yfinance · ET 含夏令时'})· 非交易时段为最新收盘快照 ·
-            仅供参考,不构成投资建议
+            {market === 'cn' ? 'Sina · 交易时段刷新' : 'yfinance · ET 含夏令时'})· 非交易时段为最新收盘快照
           </p>
         </div>
       </main>

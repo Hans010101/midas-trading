@@ -45,9 +45,6 @@ export default function SettingsPage() {
           description="密码修改 · 2FA · 登录设备管理 · 操作日志"
         />
 
-        <p className="mt-12 text-center text-xs text-muted-foreground/70">
-          模拟交易,不构成投资建议
-        </p>
       </main>
     </div>
   )

@@ -341,7 +341,7 @@ export default function CryptoMarketPage() {
 
           <p className="mt-3 text-[11px] text-muted-foreground/60">
             交易对/价格/涨跌/高低/成交额 = 真实(M2-A ticker · 全市场 USDT 永续)· 资金费率/账户多空比/OI 24H变化 =
-            采集范围内真实,范围外(如 USDC 本位)「—」· 点行新标签打开详情页 · 仅供参考,不构成投资建议
+            采集范围内真实,范围外(如 USDC 本位)「—」· 点行新标签打开详情页
           </p>
         </div>
       </main>

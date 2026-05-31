@@ -3,7 +3,7 @@
 /**
  * 下单确认模态 · 0008 v2 § 8.3 必经。
  *
- * 7 字段 + VIRTUAL 徽章 + 实时算成本 + 中国红主按钮 + Esc 取消。
+ * 7 字段 + 实时算成本 + 中国红主按钮 + Esc 取消。
  * 所有下单入口(顶部按钮 / 右键 / Cmd+B/S / 一键平仓)共用此模态。
  *
  * 提交后弹 sonner toast(R10)· 帝王金成功 / 中国红失败 · 永不绿色。
@@ -12,7 +12,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
-import { VirtualBadge } from '@/components/ui/virtual-badge'
 import { useAccount, usePlaceOrder } from '@/hooks/use-virtual'
 import { useKline } from '@/hooks/use-kline'
 import { VirtualApiError } from '@/lib/api/virtual'
@@ -111,9 +110,6 @@ export function OrderConfirmDialog({
       }}
     >
       <div className="w-full max-w-md rounded-lg border border-midas-red bg-cream p-6 shadow-xl">
-        <div className="mb-3 flex justify-center">
-          <VirtualBadge size="sm" />
-        </div>
         <h3 className="mb-5 text-center font-serif text-xl font-bold text-foreground">
           确认下单
         </h3>
@@ -198,11 +194,7 @@ export function OrderConfirmDialog({
           </p>
         )}
 
-        <p className="mt-5 text-center text-[10px] text-muted-foreground/70">
-          本次为模拟交易,不构成投资建议
-        </p>
-
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
