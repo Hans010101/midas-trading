@@ -69,6 +69,8 @@ M0 验收标准:陌生人能注册 → 看跨市场 K 线 → 建虚拟单 → �
 - 报告里说"完成"必须等于"实测通过",写完没跑不算完成
 - **自验绝不接会吞退出码的管道**(`命令 2>&1 | tail` 让退出码 = `tail` 的 0,吞掉真实 exit 1)。lint / build / test 必须直接取命令真实退出码:`命令 > 日志; EXIT=$?` 或 `set -o pipefail`,非零即失败、如实报。详见 docs/decisions/0033 翻车。
 - **部署成功以三者为准,绝不凭「代码已合 main」就报成功**:① GitHub Actions 状态绿(`gh run watch --exit-status` / `gh run view` conclusion=success)· ② 服务器 `docker compose ps` 容器真重建(CREATED 是本次 + healthy)· ③ 改了显示的话真机抽查。详见 docs/decisions/0033。
+- **多页面 / 多市场功能,验收必须真机覆盖【用户实际会用的每一个页面 / 入口】,不能用「后端测试过 + 某一个前端面验到」冒充「全覆盖」。** 动手前先列「该功能应覆盖的所有页面/入口」清单,逐页真机(像用户那样正常访问 · 零 mock · 零特殊构造),缺一不可。
+  本 session 翻车:AI 模拟交易第一层(actionable + 一键模拟下单)只接了 `AiDecisionCard`(workbench / cn / us 详情页),漏了 crypto perp 详情页 `/crypto-preview` 用的 `CryptoAiCard`(★同一功能在不同页面 / 市场可能是【不同前端组件】);真机只验了 `/workbench` 就报「三市场跑通」,用户在主力使用面 `/crypto-preview` 看不到 → 典型「报告上线但用户看不到」。根因:① 同功能多组件;② 真机只验一个面 = 给「全覆盖」假象。build 过 + 后端测试过 + 单一前端面验到 ≠ 全覆盖。
 
 ### 3. 自主决策 · 事后审计
 - 默认自己决策,不要每个小事都问
