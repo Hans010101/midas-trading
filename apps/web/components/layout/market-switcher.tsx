@@ -83,7 +83,7 @@ export function MarketSwitcher({ className }: { className?: string }) {
             : 'text-muted-foreground hover:bg-midas-red-glow hover:text-foreground',
         )}
       >
-        全球
+        全球市场
       </button>
       {MARKETS.map((m) => (
         <button
