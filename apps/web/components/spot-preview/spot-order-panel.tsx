@@ -14,14 +14,13 @@
  *   - 买入做多 / 卖出开空 = 开仓 · 需现金(成本 / 担保 = notional + 手续费)· 校验余额
  *   - 卖出平多 / 买入平空 = 平仓 · 不需预付现金 · 数量受持仓上限约束
  *
- * 红线:全程虚拟资金 · 美股卖空只是虚拟负持仓记账 · 绝不接真实交易 · 仅供参考不构成投资建议。
+ * 红线:全程虚拟资金 · 美股卖空只是虚拟负持仓记账 · 绝不接真实交易。
  */
 
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
-import { VirtualBadge } from '@/components/ui/virtual-badge'
 import { useSession } from 'next-auth/react'
 import { useAccount, usePlaceOrder, usePositions } from '@/hooks/use-virtual'
 import { useKline } from '@/hooks/use-kline'
@@ -75,7 +74,7 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
       <PanelShell>
         <GateNote
           title="登录后可下单"
-          hint="点金全程虚拟资金,登录即可用模拟盘买卖。"
+          hint="点金全程账户资金,登录即可买卖。"
           href="/login"
           cta="去登录"
         />
@@ -86,8 +85,8 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
     return (
       <PanelShell>
         <GateNote
-          title={`${market === 'cn' ? 'A股' : '美股'}虚拟资金未激活`}
-          hint="先到设置页设定该市场的初始虚拟资金,再来下单。"
+          title={`${market === 'cn' ? 'A股' : '美股'}账户资金未激活`}
+          hint="先到设置页设定该市场的初始账户资金,再来下单。"
           href="/settings/wallet"
           cta="去激活"
         />
@@ -173,16 +172,15 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
       {market === 'cn' ? (
         <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground/70">
           A股 T+1:当日买入次日方可卖出 · ±10%/20% 涨跌停限制 ·
-          模拟撮合按最新价成交,不强制 T+1 / 涨跌停。
+          按最新价成交,不强制 T+1 / 涨跌停。
         </p>
       ) : (
         <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground/70">
           {tab === 'short'
-            ? '卖空 = 虚拟负持仓记账 · 无杠杆 1:1 锁定等额现金担保 · 无强平/资金费 · 仅模拟。'
-            : '美股做多 · 现货买卖 · 模拟撮合按最新价成交。'}
+            ? '卖空 = 虚拟负持仓记账 · 无杠杆 1:1 锁定等额现金担保 · 无强平/资金费。'
+            : '美股做多 · 现货买卖 · 按最新价成交。'}
         </p>
       )}
-      <p className="mt-1 text-[11px] text-muted-foreground/60">仅供参考,不构成投资建议</p>
 
       {pending && (
         <SpotOrderConfirm
@@ -273,9 +271,6 @@ function SpotOrderConfirm({
       }}
     >
       <div className="w-full max-w-md rounded-lg border border-midas-red bg-cream p-6 shadow-xl">
-        <div className="mb-3 flex justify-center">
-          <VirtualBadge size="sm" />
-        </div>
         <h3 className="mb-5 text-center font-serif text-xl font-bold text-foreground">确认下单</h3>
 
         <dl className="space-y-3 text-sm">
@@ -350,11 +345,7 @@ function SpotOrderConfirm({
           </p>
         )}
 
-        <p className="mt-5 text-center text-[10px] text-muted-foreground/70">
-          本次为模拟交易,不构成投资建议
-        </p>
-
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
@@ -384,9 +375,8 @@ function SpotOrderConfirm({
 function PanelShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="rounded-md border border-paper bg-background p-3">
-      <header className="mb-3 flex items-center justify-between">
-        <p className="font-serif text-sm font-bold text-foreground">下单 · 模拟盘</p>
-        <VirtualBadge size="sm" />
+      <header className="mb-3">
+        <p className="font-serif text-sm font-bold text-foreground">下单</p>
       </header>
       {children}
     </div>

@@ -3,7 +3,7 @@
 /**
  * AI 一键模拟下单 · 二次确认模态 · 0036 批次甲。
  *
- * 复用手动下单确认模态(order-confirm-dialog)的【口径】(同壳 + VIRTUAL 徽章 + 二次确认步骤
+ * 复用手动下单确认模态(order-confirm-dialog)的【口径】(同壳 + 二次确认步骤
  * + sonner toast),但路由到 ai-order 端点(source=ai_signal · 走同一虚拟撮合引擎 execute)。
  *
  * ★ 红线:① 只在用户点「确认」后才发请求(二次确认必经,绝不绕过);② 只调虚拟引擎,绝不接真实交易。
@@ -13,7 +13,6 @@
 import { useEffect } from 'react'
 import { toast } from 'sonner'
 
-import { VirtualBadge } from '@/components/ui/virtual-badge'
 import { useKline } from '@/hooks/use-kline'
 import { useAiOrder } from '@/hooks/use-virtual'
 import { VirtualApiError } from '@/lib/api/virtual'
@@ -90,11 +89,8 @@ export function AiOrderConfirmDialog({
       }}
     >
       <div className="w-full max-w-md rounded-lg border border-midas-red bg-cream p-6 shadow-xl">
-        <div className="mb-3 flex justify-center">
-          <VirtualBadge size="sm" />
-        </div>
         <h3 className="mb-5 text-center font-serif text-xl font-bold text-foreground">
-          确认按 AI 建议模拟下单
+          确认按 AI 建议下单
         </h3>
 
         <dl className="space-y-3 text-sm">
@@ -135,7 +131,7 @@ export function AiOrderConfirmDialog({
         </dl>
 
         <p className="mt-5 text-center text-[10px] text-muted-foreground/70">
-          本次为模拟交易,不构成投资建议 · 成交数量按你的下单预设
+          成交数量按你的下单预设
         </p>
 
         <div className="mt-4 flex justify-end gap-2">

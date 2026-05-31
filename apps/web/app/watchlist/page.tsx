@@ -5,7 +5,7 @@
  * 导航结构跟三市场首页统一(TopNav + MarketSwitcher,其中第四 Tab「自选」高亮本页)。
  * 未登录由 WatchlistOverview 内引导登录(本路由不在 middleware 保护列表,匿名可达)。
  *
- * 红线:只读行情 · 全程虚拟资金 · 仅供参考,不构成投资建议。
+ * 红线:只读行情 · 全程虚拟资金。
  */
 
 import { MarketSwitcher } from '@/components/layout/market-switcher'

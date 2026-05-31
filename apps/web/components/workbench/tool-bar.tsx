@@ -128,9 +128,6 @@ export function ToolBar() {
         </span>
       </div>
 
-      <div className="mt-auto text-[8px] leading-tight text-muted-foreground/50 [writing-mode:vertical-rl]">
-        不构成投资建议
-      </div>
     </aside>
   )
 }

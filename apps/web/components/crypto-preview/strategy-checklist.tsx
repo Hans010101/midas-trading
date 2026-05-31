@@ -11,12 +11,11 @@
  *
  * 基差「走弱」单点定义:基差率 = (mark−index)/index < 0(合约贴水)· 不依赖 2.4 的时序。
  *
- * 🔴 红线:只读提示 · 绝不自动下单 · 「仅供参考,不构成投资建议」· 全程虚拟。
+ * 🔴 红线:只读提示 · 绝不自动下单 · 全程虚拟。
  */
 
 import { useQuery } from '@tanstack/react-query'
 
-import { VirtualBadge } from '@/components/ui/virtual-badge'
 import { useChan } from '@/hooks/use-chan'
 import { useFuturesInfo } from '@/hooks/use-crypto'
 import { usePerpPositions } from '@/hooks/use-perp'
@@ -121,7 +120,6 @@ export function StrategyChecklist({ futuresSymbol, klineSymbol, period }: Props)
     <div className="rounded-lg border border-paper bg-surface-card p-4">
       <div className="mb-3 flex items-center justify-between">
         <span className="font-serif text-base font-bold">实战策略清单</span>
-        <VirtualBadge size="sm" />
       </div>
       <ul className="space-y-2">
         {rules.map((r) => (
@@ -129,7 +127,7 @@ export function StrategyChecklist({ futuresSymbol, klineSymbol, period }: Props)
         ))}
       </ul>
       <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground/70">
-        策略由实时指标驱动 · 命中仅作提示 · 仅供参考,不构成投资建议 · 全程虚拟,绝不自动下单
+        策略由实时指标驱动 · 命中仅作提示
       </p>
     </div>
   )

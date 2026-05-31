@@ -5,7 +5,7 @@
  *
  * 响应式卡片网格(宽窄屏都能用)· 按分类分组(环球指数 / 商品 / 外汇 / 债券 / 加密)。
  * 阶段 B 再叠「世界地图」视觉增强(读同一份数据 · 宽屏地图+列表 / 窄屏卡片)· 不阻塞本基座。
- * 红线:纯只读展示 · 不涉及交易(市场是地区码非交易市场 · 不可下单)· 行情仅供参考。
+ * 红线:纯只读展示 · 不涉及交易(市场是地区码非交易市场 · 不可下单)。
  */
 
 import { useQuery } from '@tanstack/react-query'
@@ -56,7 +56,6 @@ export default function GlobalOverviewPage() {
       <main className="flex-1">
         <div className="flex items-center justify-center gap-2 border-b border-dashed border-gold/60 bg-gold/10 px-6 py-2 text-center text-xs text-gold">
           <span className="font-bold">全球市场概览</span>
-          <span className="text-muted-foreground/70">行情仅供参考</span>
         </div>
 
         <div className="mx-auto max-w-[1600px] px-6 py-5">
@@ -94,7 +93,7 @@ export default function GlobalOverviewPage() {
           ))}
 
           <p className="mt-4 text-[11px] text-muted-foreground/60">
-            全球核心市场指标 · 数据先采集进库再展示(~15min 延迟)· 仅供参考,不构成投资建议
+            全球核心市场指标 · 数据先采集进库再展示(~15min 延迟)
           </p>
         </div>
       </main>

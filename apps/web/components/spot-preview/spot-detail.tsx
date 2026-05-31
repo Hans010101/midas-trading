@@ -9,7 +9,7 @@
  * 标的由 URL ?symbol=（&name=)驱动 · 无参数回落到该市场 demo 标的(绝不崩、绝不留空)。
  * 路由 /cn-preview /us-preview · middleware 不保护(匿名可看图,下单时引导登录)。
  *
- * 红线:全程虚拟资金 · 美股卖空仅虚拟负持仓记账 · 绝不接真实交易 · 仅供参考不构成投资建议。
+ * 红线:全程虚拟资金 · 美股卖空仅虚拟负持仓记账 · 绝不接真实交易。
  */
 
 import { useSearchParams } from 'next/navigation'

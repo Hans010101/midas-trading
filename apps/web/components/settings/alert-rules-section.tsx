@@ -4,7 +4,7 @@
  * 设置页 · 告警规则配置 · 0026 G5 · DP-G5-2/3。
  *
  * 复用 G2b CRUD + G5 一键应用推荐。指标按 /indicators 目录动态渲染(当前 20 个)。
- * 全程仅供参考,不构成投资建议。
+ * 全程仅作提示。
  */
 
 import { Loader2 } from 'lucide-react'
@@ -50,7 +50,7 @@ export function AlertRulesSection() {
     <section className="mb-10">
       <h2 className="mb-2 font-serif text-xl font-bold text-foreground">告警规则</h2>
       <p className="mb-4 text-sm text-muted-foreground">
-        命中规则会经 Telegram 推送(需先绑定)· 上限 {MAX_RULES} 条 · 仅供参考,不构成投资建议
+        命中规则会经 Telegram 推送(需先绑定)· 上限 {MAX_RULES} 条
       </p>
 
       <div className="mb-4 rounded-lg border border-gold/40 bg-gold/[0.06] p-4">

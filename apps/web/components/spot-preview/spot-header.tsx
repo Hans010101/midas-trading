@@ -13,7 +13,6 @@
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 
-import { VirtualBadge } from '@/components/ui/virtual-badge'
 import { WatchlistToggleButton } from '@/components/watchlist/watchlist-toggle-button'
 import { useKline } from '@/hooks/use-kline'
 import { cn } from '@/lib/utils'
@@ -86,7 +85,6 @@ export function SpotHeader({ symbol, name, market, period, onPeriodChange }: Spo
         <span className="rounded-md border border-paper px-2 py-0.5 text-xs text-muted-foreground">
           {MARKET_LABEL[market]} · 现货
         </span>
-        <VirtualBadge size="sm" />
         <WatchlistToggleButton symbol={symbol} market={market} />
 
         {/* 周期切换 · 驱动主图 */}
@@ -108,9 +106,6 @@ export function SpotHeader({ symbol, name, market, period, onPeriodChange }: Spo
           ))}
         </div>
 
-        <span className="ml-auto text-[11px] text-muted-foreground/60">
-          仅供参考,不构成投资建议
-        </span>
       </div>
     </header>
   )

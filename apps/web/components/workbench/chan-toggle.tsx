@@ -21,7 +21,7 @@ export function ChanToggle() {
       title={
         enabled
           ? '关闭缠论标注(笔/中枢/分型)'
-          : '开启缠论标注(笔/中枢/分型)· 仅供参考,不构成投资建议'
+          : '开启缠论标注(笔/中枢/分型)'
       }
       className={cn(
         'inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors',

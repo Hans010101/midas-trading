@@ -4,27 +4,21 @@
  * AI 决策卡 · 0012 ADR M1 二波单 Agent 版(0012 § M1 二波降级 v2)。
  *
  * 内容(从上到下):
- *   - Header:「AI 决策卡 · 技术面分析」+ VIRTUAL 徽章
+ *   - Header:「AI 决策卡 · 技术面分析」
  *   - 综合评分大字 + 标签(强多/弱多/中性/弱空/强空)+ 置信度
  *   - 关键支撑/阻力位
  *   - 技术面分析文字(narrative · 已过 Validator 改写祈使句)
  *   - 缠论买卖点列表(最近 N 个)
- *   - DisclaimerStrip(强制 · 0012 红线 ④)
  *   - footer:「上次更新 X 分钟前」+ mock 标识(若 llm_mode='mock')
  *
  * 视觉系统严守(0012 红线):
  *   - composite 数字:强多/弱多 → bull · 弱空/强空 → bear · 中性 → ink-faint
- *   - VIRTUAL 徽章帝王金
- *   - disclaimer 浅灰底 ink-faint 文字
- *   - 文字「不构成投资建议」从 API 字段读 · 同时前端硬编码兜底
  */
 
 import { Loader2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { AiOrderConfirmDialog } from '@/components/workbench/ai-order-confirm-dialog'
-import { DisclaimerStrip } from '@/components/workbench/disclaimer-strip'
-import { VirtualBadge } from '@/components/ui/virtual-badge'
 import { useAiDecision } from '@/hooks/use-ai-decision'
 import type { ActionableDirection, CompositeLabel, DecisionCard } from '@/lib/api/ai-decision'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
@@ -55,21 +49,16 @@ export function AiDecisionCard({
 
   return (
     <div className="rounded-md border border-paper bg-background p-3">
-      <header className="mb-2 flex items-center justify-between">
-        <div>
-          <p className="font-serif text-sm font-bold text-foreground">
-            AI 决策卡
-          </p>
-          <p className="text-[10px] text-muted-foreground/70">· 技术面分析</p>
-        </div>
-        <VirtualBadge size="sm" />
+      <header className="mb-2">
+        <p className="font-serif text-sm font-bold text-foreground">
+          AI 决策卡
+        </p>
+        <p className="text-[10px] text-muted-foreground/70">· 技术面分析</p>
       </header>
 
       {query.status === 'pending' && <CardSkeleton />}
       {query.status === 'error' && <CardError onRetry={() => void query.refetch()} />}
       {query.status === 'success' && <CardBody card={query.data} />}
-
-      <DisclaimerStrip className="mt-3" />
     </div>
   )
 }
@@ -151,7 +140,7 @@ function CardBody({ card }: { card: DecisionCard }) {
                 'text-xs font-medium text-white transition-colors hover:bg-midas-red-deep',
               )}
             >
-              一键模拟下单 · {TRADE_DIR_LABEL[tradeDir]}
+              一键下单 · {TRADE_DIR_LABEL[tradeDir]}
             </button>
           )}
         </div>

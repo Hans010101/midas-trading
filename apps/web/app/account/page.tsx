@@ -27,7 +27,6 @@ import {
 import { PerpPositionsSection } from '@/components/account/perp-positions-section'
 import { WalletSection } from '@/components/account/wallet-section'
 import { TopNav } from '@/components/layout/top-nav'
-import { VirtualBadge } from '@/components/ui/virtual-badge'
 import { OrderConfirmDialog } from '@/components/workbench/order-confirm-dialog'
 import {
   useAccounts,
@@ -71,7 +70,6 @@ export default function AccountPage() {
           <h1 className="font-serif text-2xl font-bold text-foreground">
             我的账户
           </h1>
-          <VirtualBadge size="sm" />
         </div>
 
         {/* Section 1: 账户基本信息 */}
@@ -93,17 +91,11 @@ export default function AccountPage() {
                   {session?.user?.id ?? '—'}
                 </dd>
               </div>
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">账户类型</dt>
-                <dd>
-                  <VirtualBadge size="sm" />
-                </dd>
-              </div>
             </dl>
           </div>
         </section>
 
-        {/* Section 2: 虚拟资金设置(从旧 /settings/wallet 迁入)*/}
+        {/* Section 2: 账户资金设置(从旧 /settings/wallet 迁入)*/}
         <WalletSection />
 
         {/* Section 3: KPI + 曲线 + 持仓 + 历史 + 订单(仅有激活账户时显示)*/}
@@ -196,9 +188,6 @@ export default function AccountPage() {
         {/* 加密合约(永续)持仓 / 订单中心 · M2-C.1 · 独立 Section,自身按 crypto 激活态门控 */}
         <PerpPositionsSection />
 
-        <p className="mt-12 text-center text-xs text-muted-foreground/70">
-          模拟交易,不构成投资建议
-        </p>
       </main>
 
       <OrderConfirmDialog

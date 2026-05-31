@@ -8,7 +8,7 @@
  * 用 0022 阶段② 共用组件(DataTable / EmptyState / LoadingNote)· 视觉跟三市场首页统一。
  *
  * 每行:市场徽章 + 代码 + 最新价(原币种)+ 涨跌幅 · 点行 → 新标签开对应详情页 · 行尾可取消自选。
- * 红线:只读行情 · 仅供参考,不构成投资建议。
+ * 红线:只读行情。
  */
 
 import { Star, X } from 'lucide-react'
@@ -179,8 +179,7 @@ export function WatchlistOverview() {
             </tbody>
           </DataTable>
           <p className="mt-2 text-[11px] text-muted-foreground/60">
-            最新价为各标的最近日 K 收盘(原币种)· 30 秒刷新 · 点行进对应详情页 ·
-            仅供参考,不构成投资建议
+            最新价为各标的最近日 K 收盘(原币种)· 30 秒刷新 · 点行进对应详情页
           </p>
         </>
       )}

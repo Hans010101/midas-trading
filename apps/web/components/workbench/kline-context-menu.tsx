@@ -116,7 +116,7 @@ export function KlineContextMenu({ children }: Props) {
           )}
           {isAuthenticated && !isActivated && (
             <div className="border-b border-paper bg-surface-card px-3 py-2 text-[10px] text-warn">
-              ⚠ 未设置 {MARKET_LABEL[market]} 虚拟资金 · 去 /account 激活
+              ⚠ 未设置 {MARKET_LABEL[market]} 账户资金 · 去 /account 激活
             </div>
           )}
           <MenuItem

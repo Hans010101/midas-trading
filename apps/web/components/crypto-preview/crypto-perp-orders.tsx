@@ -117,7 +117,7 @@ export function CryptoPerpOrders({ futuresSymbol }: { futuresSymbol: string }) {
         </div>
       )}
       <p className="mt-2 text-[10px] text-muted-foreground/60">
-        本币已成交开/平记录 · 全部币种见「我的账户」· 全程虚拟
+        本币已成交开/平记录 · 全部币种见「我的账户」
       </p>
     </div>
   )
