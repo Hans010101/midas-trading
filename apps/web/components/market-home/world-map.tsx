@@ -66,15 +66,16 @@ const MARKET_GEO: readonly MarketGeo[] = [
   { symbol: '^SSMI', short: '瑞士', lng: 8.5, lat: 47.4, lx: 594, ly: 76, align: 'left', priority: 2 },
   // 南亚(孟买 · 单独标向左)
   { symbol: '^NSEI', short: '印度', lng: 72.8, lat: 19.0, lx: 632, ly: 208, align: 'right', priority: 1 },
-  // 东亚簇(东京/首尔/上海/台湾/香港很挤)· 向右(太平洋)callout 竖排
-  { symbol: '^N225', short: '日经', lng: 139.7, lat: 35.7, lx: 954, ly: 104, align: 'right', priority: 1 },
-  { symbol: '^KS11', short: '韩KOSPI', lng: 127, lat: 37.57, lx: 954, ly: 130, align: 'right', priority: 2 },
+  // 东亚 + 东南亚(东京/首尔/上海/台湾/香港/新加坡/雅加达很挤)· 统一向右(太平洋)callout 单列竖排。
+  // ★ ly 严格按【纬度从北到南】排(首尔→东京→上海→台湾→香港→新STI→印尼),
+  //   与标记点 y 同序 → 引导线单调扇出、互不交叉(防原 日经/韩 标签错位交叉)。每条 26px 错落、清晰不重叠。
+  { symbol: '^KS11', short: '韩KOSPI', lng: 127, lat: 37.57, lx: 954, ly: 104, align: 'right', priority: 2 },
+  { symbol: '^N225', short: '日经', lng: 139.7, lat: 35.7, lx: 954, ly: 130, align: 'right', priority: 1 },
   { symbol: '000001.SS', short: '上证', lng: 121.5, lat: 31.2, lx: 954, ly: 156, align: 'right', priority: 2 },
   { symbol: '^TWII', short: '台湾', lng: 121.5, lat: 25.0, lx: 954, ly: 182, align: 'right', priority: 2 },
   { symbol: '^HSI', short: '恒生', lng: 114.2, lat: 22.3, lx: 954, ly: 208, align: 'right', priority: 2 },
-  // 东南亚(新加坡/雅加达 · 偏南、向左标)
-  { symbol: '^STI', short: '新STI', lng: 103.8, lat: 1.35, lx: 706, ly: 262, align: 'right', priority: 2 },
-  { symbol: '^JKSE', short: '印尼', lng: 106.8, lat: -6.2, lx: 706, ly: 288, align: 'right', priority: 2 },
+  { symbol: '^STI', short: '新STI', lng: 103.8, lat: 1.35, lx: 954, ly: 234, align: 'right', priority: 2 },
+  { symbol: '^JKSE', short: '印尼', lng: 106.8, lat: -6.2, lx: 954, ly: 260, align: 'right', priority: 2 },
   // 大洋洲(悉尼 · 右下、孤立)
   { symbol: '^AXJO', short: '澳ASX', lng: 151.2, lat: -33.87, lx: 860, ly: 362, align: 'right', priority: 1 },
 ]
