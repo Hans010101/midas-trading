@@ -52,22 +52,31 @@ type MarketGeo = {
   priority: 1 | 2
 }
 
+// 精选扩充后 16 个上图(其余新增指数 STOXX50/罗素2000/沪深300/深证 无独立地理 → 仅卡片)。
+// 窄屏 priority 1 = 6 个跨大洲分散的(标普/富时/印度/日经/巴西/澳),窄屏只显示这 6 标签、其余只留点。
 const MARKET_GEO: readonly MarketGeo[] = [
   // 美洲
-  { symbol: '^GSPC', short: '标普', lng: -74, lat: 40.7, lx: 248, ly: 198, align: 'center', priority: 1 },
-  // 欧洲簇(伦敦/巴黎/法兰克福很挤)· 伦敦+巴黎向左上 callout,DAX 往右上分流
-  { symbol: '^FTSE', short: '富时', lng: -0.1, lat: 51.5, lx: 442, ly: 52, align: 'right', priority: 1 },
-  { symbol: '^FCHI', short: '法CAC', lng: 2.35, lat: 48.86, lx: 442, ly: 80, align: 'right', priority: 2 },
-  { symbol: '^GDAXI', short: 'DAX', lng: 8.7, lat: 50.1, lx: 588, ly: 54, align: 'left', priority: 2 },
-  // 东亚簇(东京/首尔/上海/香港很挤)· 向右(太平洋)callout 竖排
-  { symbol: '^N225', short: '日经', lng: 139.7, lat: 35.7, lx: 946, ly: 110, align: 'right', priority: 1 },
-  { symbol: '^KS11', short: '韩KOSPI', lng: 127, lat: 37.57, lx: 946, ly: 140, align: 'right', priority: 2 },
-  { symbol: '000001.SS', short: '上证', lng: 121.5, lat: 31.2, lx: 946, ly: 170, align: 'right', priority: 2 },
-  { symbol: '^HSI', short: '恒生', lng: 114.2, lat: 22.3, lx: 946, ly: 200, align: 'right', priority: 2 },
-  // 东南亚(新加坡 · 偏南、单独标)
-  { symbol: '^STI', short: '新STI', lng: 103.8, lat: 1.35, lx: 718, ly: 268, align: 'right', priority: 2 },
+  { symbol: '^GSPC', short: '标普', lng: -74, lat: 40.7, lx: 246, ly: 200, align: 'center', priority: 1 },
+  { symbol: '^GSPTSE', short: '加拿大', lng: -79.4, lat: 43.6, lx: 206, ly: 92, align: 'right', priority: 2 },
+  { symbol: '^BVSP', short: '巴西', lng: -46.6, lat: -23.5, lx: 300, ly: 328, align: 'right', priority: 1 },
+  // 欧洲簇(伦敦/巴黎/法兰克福/苏黎世很挤)· 伦敦+巴黎向左、DAX+瑞士向右 分两摞
+  { symbol: '^FTSE', short: '富时', lng: -0.1, lat: 51.5, lx: 436, ly: 48, align: 'right', priority: 1 },
+  { symbol: '^FCHI', short: '法CAC', lng: 2.35, lat: 48.86, lx: 436, ly: 74, align: 'right', priority: 2 },
+  { symbol: '^GDAXI', short: 'DAX', lng: 8.7, lat: 50.1, lx: 594, ly: 50, align: 'left', priority: 2 },
+  { symbol: '^SSMI', short: '瑞士', lng: 8.5, lat: 47.4, lx: 594, ly: 76, align: 'left', priority: 2 },
+  // 南亚(孟买 · 单独标向左)
+  { symbol: '^NSEI', short: '印度', lng: 72.8, lat: 19.0, lx: 632, ly: 208, align: 'right', priority: 1 },
+  // 东亚簇(东京/首尔/上海/台湾/香港很挤)· 向右(太平洋)callout 竖排
+  { symbol: '^N225', short: '日经', lng: 139.7, lat: 35.7, lx: 954, ly: 104, align: 'right', priority: 1 },
+  { symbol: '^KS11', short: '韩KOSPI', lng: 127, lat: 37.57, lx: 954, ly: 130, align: 'right', priority: 2 },
+  { symbol: '000001.SS', short: '上证', lng: 121.5, lat: 31.2, lx: 954, ly: 156, align: 'right', priority: 2 },
+  { symbol: '^TWII', short: '台湾', lng: 121.5, lat: 25.0, lx: 954, ly: 182, align: 'right', priority: 2 },
+  { symbol: '^HSI', short: '恒生', lng: 114.2, lat: 22.3, lx: 954, ly: 208, align: 'right', priority: 2 },
+  // 东南亚(新加坡/雅加达 · 偏南、向左标)
+  { symbol: '^STI', short: '新STI', lng: 103.8, lat: 1.35, lx: 706, ly: 262, align: 'right', priority: 2 },
+  { symbol: '^JKSE', short: '印尼', lng: 106.8, lat: -6.2, lx: 706, ly: 288, align: 'right', priority: 2 },
   // 大洋洲(悉尼 · 右下、孤立)
-  { symbol: '^AXJO', short: '澳ASX', lng: 151.2, lat: -33.87, lx: 858, ly: 362, align: 'right', priority: 1 },
+  { symbol: '^AXJO', short: '澳ASX', lng: 151.2, lat: -33.87, lx: 860, ly: 362, align: 'right', priority: 1 },
 ]
 
 export type MapQuote = { name: string; changePct: number }
