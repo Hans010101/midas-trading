@@ -18,6 +18,7 @@ from app.api.deps import (
     ClickHouseDep,
     CnSourceDep,
     CryptoSourceDep,
+    HkSourceDep,
     UsSourceDep,
 )
 from app.core.database import get_db
@@ -71,8 +72,9 @@ async def get_chan_analysis(
     cn: CnSourceDep,
     us: UsSourceDep,
     crypto: CryptoSourceDep,
+    hk: HkSourceDep,
     binance_futures: BinanceFuturesSourceDep,
-    symbol: str = Query(..., min_length=1, examples=["BTC/USDT", "NVDA", "600519", "BTCUSDT"]),
+    symbol: str = Query(..., min_length=1, examples=["BTC/USDT", "NVDA", "600519", "00700"]),
     market: Market = Query(...),
     period: Period = Query("1d"),
     limit: int = Query(300, ge=30, le=1000),
@@ -106,7 +108,7 @@ async def get_chan_analysis(
                     detail=f"perp K 线数据不足 30 根 · 无法做缠论分析:{e}",
                 ) from e
         else:
-            source = _source_for(market, cn=cn, us=us, crypto=crypto)
+            source = _source_for(market, cn=cn, us=us, crypto=crypto, hk=hk)
             try:
                 klines = await source.fetch_kline(symbol, period, limit=limit)
             except Exception as e:  # noqa: BLE001
@@ -165,10 +167,14 @@ def _source_for(
     cn: CnSourceDep,
     us: UsSourceDep,
     crypto: CryptoSourceDep,
+    hk: HkSourceDep | None = None,
 ) -> BaseDataSource:
+    # hk 可选(港股阶段二只 chan 用 · decision-card/strategy 港股不接 · 不传则不含 hk)
     mapping: dict[Market, BaseDataSource] = {
         "cn": cn, "us": us, "crypto": crypto,
     }
+    if hk is not None:
+        mapping["hk"] = hk
     return mapping[market]
 
 

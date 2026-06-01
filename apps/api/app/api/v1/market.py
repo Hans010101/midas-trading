@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from typing import Annotated, Literal, get_args
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -26,6 +27,7 @@ from app.services.data_sources.exceptions import (
     SymbolNotFoundError,
     UpstreamUnavailableError,
 )
+from app.services.hk_pool import HK_POOL
 
 # M2-B(0017 ADR)· instrument 区分 spot/perp · 默认 spot 向后兼容
 Instrument = Literal["spot", "perp"]
@@ -138,6 +140,17 @@ async def search_symbols(
     market: Market | None = Query(None, description="限定市场(可选)"),
     limit: int = Query(50, ge=1, le=200),
 ) -> list[SymbolMeta]:
+    # 港股标的 = 策展池(阶段二只读 · 固定 18 只 · 不依赖 CH symbol_meta 是否已采)
+    # 按 q 过滤代码 / 中文名;阶段四接全市场后再走 CH 搜索。
+    if market == "hk":
+        now = datetime.now(tz=UTC)
+        ql = q.strip().lower()
+        metas = [
+            SymbolMeta(symbol=sym, market="hk", name=name, updated_at=now)
+            for sym, name, _lot, _sector in HK_POOL
+            if ql in sym.lower() or ql in name.lower()
+        ]
+        return metas[:limit]
     return await ch.search_symbols(query=q, market=market, limit=limit)
 
 
