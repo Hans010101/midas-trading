@@ -26,6 +26,26 @@ const STRATEGY_LABELS: Record<StrategyKind, string> = {
 
 const STRATEGY_ORDER: StrategyKind[] = ['ma_cross', 'rsi_reversal', 'boll_reversion']
 
+// 价格符号(按市场)· cn ¥ / hk HK$ / us·crypto $
+function priceSym(market: Market): string {
+  return market === 'cn' ? '¥' : market === 'hk' ? 'HK$' : '$'
+}
+// 信号价格(智能小数 · ≥1000 整数千分位 · ≥1 两位 · <1 四位)+ 市场符号
+function fmtSignalPrice(price: number, market: Market): string {
+  const d = price >= 1000 ? 0 : price >= 1 ? 2 : 4
+  return `${priceSym(market)}${price.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })}`
+}
+// 信号时间(月/日 时:分)
+function fmtSignalTs(ts: string): string {
+  try {
+    const d = new Date(ts)
+    const p = (n: number) => String(n).padStart(2, '0')
+    return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`
+  } catch {
+    return ts.slice(5, 16)
+  }
+}
+
 interface Props {
   symbol: string
   market: Market
@@ -110,13 +130,47 @@ export function StrategyPanel({
             </p>
           )}
 
-          {/* 当前触发状态 */}
+          {/* 当前触发状态(① 含触发价) */}
           <TriggerStatus
             triggered={sig?.current_triggered ?? false}
             lastKind={sig?.last_signal?.kind ?? null}
             lastReason={sig?.last_signal?.reason ?? null}
+            lastPrice={sig?.last_signal?.price ?? null}
+            market={market}
             hasSignals={(sig?.signals.length ?? 0) > 0}
           />
+
+          {/* ② 历史信号列表(可折叠 · 复盘该策略历史买卖信号点 · 纯数据展示 · 不加建议/风险废话) */}
+          {sig && sig.signals.length > 0 && (
+            <details className="group rounded-md border border-paper bg-background/50">
+              <summary className="cursor-pointer px-2.5 py-1.5 text-[11px] text-muted-foreground/80 hover:text-foreground">
+                历史信号 {sig.signals.length} 个 · 点击展开复盘
+              </summary>
+              <div className="max-h-44 overflow-y-auto border-t border-paper/60">
+                {[...sig.signals].reverse().map((s, i) => {
+                  const isBuy = s.kind === 'buy'
+                  return (
+                    <div
+                      key={`${s.ts}-${i}`}
+                      className="flex items-center gap-2 px-2.5 py-1 text-[11px] odd:bg-background/30"
+                    >
+                      <span className="w-20 shrink-0 font-mono text-muted-foreground/60">
+                        {fmtSignalTs(s.ts)}
+                      </span>
+                      <span
+                        className={cn('shrink-0 font-mono font-medium', isBuy ? 'text-up' : 'text-down')}
+                      >
+                        {isBuy ? '买' : '卖'} {fmtSignalPrice(s.price, market)}
+                      </span>
+                      <span className="flex-1 truncate text-right text-muted-foreground/60">
+                        {s.reason}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </details>
+          )}
         </div>
       )}
     </div>
@@ -127,11 +181,15 @@ function TriggerStatus({
   triggered,
   lastKind,
   lastReason,
+  lastPrice,
+  market,
   hasSignals,
 }: {
   triggered: boolean
   lastKind: 'buy' | 'sell' | null
   lastReason: string | null
+  lastPrice: number | null
+  market: Market
   hasSignals: boolean
 }) {
   if (!hasSignals) {
@@ -144,6 +202,8 @@ function TriggerStatus({
   const isBuy = lastKind === 'buy'
   const tone = isBuy ? 'text-up' : 'text-down'
   const label = isBuy ? '买点' : '卖点'
+  // ① 触发价(纯数据 · 带市场符号)
+  const priceStr = lastPrice !== null ? ` ${fmtSignalPrice(lastPrice, market)}` : ''
   return (
     <div
       className={cn(
@@ -156,10 +216,10 @@ function TriggerStatus({
       )}
     >
       {triggered ? (
-        <span className={cn('font-medium', tone)}>🔔 当前触发:{label} · {lastReason}</span>
+        <span className={cn('font-medium', tone)}>🔔 当前触发:{label}{priceStr} · {lastReason}</span>
       ) : (
         <span className="text-muted-foreground/70">
-          最近信号:<span className={tone}>{label}</span> · {lastReason}
+          最近信号:<span className={tone}>{label}{priceStr}</span> · {lastReason}
         </span>
       )}
     </div>

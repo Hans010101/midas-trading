@@ -75,7 +75,12 @@ export function StrategyOverlay({
         lock: true,
         points: [{ timestamp: new Date(sig.ts).getTime(), value: sig.price }],
         // 'B…' → 下方偏移 / 'S…' → 上方偏移(复用 midas-fractal 既有规则)
-        extendData: isBuy ? 'B▲' : 'S▼',
+        // ① 信号点标触发价(纯数据 · 智能小数:≥1000 整数千分位 · <1000 两位)
+        extendData: `${isBuy ? 'B▲' : 'S▼'} ${
+          sig.price >= 1000
+            ? Math.round(sig.price).toLocaleString('en-US')
+            : sig.price.toFixed(2)
+        }`,
         styles: {
           text: {
             color: isBuy ? COLOR_BUY : COLOR_SELL,
