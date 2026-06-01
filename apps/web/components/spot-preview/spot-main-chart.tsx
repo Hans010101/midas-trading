@@ -40,7 +40,9 @@ const BOLL_STYLES = {
 
 interface SpotMainChartProps {
   symbol: string
-  market: 'cn' | 'us'
+  // 港股阶段二:hk 复用现货主图(K线 + 缠论 + BOLL/MACD 指标),
+  // 但 market==='hk' 时 gate 掉形态A 策略面板/信号(strategy API 未注入 hk 会 500 · 港股不接 AI 策略)
+  market: 'cn' | 'us' | 'hk'
   period: Period
 }
 
@@ -101,27 +103,33 @@ export function SpotMainChart({ symbol, market, period }: SpotMainChartProps) {
         period={period}
         enabled={chanEnabled}
       />
-      {/* 策略信号标注层 · 独立 groupId · 不干扰缠论 · 现货默认 spot */}
-      <StrategyOverlay
-        chart={chart}
-        symbol={symbol}
-        market={market as Market}
-        period={period}
-        strategy={strategy}
-        enabled={strategyEnabled}
-      />
+      {/* 策略信号标注层 · 独立 groupId · 不干扰缠论 · 现货默认 spot
+          ★ 港股阶段二不渲染(形态A 策略=AI 信号 · /analysis/strategy-* 未注入 hk 会 500 · 港股只看 K线+缠论+指标) */}
+      {market !== 'hk' && (
+        <StrategyOverlay
+          chart={chart}
+          symbol={symbol}
+          market={market as Market}
+          period={period}
+          strategy={strategy}
+          enabled={strategyEnabled}
+        />
+      )}
       </div>
 
-      {/* AI 策略面板:选择器 + 推荐 + 触发状态(展示型 · 不下单)*/}
-      <StrategyPanel
-        symbol={symbol}
-        market={market as Market}
-        period={period}
-        strategy={strategy}
-        onStrategyChange={setStrategy}
-        enabled={strategyEnabled}
-        onToggle={() => setStrategyEnabled((v) => !v)}
-      />
+      {/* AI 策略面板:选择器 + 推荐 + 触发状态(展示型 · 不下单)
+          ★ 港股阶段二不渲染(同上 · 港股不接 AI 策略 · 不给开启入口 → strategyEnabled 恒 false · 留后续) */}
+      {market !== 'hk' && (
+        <StrategyPanel
+          symbol={symbol}
+          market={market as Market}
+          period={period}
+          strategy={strategy}
+          onStrategyChange={setStrategy}
+          enabled={strategyEnabled}
+          onToggle={() => setStrategyEnabled((v) => !v)}
+        />
+      )}
     </div>
   )
 }

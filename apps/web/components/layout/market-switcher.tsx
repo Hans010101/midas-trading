@@ -48,10 +48,10 @@ export function MarketSwitcher({ className }: { className?: string }) {
   const active: Market | null = onGlobal || onWatchlist ? null : (homeMarket ?? storeMarket)
 
   function handleSelect(m: Market) {
-    // 港股(hk)阶段一:暂无市场首页 + 数据未上线(P1-3 采集后才有)→ 统一去港股占位页。
-    // 不进工作台 K 线流(避免请求未上线的 hk 数据)· 数据上线后再接工作台。
+    // 港股(hk)阶段二:数据已上线 → 进真实港股详情页(/hk-preview · K线+缠论·只读·不接 AI/下单)。
+    // 行情页策展池列表(/hk-market)留单元3 升级,届时改为先进行情页;当前直接进默认标的(腾讯 00700)详情页。
     if (m === 'hk') {
-      router.push('/hk-market')
+      router.push('/hk-preview')
       return
     }
     // 在任一市场首页 / 全球概览(ADR 0035):点市场 → 跳对应市场首页(已在本页则 no-op)
