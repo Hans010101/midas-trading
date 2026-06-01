@@ -31,6 +31,12 @@ from app.services.clickhouse_cn_market import (
     insert_sectors,
     insert_spot_snapshot,
 )
+from app.services.clickhouse_hk_market import (
+    insert_breadth as insert_hk_breadth,
+)
+from app.services.clickhouse_hk_market import (
+    insert_spot_snapshot as insert_hk_spot,
+)
 from app.services.clickhouse_market_home import (
     insert_index_snapshots,
     insert_trade_calendar,
@@ -39,8 +45,10 @@ from app.services.clickhouse_overview import insert_overview_quotes
 from app.services.clickhouse_us_market import insert_us_sectors, insert_us_spot
 from app.services.cn_market import aggregate_breadth
 from app.services.data_sources.cn_source import AKShareCnSource
+from app.services.data_sources.hk_source import AKShareHkSource
 from app.services.data_sources.us_source import YFinanceUsSource
 from app.services.global_overview_config import GLOBAL_OVERVIEW_YF
+from app.services.hk_market import aggregate_breadth as aggregate_hk_breadth
 from app.services.market_home_config import CN_INDEX_CODES, US_INDICES
 from app.services.us_market import aggregate_sectors
 from app.services.us_pool import US_POOL
@@ -229,5 +237,39 @@ async def _us_board_scan_async() -> dict[str, Any]:
         n_sec = await insert_us_sectors(ch, sectors, ts=now)
         logger.info("[market.us_board_scan] pool=%d sectors=%d", n_spot, n_sec)
         return {"pool": n_spot, "sectors": n_sec}
+    finally:
+        await ch.close()
+
+
+# ============================================================================
+# 6 · 港股榜单 · 全市场 spot 快照 + 情绪条 · 港股时段每 3min(港股首页全市场)
+# ============================================================================
+
+
+@shared_task(name="tasks.market.hk_board_scan")
+def hk_board_scan() -> dict[str, Any]:
+    return asyncio.run(_hk_board_scan_async())
+
+
+async def _hk_board_scan_async() -> dict[str, Any]:
+    """新浪 stock_hk_spot 全市场(~2764)→ 存快照 + 算情绪条(涨跌家数 + 总成交额)。
+
+    ★ 源用新浪(stock_hk_spot · 生产已实测可达 2764 只)· 绝不用东财 _em(生产被拒)。
+    港股无涨跌停(breadth 无 limit)· 板块暂不做(全市场无现成行业源)· 所有行共享同一扫描 ts。
+    """
+    source = AKShareHkSource()
+    ch = await _get_ch_client()
+    try:
+        now = datetime.now(tz=UTC)
+        rows = await source.fetch_spot_snapshot()
+        n_spot = await insert_hk_spot(ch, rows, ts=now)
+        breadth = aggregate_hk_breadth(rows, ts=now)
+        await insert_hk_breadth(ch, breadth)
+        logger.info(
+            "[market.hk_board_scan] spot=%d breadth(up=%d down=%d flat=%d) total_amount=%.0f",
+            n_spot, breadth.up_count, breadth.down_count, breadth.flat_count,
+            breadth.total_amount,
+        )
+        return {"spot": n_spot}
     finally:
         await ch.close()

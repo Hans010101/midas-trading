@@ -332,3 +332,38 @@ PARTITION BY toYYYYMM(ts)
 ORDER BY (ts, name)
 TTL ingested_at + INTERVAL 2 DAY
 SETTINGS index_granularity = 8192;
+
+-- ============================================================================
+-- 港股首页全市场 · 新浪 stock_hk_spot(~2764 只)· spot 快照 + 情绪条(★无涨跌停 · 无板块)
+-- ⚠️ 与 apps/worker/ch_schema.py 的 DDL 必须保持一致。
+-- ============================================================================
+-- hk_spot_snapshot · 港股全市场个股快照(新浪 stock_hk_spot)· 每次扫描同一 ts 写全量
+CREATE TABLE IF NOT EXISTS hk_spot_snapshot (
+    symbol String,                          -- 5 位港股代码 '00700'
+    name String,
+    ts DateTime,
+    last_price Float64,
+    change_pct Float64,
+    change_amount Float64,
+    amount Float64,                         -- 成交额(港币元)
+    volume Float64,
+    ingested_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toDate(ts)
+ORDER BY (ts, symbol)
+TTL ingested_at + INTERVAL 2 DAY
+SETTINGS index_granularity = 8192;
+
+-- hk_market_breadth · 港股情绪条单行 · ★港股无涨跌停制度 → 无 limit 列(对比 cn_market_breadth)
+CREATE TABLE IF NOT EXISTS hk_market_breadth (
+    ts DateTime,
+    up_count UInt32,
+    down_count UInt32,
+    flat_count UInt32,
+    total_amount Float64,                    -- 全市场总成交额(港币元)
+    ingested_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(ts)
+ORDER BY ts
+TTL ingested_at + INTERVAL 30 DAY
+SETTINGS index_granularity = 8192;

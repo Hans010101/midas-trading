@@ -18,6 +18,7 @@ GLOBAL_OVERVIEW_YF: tuple[tuple[str, str, str, str, str], ...] = (
     ("^DJI", "道琼斯", "us", "index", "point"),
     ("^N225", "日经225", "jp", "index", "point"),
     ("^HSI", "恒生指数", "hk", "index", "point"),
+    ("^HSCE", "恒生国企指数", "hk", "index", "point"),
     ("000001.SS", "上证指数", "cn", "index", "point"),
     ("^GDAXI", "德国DAX", "de", "index", "point"),
     ("^FTSE", "英国富时100", "uk", "index", "point"),

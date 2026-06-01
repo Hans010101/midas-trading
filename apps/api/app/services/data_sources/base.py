@@ -75,22 +75,26 @@ class BaseDataSource(abc.ABC):
     name: str  # 子类设置:"akshare" / "yfinance" / "ccxt-binance"
     market: Market
 
-    async def _run_blocking(self, fn: Callable[..., R], *args: object) -> R:
+    async def _run_blocking(
+        self, fn: Callable[..., R], *args: object, timeout: float | None = None,
+    ) -> R:
         """把【同步】上游调用放到隔离线程池执行,带 asyncio 超时。
 
         - 隔离线程池:不阻塞事件循环、不耗尽 asyncio 默认池(DNS 等内部操作不受影响)。
-        - 超时:UPSTREAM_CALL_TIMEOUT 内没返回 → 抛 UpstreamUnavailableError(可被 _retry 接住)。
+        - 超时:默认 UPSTREAM_CALL_TIMEOUT(18s)· 超时抛 UpstreamUnavailableError(可被 _retry 接住)。
           底层 socket 超时(更短)通常先让线程自己结束、线程池自愈。
+        - timeout:覆盖默认值 · 给全市场分页等慢调用(如港股 stock_hk_spot ~46 页)用 · 默认 None=18s。
         """
         loop = asyncio.get_running_loop()
+        to = UPSTREAM_CALL_TIMEOUT if timeout is None else timeout
         try:
             return await asyncio.wait_for(
                 loop.run_in_executor(_UPSTREAM_POOL, fn, *args),
-                timeout=UPSTREAM_CALL_TIMEOUT,
+                timeout=to,
             )
         except TimeoutError as e:
             raise UpstreamUnavailableError(
-                f"上游同步调用超时(>{UPSTREAM_CALL_TIMEOUT:.0f}s)· 已隔离线程池,未阻塞事件循环",
+                f"上游同步调用超时(>{to:.0f}s)· 已隔离线程池,未阻塞事件循环",
                 market=self.market,
                 upstream=self.name,
             ) from e

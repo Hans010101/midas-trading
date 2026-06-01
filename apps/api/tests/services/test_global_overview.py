@@ -26,14 +26,14 @@ _FRONTEND_QUOTE_UNITS = {"point", "price", "rate", "yield_pct"}
 
 class TestConfigConsistency:
     def test_first_batch_counts(self) -> None:
-        # 精选扩充后:22 指数 + 13 商品 + 9 外汇 + 4 债券 + 4 市场情绪 = 52 yfinance + 7 加密
-        assert len(GLOBAL_OVERVIEW_YF) == 52
+        # 精选扩充 + 港股国企指数 ^HSCE:23 指数 + 13 商品 + 9 外汇 + 4 债券 + 4 市场情绪 = 53 yfinance + 7 加密
+        assert len(GLOBAL_OVERVIEW_YF) == 53
         assert len(CRYPTO_OVERVIEW) == 7
         by_cat = dict.fromkeys(CATEGORY_ORDER, 0)
         for _sym, _name, _region, category, _unit in GLOBAL_OVERVIEW_YF:
             by_cat[category] += 1
         assert by_cat == {
-            "index": 22,
+            "index": 23,
             "commodity": 13,
             "forex": 9,
             "bond": 4,

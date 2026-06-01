@@ -162,6 +162,41 @@ TTL ingested_at + INTERVAL 2 DAY
 SETTINGS index_granularity = 8192
 """
 
+# hk_spot_snapshot · 港股全市场个股快照 · 新浪 stock_hk_spot ~2764 只 · 与 init.sql 一致
+_CREATE_HK_SPOT_SNAPSHOT = """
+CREATE TABLE IF NOT EXISTS hk_spot_snapshot (
+    symbol String,
+    name String,
+    ts DateTime,
+    last_price Float64,
+    change_pct Float64,
+    change_amount Float64,
+    amount Float64,
+    volume Float64,
+    ingested_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toDate(ts)
+ORDER BY (ts, symbol)
+TTL ingested_at + INTERVAL 2 DAY
+SETTINGS index_granularity = 8192
+"""
+
+# hk_market_breadth · 港股情绪条单行 · ★港股无涨跌停 → 无 limit 列 · 与 init.sql 一致
+_CREATE_HK_MARKET_BREADTH = """
+CREATE TABLE IF NOT EXISTS hk_market_breadth (
+    ts DateTime,
+    up_count UInt32,
+    down_count UInt32,
+    flat_count UInt32,
+    total_amount Float64,
+    ingested_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(ts)
+ORDER BY ts
+TTL ingested_at + INTERVAL 30 DAY
+SETTINGS index_granularity = 8192
+"""
+
 # ADR 0035 阶段 A · market_index_snapshot 幂等加列(复用本表装全球指标概览 · 零迁移 · 非破坏)·
 #   与 docker/clickhouse-init.sql 保持一致 · 老库靠 ALTER IF NOT EXISTS,新库靠 init.sql
 _ALTER_OVERVIEW_CATEGORY = (
@@ -183,6 +218,8 @@ _DDL_STATEMENTS: tuple[str, ...] = (
     _CREATE_CN_SECTOR_SNAPSHOT,
     _CREATE_US_SPOT_SNAPSHOT,
     _CREATE_US_SECTOR_SNAPSHOT,
+    _CREATE_HK_SPOT_SNAPSHOT,
+    _CREATE_HK_MARKET_BREADTH,
 )
 
 

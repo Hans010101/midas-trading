@@ -1,0 +1,57 @@
+"""港股榜单 / 情绪契约(港股首页全市场 · 对标 A股 cn_market)。
+
+数据源:新浪 `stock_hk_spot`(全市场 ~2764 只 · 最新价/涨跌幅/成交额)· 东财 _em 生产不可达。
+港股特性 vs A股:
+  ① 港股**无涨跌停制度** → breadth 不含 limit 字段(对比 CnBreadth 的涨跌停估算)。
+  ② 板块暂不做(港股全市场无现成行业聚合源)· /hk/board 无 sectors · 留后续。
+红线:只读行情 · frozen + extra=forbid · ts 全 tz-aware UTC。
+"""
+
+from __future__ import annotations
+
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+
+
+class HkSpotRow(BaseModel):
+    """港股个股实时快照单行(新浪 stock_hk_spot)。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    symbol: str = Field(min_length=1, description="5 位港股代码 · 如 '00700'")
+    name: str = Field(min_length=1, description="中文名称")
+    last_price: float = Field(ge=0, description="最新价(停牌可能为 0)")
+    change_pct: float = Field(description="涨跌幅 %(已是百分数 · 可负)")
+    change_amount: float = Field(description="涨跌额(可负)")
+    amount: float = Field(ge=0, description="成交额(港币元)")
+    volume: float = Field(ge=0, description="成交量(股)")
+
+
+class HkBreadth(BaseModel):
+    """港股市场情绪条 · 全市场涨跌平家数 + 总成交额。
+
+    ★ 港股无涨跌停制度 → 不含 limit_up/limit_down(对比 A股 CnBreadth)。
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    ts: AwareDatetime
+    up_count: int = Field(ge=0, description="上涨家数(涨跌幅 > 0)")
+    down_count: int = Field(ge=0, description="下跌家数(涨跌幅 < 0)")
+    flat_count: int = Field(ge=0, description="平盘家数(涨跌幅 = 0 · 含停牌)")
+    total_amount: float = Field(ge=0, description="全市场总成交额(港币元)")
+
+
+class HkBoardResponse(BaseModel):
+    """`GET /api/v1/hk/board` 响应 · 情绪条 + 3 榜单。
+
+    榜单是同一份全市场快照(~2764 只)的 3 种排序(涨幅/跌幅/成交额)· 前端 Tab 内存切换。
+    ★ 板块暂不做(港股全市场无现成行业源)· 留后续。
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    breadth: HkBreadth | None = Field(default=None, description="情绪条 · 无数据为 null")
+    data_as_of: AwareDatetime | None = Field(default=None, description="快照最新时间 · 截至")
+    gainers: list[HkSpotRow] = Field(description="涨幅榜(change_pct DESC)")
+    losers: list[HkSpotRow] = Field(description="跌幅榜(change_pct ASC)")
+    top_amount: list[HkSpotRow] = Field(description="成交额榜(amount DESC)")
