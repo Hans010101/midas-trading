@@ -104,32 +104,28 @@ export function SpotMainChart({ symbol, market, period }: SpotMainChartProps) {
         enabled={chanEnabled}
       />
       {/* 策略信号标注层 · 独立 groupId · 不干扰缠论 · 现货默认 spot
-          ★ 港股阶段二不渲染(形态A 策略=AI 信号 · /analysis/strategy-* 未注入 hk 会 500 · 港股只看 K线+缠论+指标) */}
-      {market !== 'hk' && (
-        <StrategyOverlay
-          chart={chart}
-          symbol={symbol}
-          market={market as Market}
-          period={period}
-          strategy={strategy}
-          enabled={strategyEnabled}
-        />
-      )}
+          ★ 港股阶段三单元2:解 gate · strategy 端点已注入 hk · 港股跑 3 策略出信号点(纯展示) */}
+      <StrategyOverlay
+        chart={chart}
+        symbol={symbol}
+        market={market as Market}
+        period={period}
+        strategy={strategy}
+        enabled={strategyEnabled}
+      />
       </div>
 
       {/* AI 策略面板:选择器 + 推荐 + 触发状态(展示型 · 不下单)
-          ★ 港股阶段二不渲染(同上 · 港股不接 AI 策略 · 不给开启入口 → strategyEnabled 恒 false · 留后续) */}
-      {market !== 'hk' && (
-        <StrategyPanel
-          symbol={symbol}
-          market={market as Market}
-          period={period}
-          strategy={strategy}
-          onStrategyChange={setStrategy}
-          enabled={strategyEnabled}
-          onToggle={() => setStrategyEnabled((v) => !v)}
-        />
-      )}
+          ★ 港股阶段三单元2:解 gate · 港股可选策略 + 看推荐/触发状态 · 纯展示不下单(下单仍 gate 在详情页 aside) */}
+      <StrategyPanel
+        symbol={symbol}
+        market={market as Market}
+        period={period}
+        strategy={strategy}
+        onStrategyChange={setStrategy}
+        enabled={strategyEnabled}
+        onToggle={() => setStrategyEnabled((v) => !v)}
+      />
     </div>
   )
 }
