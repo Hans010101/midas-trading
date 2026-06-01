@@ -37,28 +37,28 @@ def to_actionable(card: DecisionCardResponse) -> ActionableAdvice:
         if is_crypto:
             return ActionableAdvice(
                 direction="open_long", actionable=True, basis=basis,
-                size_note=_SIZE_NOTE, hint="模拟开多参考 · 成交走虚拟账户 + 二次确认",
+                size_note=_SIZE_NOTE, hint="开多参考",
             )
         return ActionableAdvice(
             direction="buy", actionable=True, basis=basis,
-            size_note=_SIZE_NOTE, hint="模拟买入参考 · 成交走虚拟账户 + 二次确认",
+            size_note=_SIZE_NOTE, hint="买入参考",
         )
     if label in _BEARISH:
         if is_crypto:
             return ActionableAdvice(
                 direction="open_short", actionable=True, basis=basis,
-                size_note=_SIZE_NOTE, hint="模拟开空参考 · 成交走虚拟账户 + 二次确认",
+                size_note=_SIZE_NOTE, hint="开空参考",
             )
         # 拍板④:现货不裸做空 → 有持仓建议平、无持仓建议观望
         return ActionableAdvice(
             direction="sell", actionable=True, basis=basis,
             size_note=_SIZE_NOTE,
-            hint="现货:如持有该标的可考虑减/平仓;无持仓则观望(模拟参考)",
+            hint="现货:如持有该标的可考虑减/平仓;无持仓则观望",
         )
     # 中性 → 观望
     return ActionableAdvice(
         direction="hold", actionable=False, basis=basis,
-        size_note=_SIZE_NOTE_HOLD, hint="信号中性 · 建议观望(模拟参考)",
+        size_note=_SIZE_NOTE_HOLD, hint="信号中性 · 建议观望",
     )
 
 

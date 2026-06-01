@@ -8,7 +8,6 @@
  * - 3 个策略选择(均线金叉 / RSI 反弹 / 布林均值回归)· 选中高亮
  * - AI 推荐徽章(调 /strategy-recommend · 纯规则 · 显示「推荐 XX + 理由」)
  * - 当前是否触发提示(调 /strategy-signals · current_triggered / 最近信号)
- * - disclaimer:仅供参考 · 信号仅展示,下单走第一层一键模拟
  *
  * ★ 全 props 驱动 · 信号点的实际标注在 <StrategyOverlay>(同 strategy/enabled 状态由父组件管理)。
  * ★ 红线:纯展示 · 不下单 / 不自动交易。
@@ -118,10 +117,6 @@ export function StrategyPanel({
             lastReason={sig?.last_signal?.reason ?? null}
             hasSignals={(sig?.signals.length ?? 0) > 0}
           />
-
-          <p className="text-[10px] leading-relaxed text-muted-foreground/60">
-            仅供参考,不构成投资建议 · 信号仅展示,下单请走「一键模拟下单」(虚拟)
-          </p>
         </div>
       )}
     </div>
