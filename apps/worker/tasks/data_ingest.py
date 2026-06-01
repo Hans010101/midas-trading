@@ -24,6 +24,7 @@ from app.services.clickhouse_client import ClickHouseClient
 from app.services.data_sources.cn_source import AKShareCnSource
 from app.services.data_sources.crypto_source import CcxtBinanceCryptoSource
 from app.services.data_sources.exceptions import DataSourceError
+from app.services.data_sources.hk_source import AKShareHkSource
 from app.services.data_sources.us_source import YFinanceUsSource
 
 logger = logging.getLogger(__name__)
@@ -52,10 +53,14 @@ async def _backfill_one(
     exchange: ccxt_async.binance | None = None
     try:
         if market == "cn":
-            source: AKShareCnSource | YFinanceUsSource | CcxtBinanceCryptoSource
+            source: (
+                AKShareCnSource | YFinanceUsSource | AKShareHkSource | CcxtBinanceCryptoSource
+            )
             source = AKShareCnSource()
         elif market == "us":
             source = YFinanceUsSource()
+        elif market == "hk":
+            source = AKShareHkSource()  # 港股(akshare)· ADR 0034a P1-3
         elif market == "crypto":
             exchange = ccxt_async.binance({"enableRateLimit": True, "timeout": 30_000})
             source = CcxtBinanceCryptoSource(exchange=exchange)

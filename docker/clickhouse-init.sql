@@ -4,7 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS kline (
     symbol String,
-    market Enum8('cn'=1, 'us'=2, 'crypto'=3),
+    market Enum8('cn'=1, 'us'=2, 'crypto'=3, 'hk'=4),
     period Enum8('1m'=1, '5m'=2, '15m'=3, '30m'=4, '1h'=5, '1d'=6, '1w'=7),
     ts DateTime,
     open Float64,
@@ -20,7 +20,7 @@ SETTINGS index_granularity = 8192;
 
 CREATE TABLE IF NOT EXISTS symbol_meta (
     symbol String,
-    market Enum8('cn'=1, 'us'=2, 'crypto'=3),
+    market Enum8('cn'=1, 'us'=2, 'crypto'=3, 'hk'=4),
     name String,
     name_en String,
     listed_date Date,

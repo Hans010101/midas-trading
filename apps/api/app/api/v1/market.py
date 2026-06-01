@@ -16,6 +16,7 @@ from app.api.deps import (
     ClickHouseDep,
     CnSourceDep,
     CryptoSourceDep,
+    HkSourceDep,
     UsSourceDep,
 )
 from app.schemas.market import KlineResponse, Market, Period, SymbolMeta
@@ -49,8 +50,9 @@ async def get_kline(
     cn: CnSourceDep,
     us: UsSourceDep,
     crypto: CryptoSourceDep,
+    hk: HkSourceDep,
     binance_futures: BinanceFuturesSourceDep,
-    symbol: str = Query(..., min_length=1, examples=["600519", "NVDA", "BTC/USDT", "BTCUSDT"]),
+    symbol: str = Query(..., min_length=1, examples=["600519", "NVDA", "BTC/USDT", "00700"]),
     market: Market = Query(...),
     period: Period = Query("1d"),
     limit: int = Query(500, ge=1, le=5000),
@@ -65,12 +67,6 @@ async def get_kline(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"instrument=perp 只支持 market=crypto · 当前 market={market}",
         )
-
-    # 港股(hk)阶段一 guard:数据未上线(CH 迁移 + P1-3 采集之前)。
-    # 直接返回空,避免用 market='hk' 触达【尚未含 hk 的 Enum8】导致 CH 报错。
-    # ★ P1-3 接入 hk_source + 完成生产迁移后,移除此 guard。
-    if market == "hk":
-        return KlineResponse(symbol=symbol, market=market, period=period, items=[])
 
     # 1. 缓存命中:CH 已有 ≥ limit 条 → 直接返回(最近 limit 条)
     cached = await ch.select_kline(
@@ -91,7 +87,7 @@ async def get_kline(
         source: BaseDataSource = binance_futures
         fetch_symbol = binance_symbol
     else:
-        source = _source_for(market, cn=cn, us=us, crypto=crypto)
+        source = _source_for(market, cn=cn, us=us, crypto=crypto, hk=hk)
         fetch_symbol = symbol
 
     try:
@@ -142,9 +138,6 @@ async def search_symbols(
     market: Market | None = Query(None, description="限定市场(可选)"),
     limit: int = Query(50, ge=1, le=200),
 ) -> list[SymbolMeta]:
-    # 港股(hk)阶段一 guard:标的库未上线(CH 迁移 + P1-3 采集前)· 返回空避免触达未含 hk 的 Enum8。
-    if market == "hk":
-        return []
     return await ch.search_symbols(query=q, market=market, limit=limit)
 
 
@@ -158,12 +151,14 @@ def _source_for(
     cn: CnSourceDep,
     us: UsSourceDep,
     crypto: CryptoSourceDep,
+    hk: HkSourceDep,
 ) -> BaseDataSource:
     """市场 → 对应适配器。"""
     mapping: dict[Market, BaseDataSource] = {
         "cn": cn,
         "us": us,
         "crypto": crypto,
+        "hk": hk,
     }
     return mapping[market]
 
