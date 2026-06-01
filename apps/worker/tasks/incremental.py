@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any
 
 from celery import shared_task
 
 from app.services.data_sources.exceptions import DataSourceError
+from app.services.hk_pool import HK_POOL_META, HK_POOL_SYMBOLS
 
 # 复用 data_ingest 里的核心异步函数 _backfill_one(本质就是"拉 + 写"幂等操作)
 from tasks.data_ingest import _backfill_one
@@ -22,6 +24,8 @@ from tasks.data_ingest import _backfill_one
 logger = logging.getLogger(__name__)
 
 _INCREMENTAL_LIMIT = 10  # 每次只拉最近 10 根,够覆盖任何短停机窗口
+# 港股池每只采最近 300 根日 K(首次充足历史 · 后续 insert 去重幂等增量)
+_HK_POOL_LIMIT = 300
 
 
 @shared_task(
@@ -73,3 +77,31 @@ def update_crypto_demo(self: Any) -> dict[str, Any]:
     except DataSourceError as exc:
         logger.warning("update_crypto_demo 失败,重试 %d/3:%s", self.request.retries + 1, exc)
         raise self.retry(exc=exc) from exc
+
+
+@shared_task(
+    bind=True,
+    name="tasks.incremental.update_hk_pool",
+    max_retries=2,
+    default_retry_delay=120,
+)
+def update_hk_pool(self: Any) -> dict[str, int]:  # noqa: ARG001
+    """港股策展池日 K 采集 · 每交易日港股收盘后(16:30 HKT)· ADR 0034a P1-3。
+
+    循环策展 ~18 只 · 每只走 _backfill_one(market='hk' · akshare stock_hk_hist)·
+    sleep 错峰防 akshare 限流。单只失败不中断整池(记 warning + 计数),整体不 retry
+    (日 K 一天一根 · 漏的下一交易日补;单只异常吞掉不连累其它)。
+    """
+    ok = 0
+    fail = 0
+    for sym in HK_POOL_SYMBOLS:
+        name = HK_POOL_META.get(sym, (sym, ""))[0]
+        try:
+            asyncio.run(_backfill_one(sym, "hk", name, "1d", _HK_POOL_LIMIT))
+            ok += 1
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("update_hk_pool %s(%s)采集失败:%s", sym, name, exc)
+            fail += 1
+        time.sleep(0.5)  # 错峰防限流
+    logger.info("[hk-pool] 港股池采集完成 ok=%d fail=%d", ok, fail)
+    return {"ok": ok, "fail": fail}

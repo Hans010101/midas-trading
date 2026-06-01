@@ -23,6 +23,7 @@ from app.services.clickhouse_client import ClickHouseClient
 from app.services.data_sources.binance_futures_source import BinanceFuturesSource
 from app.services.data_sources.cn_source import AKShareCnSource
 from app.services.data_sources.crypto_source import CcxtBinanceCryptoSource
+from app.services.data_sources.hk_source import AKShareHkSource
 from app.services.data_sources.us_source import YFinanceUsSource
 
 
@@ -51,6 +52,11 @@ def get_us_source(request: Request) -> YFinanceUsSource:
 
 def get_crypto_source(request: Request) -> CcxtBinanceCryptoSource:
     return cast(CcxtBinanceCryptoSource, request.app.state.crypto_source)
+
+
+def get_hk_source(request: Request) -> AKShareHkSource:
+    """港股数据源(akshare · ADR 0034a P1-2)· 对齐 cn/us source 注入。"""
+    return cast(AKShareHkSource, request.app.state.hk_source)
 
 
 def get_binance_futures_source(request: Request) -> BinanceFuturesSource:
@@ -96,6 +102,7 @@ OptionalClickHouseDep = Annotated[
 ]
 CnSourceDep = Annotated[AKShareCnSource, Depends(get_cn_source)]
 UsSourceDep = Annotated[YFinanceUsSource, Depends(get_us_source)]
+HkSourceDep = Annotated[AKShareHkSource, Depends(get_hk_source)]
 CryptoSourceDep = Annotated[CcxtBinanceCryptoSource, Depends(get_crypto_source)]
 BinanceFuturesSourceDep = Annotated[BinanceFuturesSource, Depends(get_binance_futures_source)]
 CurrentUserDep = Annotated[User, Depends(get_current_user)]

@@ -34,6 +34,13 @@ beat_schedule = {
         # 加密 7×24 市场,每 5 分钟一次
         "schedule": crontab(minute="*/5"),
     },
+    "update-hk-pool": {
+        "task": "tasks.incremental.update_hk_pool",
+        # 港股策展池日 K · 每交易日 16:30 HKT 收盘后(timezone Asia/Shanghai · 16:30 CST = 16:30 HKT)
+        # ADR 0034a P1-3 · 港股日 K 一天一根,收盘后采一次;循环 ~18 只 + sleep 错峰
+        "schedule": crontab(hour="16", minute="30", day_of_week="mon-fri"),
+        "options": {"expires": 3000},
+    },
     "daily-equity-snapshot": {
         "task": "tasks.equity_snapshot.take_daily_snapshots",
         # 每日 23:59 给所有激活子账户写一条 daily 快照
