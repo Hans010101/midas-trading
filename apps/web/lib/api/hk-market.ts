@@ -60,7 +60,7 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await r.json()) as T
 }
 
-/** 港股榜单 + 情绪条(主要成分股 ~900 只 · 一次取齐)。 */
-export function fetchHkBoard(signal?: AbortSignal): Promise<HkBoardResponse> {
-  return getJson<HkBoardResponse>('/api/v1/hk/board', signal)
+/** 港股榜单 + 情绪条(主要成分股)· limit 默认 900 = 数据池全量 · 供前端滚动加载到底。 */
+export function fetchHkBoard(limit = 900, signal?: AbortSignal): Promise<HkBoardResponse> {
+  return getJson<HkBoardResponse>(`/api/v1/hk/board?limit=${limit}`, signal)
 }

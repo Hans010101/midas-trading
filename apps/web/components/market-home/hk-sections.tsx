@@ -1,16 +1,15 @@
 'use client'
 
 /**
- * 港股榜单区(港股首页全市场)· 仅 /hk-market 渲染 · 接 /api/v1/hk/board。
+ * 港股榜单区(港股首页全市场)· 仅 /hk-market 渲染 · 接 /api/v1/hk/board(limit=900)。
  *
- * ★★ 标注「主要成分股 / 活跃精选」· 【绝不写"全市场"】:数据 = 新浪限页 ~900 只主要成分(非 2764 全市场)·
- *    同美股「策展非全市场」· 诚实不假装全市场。
- * 两块:情绪条(涨跌平家数 + 总成交额 · ★港股无涨跌停 · 对比 cn 去掉涨跌停行)+ 3 榜单 Tab(涨幅/跌幅/成交额)。
- * 板块暂不做(港股全市场无现成行业源 · 留后续)。行点击 → /hk-preview 详情页(K线+缠论)。
- * 红线:只读行情 · 港股不下单不接 AI(阶段三)。
+ * ★★ 标注「主要成分股 / 活跃精选」· 【绝不写"全市场"】(新浪限页 ~900 只 · 非 2764)· 诚实。
+ * 三块:情绪条(涨跌平 + 总成交额 · ★港股无涨跌停)+ 工具条(榜单 Tab + 搜索框)+ 榜单(无限滚动到 ~900 只到底)。
+ * 搜索 = 本地过滤当前榜单 ~900 只主要成分(代码 / 名称)· 点行 → /hk-preview(K线+缠论)。
+ * 板块暂不做(全市场无行业源 · 留后续)· 红线:只读 · 港股不下单不接 AI(阶段三)。
  */
 
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 
@@ -19,6 +18,8 @@ import { Panel } from '@/components/ui/panel'
 import { EmptyState, LoadingNote } from '@/components/ui/state'
 import { fetchHkBoard, type HkBreadth, type HkSpotRow } from '@/lib/api/hk-market'
 import { cn } from '@/lib/utils'
+
+const PAGE_STEP = 30 // 无限滚动每次续加载行数(数据池 ~900 只 · 到底为止)
 
 type Tab = 'gainers' | 'losers' | 'amount'
 const TABS: { key: Tab; label: string }[] = [
@@ -52,20 +53,60 @@ function openDetail(symbol: string, name: string) {
 export function HkSections() {
   const q = useQuery({
     queryKey: ['hk-board'],
-    queryFn: ({ signal }) => fetchHkBoard(signal),
+    queryFn: ({ signal }) => fetchHkBoard(900, signal), // 取数据池全量 ~900 只 · 供本地搜索 + 滚动
     retry: 0,
     staleTime: 30_000,
     refetchInterval: 60_000,
   })
   const [tab, setTab] = useState<Tab>('gainers')
+  const [query, setQuery] = useState('')
+  const [visibleCount, setVisibleCount] = useState(PAGE_STEP)
 
   const breadth = q.data?.breadth ?? null
-  const rows: HkSpotRow[] =
-    tab === 'gainers'
-      ? (q.data?.gainers ?? [])
+
+  // 当前 tab 全集(~900 只 · 后端已按对应维度排序)
+  const fullRows: HkSpotRow[] = useMemo(() => {
+    if (!q.data) return []
+    return tab === 'gainers'
+      ? q.data.gainers
       : tab === 'losers'
-        ? (q.data?.losers ?? [])
-        : (q.data?.top_amount ?? [])
+        ? q.data.losers
+        : q.data.top_amount
+  }, [q.data, tab])
+
+  // 搜索过滤(本地 · 代码 / 名称 · 范围 = 当前榜单 ~900 只主要成分)
+  const viewRows = useMemo(() => {
+    const ql = query.trim().toLowerCase()
+    if (!ql) return fullRows
+    return fullRows.filter(
+      (r) => r.symbol.toLowerCase().includes(ql) || r.name.toLowerCase().includes(ql),
+    )
+  }, [fullRows, query])
+
+  const visibleRows = useMemo(() => viewRows.slice(0, visibleCount), [viewRows, visibleCount])
+
+  // tab / 搜索变 → 重置滚动到首屏
+  useEffect(() => {
+    setVisibleCount(PAGE_STEP)
+  }, [tab, query])
+
+  // 无限滚动:sentinel 进视口 → 续加载(到 viewRows.length = ~900 只到底 · 不假装更多)
+  const sentinelRef = useRef<HTMLTableRowElement | null>(null)
+  const hasMore = visibleCount < viewRows.length
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el || !hasMore) return
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((c) => Math.min(c + PAGE_STEP, viewRows.length))
+        }
+      },
+      { rootMargin: '300px' }, // 提前 300px 预加载 · 滚动更顺
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [hasMore, viewRows.length, visibleCount])
 
   return (
     <div className="mt-8 space-y-6">
@@ -83,25 +124,38 @@ export function HkSections() {
         {breadth && <BreadthBar b={breadth} />}
       </section>
 
-      {/* 榜单 3 Tab(同一份主要成分股快照 3 种排序) */}
+      {/* 工具条(榜单 Tab + 搜索框)+ 榜单(无限滚动到 ~900 只) */}
       {q.isSuccess && breadth && (
         <section>
-          <div className="mb-3 flex overflow-hidden rounded-md border border-paper text-sm">
-            {TABS.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => setTab(t.key)}
-                className={cn(
-                  'px-4 py-1.5 transition-colors',
-                  tab === t.key
-                    ? 'bg-midas-red text-white'
-                    : 'text-muted-foreground hover:bg-midas-red-glow/50',
-                )}
-              >
-                {t.label}
-              </button>
-            ))}
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex overflow-hidden rounded-md border border-paper text-sm">
+              {TABS.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setTab(t.key)}
+                  className={cn(
+                    'px-4 py-1.5 transition-colors',
+                    tab === t.key
+                      ? 'bg-midas-red text-white'
+                      : 'text-muted-foreground hover:bg-midas-red-glow/50',
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {/* 搜索框 · 对齐加密首页位置/风格 · 本地过滤主要成分股 */}
+            <div className="flex items-center gap-1.5 rounded-md border border-paper bg-surface-card px-3 py-1.5 text-sm">
+              <SearchIcon />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="搜索港股(主要成分股)"
+                className="w-44 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+              />
+            </div>
           </div>
           <DataTable minWidth="640px">
             <THead>
@@ -113,14 +167,14 @@ export function HkSections() {
               <TH align="right">成交额</TH>
             </THead>
             <tbody>
-              {rows.length === 0 && (
+              {viewRows.length === 0 && (
                 <TRow>
                   <TCell align="center" className="py-8 text-muted-foreground/60" colSpan={6}>
-                    暂无数据
+                    {query ? '无匹配港股' : '暂无数据'}
                   </TCell>
                 </TRow>
               )}
-              {rows.map((r, i) => (
+              {visibleRows.map((r, i) => (
                 <TRow
                   key={r.symbol}
                   onClick={() => openDetail(r.symbol, r.name)}
@@ -143,10 +197,19 @@ export function HkSections() {
                   </TCell>
                 </TRow>
               ))}
+              {/* 无限滚动哨兵 · 进视口续加载 · 到 ~900 只到底自动消失(不假装更多) */}
+              {hasMore && (
+                <tr ref={sentinelRef}>
+                  <td colSpan={6} className="px-3 py-4 text-center text-xs text-muted-foreground/50">
+                    下拉加载更多…
+                  </td>
+                </tr>
+              )}
             </tbody>
           </DataTable>
           <p className="mt-2 text-[11px] text-muted-foreground/60">
-            ★ 主要成分股 / 活跃精选(新浪源 ~900 只 · 非全市场 2764)· 点击个股看 K线 + 缠论 · 港股只读不下单
+            ★ 主要成分股 / 活跃精选(~900 只 · 非全市场 2764)· 共 {viewRows.length} 只 ·
+            点击看 K线 + 缠论 · 港股只读不下单
           </p>
         </section>
       )}
@@ -180,5 +243,22 @@ function BreadthBar({ b }: { b: HkBreadth }) {
         <span className="text-muted-foreground/50">(港股无涨跌停制度 · 涨跌家数基于 ~900 只主要成分)</span>
       </div>
     </Panel>
+  )
+}
+
+function SearchIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      className="text-muted-foreground/50"
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
   )
 }
