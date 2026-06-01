@@ -8,8 +8,11 @@
 ═══════════════════════════════════════════════════════════════════════════
 
 对齐 cn_source(akshare)模式:`fetch_kline` → `_retry` → `_run_blocking(_fetch_sync)`。
-主源 akshare `stock_hk_hist(symbol=<5位>, period=daily/weekly, adjust="qfq")`(前复权 · 零-B 实测
-00700 = 5408 行 OK)· yfinance `.HK` 备用源(本期不接,留扩展)。
+★ 主源 + 备用源【自动降级】(2026-06-01 实证:生产香港 VPS 的出口 IP 被 akshare 港股上游
+(东财)持续 RemoteDisconnected,而 yfinance/Yahoo 对生产可达 —— 全球概览 52 指标在生产稳跑):
+- 主源 akshare `stock_hk_hist(symbol=<5位>, period=daily/weekly, adjust="qfq")`(前复权 · 数据更全)
+- 主源失败 / 返空 → 自动降级 yfinance(Yahoo · `0700.HK` 风格 · 复用 us_source 同款 history 调用)
+- 两源都失败才 503。yfinance 的 ts 统一对齐 akshare(16:00 HKT 收盘)→ CH 按 ts 去重不会两源各存一行。
 
 ★ 阶段一只支持【日 / 周线】:零-B 只测 daily;akshare 港股分钟级支持度待定,其它周期直接报
 DataFormatError(不静默返空)。分钟级以后补(ADR 0034a 决策③)。
@@ -25,6 +28,7 @@ from zoneinfo import ZoneInfo
 
 import akshare as ak
 import pandas as pd
+import yfinance as yf
 
 from app.schemas.market import Kline, Period, SymbolMeta
 from app.services.data_sources.base import BaseDataSource
@@ -91,26 +95,92 @@ class AKShareHkSource(BaseDataSource):
     def _fetch_sync(self, symbol: str, period: Period, limit: int) -> list[Kline]:
         ak_period = _AK_HK_PERIOD.get(period)
         if ak_period is None:
+            # 两源阶段一都只日 / 周线 · 不降级(降级也不支持)
             raise DataFormatError(
                 f"港股阶段一只支持日 / 周线(1d/1w),不支持周期 {period}",
-                market="hk", symbol=symbol, upstream="akshare-hk",
+                market="hk", symbol=symbol, upstream="hk",
             )
-        code = normalize_hk_code(symbol)
+        # 主源 akshare(数据更全)· 失败 / 返空 → 自动降级备用源 yfinance
         try:
-            df = ak.stock_hk_hist(symbol=code, period=ak_period, adjust="qfq")
+            klines = self._fetch_akshare(symbol, ak_period, limit)
+            if klines:
+                return klines
+            logger.warning("[hk] akshare 返空 · 降级 yfinance · symbol=%s", symbol)
+        except Exception as e:  # noqa: BLE001 · akshare 任何失败(连接/上游/协议)→ 降级
+            logger.warning("[hk] akshare 失败 · 降级 yfinance · symbol=%s · %s", symbol, e)
+        # 备用源 yfinance(Yahoo · 生产可达 · 同 us_source / 全球概览用法)
+        return self._fetch_yfinance(symbol, period, limit)
+
+    def _fetch_akshare(self, symbol: str, ak_period: str, limit: int) -> list[Kline]:
+        """主源 akshare · 返空则 []( 触发降级)· 连接 / 协议异常 raise(由 _fetch_sync 接住降级)。"""
+        code = normalize_hk_code(symbol)
+        df = ak.stock_hk_hist(symbol=code, period=ak_period, adjust="qfq")
+        if df is None or df.empty:
+            return []
+        return self._df_to_klines(df, symbol=symbol, limit=limit)
+
+    @staticmethod
+    def _to_yf_code(symbol: str) -> str:
+        """akshare 5 位港股代码 → yfinance ticker:去前导 0 补 4 位 + '.HK'。
+
+        00700 → 0700.HK · 09988 → 9988.HK · 00005 → 0005.HK(对齐 Yahoo Finance 港股 ticker)。
+        """
+        return normalize_hk_code(symbol).lstrip("0").zfill(4) + ".HK"
+
+    def _fetch_yfinance(self, symbol: str, period: Period, limit: int) -> list[Kline]:
+        """备用源 yfinance(Yahoo)· 复用 us_source 同款 `yf.Ticker().history()`。
+
+        ts 统一走 _hk_daily_ts(16:00 HKT 收盘)· 与主源 akshare 一致 → 同交易日同 ts,
+        CH 按 ts 去重不会因两源(yfinance daily index 是 HKT 午夜)各存一行。
+        """
+        yf_code = self._to_yf_code(symbol)
+        interval = "1wk" if period == "1w" else "1d"
+        try:
+            df = yf.Ticker(yf_code).history(period="max", interval=interval, auto_adjust=True)
         except (ConnectionError, TimeoutError, OSError) as e:
             raise UpstreamUnavailableError(
-                str(e), market="hk", symbol=symbol, upstream="akshare-hk",
+                str(e), market="hk", symbol=symbol, upstream="yfinance-hk",
+            ) from e
+        except Exception as e:  # noqa: BLE001 · yfinance 内部异常通常临时(限流/解析)
+            raise UpstreamUnavailableError(
+                f"yfinance 未知异常:{e}", market="hk", symbol=symbol, upstream="yfinance-hk",
             ) from e
 
         if df is None or df.empty:
             raise SymbolNotFoundError(
-                f"akshare 未返回 {symbol}({code})任何 {period} 数据"
-                "(代码错误 / 已退市 / 上游临时无数据)",
-                market="hk", symbol=symbol, upstream="akshare-hk",
+                f"akshare + yfinance 都未返回 {symbol}({yf_code})数据"
+                "(代码错误 / 已退市 / 两源皆不可达)",
+                market="hk", symbol=symbol, upstream="yfinance-hk",
+            )
+        required = {"Open", "High", "Low", "Close", "Volume"}
+        if not required.issubset(set(df.columns)):
+            raise DataFormatError(
+                f"yfinance 港股字段不全 · 实际: {sorted(df.columns)}",
+                market="hk", symbol=symbol, upstream="yfinance-hk",
             )
 
-        return self._df_to_klines(df, symbol=symbol, limit=limit)
+        df_sorted = df.sort_index().tail(limit)
+        klines: list[Kline] = []
+        for idx, row in df_sorted.iterrows():
+            try:
+                # yfinance index 是 tz-aware(HKT)· 只取日期 → 统一 16:00 HKT 收盘(对齐 akshare)
+                ts = _hk_daily_ts(idx.strftime("%Y-%m-%d"))
+                k = Kline(
+                    ts=ts,
+                    open=float(row["Open"]),
+                    high=float(row["High"]),
+                    low=float(row["Low"]),
+                    close=float(row["Close"]),
+                    volume=float(row["Volume"]),
+                    amount=None,  # yfinance 不提供成交额
+                )
+            except (ValueError, KeyError, TypeError, AttributeError) as e:
+                raise DataFormatError(
+                    f"yfinance 港股行映射失败:idx={idx};{e}",
+                    market="hk", symbol=symbol, upstream="yfinance-hk",
+                ) from e
+            klines.append(k)
+        return klines
 
     @staticmethod
     def _df_to_klines(df: pd.DataFrame, *, symbol: str, limit: int) -> list[Kline]:
