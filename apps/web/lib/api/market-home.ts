@@ -10,7 +10,7 @@
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
-export type MarketKind = 'cn' | 'us'
+export type MarketKind = 'cn' | 'us' | 'hk'
 
 export type MarketStatusCode =
   | 'open'

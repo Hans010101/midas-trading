@@ -15,6 +15,7 @@ import { useQuery } from '@tanstack/react-query'
 import { MarketSwitcher } from '@/components/layout/market-switcher'
 import { TopNav } from '@/components/layout/top-nav'
 import { CnSections } from '@/components/market-home/cn-sections'
+import { HkSections } from '@/components/market-home/hk-sections'
 import { QuoteCard } from '@/components/market-home/index-card'
 import { UsSections } from '@/components/market-home/us-sections'
 import { StatusPill } from '@/components/ui/direction-badge'
@@ -26,7 +27,7 @@ import {
   type MarketStatusInfo,
 } from '@/lib/api/market-home'
 
-const MARKET_NAME: Record<MarketKind, string> = { cn: 'A 股', us: '美股' }
+const MARKET_NAME: Record<MarketKind, string> = { cn: 'A 股', us: '美股', hk: '港股' }
 
 const STATUS_TONE: Record<MarketStatusCode, 'success' | 'warn' | 'muted' | 'neutral'> = {
   open: 'success',
@@ -89,11 +90,15 @@ export function MarketHomePage({ market }: { market: MarketKind }) {
             </div>
           )}
 
-          {market === 'cn' ? <CnSections /> : <UsSections />}
+          {market === 'cn' ? <CnSections /> : market === 'us' ? <UsSections /> : <HkSections />}
 
           <p className="mt-6 text-[11px] text-muted-foreground/60">
             大盘指数为{MARKET_NAME[market]}实时快照(
-            {market === 'cn' ? 'Sina · 交易时段刷新' : 'yfinance · ET 含夏令时'})· 非交易时段为最新收盘快照
+            {market === 'cn'
+              ? 'Sina · 交易时段刷新'
+              : market === 'us'
+                ? 'yfinance · ET 含夏令时'
+                : 'yfinance · HKT 收盘快照'})· 非交易时段为最新收盘快照
           </p>
         </div>
       </main>
