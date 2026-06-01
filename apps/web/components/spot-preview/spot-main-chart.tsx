@@ -16,6 +16,9 @@ import { useMemo, useState } from 'react'
 
 import { ChanOverlay } from '@/components/chart/chan-overlay'
 import { KlineChart } from '@/components/chart/kline-chart'
+import { StrategyOverlay } from '@/components/chart/strategy-overlay'
+import { StrategyPanel } from '@/components/chart/strategy-panel'
+import type { StrategyKind } from '@/lib/api/strategy'
 import type { IndicatorName } from '@/lib/store/workbench-store'
 import { cn } from '@/lib/utils'
 import type { Market, Period } from '@midas/shared'
@@ -46,6 +49,9 @@ export function SpotMainChart({ symbol, market, period }: SpotMainChartProps) {
   const [chanEnabled, setChanEnabled] = useState(true)
   const [bollEnabled, setBollEnabled] = useState(true)
   const [macdEnabled, setMacdEnabled] = useState(true)
+  // 形态A 策略信号(默认关 · 不干扰现有缠论/指标)
+  const [strategy, setStrategy] = useState<StrategyKind>('ma_cross')
+  const [strategyEnabled, setStrategyEnabled] = useState(false)
 
   const indicators = useMemo<Record<IndicatorName, boolean>>(
     () => ({ MA: false, BOLL: bollEnabled, MACD: macdEnabled, RSI: false }),
@@ -60,7 +66,8 @@ export function SpotMainChart({ symbol, market, period }: SpotMainChartProps) {
   )
 
   return (
-    <div className="rounded-lg border border-paper bg-surface-card p-3">
+    <div className="space-y-3">
+      <div className="rounded-lg border border-paper bg-surface-card p-3">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div>
           <span className="font-serif text-sm font-bold">主图:K 线 + 布林带 + MACD + 缠论</span>
@@ -93,6 +100,27 @@ export function SpotMainChart({ symbol, market, period }: SpotMainChartProps) {
         market={market as Market}
         period={period}
         enabled={chanEnabled}
+      />
+      {/* 策略信号标注层 · 独立 groupId · 不干扰缠论 · 现货默认 spot */}
+      <StrategyOverlay
+        chart={chart}
+        symbol={symbol}
+        market={market as Market}
+        period={period}
+        strategy={strategy}
+        enabled={strategyEnabled}
+      />
+      </div>
+
+      {/* AI 策略面板:选择器 + 推荐 + 触发状态(展示型 · 不下单)*/}
+      <StrategyPanel
+        symbol={symbol}
+        market={market as Market}
+        period={period}
+        strategy={strategy}
+        onStrategyChange={setStrategy}
+        enabled={strategyEnabled}
+        onToggle={() => setStrategyEnabled((v) => !v)}
       />
     </div>
   )

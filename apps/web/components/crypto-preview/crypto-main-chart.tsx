@@ -22,6 +22,9 @@ import { useMemo, useState } from 'react'
 
 import { ChanOverlay } from '@/components/chart/chan-overlay'
 import { KlineChart } from '@/components/chart/kline-chart'
+import { StrategyOverlay } from '@/components/chart/strategy-overlay'
+import { StrategyPanel } from '@/components/chart/strategy-panel'
+import type { StrategyKind } from '@/lib/api/strategy'
 import { cn } from '@/lib/utils'
 import type { IndicatorName } from '@/lib/store/workbench-store'
 import type { Period } from '@midas/shared'
@@ -55,6 +58,9 @@ export function CryptoMainChart({ symbol, period }: CryptoMainChartProps) {
   const [chanEnabled, setChanEnabled] = useState(true)
   const [bollEnabled, setBollEnabled] = useState(true)
   const [macdEnabled, setMacdEnabled] = useState(true)
+  // 形态A 策略信号(默认关 · 不干扰现有缠论/指标)
+  const [strategy, setStrategy] = useState<StrategyKind>('ma_cross')
+  const [strategyEnabled, setStrategyEnabled] = useState(false)
 
   // useMemo 稳定引用 · 否则每次 render 新对象会让 KlineChart 反复重建指标
   const indicators = useMemo<Record<IndicatorName, boolean>>(
@@ -70,7 +76,8 @@ export function CryptoMainChart({ symbol, period }: CryptoMainChartProps) {
   )
 
   return (
-    <div className="rounded-lg border border-paper bg-surface-card p-3">
+    <div className="space-y-3">
+      <div className="rounded-lg border border-paper bg-surface-card p-3">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div>
           <span className="font-serif text-sm font-bold">主图:K 线 + 布林带 + MACD + 缠论</span>
@@ -105,6 +112,29 @@ export function CryptoMainChart({ symbol, period }: CryptoMainChartProps) {
         instrument="perp"
         period={period}
         enabled={chanEnabled}
+      />
+      {/* 策略信号标注层 · 独立 groupId(midas-strategy-overlay)· 不干扰缠论 */}
+      <StrategyOverlay
+        chart={chart}
+        symbol={symbol}
+        market="crypto"
+        instrument="perp"
+        period={period}
+        strategy={strategy}
+        enabled={strategyEnabled}
+      />
+      </div>
+
+      {/* AI 策略面板:选择器 + 推荐 + 触发状态(展示型 · 不下单)*/}
+      <StrategyPanel
+        symbol={symbol}
+        market="crypto"
+        instrument="perp"
+        period={period}
+        strategy={strategy}
+        onStrategyChange={setStrategy}
+        enabled={strategyEnabled}
+        onToggle={() => setStrategyEnabled((v) => !v)}
       />
     </div>
   )
