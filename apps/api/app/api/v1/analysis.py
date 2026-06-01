@@ -169,7 +169,7 @@ def _source_for(
     crypto: CryptoSourceDep,
     hk: HkSourceDep | None = None,
 ) -> BaseDataSource:
-    # hk 可选(港股阶段二只 chan 用 · decision-card/strategy 港股不接 · 不传则不含 hk)
+    # hk 可选(chan/decision-card/strategy 港股已注入 hk · 不传则不含 hk · 防 KeyError)
     mapping: dict[Market, BaseDataSource] = {
         "cn": cn, "us": us, "crypto": crypto,
     }
@@ -317,6 +317,7 @@ async def _fetch_klines_for_strategy(
     cn: CnSourceDep,
     us: UsSourceDep,
     crypto: CryptoSourceDep,
+    hk: HkSourceDep,
     binance_futures: BinanceFuturesSourceDep,
     symbol: str,
     market: Market,
@@ -349,7 +350,7 @@ async def _fetch_klines_for_strategy(
                     detail=f"perp K 线数据不足 · 无法{purpose}:{e}",
                 ) from e
         else:
-            source = _source_for(market, cn=cn, us=us, crypto=crypto)
+            source = _source_for(market, cn=cn, us=us, crypto=crypto, hk=hk)
             try:
                 klines = await source.fetch_kline(symbol, period, limit=limit)
             except Exception as e:  # noqa: BLE001
@@ -375,6 +376,7 @@ async def get_strategy_signals(
     cn: CnSourceDep,
     us: UsSourceDep,
     crypto: CryptoSourceDep,
+    hk: HkSourceDep,
     binance_futures: BinanceFuturesSourceDep,
     symbol: str = Query(..., min_length=1, examples=["BTC/USDT", "NVDA", "600519", "BTCUSDT"]),
     market: Market = Query(...),
@@ -387,7 +389,7 @@ async def get_strategy_signals(
     strategy: StrategyKind = Query(..., description="ma_cross / rsi_reversal / boll_reversion"),
 ) -> StrategySignalsResponse:
     klines = await _fetch_klines_for_strategy(
-        ch=ch, cn=cn, us=us, crypto=crypto, binance_futures=binance_futures,
+        ch=ch, cn=cn, us=us, crypto=crypto, hk=hk, binance_futures=binance_futures,
         symbol=symbol, market=market, period=period, instrument=instrument,
         limit=limit, purpose="生成策略信号",
     )
@@ -425,6 +427,7 @@ async def get_strategy_recommend(
     cn: CnSourceDep,
     us: UsSourceDep,
     crypto: CryptoSourceDep,
+    hk: HkSourceDep,
     binance_futures: BinanceFuturesSourceDep,
     symbol: str = Query(..., min_length=1, examples=["BTC/USDT", "NVDA", "600519", "BTCUSDT"]),
     market: Market = Query(...),
@@ -436,7 +439,7 @@ async def get_strategy_recommend(
     ] = "spot",
 ) -> StrategyRecommendResponse:
     klines = await _fetch_klines_for_strategy(
-        ch=ch, cn=cn, us=us, crypto=crypto, binance_futures=binance_futures,
+        ch=ch, cn=cn, us=us, crypto=crypto, hk=hk, binance_futures=binance_futures,
         symbol=symbol, market=market, period=period, instrument=instrument,
         limit=limit, purpose="推荐策略",
     )
