@@ -48,10 +48,11 @@ export function MarketSwitcher({ className }: { className?: string }) {
   const active: Market | null = onGlobal || onWatchlist ? null : (homeMarket ?? storeMarket)
 
   function handleSelect(m: Market) {
-    // 港股(hk)阶段二:数据已上线 → 进真实港股详情页(/hk-preview · K线+缠论·只读·不接 AI/下单)。
-    // 行情页策展池列表(/hk-market)留单元3 升级,届时改为先进行情页;当前直接进默认标的(腾讯 00700)详情页。
+    // 港股(hk)阶段二单元3:行情页(/hk-market 策展池 18 只列表)已上线 →
+    // 点 hk Tab 统一进行情页(与 cn/us/crypto 一致:Tab → 市场首页 → 点标的进详情)。
+    // 港股只读 · 不进工作台 K 线流(拍板③ workbench 不接 hk)。
     if (m === 'hk') {
-      router.push('/hk-preview')
+      router.push('/hk-market')
       return
     }
     // 在任一市场首页 / 全球概览(ADR 0035):点市场 → 跳对应市场首页(已在本页则 no-op)
