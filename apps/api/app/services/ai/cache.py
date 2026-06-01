@@ -31,6 +31,7 @@ _TTL_BY_MARKET: dict[Market, int] = {
     "cn": 4 * 3600,
     "us": 4 * 3600,
     "crypto": 1 * 3600,
+    "hk": 4 * 3600,  # 港股日线 · 同 cn/us(decision-card?market=hk 缓存 TTL · 否则 KeyError)
 }
 
 

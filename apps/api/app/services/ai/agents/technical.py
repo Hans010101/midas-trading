@@ -39,6 +39,10 @@ _SYSTEM_CRYPTO = (
     _SYSTEM_BASE
     + "\n\n市场:加密 · 24/7 · 无涨跌停 · 关注资金费率 / 链上数据(但当前 input 暂不含,M2+ 才接)"
 )
+_SYSTEM_HK = (
+    _SYSTEM_BASE
+    + "\n\n市场:港股 · T+0 · 无涨跌停 · 复权「前复权」qfq · 按手 board lot 交易"
+)
 
 
 def _system_prompt(market: Market) -> str:
@@ -46,6 +50,7 @@ def _system_prompt(market: Market) -> str:
         "cn": _SYSTEM_CN,
         "us": _SYSTEM_US,
         "crypto": _SYSTEM_CRYPTO,
+        "hk": _SYSTEM_HK,
     }[market]
 
 
