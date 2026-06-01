@@ -93,12 +93,13 @@ export function MarketHomePage({ market }: { market: MarketKind }) {
           {market === 'cn' ? <CnSections /> : market === 'us' ? <UsSections /> : <HkSections />}
 
           <p className="mt-6 text-[11px] text-muted-foreground/60">
-            大盘指数为{MARKET_NAME[market]}实时快照(
+            大盘指数为{MARKET_NAME[market]}实时快照
             {market === 'cn'
-              ? 'Sina · 交易时段刷新'
+              ? '(Sina · 交易时段刷新)'
               : market === 'us'
-                ? 'yfinance · ET 含夏令时'
-                : 'yfinance · HKT 收盘快照'})· 非交易时段为最新收盘快照
+                ? '(yfinance · ET 含夏令时)'
+                : ''}
+            · 非交易时段为最新收盘快照
           </p>
         </div>
       </main>

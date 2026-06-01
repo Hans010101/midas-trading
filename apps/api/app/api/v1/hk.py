@@ -58,8 +58,9 @@ async def get_hk_overview(ch: ClickHouseDep) -> MarketHomeOverview:
 )
 async def get_hk_board(
     ch: ClickHouseDep,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 50,
 ) -> HkBoardResponse:
+    # le=1000:供前端滚动加载到数据池底(限页 ~900 只)· 默认 50 不变
     breadth = await select_latest_breadth(ch._client)  # noqa: SLF001
     gainers = await select_latest_spot(
         ch._client, sort_by="change_pct", order="DESC", limit=limit,  # noqa: SLF001
