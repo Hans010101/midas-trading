@@ -30,11 +30,18 @@ from app.schemas.chan import (
     FractalPointResponse,
     ZhongshuResponse,
 )
-from app.schemas.market import Market, Period
+from app.schemas.market import Kline, Market, Period
+from app.schemas.strategy import (
+    StrategyKind,
+    StrategyRecommendResponse,
+    StrategySignalsResponse,
+)
 from app.services.ai.accuracy import compute_accuracy
 from app.services.ai.actionable import with_actionable
 from app.services.ai.cache import get_cached_card, set_cached_card
 from app.services.ai.memory import record_decision
+from app.services.ai.strategy_recommend import recommend_strategy
+from app.services.ai.strategy_signals import scan_signals
 from app.services.ai.workflow import run_decision_workflow
 from app.services.analysis.chan import analyze as analyze_chan
 from app.services.data_sources.base import BaseDataSource
@@ -290,4 +297,147 @@ async def get_ai_accuracy(
     )
     return await compute_accuracy(
         db, since=since, since_days=since_days, llm_mode=llm_mode,
+    )
+
+
+# ===== AI 策略信号 + 推荐 · 0037 形态A 单元2(展示型 · 只读 · 不下单)=====
+
+
+async def _fetch_klines_for_strategy(
+    *,
+    ch: ClickHouseDep,
+    cn: CnSourceDep,
+    us: UsSourceDep,
+    crypto: CryptoSourceDep,
+    binance_futures: BinanceFuturesSourceDep,
+    symbol: str,
+    market: Market,
+    period: Period,
+    instrument: Instrument,
+    limit: int,
+    purpose: str,
+) -> list[Kline]:
+    """策略端点专用 K 线获取(只读 · 先 CH 后回源)· 复用 decision-card 同源模式。
+
+    ★ 只读 select_kline(CH 已采)· 不足回源拉(与 /chan、/decision-card 同源)·
+    绝不写、绝不下单。不改现有 chan/decision-card 端点(它们各自内联,本 helper 仅新端点用)。
+    """
+    if instrument == "perp" and market != "crypto":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"instrument=perp 只支持 market=crypto · 当前 market={market}",
+        )
+    klines = await ch.select_kline(
+        symbol=symbol, market=market, period=period, limit=limit, instrument=instrument,
+    )
+    if len(klines) < 30:
+        if instrument == "perp":
+            fetch_symbol = symbol.replace("/", "") if "/" in symbol else symbol
+            try:
+                klines = await binance_futures.fetch_kline(fetch_symbol, period, limit=limit)
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"perp K 线数据不足 · 无法{purpose}:{e}",
+                ) from e
+        else:
+            source = _source_for(market, cn=cn, us=us, crypto=crypto)
+            try:
+                klines = await source.fetch_kline(symbol, period, limit=limit)
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"K 线数据不足 · 无法{purpose}:{e}",
+                ) from e
+    return klines
+
+
+@router.get(
+    "/strategy-signals",
+    response_model=StrategySignalsResponse,
+    summary="策略历史买卖信号点 · 形态A 单元2(展示型 · 只读)",
+    description=(
+        "返回某标的在某经典策略下的【历史买卖信号点序列】(穿越式离散信号)+ 当前是否触发。"
+        "ma_cross 金叉/死叉 · rsi_reversal 超卖反弹/超买回落 · boll_reversion 触轨均值回归。"
+        "★ 纯展示:只算信号、不下单、不执行;用户看完走第一层一键模拟下单。"
+    ),
+)
+async def get_strategy_signals(
+    ch: ClickHouseDep,
+    cn: CnSourceDep,
+    us: UsSourceDep,
+    crypto: CryptoSourceDep,
+    binance_futures: BinanceFuturesSourceDep,
+    symbol: str = Query(..., min_length=1, examples=["BTC/USDT", "NVDA", "600519", "BTCUSDT"]),
+    market: Market = Query(...),
+    period: Period = Query("1d"),
+    limit: int = Query(300, ge=30, le=1000),
+    instrument: Annotated[
+        Instrument,
+        Query(description="'spot' 现货(默认)· 'perp' USDT-M 永续(只 crypto · 拍板⑦ 跟随详情页)"),
+    ] = "spot",
+    strategy: StrategyKind = Query(..., description="ma_cross / rsi_reversal / boll_reversion"),
+) -> StrategySignalsResponse:
+    klines = await _fetch_klines_for_strategy(
+        ch=ch, cn=cn, us=us, crypto=crypto, binance_futures=binance_futures,
+        symbol=symbol, market=market, period=period, instrument=instrument,
+        limit=limit, purpose="生成策略信号",
+    )
+    signals = scan_signals(klines, strategy)
+    # 当前是否触发:最新一根 K 是否为信号点(klines / signals 均 ts 升序)
+    current_triggered = bool(
+        signals and klines and signals[-1].ts == klines[-1].ts,
+    )
+    logger.info(
+        "[strategy-signals] symbol=%s market=%s instrument=%s period=%s strategy=%s"
+        " bars=%d signals=%d triggered=%s",
+        symbol, market, instrument, period, strategy,
+        len(klines), len(signals), current_triggered,
+    )
+    return StrategySignalsResponse(
+        symbol=symbol, market=market, period=period, instrument=instrument,
+        strategy=strategy, bar_count=len(klines), signals=signals,
+        current_triggered=current_triggered,
+        last_signal=signals[-1] if signals else None,
+    )
+
+
+@router.get(
+    "/strategy-recommend",
+    response_model=StrategyRecommendResponse,
+    summary="AI 推荐策略 · 形态A 单元2(纯规则 · 零 LLM · 只读)",
+    description=(
+        "给一个标的,纯规则推荐「现在适合用哪个经典策略」+ 可读理由。"
+        "趋势市→均线金叉 · 震荡+RSI 极值→RSI 反弹 · 震荡+贴轨→布林均值回归。"
+        "★ 确定性映射(类比 actionable.py)· 不调 LLM · 不改 AI 管线 · 只读不下单。"
+    ),
+)
+async def get_strategy_recommend(
+    ch: ClickHouseDep,
+    cn: CnSourceDep,
+    us: UsSourceDep,
+    crypto: CryptoSourceDep,
+    binance_futures: BinanceFuturesSourceDep,
+    symbol: str = Query(..., min_length=1, examples=["BTC/USDT", "NVDA", "600519", "BTCUSDT"]),
+    market: Market = Query(...),
+    period: Period = Query("1d"),
+    limit: int = Query(300, ge=30, le=1000),
+    instrument: Annotated[
+        Instrument,
+        Query(description="'spot' 现货(默认)· 'perp' USDT-M 永续(只 crypto · 拍板⑦)"),
+    ] = "spot",
+) -> StrategyRecommendResponse:
+    klines = await _fetch_klines_for_strategy(
+        ch=ch, cn=cn, us=us, crypto=crypto, binance_futures=binance_futures,
+        symbol=symbol, market=market, period=period, instrument=instrument,
+        limit=limit, purpose="推荐策略",
+    )
+    rec = recommend_strategy(klines)
+    logger.info(
+        "[strategy-recommend] symbol=%s market=%s instrument=%s period=%s → %s",
+        symbol, market, instrument, period, rec.strategy,
+    )
+    return StrategyRecommendResponse(
+        symbol=symbol, market=market, period=period, instrument=instrument,
+        recommended_strategy=rec.strategy, reason=rec.reason,
     )

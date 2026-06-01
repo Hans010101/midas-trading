@@ -17,6 +17,8 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
+from app.schemas.market import Market, Period
+
 # 3 个经典策略 key(拍板①)
 StrategyKind = Literal["ma_cross", "rsi_reversal", "boll_reversion"]
 
@@ -37,3 +39,46 @@ class StrategySignal(BaseModel):
     price: float                                        # 该 K 线收盘价
     kind: SignalKind                                    # buy / sell(抽象方向)
     reason: str = Field(min_length=1, max_length=80)    # 可读依据(金叉/超卖反弹/触轨)
+
+
+# ===== 单元2:推荐 + 只读 API 契约 =====
+
+
+class StrategyRecommendation(BaseModel):
+    """纯规则推荐结果 · 推荐适配层(strategy_recommend.py)输出 · 零 LLM。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    strategy: StrategyKind
+    reason: str = Field(min_length=1, max_length=120)   # 可读推荐依据(趋势/震荡+RSI/贴轨)
+
+
+class StrategySignalsResponse(BaseModel):
+    """GET /api/v1/analysis/strategy-signals 响应 · 某标的某策略的历史信号点序列。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    symbol: str = Field(min_length=1)
+    market: Market
+    period: Period
+    instrument: str                                     # spot / perp(拍板⑦ · crypto 跟随详情页)
+    strategy: StrategyKind
+    bar_count: int = Field(ge=0)                        # 扫描用的 K 线根数
+    signals: list[StrategySignal]                       # ts 升序(拍板⑥ · 全部可见历史信号点)
+    # 最新一根 K 是否为信号点 → 前端「当前是否触发」提示
+    current_triggered: bool
+    # 最近一个信号(无则 None)· 给「当前/最近信号」提示
+    last_signal: StrategySignal | None = None
+
+
+class StrategyRecommendResponse(BaseModel):
+    """GET /api/v1/analysis/strategy-recommend 响应 · 推荐该标的现在适合哪个策略。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    symbol: str = Field(min_length=1)
+    market: Market
+    period: Period
+    instrument: str
+    recommended_strategy: StrategyKind
+    reason: str = Field(min_length=1, max_length=120)
