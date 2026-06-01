@@ -20,27 +20,33 @@ import type { Market, Period } from '@midas/shared'
 
 // 现货主图周期 · kline 存储支持的子集(无 4h)
 export const SPOT_PREVIEW_PERIODS: Period[] = ['15m', '1h', '1d']
+// ★ 港股周期:hk_source 只支持日 / 周线(无分钟线 · 15m/1h 会 502)→ 详情页只给日线
+const HK_PERIODS: Period[] = ['1d']
 
-const MARKET_LABEL: Record<'cn' | 'us', string> = { cn: 'A股', us: '美股' }
-const MARKET_HOME: Record<'cn' | 'us', '/cn-market' | '/us-market'> = {
+const MARKET_LABEL: Record<'cn' | 'us' | 'hk', string> = { cn: 'A股', us: '美股', hk: '港股' }
+const MARKET_HOME: Record<'cn' | 'us' | 'hk', '/cn-market' | '/us-market' | '/hk-market'> = {
   cn: '/cn-market',
   us: '/us-market',
+  hk: '/hk-market',
 }
 
 interface SpotHeaderProps {
   symbol: string
   name?: string | null
-  market: 'cn' | 'us'
+  market: 'cn' | 'us' | 'hk'
   period: Period
   onPeriodChange: (p: Period) => void
 }
 
-function fmtPrice(price: number, market: 'cn' | 'us'): string {
-  const sign = market === 'cn' ? '¥' : '$'
+function fmtPrice(price: number, market: 'cn' | 'us' | 'hk'): string {
+  // 港股价格用 HK$(港币)· A股 ¥ · 美股 $
+  const sign = market === 'cn' ? '¥' : market === 'hk' ? 'HK$' : '$'
   return `${sign}${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 export function SpotHeader({ symbol, name, market, period, onPeriodChange }: SpotHeaderProps) {
+  // ★ 港股只给日线(hk_source 无分钟线 · 15m/1h 会 502)· cn/us 给 15m/1h/1d
+  const periods = market === 'hk' ? HK_PERIODS : SPOT_PREVIEW_PERIODS
   // 日 K 取末两根算最新价 + 日涨跌 · 现货(spot)· 跟主图 / 缠论 / AI 同源
   const dailyKline = useKline({
     symbol,
@@ -89,7 +95,7 @@ export function SpotHeader({ symbol, name, market, period, onPeriodChange }: Spo
 
         {/* 周期切换 · 驱动主图 */}
         <div className="flex gap-1 text-xs">
-          {SPOT_PREVIEW_PERIODS.map((p) => (
+          {periods.map((p) => (
             <button
               key={p}
               type="button"
