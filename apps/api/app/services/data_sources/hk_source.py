@@ -28,8 +28,10 @@ from zoneinfo import ZoneInfo
 
 import akshare as ak
 import pandas as pd
+import requests
 import yfinance as yf
 
+from app.schemas.hk_market import HkSpotRow
 from app.schemas.market import Kline, Period, SymbolMeta
 from app.services.data_sources.base import BaseDataSource
 from app.services.data_sources.exceptions import (
@@ -42,6 +44,21 @@ from app.services.hk_pool import HK_POOL, normalize_hk_code
 logger = logging.getLogger(__name__)
 
 HK_TZ = ZoneInfo("Asia/Hong_Kong")
+
+# 全市场 spot 分页 · ★限页前 15 页 ≈ 900 只主要成分(防新浪封 IP · 不拉全 46 页)·
+#   自己分页(不用 ak.stock_hk_spot 全 46 页)· 单次 15 页 ~15-20s → timeout 60s。
+_SINA_HK_SPOT_URL = (
+    "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHKStockData"
+)
+_HK_SPOT_MAX_PAGES = 15        # 前 15 页(每页 60)≈ 900 只 · 限页防封 IP(本地已实证限速)
+_SINA_PAGE_TIMEOUT = 8.0       # 单页 requests 超时(秒)
+_HK_SPOT_TIMEOUT = 60.0        # _run_blocking 总超时(15 页 ~15-20s · 给足缓冲)
+# 新浪 getHKStockData 单页 24 列位置映射(对齐 akshare stock_hk_spot · 防字段错位)
+_SINA_HK_SPOT_COLUMNS = (
+    "代码", "中文名称", "英文名称", "交易类型", "最新价", "昨收", "今开", "最高", "最低",
+    "成交量", "-", "成交额", "日期时间", "买一", "卖一", "-", "-", "-", "-", "-",
+    "涨跌额", "涨跌幅", "-", "-",
+)
 
 # 我们的 Period → akshare stock_hk_hist 的 period(阶段一只日 / 周)
 _AK_HK_PERIOD: dict[Period, str] = {"1d": "daily", "1w": "weekly"}
@@ -87,6 +104,82 @@ class AKShareHkSource(BaseDataSource):
             SymbolMeta(symbol=sym, market="hk", name=name, updated_at=now)
             for sym, name, _lot, _sector in HK_POOL
         ]
+
+    # ===========================
+    # 全市场 spot 榜单(港股首页全市场 · 新浪 stock_hk_spot ~2764 只)
+    # ===========================
+
+    async def fetch_spot_snapshot(self) -> list[HkSpotRow]:
+        """港股主要成分实时快照 · 新浪源 · ★限页前 15 页 ≈ 900 只(产品负责人拍板防封 IP)。
+
+        ★ 源用新浪(getHKStockData · 生产已实测可达)· 绝不用东财 `stock_hk_spot_em`
+          (生产被拒 · 本地都 RemoteDisconnected · 同 stock_hk_hist 东财翻车)。
+        ★ 限页前 15 页(非全 46 页 2764 只):全拉 46 请求/次封 IP 风险高(本地连测已触发限速)·
+          限页 ≈ 900 只主要成分,涨跌家数/榜单够有意义。
+        """
+
+        # ★ 自己分页前 15 页 · ~15-20s → timeout 60s · 不走 _retry(失败下次 beat 再跑)。
+        return await self._run_blocking(self._fetch_spot_sync, timeout=_HK_SPOT_TIMEOUT)
+
+    def _fetch_spot_sync(self) -> list[HkSpotRow]:
+        # ★ 自己分页前 15 页(限页防封 IP)· 不用 ak.stock_hk_spot(它内部固定全拉 46 页)。
+        big = pd.DataFrame()
+        for page in range(1, _HK_SPOT_MAX_PAGES + 1):
+            try:
+                resp = requests.get(
+                    _SINA_HK_SPOT_URL,
+                    params={
+                        "page": str(page), "num": "60", "sort": "symbol",
+                        "asc": "1", "node": "qbgg_hk", "_s_r_a": "init",
+                    },
+                    timeout=_SINA_PAGE_TIMEOUT,
+                )
+                data = resp.json()
+            except (ConnectionError, TimeoutError, OSError, ValueError) as e:
+                raise UpstreamUnavailableError(
+                    f"新浪港股 spot 第 {page} 页失败:{e}",
+                    market="hk", upstream="akshare-sina-hk",
+                ) from e
+            if not data:
+                break  # 空页 = 到底(港股不足 900 只时不足 15 页也正常)
+            big = pd.concat([big, pd.DataFrame(data)], ignore_index=True)
+        if big.empty:
+            raise UpstreamUnavailableError(
+                "新浪港股 spot 返回空(前 15 页皆空)", market="hk", upstream="akshare-sina-hk",
+            )
+        if len(big.columns) != len(_SINA_HK_SPOT_COLUMNS):
+            raise DataFormatError(
+                f"新浪港股 spot 列数变(实际 {len(big.columns)} · 期望 24)",
+                market="hk", upstream="akshare-sina-hk",
+            )
+        big.columns = list(_SINA_HK_SPOT_COLUMNS)
+        for col in ("最新价", "涨跌额", "涨跌幅", "成交量", "成交额"):
+            big[col] = pd.to_numeric(big[col], errors="coerce")
+        out: list[HkSpotRow] = []
+        for _, row in big.iterrows():
+            last = row["最新价"]
+            chg_pct = row["涨跌幅"]
+            if pd.isna(last) or pd.isna(chg_pct):
+                continue  # 停牌 / 脏行 · 跳过
+            try:
+                code = normalize_hk_code(str(row["代码"]).strip())  # 规范 5 位
+                out.append(
+                    HkSpotRow(
+                        symbol=code, name=str(row["中文名称"]).strip(),
+                        last_price=max(float(last), 0.0),
+                        change_pct=float(chg_pct),
+                        change_amount=0.0 if pd.isna(row["涨跌额"]) else float(row["涨跌额"]),
+                        amount=max(0.0 if pd.isna(row["成交额"]) else float(row["成交额"]), 0.0),
+                        volume=max(0.0 if pd.isna(row["成交量"]) else float(row["成交量"]), 0.0),
+                    ),
+                )
+            except (ValueError, TypeError):
+                continue  # 个别脏行跳过,不致命
+        if not out:
+            raise DataFormatError(
+                "新浪港股 spot 全部行解析失败", market="hk", upstream="akshare-sina-hk",
+            )
+        return out
 
     # ===========================
     # 同步实现

@@ -18,3 +18,7 @@ US_INDICES: tuple[tuple[str, str], ...] = (
     ("^RUT", "罗素2000"),
 )
 US_INDEX_ORDER: tuple[str, ...] = tuple(sym for sym, _ in US_INDICES)
+
+# 港股大盘指数 · 全球概览采的 hk 指数 symbol(market_index_snapshot market='hk')· 展示顺序
+# 恒生 ^HSI(已采)+ 恒生国企 ^HSCE(新加)· 恒生科技 yahoo 无好 ticker(^HSTECH 404)暂缺
+HK_INDEX_CODES: tuple[str, ...] = ("^HSI", "^HSCE")

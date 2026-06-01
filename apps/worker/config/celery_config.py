@@ -131,6 +131,14 @@ beat_schedule = {
         "schedule": crontab(minute="*/5", hour="20-23,0-5"),
         "options": {"expires": 280},
     },
+    "market-hk-board-scan": {
+        "task": "tasks.market.hk_board_scan",
+        # 港股榜单(首页全市场)· 新浪 stock_hk_spot(~2764)→ 情绪条 + 榜单 · 港股时段每 3 分钟。
+        # ★ 源用新浪(生产已验)· 绝不用东财 _em(生产被拒)· 频率对齐 cn_board_scan(防封 IP)。
+        # 港股时段 9:30–16:00 HKT(timezone Asia/Shanghai · HKT=CST)· hour 9-16 覆盖含午休。
+        "schedule": crontab(minute="*/3", hour="9-16", day_of_week="mon-fri"),
+        "options": {"expires": 170},
+    },
     # ── M2-A · Crypto Pro 数据采集(0017 ADR)· 常驻定时刷新 ────────────────────
     # 错峰原则:Binance 四个采集(ticker/oi/longshort/funding)分钟数互不重叠,避免
     #   同一刻对 Binance 合约接口集中打请求(IP 权重限流)。oi 落在 5 的倍数;

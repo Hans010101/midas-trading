@@ -7,6 +7,7 @@ from app.api.v1.bot_preset import router as bot_preset_router
 from app.api.v1.cn import router as cn_router
 from app.api.v1.crypto import router as crypto_router
 from app.api.v1.feishu import router as feishu_router
+from app.api.v1.hk import router as hk_router
 from app.api.v1.market import router as market_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.overview import router as overview_router
@@ -33,5 +34,7 @@ router.include_router(crypto_router)
 # 0023 阶段③ · A股/美股 市场首页(3.1 基建:状态 + 大盘指数)
 router.include_router(cn_router)
 router.include_router(us_router)
+# 港股首页全市场 · 状态 + 大盘指数(恒生/国企)+ 全市场榜单 + 涨跌家数(新浪源)
+router.include_router(hk_router)
 # ADR 0035 阶段 A · 全球指标概览(只读 · 不涉及交易)
 router.include_router(overview_router)
