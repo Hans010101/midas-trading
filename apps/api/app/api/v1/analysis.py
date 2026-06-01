@@ -196,6 +196,7 @@ async def get_decision_card(
     cn: CnSourceDep,
     us: UsSourceDep,
     crypto: CryptoSourceDep,
+    hk: HkSourceDep,
     binance_futures: BinanceFuturesSourceDep,
     db: DbDep,
     symbol: str = Query(..., min_length=1, examples=["BTC/USDT", "NVDA", "600519", "BTCUSDT"]),
@@ -240,7 +241,8 @@ async def get_decision_card(
                     detail=f"perp K 线数据不足 30 根 · 无法生成决策卡:{e}",
                 ) from e
         else:
-            source = _source_for(market, cn=cn, us=us, crypto=crypto)
+            # 港股阶段三单元1:decision-card 注入 hk(此前 _source_for 无 hk → market=hk KeyError)
+            source = _source_for(market, cn=cn, us=us, crypto=crypto, hk=hk)
             try:
                 klines = await source.fetch_kline(symbol, period, limit=limit)
             except Exception as e:  # noqa: BLE001

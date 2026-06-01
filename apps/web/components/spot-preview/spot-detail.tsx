@@ -59,16 +59,15 @@ export function SpotDetail({ market }: SpotDetailProps) {
         </div>
 
         {/* 右侧栏:AI 决策卡(复用工作台)+ 下单区(差异化)
-            ★ 港股阶段二完全不渲染整块 aside(拍板②:不显示「即将上线」占位、无噪音):
-              · decision-card?market=hk 后端 technical agent prompt 无 hk 键 → 会 500(港股不接 AI)
-              · 港股下单是阶段三(每手 board lot 逻辑)· 阶段二不可交易
-            market!=='hk' 内 market 收窄为 'cn'|'us',AiDecisionCard / SpotOrderPanel 类型无需改。 */}
-        {market !== 'hk' && (
-          <aside className="w-full shrink-0 space-y-4 lg:w-[360px]">
-            <AiDecisionCard symbol={symbol} market={market} period={period} />
+            ★ 港股阶段三单元1:解 gate AI 决策卡 —— hk 也渲染 AiDecisionCard(后端已补 hk prompt/TTL/source)。
+            ★ 下单区(SpotOrderPanel)hk 仍不渲染:港股下单是阶段三单元3(每手 board lot + 虚拟红线 + 二次确认 · 待产品负责人审)。
+            market!=='hk' 内 market 收窄为 'cn'|'us',SpotOrderPanel 类型无需改;AiDecisionCard 接受 Market(含 hk)。 */}
+        <aside className="w-full shrink-0 space-y-4 lg:w-[360px]">
+          <AiDecisionCard symbol={symbol} market={market} period={period} />
+          {market !== 'hk' && (
             <SpotOrderPanel symbol={symbol} name={name} market={market} />
-          </aside>
-        )}
+          )}
+        </aside>
       </div>
     </main>
   )
