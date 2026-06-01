@@ -50,6 +50,19 @@ export function ChartArea() {
           </div>
         </div>
 
+        {/* AI 策略面板 · 顶部控制区(K 线上方 · 显眼 · 展示型 · 不下单 · 默认关)*/}
+        <div className="mb-3 shrink-0">
+          <StrategyPanel
+            symbol={symbol}
+            market={market}
+            period={period}
+            strategy={strategy}
+            onStrategyChange={setStrategy}
+            enabled={strategyEnabled}
+            onToggle={() => setStrategyEnabled((v) => !v)}
+          />
+        </div>
+
         <KlineContextMenu>
           <div className="flex-1 overflow-hidden rounded-lg border border-paper">
             <KlineChart
@@ -74,19 +87,6 @@ export function ChartArea() {
           strategy={strategy}
           enabled={strategyEnabled}
         />
-
-        {/* AI 策略面板 · 工作台底部(展示型 · 不下单 · 默认关)*/}
-        <div className="mt-3 shrink-0">
-          <StrategyPanel
-            symbol={symbol}
-            market={market}
-            period={period}
-            strategy={strategy}
-            onStrategyChange={setStrategy}
-            enabled={strategyEnabled}
-            onToggle={() => setStrategyEnabled((v) => !v)}
-          />
-        </div>
       </div>
     </section>
   )
