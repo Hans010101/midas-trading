@@ -187,7 +187,7 @@ async def aggregate_portfolio(
             AccountSummary(
                 account_id=acc.id,
                 market=acc.market,
-                currency=acc.currency.value,
+                currency=acc.currency,
                 initial_capital=acc.initial_capital,
                 cash_balance=acc.cash_balance,
                 realized_pnl=acc.realized_pnl,
