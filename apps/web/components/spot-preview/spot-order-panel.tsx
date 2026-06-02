@@ -62,8 +62,12 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
   const [quantity, setQuantity] = useState(defaultQty(market))
   const [pending, setPending] = useState<PendingAction | null>(null)
 
-  // 港股每手股数(board lot)· 只读配置 · 非 hk 不请求(enabled=false)· 用于按手取整 + UI 提示
-  const boardLot = useHkBoardLot(symbol, market === 'hk').data ?? null
+  // 港股每手股数(board lot)· 只读配置 · 非 hk 不请求(enabled=false)· 用于按手取整 + UI 提示 + 不在池禁用
+  const boardLotQuery = useHkBoardLot(symbol, market === 'hk')
+  const boardLot = boardLotQuery.data ?? null
+  // ★ A2b 不在下单池:hk + 查询完成 + 返 null(后端 board-lot 404 = resolve None)→ 彻底禁用下单
+  const hkNotInPool = market === 'hk' && boardLotQuery.isSuccess && boardLotQuery.data === null
+  const hkLotLoading = market === 'hk' && boardLotQuery.isLoading
   // 港股:lot 首次载入时填默认 1 手(只填一次 · 用户清空后不强行回填)
   const hkInitDone = useRef(false)
   useEffect(() => {
@@ -92,6 +96,28 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
           href="/login"
           cta="去登录"
         />
+      </PanelShell>
+    )
+  }
+  // ★ A2b 港股不在下单池:lot 表无该标的(非主板 HKD / 采不到 lot)→ resolve None → 彻底禁用下单。
+  //    早返不渲染买卖按钮 → 用户根本点不到、不弹确认模态(修「不在池仍弹确认」bug)。
+  //    放在激活网关【前】:不在池的标的不必先提示激活(本就不能交易)· cn/us/crypto 不进此分支。
+  if (hkLotLoading) {
+    return (
+      <PanelShell>
+        <p className="py-6 text-center text-xs text-muted-foreground/60">载入每手股数…</p>
+      </PanelShell>
+    )
+  }
+  if (hkNotInPool) {
+    return (
+      <PanelShell>
+        <div className="rounded-md border border-dashed border-paper bg-cream p-4 text-center">
+          <p className="mb-1 text-sm font-medium text-foreground">该标的暂不可下单</p>
+          <p className="text-xs leading-relaxed text-muted-foreground/80">
+            仅港股主板 HKD(~2406 只)支持虚拟下单 · 该标的不在下单池(行情仍可正常查看)。
+          </p>
+        </div>
       </PanelShell>
     )
   }
@@ -164,11 +190,9 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
           market === 'hk' ? 'mb-1' : 'mb-3',
         )}
       />
-      {market === 'hk' && (
+      {market === 'hk' && boardLot && (
         <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground/70">
-          {boardLot
-            ? `每手 ${boardLot} 股 · 实际下单按手取整(不足一手不可下单)`
-            : '该标的不在港股可下单池(策展 18 只)'}
+          每手 {boardLot} 股 · 实际下单按手取整(不足一手不可下单)
         </p>
       )}
 
