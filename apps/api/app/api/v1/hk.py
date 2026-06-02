@@ -13,18 +13,23 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Query
 
 from app.api.deps import ClickHouseDep
-from app.schemas.hk_market import HkBoardResponse
+from app.schemas.hk_market import HkBoardLotScanResult, HkBoardResponse
 from app.schemas.market_home import MarketHomeOverview
 from app.services.clickhouse_hk_market import select_latest_breadth, select_latest_spot
 from app.services.clickhouse_market_home import select_latest_indices
+from app.services.hk_board_lot import fetch_hkex_board_lots
 from app.services.market_calendar import compute_market_status
 from app.services.market_home_config import HK_INDEX_CODES
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/hk", tags=["hk"])
 
@@ -77,4 +82,29 @@ async def get_hk_board(
         gainers=gainers,
         losers=losers,
         top_amount=top_amount,
+    )
+
+
+@router.get(
+    "/board-lot-scan",
+    response_model=HkBoardLotScanResult,
+    summary="[阶段三A1] HKEX board lot 下载+解析实测(生产可达验证 · 只读不写库)",
+    description=(
+        "下载港交所官方 ListOfSecurities.xlsx → 解析主板 HKD 普通股 board lot,返摘要。"
+        "★ A1 只读 · 不写库、不改下单池(A2 才放量)· 用于生产 VPS 实测 HKEX 可达 + 解析正确。"
+    ),
+)
+async def hk_board_lot_scan() -> HkBoardLotScanResult:
+    # 阻塞下载+解析经 asyncio.to_thread(项目约定 · 同 chan._analyze_sync)· 不阻塞事件循环
+    r = await asyncio.to_thread(fetch_hkex_board_lots)
+    logger.info(
+        "[hk-board-lot-scan] ok=%s http=%s bytes=%s mainboard_hkd=%s errors=%s updated=%s",
+        r.ok, r.http_code, r.bytes_downloaded, r.mainboard_hkd_count,
+        r.parse_errors, r.updated_as_at,
+    )
+    return HkBoardLotScanResult(
+        ok=r.ok, http_code=r.http_code, bytes_downloaded=r.bytes_downloaded,
+        updated_as_at=r.updated_as_at, total_rows=r.total_rows,
+        mainboard_hkd_count=r.mainboard_hkd_count, parse_errors=r.parse_errors,
+        samples=r.samples, error=r.error,
     )
