@@ -97,18 +97,3 @@ class HkKlineSourceProbe(BaseModel):
     yfinance_ok: bool = Field(description="yfinance 现备用源可达")
     yfinance_rows: int = Field(description="yfinance 返回行数(探测用 1mo)")
     yfinance_error: str | None = Field(default=None, description="yfinance 失败原因")
-
-
-class HkBoardLotRefreshResult(BaseModel):
-    """`GET /api/v1/hk/board-lot-refresh` 响应 · A2a 手动刷新 lot 表(下载 HKEX → upsert)。
-
-    运维/生产验用:同步下载 HKEX → upsert hk_board_lot 表 · worker beat 每日自动跑此采集。
-    """
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    ok: bool = Field(description="下载+解析+upsert 整体成功")
-    upserted: int = Field(description="upsert 进 lot 表的主板 HKD 行数(应 ~2406)")
-    parse_errors: int = Field(description="board lot 解析失败数(应 0)")
-    updated_as_at: str | None = Field(default=None, description="HKEX 文件「Updated as at」")
-    error: str | None = Field(default=None, description="失败原因(ok=False 时)")
