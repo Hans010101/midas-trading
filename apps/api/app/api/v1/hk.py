@@ -18,10 +18,13 @@ import logging
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import ClickHouseDep
+from app.core.database import get_db
 from app.schemas.hk_market import (
+    HkBoardLotRefreshResult,
     HkBoardLotScanResult,
     HkBoardResponse,
     HkKlineSourceProbe,
@@ -29,12 +32,14 @@ from app.schemas.hk_market import (
 from app.schemas.market_home import MarketHomeOverview
 from app.services.clickhouse_hk_market import select_latest_breadth, select_latest_spot
 from app.services.clickhouse_market_home import select_latest_indices
-from app.services.hk_board_lot import fetch_hkex_board_lots
+from app.services.hk_board_lot import fetch_hkex_board_lots, upsert_board_lots
 from app.services.hk_kline_probe import probe_hk_kline_sources
 from app.services.market_calendar import compute_market_status
 from app.services.market_home_config import HK_INDEX_CODES
 
 logger = logging.getLogger(__name__)
+
+DbDep = Annotated[AsyncSession, Depends(get_db)]
 
 router = APIRouter(prefix="/hk", tags=["hk"])
 
@@ -136,4 +141,32 @@ async def hk_kline_source_probe(
         symbol=r.symbol, sina_ok=r.sina_ok, sina_rows=r.sina_rows, sina_last=r.sina_last,
         sina_error=r.sina_error, yfinance_ok=r.yfinance_ok, yfinance_rows=r.yfinance_rows,
         yfinance_error=r.yfinance_error,
+    )
+
+
+@router.get(
+    "/board-lot-refresh",
+    response_model=HkBoardLotRefreshResult,
+    summary="[A2a运维] 手动刷新港股 lot 表(下载 HKEX → upsert · 同步)",
+    description=(
+        "同步下载 HKEX ListOfSecurities.xlsx → upsert hk_board_lot 表(主板 HKD ~2406)· 返写入数。"
+        "★ 运维/生产验用(worker beat 每日自动跑 · 此端点手动立即刷新)· 幂等 · 只写 lot 表不碰下单。"
+    ),
+)
+async def hk_board_lot_refresh(db: DbDep) -> HkBoardLotRefreshResult:
+    # 阻塞下载+解析经 asyncio.to_thread · upsert 走传入 db session
+    result = await asyncio.to_thread(fetch_hkex_board_lots)
+    if not result.ok:
+        logger.warning("[hk-board-lot-refresh] HKEX 下载/解析失败:%s", result.error)
+        return HkBoardLotRefreshResult(
+            ok=False, upserted=0, parse_errors=0, updated_as_at=None, error=result.error,
+        )
+    n = await upsert_board_lots(db, result.rows)
+    logger.info(
+        "[hk-board-lot-refresh] upserted=%d parse_errors=%d updated=%s",
+        n, result.parse_errors, result.updated_as_at,
+    )
+    return HkBoardLotRefreshResult(
+        ok=True, upserted=n, parse_errors=result.parse_errors,
+        updated_as_at=result.updated_as_at, error=None,
     )

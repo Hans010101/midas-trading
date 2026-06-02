@@ -38,6 +38,13 @@ logger = logging.getLogger(__name__)
 def _on_worker_ready(**_kwargs: object) -> None:
     """worker 起来后:① 幂等建 ClickHouse 表(update.sh 无 CH 建表步骤 · M2-C.2.1)·
     ② 入队港股 lot 表采集(部署即填 ~2406,不必等 16:45 beat · 幂等 upsert · A2a)。
+    ★ 每步独立 try:① 失败不阻断 ②(否则 ensure_ch 抛异常会吞掉 lot 采集入队)。
     """
-    ensure_crypto_ch_tables()
-    hk_board_lot_ingest.hk_board_lot_scan.delay()
+    try:
+        ensure_crypto_ch_tables()
+    except Exception:  # noqa: BLE001
+        logger.exception("[worker_ready] ensure_crypto_ch_tables 失败")
+    try:
+        hk_board_lot_ingest.hk_board_lot_scan.delay()
+    except Exception:  # noqa: BLE001
+        logger.exception("[worker_ready] 入队 hk_board_lot_scan 失败")
