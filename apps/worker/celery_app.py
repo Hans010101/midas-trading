@@ -21,6 +21,7 @@ from tasks import (  # noqa: E402, F401
     crypto_metrics_ingest,
     data_ingest,
     equity_snapshot,
+    hk_board_lot_ingest,
     incremental,
     market_home_ingest,
     notifications,

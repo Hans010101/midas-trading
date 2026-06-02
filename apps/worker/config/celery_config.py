@@ -41,6 +41,13 @@ beat_schedule = {
         "schedule": crontab(hour="16", minute="30", day_of_week="mon-fri"),
         "options": {"expires": 3000},
     },
+    "update-hk-board-lot": {
+        "task": "tasks.market.hk_board_lot_scan",
+        # 港股每手股数(下单池扩量 A2)· 每日一次(HKEX ListOfSecurities 每日更新 · 别高频)·
+        # 16:45 HKT 收盘后(错开 update-hk-pool 16:30)· 自动跟港交所每手框架改革
+        "schedule": crontab(hour="16", minute="45", day_of_week="mon-fri"),
+        "options": {"expires": 3600},
+    },
     "daily-equity-snapshot": {
         "task": "tasks.equity_snapshot.take_daily_snapshots",
         # 每日 23:59 给所有激活子账户写一条 daily 快照
