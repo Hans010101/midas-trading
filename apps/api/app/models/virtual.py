@@ -101,9 +101,9 @@ class VirtualAccount(Base):
         Uuid, ForeignKey("user.id", ondelete="CASCADE"), nullable=False,
     )
     market: Mapped[str] = mapped_column(String(16), nullable=False)
-    currency: Mapped[Currency] = mapped_column(
-        Enum(Currency, name="currency"), nullable=False,
-    )
+    # currency 存 VARCHAR(迁移 d5e6f7a8b9c0 · enum→str · 照 margin_mode 先例 · 与 market 对齐)
+    # 写入存 Currency StrEnum 的 .value(CNY/USD/USDT/HKD)· 读出 str · 加币种零迁移(免 ADD VALUE 坑)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False)
     initial_capital: Mapped[Decimal] = mapped_column(Numeric(20, 4), nullable=False)
     cash_balance: Mapped[Decimal] = mapped_column(Numeric(20, 4), nullable=False)
     realized_pnl: Mapped[Decimal] = mapped_column(
