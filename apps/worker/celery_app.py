@@ -21,6 +21,7 @@ from tasks import (  # noqa: E402, F401
     crypto_metrics_ingest,
     data_ingest,
     equity_snapshot,
+    hk_board_lot_ingest,
     incremental,
     market_home_ingest,
     notifications,
@@ -34,6 +35,9 @@ logger = logging.getLogger(__name__)
 
 
 @worker_ready.connect
-def _ensure_ch_tables(**_kwargs: object) -> None:
-    """worker 起来后幂等建 ClickHouse 表(update.sh 无 CH 建表步骤 · M2-C.2.1)。"""
+def _on_worker_ready(**_kwargs: object) -> None:
+    """worker 起来后:① 幂等建 ClickHouse 表(update.sh 无 CH 建表步骤 · M2-C.2.1)·
+    ② 入队港股 lot 表采集(部署即填 ~2406,不必等 16:45 beat · 幂等 upsert · A2a)。
+    """
     ensure_crypto_ch_tables()
+    hk_board_lot_ingest.hk_board_lot_scan.delay()
