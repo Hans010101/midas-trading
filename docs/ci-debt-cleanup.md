@@ -7,14 +7,13 @@
 > 首跑基线(feat/ci-test-gate · 2026-06-02):pytest **663 passed / 1 failed** · ruff **23** · mypy **17**。
 > 全是历史腐烂,本次港股 AI 一键下单改动**零新增**(hk 3 测试 CI 真跑绿)。
 
-## 存量债① · feishu 陈旧测试(1)
+## ✅ 存量债① · feishu 陈旧测试 · 批2 已清(2026-06-03)
 - **`tests/api/test_feishu_order.py::test_feishu_order_preview_is_confirm_card`**
-- 现象:断言「确认卡 note 含『模拟交易』」`assert False`(market="us" · 与 hk 无关)。
-- 根因:`bot/replies.py` 记的产品决策「bot 输出不再带免责句 / VIRTUAL 徽章噪音(平台层已说明全程虚拟)」
-  → 免责文案被**故意删了**,测试没跟着更新 = 陈旧断言。
-- ★清的口径需产品负责人定:bot 确认卡到底该不该带「模拟交易」免责(碰红线表述)。
-  - 若维持「bot 不带免责噪音」→ 改测试断言(去掉 `模拟交易` 检查 / 改成检查新行为)。
-  - 若要求 bot 也带免责 → 改渲染器加回(那是红线增强,不是改测试)。
+- 根因:`bot/replies.py` 产品决策「bot 输出不再带免责句 / VIRTUAL 徽章噪音(平台层已说明全程虚拟)」
+  → `build_order_preview` 的 disclaimer=None → 确认卡无 note,但测试仍断言「note 含模拟交易」= 陈旧。
+- 口径(产品负责人定):**维持「bot 不带免责噪音」· 改测试断言对齐 bot 现输出**(不是改回 bot 加免责)。
+- 清法:断言改成 ① header + ordok/ordno 按钮(原有)② 正文含订单明细(买入 / NVDA)③ **notes 为空**
+  (主动锁定「bot 不带免责噪音」产品决策)。test.yml 全套 pytest 去 deselect → feishu 测试纳入硬卡。
 
 ## ✅ 存量债② · ruff(23 → 0)· 批1 已清(2026-06-03)
 已清完 · test.yml 的 ruff 步骤已**转硬卡**(去 continue-on-error)。清法(纯 lint · 零逻辑改 · import 冒烟过):
