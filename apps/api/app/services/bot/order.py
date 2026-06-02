@@ -42,6 +42,7 @@ from app.services.clickhouse_crypto import (
     select_premium_index_marks,
     select_tickers_by_symbols,
 )
+from app.services.hk_board_lot import resolve_hk_board_lot
 from app.services.notifications.perp_events import (
     build_perp_filled_event,
     build_trade_filled_event,
@@ -64,6 +65,7 @@ DEFAULT_PERP_NOTIONAL_USDT = Decimal("100")  # 每单名义额(USDT)· margin = 
 DEFAULT_SPOT_NOTIONAL: dict[str, Decimal] = {
     "cn": Decimal("10000"),  # 每单名义额(CNY)
     "us": Decimal("1000"),   # 每单名义额(USD)
+    "hk": Decimal("50000"),  # 每单名义额(HKD · 港股按手贵 · 覆盖多数一手 · 无 per-user 预设 · α)
 }
 
 
@@ -78,7 +80,12 @@ class PresetValues:
     spot_notional_usd: Decimal
 
     def spot_notional(self, market: str) -> Decimal:
-        return self.spot_notional_cny if market == "cn" else self.spot_notional_usd
+        # cn/us 走 per-user 预设;hk 走模块默认 50000 HKD(α · 无 per-user hk 预设)· 其余兜底 usd
+        if market == "cn":
+            return self.spot_notional_cny
+        if market == "hk":
+            return DEFAULT_SPOT_NOTIONAL["hk"]
+        return self.spot_notional_usd
 
 
 # 无预设行时的回退默认(= G4 行为 · 与 bot_order_preset 的 server_default 完全一致)
@@ -113,6 +120,7 @@ _DIRECTIONS: dict[str, tuple[str, ...]] = {
     "crypto": ("open_long", "open_short", "close"),
     "cn": ("buy", "sell"),
     "us": ("buy", "sell", "short", "cover"),
+    "hk": ("buy", "sell"),  # 港股现货同 cn · buy=开多/sell=平多 · 无卖空(点1 a · facade 支持 hk)
 }
 _DIR_LABEL: dict[str, str] = {
     "open_long": "开多", "open_short": "开空", "close": "平仓",
@@ -285,6 +293,23 @@ async def quote_price(
     return await _spot_price(ch, market, symbol)
 
 
+async def _hk_lot_floor(
+    db: AsyncSession, symbol: str, raw_qty: Decimal,
+) -> tuple[Decimal | None, str | None]:
+    """港股开仓按手取整(同手动口径 · resolve_hk_board_lot)· 返 (floored_qty, reject_reason)。
+
+    floor(raw_qty / lot) * lot:不在池(lot=None)→ (None, 不在池);不足一手 → (None, 不足一手)。
+    ★ 仅整数手 · 不买零散股。红线:本函数只算数量,成交仍走 place_market_order 虚拟引擎。
+    """
+    lot = await resolve_hk_board_lot(db, symbol)
+    if lot is None:
+        return None, "该标的不在港股可下单池"
+    lots = int(raw_qty // lot)
+    if lots < 1:
+        return None, f"港股按手交易 · 每手 {lot} 股 · 名义额不足 1 手"
+    return Decimal(lots * lot), None
+
+
 # ── 预览(确认页用 · 不落库)──────────────────────────────────────────────
 
 
@@ -325,6 +350,12 @@ async def build_preview(
     if is_open:
         notional = preset.spot_notional(intent.market)
         qty = (notional / price).quantize(_QTY_Q, rounding=ROUND_DOWN)
+        if intent.market == "hk":  # 港股开仓按手取整(预览数量 = 实际派生一致)
+            qty_floored, _reason = await _hk_lot_floor(db, intent.symbol, qty)
+            if qty_floored is None:
+                return None  # 不在池 / 不足一手 → 无预览(调用方提示)
+            qty = qty_floored
+            notional = (qty * price).quantize(Decimal("0.0001"))  # 按手后实际名义
     else:
         side = PositionSide.LONG if intent.direction == "sell" else PositionSide.SHORT
         pos2 = await _active_spot(db, user_id, intent.market, intent.symbol, side)
@@ -425,6 +456,12 @@ async def _exec_spot(
             filled=False, title="下单失败",
             detail="无最新报价,或(平仓)当前无可平持仓",
         )
+    # 港股开仓按手取整(同手动口径 · 不在池/不足一手拒)· 平仓走全仓不重复取整。
+    # ★红线:仅调数量,成交仍走 place_market_order 虚拟引擎(不新增真实通道)。
+    if market == "hk" and direction == "buy":
+        qty, hk_reject = await _hk_lot_floor(db, symbol, qty)
+        if qty is None:
+            return OrderResult(filled=False, title="下单失败", detail=hk_reject or "港股下单被拒")
 
     order = await place_market_order(
         db,

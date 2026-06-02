@@ -20,6 +20,7 @@ import { useMemo, useState } from 'react'
 
 import { AiOrderConfirmDialog } from '@/components/workbench/ai-order-confirm-dialog'
 import { useAiDecision } from '@/hooks/use-ai-decision'
+import { useHkBoardLot } from '@/hooks/use-virtual'
 import type { ActionableDirection, CompositeLabel, DecisionCard } from '@/lib/api/ai-decision'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
 import { cn } from '@/lib/utils'
@@ -73,6 +74,13 @@ function CardBody({ card }: { card: DecisionCard }) {
   const adv = card.actionable
   // 仅 4 个可下单方向出按钮(hold/close 不出)· tradeDir 收窄类型给确认模态
   const tradeDir = adv && adv.actionable && isTradeDir(adv.direction) ? adv.direction : null
+  // 港股一键下单 gate(镜像 A2b):不在下单池(resolve None → board-lot 404)→ 不出按钮 · 避免点了才被拒。
+  //   非 hk 恒 in-pool(cn/us 零影响 · query 禁用);hk 仅在已解析 + 在池才出按钮(载入中/不在池不出)。
+  const isHk = card.market === 'hk'
+  const hkLot = useHkBoardLot(card.symbol, isHk)
+  const hkInPool = !isHk || (hkLot.isSuccess && hkLot.data !== null)
+  const hkNotInPool = isHk && hkLot.isSuccess && hkLot.data === null
+  const showTrade = tradeDir !== null && hkInPool
 
   return (
     <div className="space-y-3">
@@ -131,8 +139,8 @@ function CardBody({ card }: { card: DecisionCard }) {
           <p className="mt-0.5 text-[10px] text-muted-foreground/60">
             {adv.basis} · 仓位:{adv.size_note}
           </p>
-          {/* 港股阶段三:AI 一键下单暂不开(ai-order 后端 gate hk)· 港股下单走详情页手动下单区(单元3)*/}
-          {tradeDir && card.market !== 'hk' && (
+          {/* 一键模拟下单(走 ai-order → 同一虚拟撮合引擎)· 港股已接入(按手取整在 execute 内)*/}
+          {showTrade && tradeDir && (
             <button
               type="button"
               onClick={() => setOrderOpen(true)}
@@ -143,6 +151,12 @@ function CardBody({ card }: { card: DecisionCard }) {
             >
               一键下单 · {TRADE_DIR_LABEL[tradeDir]}
             </button>
+          )}
+          {/* 港股不在下单池(镜像 A2b 手动)→ 不出一键下单按钮 · 提示原因(行情仍可看)*/}
+          {tradeDir && hkNotInPool && (
+            <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground/60">
+              该标的不在港股下单池 · 暂不可一键下单(仅主板 HKD 可下单)
+            </p>
           )}
         </div>
       )}
@@ -191,9 +205,9 @@ function CardBody({ card }: { card: DecisionCard }) {
         )}
       </div>
 
-      {/* AI 一键模拟下单 · 二次确认模态(复用手动下单口径 · 路由 ai-order)
-          ★ 港股阶段三:hk 不挂(ai-order 后端 gate hk · 港股下单走手动下单区)*/}
-      {adv && tradeDir && card.market !== 'hk' && (
+      {/* AI 一键模拟下单 · 二次确认模态(复用手动下单口径 · 路由 ai-order → 同一虚拟引擎)
+          港股已接入:在池才挂(showTrade)· 按手取整在 execute 内 · sizeNote 标「港股按手取整」*/}
+      {adv && showTrade && tradeDir && (
         <AiOrderConfirmDialog
           open={orderOpen}
           onClose={() => setOrderOpen(false)}
@@ -201,7 +215,7 @@ function CardBody({ card }: { card: DecisionCard }) {
           market={card.market}
           direction={tradeDir}
           basis={adv.basis}
-          sizeNote={adv.size_note}
+          sizeNote={isHk ? `${adv.size_note} · 港股按手取整` : adv.size_note}
         />
       )}
     </div>

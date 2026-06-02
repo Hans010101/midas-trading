@@ -314,15 +314,11 @@ async def place_ai_order(
        route_open_perp / route_close_perp),不新开下单出口、绝不接真实交易通道。
     二次确认:由前端 AiOrderConfirmDialog 保证(与手动下单同口径)· 本端点只在确认后被调用。
     仓位:execute 内部按用户 BotOrderPreset 派生(拍板③),本端点不收数量。
+    港股:execute 内派生数量按手取整(resolve_hk_board_lot · 不在池 / 不足一手拒 · 同手动)。
     现货 sell(拍板④):execute → 有持仓才平、无持仓返回「无可平持仓」· 绝不裸做空。
     """
-    # 港股待阶段三接入数据与下单,本期一律拒绝
-    if payload.market == "hk":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="港股 AI 模拟下单待阶段三接入",
-        )
-    # 方向必须是该市场合法方向(cn/us=buy/sell · crypto=open_long/open_short)
+    # 方向必须是该市场合法方向(cn/us/hk=buy/sell · crypto=open_long/open_short)
+    # 港股已接入(bot_order.execute 内按手取整 · 不在池 / 不足一手拒 · 同手动虚拟引擎)
     if not bot_order.direction_valid(payload.market, payload.direction):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
