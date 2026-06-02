@@ -296,7 +296,7 @@ async def test_unactivated_market_rejected(db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_commission_rates_correct_per_market():
-    """A 股买卖费率不对称 / 美股零佣 / 加密双向 · 数值正确。"""
+    """A 股买卖费率不对称 / 美股零佣 / 加密双向 / 港股印花税双边 · 数值正确。"""
     notional = Decimal("10000")
 
     # A 股
@@ -316,6 +316,12 @@ async def test_commission_rates_correct_per_market():
     crypto_sell = calc_commission("crypto", OrderSide.SELL, notional)
     assert crypto_buy == Decimal("10.0000")    # 10000 × 0.001
     assert crypto_sell == Decimal("10.0000")
+
+    # 港股(印花税 0.1% + 佣金 0.1% = 0.2% · 买卖双边对称 · 产品负责人定 2026-06-02)
+    hk_buy = calc_commission("hk", OrderSide.BUY, notional)
+    hk_sell = calc_commission("hk", OrderSide.SELL, notional)
+    assert hk_buy == Decimal("20.0000")    # 10000 × 0.002
+    assert hk_sell == Decimal("20.0000")
 
 
 @pytest.mark.asyncio
@@ -340,3 +346,9 @@ async def test_slippage_buy_up_sell_down():
     # crypto 10bp
     assert crypto_buy == Decimal("100.1000")
     assert crypto_sell == Decimal("99.9000")
+
+    hk_buy = apply_slippage(price, "hk", OrderSide.BUY)
+    hk_sell = apply_slippage(price, "hk", OrderSide.SELL)
+    # hk 5bp(同 A 股口径)
+    assert hk_buy == Decimal("100.0500")
+    assert hk_sell == Decimal("99.9500")

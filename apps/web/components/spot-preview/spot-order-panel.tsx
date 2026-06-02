@@ -18,15 +18,15 @@
  */
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { useSession } from 'next-auth/react'
-import { useAccount, usePlaceOrder, usePositions } from '@/hooks/use-virtual'
+import { useAccount, useHkBoardLot, usePlaceOrder, usePositions } from '@/hooks/use-virtual'
 import { useKline } from '@/hooks/use-kline'
 import { VirtualApiError, type OrderSide, type PositionSide } from '@/lib/api/virtual'
 import { estimateOrder } from '@/lib/fees'
-import { currencyOf, formatMoney } from '@/lib/format-money'
+import { MARKET_LABEL, currencyOf, formatMoney } from '@/lib/format-money'
 import { cn } from '@/lib/utils'
 import type { Market } from '@midas/shared'
 
@@ -35,7 +35,8 @@ type Tab = 'long' | 'short'
 interface SpotOrderPanelProps {
   symbol: string
   name?: string | null
-  market: 'cn' | 'us'
+  // 港股阶段三单元3:hk 加入(纯做多 · T+0 · 按手 board lot 取整 · 全程虚拟)
+  market: 'cn' | 'us' | 'hk'
 }
 
 interface PendingAction {
@@ -46,8 +47,10 @@ interface PendingAction {
   label: string
 }
 
-function defaultQty(market: 'cn' | 'us'): string {
-  return market === 'cn' ? '100' : '1'
+function defaultQty(market: 'cn' | 'us' | 'hk'): string {
+  if (market === 'cn') return '100'
+  if (market === 'hk') return '' // 港股:board lot 载入后由 effect 填 1 手(每手股数因股而异)
+  return '1'
 }
 
 export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
@@ -58,6 +61,17 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
   const [tab, setTab] = useState<Tab>('long')
   const [quantity, setQuantity] = useState(defaultQty(market))
   const [pending, setPending] = useState<PendingAction | null>(null)
+
+  // 港股每手股数(board lot)· 只读配置 · 非 hk 不请求(enabled=false)· 用于按手取整 + UI 提示
+  const boardLot = useHkBoardLot(symbol, market === 'hk').data ?? null
+  // 港股:lot 首次载入时填默认 1 手(只填一次 · 用户清空后不强行回填)
+  const hkInitDone = useRef(false)
+  useEffect(() => {
+    if (market === 'hk' && boardLot && !hkInitDone.current) {
+      setQuantity(String(boardLot))
+      hkInitDone.current = true
+    }
+  }, [market, boardLot])
 
   // 当前标的 · 当前方向的活仓(用于平仓上限 + 展示)
   const heldPosition = useMemo(() => {
@@ -85,7 +99,7 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
     return (
       <PanelShell>
         <GateNote
-          title={`${market === 'cn' ? 'A股' : '美股'}账户资金未激活`}
+          title={`${MARKET_LABEL[market]}账户资金未激活`}
           hint="先到设置页设定该市场的初始账户资金,再来下单。"
           href="/settings/wallet"
           cta="去激活"
@@ -143,9 +157,20 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
         value={quantity}
         onChange={(e) => setQuantity(e.target.value)}
         min={0}
-        step={market === 'cn' ? 100 : 1}
-        className="mb-3 h-9 w-full rounded border border-paper bg-background px-3 text-right font-mono text-sm"
+        step={market === 'cn' ? 100 : market === 'hk' ? (boardLot ?? 100) : 1}
+        placeholder={market === 'hk' && boardLot ? `每手 ${boardLot} 股` : undefined}
+        className={cn(
+          'h-9 w-full rounded border border-paper bg-background px-3 text-right font-mono text-sm',
+          market === 'hk' ? 'mb-1' : 'mb-3',
+        )}
       />
+      {market === 'hk' && (
+        <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground/70">
+          {boardLot
+            ? `每手 ${boardLot} 股 · 实际下单按手取整(不足一手不可下单)`
+            : '该标的不在港股可下单池(策展 18 只)'}
+        </p>
+      )}
 
       {/* 操作按钮 · 开仓 / 平仓 两枚 */}
       {activePositionSide === 'long' ? (
@@ -174,6 +199,11 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
           A股 T+1:当日买入次日方可卖出 · ±10%/20% 涨跌停限制 ·
           按最新价成交,不强制 T+1 / 涨跌停。
         </p>
+      ) : market === 'hk' ? (
+        <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground/70">
+          港股 T+0:当日可买卖 · 无涨跌停 · 按手交易(每手 {boardLot ?? '—'} 股)·
+          虚拟费率含印花税 0.1% + 佣金 0.1% · 按最新价成交。
+        </p>
       ) : (
         <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground/70">
           {tab === 'short'
@@ -189,6 +219,7 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
           market={market}
           action={pending}
           quantity={quantity}
+          boardLot={boardLot}
           heldQty={heldQty}
           availableCash={account.data ? Number(account.data.cash_balance) : 0}
           onClose={() => setPending(null)}
@@ -203,16 +234,18 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
 interface ConfirmProps {
   symbol: string
   name?: string | null
-  market: 'cn' | 'us'
+  market: 'cn' | 'us' | 'hk'
   action: PendingAction
   quantity: string
+  // 港股每手股数(board lot)· 非 hk 为 null · 用于确认前按手取整
+  boardLot: number | null
   heldQty: number
   availableCash: number
   onClose: () => void
 }
 
 function SpotOrderConfirm({
-  symbol, name, market, action, quantity, heldQty, availableCash, onClose,
+  symbol, name, market, action, quantity, boardLot, heldQty, availableCash, onClose,
 }: ConfirmProps) {
   const currency = currencyOf(market)
   const place = usePlaceOrder()
@@ -220,20 +253,23 @@ function SpotOrderConfirm({
     symbol, market: market as Market, period: '1d', limit: 1,
   })
   const marketPrice = kline?.items?.at(-1)?.close ?? null
-  const qtyNum = Number(quantity) || 0
+  const qtyRaw = Number(quantity) || 0
+  // ★ 港股按手取整:floor(qty/lot)*lot · 不足一手 → 0(不可下单)· 与后端 place_order 同口径
+  //   实际执行 / 展示 / 估算 / 提交都用 lotQty(cn/us 时 lotQty === qtyRaw,零影响)
+  const lotQty = market === 'hk' && boardLot ? Math.floor(qtyRaw / boardLot) * boardLot : qtyRaw
 
-  const estimate = marketPrice && qtyNum > 0
-    ? estimateOrder(market as Market, action.side, marketPrice, qtyNum)
+  const estimate = marketPrice && lotQty > 0
+    ? estimateOrder(market as Market, action.side, marketPrice, lotQty)
     : null
 
   // 现金影响 · 开仓需现金(买做多成本 / 卖空担保 = notional + 手续费);平仓不需预付
   const cashNeeded =
     action.intent === 'open' && estimate ? estimate.notional + estimate.commission : 0
   const enoughCash = action.intent !== 'open' || (estimate !== null && cashNeeded <= availableCash)
-  const enoughPosition = action.intent !== 'close' || qtyNum <= heldQty
+  const enoughPosition = action.intent !== 'close' || lotQty <= heldQty
 
   const canSubmit =
-    !place.isPending && qtyNum > 0 && estimate !== null && enoughCash && enoughPosition
+    !place.isPending && lotQty > 0 && estimate !== null && enoughCash && enoughPosition
 
   async function handleSubmit() {
     try {
@@ -241,14 +277,15 @@ function SpotOrderConfirm({
         symbol,
         market: market as Market,
         side: action.side,
-        quantity: quantity.trim(),
+        // ★ 港股送按手取整后的 lotQty(后端 place_order 会再次取整 · 同口径幂等)
+        quantity: market === 'hk' ? String(lotQty) : quantity.trim(),
         // A股 / 美股做多 不传(后端默认 long · 字节同 0008)· 仅美股卖空传 short
         ...(action.positionSide === 'short' ? { position_side: 'short' as const } : {}),
       })
       if (order.status === 'filled') {
         const realized = order.realized_pnl
         toast.success(
-          `${action.label} ${quantity} ${symbol} 已成交` +
+          `${action.label} ${market === 'hk' ? lotQty : quantity} ${symbol} 已成交` +
             (realized ? ` · 已实现 ${formatMoney(realized, currency)}` : ''),
           { className: 'midas-toast-success', duration: 4000 },
         )
@@ -284,7 +321,12 @@ function SpotOrderConfirm({
             </span>
           </Row>
           <Row label="数量">
-            <span className="font-mono">{quantity}</span>
+            <span className="font-mono">{market === 'hk' ? lotQty : quantity}</span>
+            {market === 'hk' && boardLot && lotQty > 0 && lotQty !== qtyRaw && (
+              <span className="ml-2 text-[10px] text-muted-foreground/70">
+                · 按手取整(每手 {boardLot})
+              </span>
+            )}
           </Row>
 
           <div className="my-2 border-t border-paper" />
@@ -328,6 +370,11 @@ function SpotOrderConfirm({
           )}
         </dl>
 
+        {market === 'hk' && boardLot && qtyRaw > 0 && lotQty === 0 && (
+          <p className="mt-3 rounded-md bg-midas-red-glow px-3 py-2 text-xs text-midas-red">
+            不足一手 · 港股每手 {boardLot} 股,最少下单 1 手
+          </p>
+        )}
         {action.intent === 'open' && estimate && !enoughCash && (
           <p className="mt-3 rounded-md bg-midas-red-glow px-3 py-2 text-xs text-midas-red">
             {action.positionSide === 'short' ? '现金担保不足' : '余额不足'} · 差{' '}

@@ -11,7 +11,7 @@ export const SLIPPAGE_BPS: Record<Market, number> = {
   cn: 5,
   us: 3,
   crypto: 10,
-  hk: 5, // 港股象征性占位 · 待定(港股暂不可下单 · P1-3+ 校准后端 fees.py)
+  hk: 5, // 港股策展池蓝筹 / 大型中概 · 流动性 OK · 同 A 股口径(对齐后端 fees.py)
 }
 
 export interface CommissionRates {
@@ -23,7 +23,7 @@ export const COMMISSION_RATES: Record<Market, CommissionRates> = {
   cn: { buy: 0.0003, sell: 0.0013 },
   us: { buy: 0, sell: 0 },
   crypto: { buy: 0.001, sell: 0.001 },
-  hk: { buy: 0.001, sell: 0.0011 }, // 港股象征性占位 · 待定(含印花税概念 · P1-3+ 校准)
+  hk: { buy: 0.002, sell: 0.002 }, // 印花税0.1%+佣金0.1%=0.2%·双边(产品负责人定 2026-06-02·对齐后端)
 }
 
 export interface OrderEstimate {

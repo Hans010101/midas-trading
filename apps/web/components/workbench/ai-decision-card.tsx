@@ -131,7 +131,8 @@ function CardBody({ card }: { card: DecisionCard }) {
           <p className="mt-0.5 text-[10px] text-muted-foreground/60">
             {adv.basis} · 仓位:{adv.size_note}
           </p>
-          {tradeDir && (
+          {/* 港股阶段三:AI 一键下单暂不开(ai-order 后端 gate hk)· 港股下单走详情页手动下单区(单元3)*/}
+          {tradeDir && card.market !== 'hk' && (
             <button
               type="button"
               onClick={() => setOrderOpen(true)}
@@ -190,8 +191,9 @@ function CardBody({ card }: { card: DecisionCard }) {
         )}
       </div>
 
-      {/* AI 一键模拟下单 · 二次确认模态(复用手动下单口径 · 路由 ai-order)*/}
-      {adv && tradeDir && (
+      {/* AI 一键模拟下单 · 二次确认模态(复用手动下单口径 · 路由 ai-order)
+          ★ 港股阶段三:hk 不挂(ai-order 后端 gate hk · 港股下单走手动下单区)*/}
+      {adv && tradeDir && card.market !== 'hk' && (
         <AiOrderConfirmDialog
           open={orderOpen}
           onClose={() => setOrderOpen(false)}
