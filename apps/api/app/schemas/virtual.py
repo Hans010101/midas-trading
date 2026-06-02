@@ -136,6 +136,18 @@ class OrderResponse(BaseModel):
     filled_at: AwareDatetime | None
 
 
+class HkBoardLotResponse(BaseModel):
+    """港股每手股数(board lot)· 前端下单按手取整 / UI 提示用 · 只读。
+
+    lot 来自 hk_pool(策展 18 只 · 已逐一核港交所官方)· 不在池内 → 404。
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    symbol: str
+    board_lot: int
+
+
 # ===== AI 模拟下单(0036 批次甲)=====
 
 

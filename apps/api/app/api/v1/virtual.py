@@ -34,6 +34,7 @@ from app.schemas.virtual import (
     AiOrderResponse,
     EquityCurvesResponse,
     EquitySnapshotResponse,
+    HkBoardLotResponse,
     OrderPlaceIn,
     OrderResponse,
     PositionResponse,
@@ -41,6 +42,7 @@ from app.schemas.virtual import (
 )
 from app.services.bot import order as bot_order
 from app.services.clickhouse_client import ClickHouseClient
+from app.services.hk_pool import hk_lot_size, normalize_hk_code
 from app.services.virtual_trading.engine import (
     PlaceOrderRequest,
     PriceFetcher,
@@ -241,17 +243,56 @@ async def place_order(
     db: DbDep,
 ) -> OrderResponse:
     fetcher = make_price_fetcher(ch)
+    # 港股按手取整(board lot)· 阶段三单元3 · ★全程虚拟 · 复用 place_market_order · 不接真实通道。
+    #   floor(qty/lot)*lot:不能买零散股 · lot 取自 hk_pool(策展 18 只 · 已核港交所官方)。
+    #   不在池 → 拒;不足一手 → 拒。cn/us/crypto 不进此分支(零影响)。
+    quantity = payload.quantity
+    if payload.market == "hk":
+        lot = hk_lot_size(payload.symbol)
+        if lot is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="该标的不在港股可下单池(策展 18 只)",
+            )
+        lots = int(quantity // lot)
+        if lots < 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"港股按手交易 · 每手 {lot} 股 · 最少下单 1 手({lot} 股)",
+            )
+        quantity = Decimal(lots * lot)
     req = PlaceOrderRequest(
         user_id=current_user.id,
         symbol=payload.symbol,
         market=payload.market,
         side=payload.side,
         position_side=payload.position_side,
-        quantity=payload.quantity,
+        quantity=quantity,
     )
     order = await place_market_order(db, req, fetcher)
     await db.commit()
     return _serialize_order(order)
+
+
+@router.get(
+    "/hk-board-lot",
+    response_model=HkBoardLotResponse,
+    summary="港股每手股数(board lot)· 下单按手取整 / UI 提示用 · 只读",
+)
+async def get_hk_board_lot(
+    symbol: str = Query(..., min_length=1, description="港股代码 · 容错任意位数 / .HK 后缀"),
+) -> HkBoardLotResponse:
+    """返回港股某标的每手股数 · 不在策展池(18 只)→ 404。
+
+    ★ 只读配置查询 · 不下单、不触账户;lot 已逐一核港交所官方(2026-06-02)。
+    """
+    lot = hk_lot_size(symbol)
+    if lot is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="该标的不在港股可下单池(策展 18 只)",
+        )
+    return HkBoardLotResponse(symbol=normalize_hk_code(symbol), board_lot=lot)
 
 
 @router.post(

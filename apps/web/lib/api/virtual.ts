@@ -190,6 +190,26 @@ export async function placeOrder(
   return (await r.json()) as VirtualOrder
 }
 
+// ===== HK board lot(港股每手股数 · 只读公开配置 · 下单按手取整 / UI 提示用)=====
+
+export interface HkBoardLot {
+  symbol: string
+  board_lot: number
+}
+
+// 不在策展池(18 只)→ null · 无需 token(只读配置 · 后端无 CurrentUserDep)
+export async function fetchHkBoardLot(
+  symbol: string, signal?: AbortSignal,
+): Promise<number | null> {
+  const r = await fetch(
+    `${API_BASE}/api/v1/virtual/hk-board-lot?symbol=${encodeURIComponent(symbol)}`,
+    { signal },
+  )
+  if (r.status === 404) return null
+  if (!r.ok) throw new VirtualApiError(r.status, await readDetail(r))
+  return ((await r.json()) as HkBoardLot).board_lot
+}
+
 // AI 一键模拟下单(0036 批次甲)· POST /virtual/ai-order · 走同一虚拟撮合引擎 · source=ai_signal
 export interface AiOrderInput {
   symbol: string

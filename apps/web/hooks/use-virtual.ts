@@ -27,6 +27,7 @@ import {
   fetchAccount,
   fetchAccounts,
   fetchEquityCurves,
+  fetchHkBoardLot,
   fetchOrders,
   fetchPortfolio,
   fetchPositions,
@@ -43,6 +44,7 @@ export const VIRTUAL_KEY = {
   positions: (m?: Market, includeClosed?: boolean) =>
     ['virtual', 'positions', m ?? 'all', includeClosed ?? false] as const,
   equityCurves: (days: number) => ['virtual', 'equity-curves', days] as const,
+  hkBoardLot: (symbol: string) => ['virtual', 'hk-board-lot', symbol] as const,
 }
 
 function useToken(): { token: string; ready: boolean } {
@@ -72,6 +74,17 @@ export function useAccount(market: Market) {
     enabled: ready,
     retry: 0,
     staleTime: 10_000,
+  })
+}
+
+// 港股每手股数 · 只读公开配置(无需 token)· 仅 hk 下单面用 · lot 极少变 → 长缓存
+export function useHkBoardLot(symbol: string, enabled = true) {
+  return useQuery<number | null>({
+    queryKey: VIRTUAL_KEY.hkBoardLot(symbol),
+    queryFn: ({ signal }) => fetchHkBoardLot(symbol, signal),
+    enabled: enabled && symbol.length > 0,
+    retry: 0,
+    staleTime: 60 * 60_000,
   })
 }
 
