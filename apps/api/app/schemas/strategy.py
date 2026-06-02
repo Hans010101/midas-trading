@@ -39,6 +39,12 @@ class StrategySignal(BaseModel):
     price: float                                        # 该 K 线收盘价
     kind: SignalKind                                    # buy / sell(抽象方向)
     reason: str = Field(min_length=1, max_length=80)    # 可读依据(金叉/超卖反弹/触轨)
+    # ⑤ 关键价位(形态A 批2 · 信号点已算值 · 策略相关键值对)·
+    #   ma_cross {"MA5":x,"MA20":y} · rsi {"RSI":x,"超卖线":30} · boll {"上轨":x,"中轨":y,"下轨":z}
+    levels: dict[str, float] = Field(default_factory=dict)
+    # ⑥ 成色(形态A 批2 · 只 rsi/boll 算 · ma_cross 不做 → None)· strength 数值越大越强 + note 可读
+    strength: float | None = Field(default=None)
+    strength_note: str | None = Field(default=None, max_length=40)
 
 
 # ===== 单元2:推荐 + 只读 API 契约 =====

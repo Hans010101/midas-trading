@@ -14,7 +14,7 @@
  */
 
 import { useStrategyRecommend, useStrategySignals } from '@/hooks/use-strategy'
-import type { Instrument, StrategyKind } from '@/lib/api/strategy'
+import type { Instrument, StrategyKind, StrategySignal } from '@/lib/api/strategy'
 import { cn } from '@/lib/utils'
 import type { Market, Period } from '@midas/shared'
 
@@ -44,6 +44,16 @@ function fmtSignalTs(ts: string): string {
   } catch {
     return ts.slice(5, 16)
   }
+}
+// ⑤ 关键价位(批2)· 智能小数去尾零 · 不带货币符号(键已表意 · 如「MA5 10.2 · MA20 10.05」)
+function fmtLevelVal(v: number): string {
+  const d = v >= 1000 ? 0 : v >= 1 ? 2 : 4
+  return v.toLocaleString('en-US', { maximumFractionDigits: d })
+}
+function fmtLevels(levels: Record<string, number>): string {
+  return Object.entries(levels)
+    .map(([k, v]) => `${k} ${fmtLevelVal(v)}`)
+    .join(' · ')
 }
 
 interface Props {
@@ -133,9 +143,7 @@ export function StrategyPanel({
           {/* 当前触发状态(① 含触发价) */}
           <TriggerStatus
             triggered={sig?.current_triggered ?? false}
-            lastKind={sig?.last_signal?.kind ?? null}
-            lastReason={sig?.last_signal?.reason ?? null}
-            lastPrice={sig?.last_signal?.price ?? null}
+            last={sig?.last_signal ?? null}
             market={market}
             hasSignals={(sig?.signals.length ?? 0) > 0}
           />
@@ -149,22 +157,34 @@ export function StrategyPanel({
               <div className="max-h-44 overflow-y-auto border-t border-paper/60">
                 {[...sig.signals].reverse().map((s, i) => {
                   const isBuy = s.kind === 'buy'
+                  const hasDetail = Object.keys(s.levels).length > 0 || s.strength_note
                   return (
                     <div
                       key={`${s.ts}-${i}`}
-                      className="flex items-center gap-2 px-2.5 py-1 text-[11px] odd:bg-background/30"
+                      className="px-2.5 py-1 text-[11px] odd:bg-background/30"
                     >
-                      <span className="w-20 shrink-0 font-mono text-muted-foreground/60">
-                        {fmtSignalTs(s.ts)}
-                      </span>
-                      <span
-                        className={cn('shrink-0 font-mono font-medium', isBuy ? 'text-up' : 'text-down')}
-                      >
-                        {isBuy ? '买' : '卖'} {fmtSignalPrice(s.price, market)}
-                      </span>
-                      <span className="flex-1 truncate text-right text-muted-foreground/60">
-                        {s.reason}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="w-20 shrink-0 font-mono text-muted-foreground/60">
+                          {fmtSignalTs(s.ts)}
+                        </span>
+                        <span
+                          className={cn('shrink-0 font-mono font-medium', isBuy ? 'text-up' : 'text-down')}
+                        >
+                          {isBuy ? '买' : '卖'} {fmtSignalPrice(s.price, market)}
+                        </span>
+                        <span className="flex-1 truncate text-right text-muted-foreground/60">
+                          {s.reason}
+                        </span>
+                      </div>
+                      {/* ⑤ 关键价位 + ⑥ 成色(批2)· 成色 ma_cross 为 null → 不显示(诚实不空塞)*/}
+                      {hasDetail && (
+                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 pl-[5.5rem] text-[10px] text-muted-foreground/50">
+                          {Object.keys(s.levels).length > 0 && (
+                            <span className="font-mono">{fmtLevels(s.levels)}</span>
+                          )}
+                          {s.strength_note && <span className="text-gold/70">成色 · {s.strength_note}</span>}
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -179,31 +199,29 @@ export function StrategyPanel({
 
 function TriggerStatus({
   triggered,
-  lastKind,
-  lastReason,
-  lastPrice,
+  last,
   market,
   hasSignals,
 }: {
   triggered: boolean
-  lastKind: 'buy' | 'sell' | null
-  lastReason: string | null
-  lastPrice: number | null
+  last: StrategySignal | null
   market: Market
   hasSignals: boolean
 }) {
-  if (!hasSignals) {
+  if (!hasSignals || !last) {
     return (
       <div className="rounded-md border border-paper bg-background/50 px-2.5 py-1.5 text-[11px] text-muted-foreground/70">
         近期无信号
       </div>
     )
   }
-  const isBuy = lastKind === 'buy'
+  const isBuy = last.kind === 'buy'
   const tone = isBuy ? 'text-up' : 'text-down'
   const label = isBuy ? '买点' : '卖点'
   // ① 触发价(纯数据 · 带市场符号)
-  const priceStr = lastPrice !== null ? ` ${fmtSignalPrice(lastPrice, market)}` : ''
+  const priceStr = ` ${fmtSignalPrice(last.price, market)}`
+  // ⑤ 关键价位(信号点已算值)· ⑥ 成色(只 rsi/boll · ma_cross 为 null → 不显示成色 · 不空塞)
+  const levelsStr = Object.keys(last.levels).length > 0 ? fmtLevels(last.levels) : ''
   return (
     <div
       className={cn(
@@ -216,11 +234,18 @@ function TriggerStatus({
       )}
     >
       {triggered ? (
-        <span className={cn('font-medium', tone)}>🔔 当前触发:{label}{priceStr} · {lastReason}</span>
+        <span className={cn('font-medium', tone)}>🔔 当前触发:{label}{priceStr} · {last.reason}</span>
       ) : (
         <span className="text-muted-foreground/70">
-          最近信号:<span className={tone}>{label}{priceStr}</span> · {lastReason}
+          最近信号:<span className={tone}>{label}{priceStr}</span> · {last.reason}
         </span>
+      )}
+      {/* ⑤ 关键价位 + ⑥ 成色(批2 · 第二行)· 成色 ma_cross 为 null → 整段不显示成色(诚实不空塞)*/}
+      {(levelsStr || last.strength_note) && (
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground/60">
+          {levelsStr && <span className="font-mono">{levelsStr}</span>}
+          {last.strength_note && <span className="text-gold/80">成色 · {last.strength_note}</span>}
+        </div>
       )}
     </div>
   )

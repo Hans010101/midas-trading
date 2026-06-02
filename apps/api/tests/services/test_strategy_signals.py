@@ -169,6 +169,43 @@ def test_boll_reversion_touch_upper_sell():
     assert "上轨" in sigs[0].reason
 
 
+# ===== 形态A 批2 · ⑤关键价位(全策略)+ ⑥成色(rsi/boll · ma_cross 不做)=====
+
+
+def test_ma_cross_levels_no_strength():
+    """⑤ ma_cross 透出 MA5/MA20 关键价位 · ⑥ 成色不做(strength=None · ★不空塞)。"""
+    closes = [10.0] * 20 + [11.0, 12.0, 13.0, 14.0, 15.0]
+    sig = scan_ma_cross(_kl(closes))[0]
+    assert set(sig.levels) == {"MA5", "MA20"}          # 透出两条均线值
+    assert sig.levels["MA5"] > sig.levels["MA20"]      # 金叉:MA5 已上穿 MA20
+    assert sig.strength is None                        # ma_cross 成色不做(产品负责人定)
+    assert sig.strength_note is None                   # ★ 不空塞误导
+
+
+def test_rsi_reversal_levels_and_strength():
+    """⑤ rsi 透出 RSI 值 + 超卖线 · ⑥ 成色=超卖深度(回穿前 RSI 越低越强)。"""
+    closes = [100.0 - 2.0 * i for i in range(16)] + [82.0, 84.0, 86.0]
+    buy = next(s for s in scan_rsi_reversal(_kl(closes)) if s.kind == "buy")
+    assert "RSI" in buy.levels
+    assert buy.levels["超卖线"] == pytest.approx(30.0)
+    assert buy.strength is not None
+    assert buy.strength > 0                            # 探底深度 > 0
+    assert buy.strength_note is not None
+    assert "超卖深度" in buy.strength_note
+
+
+def test_boll_reversion_levels_and_strength():
+    """⑤ boll 透出 上/中/下轨 · ⑥ 成色=偏离轨道幅度(越远越极端)。"""
+    closes = [100.0, 102.0, 98.0, 101.0, 99.0] * 4 + [80.0]
+    sig = scan_boll_reversion(_kl(closes))[0]
+    assert set(sig.levels) == {"上轨", "中轨", "下轨"}
+    assert sig.levels["上轨"] > sig.levels["中轨"] > sig.levels["下轨"]
+    assert sig.strength is not None
+    assert sig.strength > 0                            # 偏离下轨 > 0
+    assert sig.strength_note is not None
+    assert "偏离下轨" in sig.strength_note
+
+
 # ===== dispatcher + 通用性 =====
 
 

@@ -21,6 +21,12 @@ export interface StrategySignal {
   price: number
   kind: SignalKind
   reason: string
+  /** ⑤ 关键价位(形态A 批2 · 策略相关)· ma_cross {MA5,MA20} · rsi {RSI,超卖线} · boll {上轨,中轨,下轨} */
+  levels: Record<string, number>
+  /** ⑥ 成色数值(形态A 批2 · 只 rsi/boll · ma_cross 为 null)· 越大越强 */
+  strength: number | null
+  /** ⑥ 成色可读(如「超卖深度 · RSI 探至 18」「偏离下轨 10.7%」)· ma_cross 为 null */
+  strength_note: string | null
 }
 
 export interface StrategySignalsResponse {
