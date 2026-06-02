@@ -134,15 +134,17 @@ def scan_ma_cross(
         pf, ps, cf, cs = ma_f[i - 1], ma_s[i - 1], ma_f[i], ma_s[i]
         if pf is None or ps is None or cf is None or cs is None:
             continue
+        # ⑤ 关键价位:信号点 MA 值(已算·透出)· ⑥ 成色:ma_cross 不做(穿越本身即信号·产品负责人定)
+        levels = {f"MA{fast}": round(cf, 4), f"MA{slow}": round(cs, 4)}
         if _crosses_up(pf, ps, cf, cs):
             signals.append(StrategySignal(
                 ts=klines[i].ts, price=closes[i], kind="buy",
-                reason=f"MA{fast} 上穿 MA{slow}(金叉)",
+                reason=f"MA{fast} 上穿 MA{slow}(金叉)", levels=levels,
             ))
         elif _crosses_down(pf, ps, cf, cs):
             signals.append(StrategySignal(
                 ts=klines[i].ts, price=closes[i], kind="sell",
-                reason=f"MA{fast} 下穿 MA{slow}(死叉)",
+                reason=f"MA{fast} 下穿 MA{slow}(死叉)", levels=levels,
             ))
     return signals
 
@@ -161,22 +163,39 @@ def scan_rsi_reversal(
     closes = [float(k.close) for k in klines]
     rsi = _rsi_series(closes, period)
     signals: list[StrategySignal] = []
+    trough: float | None = None  # 当前超卖区 RSI 最低值(⑥ 成色:探底越深反弹越强)
+    peak: float | None = None    # 当前超买区 RSI 最高值(⑥ 成色:冲顶越高回落越强)
     for i in range(1, len(klines)):
         prev, cur = rsi[i - 1], rsi[i]
         if prev is None or cur is None:
             continue
+        # 追踪回穿前的探底/冲顶极值(给 ⑥ 成色用)
+        if cur < oversold:
+            trough = cur if trough is None else min(trough, cur)
+        if cur > overbought:
+            peak = cur if peak is None else max(peak, cur)
         # 上穿超卖线 → 反弹买点
         if prev < oversold and cur >= oversold:
+            depth = round(oversold - trough, 1) if trough is not None else None
             signals.append(StrategySignal(
                 ts=klines[i].ts, price=closes[i], kind="buy",
                 reason=f"RSI 上穿 {oversold:.0f}(超卖反弹)",
+                levels={"RSI": round(cur, 1), "超卖线": oversold},
+                strength=depth,
+                strength_note=(f"超卖深度 · RSI 探至 {trough:.0f}" if trough is not None else None),
             ))
+            trough = None  # 反弹已确认 · 重置等下一轮超卖
         # 下穿超买线 → 回落卖点
         elif prev > overbought and cur <= overbought:
+            height = round(peak - overbought, 1) if peak is not None else None
             signals.append(StrategySignal(
                 ts=klines[i].ts, price=closes[i], kind="sell",
                 reason=f"RSI 下穿 {overbought:.0f}(超买回落)",
+                levels={"RSI": round(cur, 1), "超买线": overbought},
+                strength=height,
+                strength_note=(f"超买高度 · RSI 冲至 {peak:.0f}" if peak is not None else None),
             ))
+            peak = None
     return signals
 
 
@@ -196,19 +215,25 @@ def scan_boll_reversion(
         if prev_band is None or cur_band is None:
             continue
         _, prev_up, prev_low = prev_band
-        _, cur_up, cur_low = cur_band
+        cur_mid, cur_up, cur_low = cur_band
         prev_c, cur_c = closes[i - 1], closes[i]
+        # ⑤ 关键价位:信号点布林上/中/下轨(已算·透出)· ⑥ 成色:偏离轨道幅度(越远越极端)
+        levels = {"上轨": round(cur_up, 4), "中轨": round(cur_mid, 4), "下轨": round(cur_low, 4)}
         # 收盘价下穿下轨 → 均值回归买点
         if prev_c > prev_low and cur_c <= cur_low:
+            dev = (cur_low - cur_c) / cur_low if cur_low else 0.0
             signals.append(StrategySignal(
                 ts=klines[i].ts, price=cur_c, kind="buy",
-                reason="收盘触布林下轨(均值回归买点)",
+                reason="收盘触布林下轨(均值回归买点)", levels=levels,
+                strength=round(dev, 4), strength_note=f"偏离下轨 {dev:.1%}",
             ))
         # 收盘价上穿上轨 → 均值回归卖点
         elif prev_c < prev_up and cur_c >= cur_up:
+            dev = (cur_c - cur_up) / cur_up if cur_up else 0.0
             signals.append(StrategySignal(
                 ts=klines[i].ts, price=cur_c, kind="sell",
-                reason="收盘触布林上轨(均值回归卖点)",
+                reason="收盘触布林上轨(均值回归卖点)", levels=levels,
+                strength=round(dev, 4), strength_note=f"偏离上轨 {dev:.1%}",
             ))
     return signals
 
