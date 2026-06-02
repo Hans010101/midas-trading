@@ -21,6 +21,9 @@ dependencies = [
     "passlib[argon2,bcrypt]>=1.7.4",
     "python-multipart>=0.0.17",
     "akshare>=1.14.0",
+    # 港股 board lot:pd.read_excel(engine="openpyxl") 解析 HKEX List of Securities xlsx ·
+    # openpyxl 经 akshare/pandas 传递引入,但代码直接依赖必须显式列(避隐形 extra 坑 · 同 cryptography)。
+    "openpyxl>=3.1.0",
     "yfinance>=0.2.48",
     "ccxt>=4.4.0",
     "clickhouse-connect>=0.8.0",

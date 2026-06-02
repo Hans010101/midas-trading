@@ -57,6 +57,29 @@ class HkBoardResponse(BaseModel):
     top_amount: list[HkSpotRow] = Field(description="成交额榜(amount DESC)")
 
 
+class HkBoardLotScanResult(BaseModel):
+    """`GET /api/v1/hk/board-lot-scan` 响应 · 阶段三方案 A1 生产实测可达。
+
+    HKEX 官方 List of Securities 下载 + 解析摘要(只读不写库)· 验证生产 VPS 可达 + 解析正确。
+    不返完整 ~2406 lot 字典(太大)· 只返计数 + 抽验样本。
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    ok: bool = Field(description="下载+解析整体成功")
+    http_code: int = Field(description="HKEX xlsx 下载 HTTP 状态(应 200)")
+    bytes_downloaded: int = Field(description="下载字节数(本机实测 ~1.4MB)")
+    updated_as_at: str | None = Field(default=None, description="文件头 Updated as at · 新鲜度")
+    total_rows: int = Field(description="文件全部证券行数(~17880 · 含衍生/债)")
+    mainboard_hkd_count: int = Field(description="主板 HKD 普通股数(= 下单池目标 · 应 ~2406)")
+    parse_errors: int = Field(description="board lot 解析失败数(应 0)")
+    samples: dict[str, int] = Field(
+        default_factory=dict,
+        description="抽验样本(00700=100 / 00005=400 / 01211=100 验解析对)",
+    )
+    error: str | None = Field(default=None, description="失败原因(ok=False 时)")
+
+
 class HkKlineSourceProbe(BaseModel):
     """`GET /api/v1/hk/kline-source-probe` 响应 · 方案A 阶段1 生产实测可达(只读)。
 
