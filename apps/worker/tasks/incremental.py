@@ -88,8 +88,8 @@ def update_crypto_demo(self: Any) -> dict[str, Any]:
 def update_hk_pool(self: Any) -> dict[str, int]:  # noqa: ARG001
     """港股策展池日 K 采集 · 每交易日港股收盘后(16:30 HKT)· ADR 0034a P1-3。
 
-    循环策展 ~18 只 · 每只走 _backfill_one(market='hk' · akshare stock_hk_hist)·
-    sleep 错峰防 akshare 限流。单只失败不中断整池(记 warning + 计数),整体不 retry
+    循环策展 ~18 只 · 每只走 _backfill_one(market='hk' · 新浪 stock_hk_daily 主源 + yfinance 备用)·
+    sleep 错峰防限流。单只失败不中断整池(记 warning + 计数),整体不 retry
     (日 K 一天一根 · 漏的下一交易日补;单只异常吞掉不连累其它)。
     """
     ok = 0
