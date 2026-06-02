@@ -40,8 +40,8 @@ const BOLL_STYLES = {
 
 interface SpotMainChartProps {
   symbol: string
-  // 港股阶段二:hk 复用现货主图(K线 + 缠论 + BOLL/MACD 指标),
-  // 但 market==='hk' 时 gate 掉形态A 策略面板/信号(strategy API 未注入 hk 会 500 · 港股不接 AI 策略)
+  // 港股阶段三:hk 复用现货主图(K线 + 缠论 + BOLL/MACD + 形态A 策略信号 · strategy 已注入 hk)。
+  // ★ 港股策略信号【默认打开】(产品负责人 2026-06-02)· cn/us 仍默认关(手动开)。
   market: 'cn' | 'us' | 'hk'
   period: Period
 }
@@ -51,9 +51,9 @@ export function SpotMainChart({ symbol, market, period }: SpotMainChartProps) {
   const [chanEnabled, setChanEnabled] = useState(true)
   const [bollEnabled, setBollEnabled] = useState(true)
   const [macdEnabled, setMacdEnabled] = useState(true)
-  // 形态A 策略信号(默认关 · 不干扰现有缠论/指标)
+  // 形态A 策略信号 · ★港股(market==='hk')默认打开,cn/us 默认关(进去手动开)
   const [strategy, setStrategy] = useState<StrategyKind>('ma_cross')
-  const [strategyEnabled, setStrategyEnabled] = useState(false)
+  const [strategyEnabled, setStrategyEnabled] = useState(market === 'hk')
 
   const indicators = useMemo<Record<IndicatorName, boolean>>(
     () => ({ MA: false, BOLL: bollEnabled, MACD: macdEnabled, RSI: false }),
