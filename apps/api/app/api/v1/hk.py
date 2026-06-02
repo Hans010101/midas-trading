@@ -21,11 +21,16 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from app.api.deps import ClickHouseDep
-from app.schemas.hk_market import HkBoardLotScanResult, HkBoardResponse
+from app.schemas.hk_market import (
+    HkBoardLotScanResult,
+    HkBoardResponse,
+    HkKlineSourceProbe,
+)
 from app.schemas.market_home import MarketHomeOverview
 from app.services.clickhouse_hk_market import select_latest_breadth, select_latest_spot
 from app.services.clickhouse_market_home import select_latest_indices
 from app.services.hk_board_lot import fetch_hkex_board_lots
+from app.services.hk_kline_probe import probe_hk_kline_sources
 from app.services.market_calendar import compute_market_status
 from app.services.market_home_config import HK_INDEX_CODES
 
@@ -107,4 +112,28 @@ async def hk_board_lot_scan() -> HkBoardLotScanResult:
         updated_as_at=r.updated_as_at, total_rows=r.total_rows,
         mainboard_hkd_count=r.mainboard_hkd_count, parse_errors=r.parse_errors,
         samples=r.samples, error=r.error,
+    )
+
+
+@router.get(
+    "/kline-source-probe",
+    response_model=HkKlineSourceProbe,
+    summary="[方案A阶段1] 港股K线源探测(新浪 stock_hk_daily 生产可达 · 只读不改降级链)",
+    description=(
+        "探测新浪 stock_hk_daily(主源候选)+ yfinance(现备用)对某冷门股的生产可达性 + 行数。"
+        "★ 只读 · 不改 fetch_kline 降级链(零回归)· 实测新浪生产可达后阶段2 再正式接入主源。"
+    ),
+)
+async def hk_kline_source_probe(
+    symbol: Annotated[str, Query(description="港股代码 · 默认冷门 00980 联华超市")] = "00980",
+) -> HkKlineSourceProbe:
+    r = await asyncio.to_thread(probe_hk_kline_sources, symbol)
+    logger.info(
+        "[hk-kline-probe] %s sina_ok=%s rows=%s yf_ok=%s",
+        r.symbol, r.sina_ok, r.sina_rows, r.yfinance_ok,
+    )
+    return HkKlineSourceProbe(
+        symbol=r.symbol, sina_ok=r.sina_ok, sina_rows=r.sina_rows, sina_last=r.sina_last,
+        sina_error=r.sina_error, yfinance_ok=r.yfinance_ok, yfinance_rows=r.yfinance_rows,
+        yfinance_error=r.yfinance_error,
     )

@@ -20,8 +20,9 @@ import type { Market, Period } from '@midas/shared'
 
 // 现货主图周期 · kline 存储支持的子集(无 4h)
 export const SPOT_PREVIEW_PERIODS: Period[] = ['15m', '1h', '1d']
-// ★ 港股周期:hk_source 只支持日 / 周线(无分钟线 · 15m/1h 会 502)→ 详情页只给日线
-const HK_PERIODS: Period[] = ['1d']
+// ★ 港股周期:hk_source 支持日 / 周线(1d 新浪主源 · 1w 走 yfinance · 实测现成)·
+//   无分钟线(akshare HK 分钟源生产死 · yfinance 日内 ts 处理待后续单独做)→ 给日 + 周线
+const HK_PERIODS: Period[] = ['1d', '1w']
 
 const MARKET_LABEL: Record<'cn' | 'us' | 'hk', string> = { cn: 'A股', us: '美股', hk: '港股' }
 const MARKET_HOME: Record<'cn' | 'us' | 'hk', '/cn-market' | '/us-market' | '/hk-market'> = {
@@ -45,7 +46,7 @@ function fmtPrice(price: number, market: 'cn' | 'us' | 'hk'): string {
 }
 
 export function SpotHeader({ symbol, name, market, period, onPeriodChange }: SpotHeaderProps) {
-  // ★ 港股只给日线(hk_source 无分钟线 · 15m/1h 会 502)· cn/us 给 15m/1h/1d
+  // ★ 港股给日 / 周线(无分钟线 · 15m/1h 日内 ts 待后续)· cn/us 给 15m/1h/1d
   const periods = market === 'hk' ? HK_PERIODS : SPOT_PREVIEW_PERIODS
   // 日 K 取末两根算最新价 + 日涨跌 · 现货(spot)· 跟主图 / 缠论 / AI 同源
   const dailyKline = useKline({

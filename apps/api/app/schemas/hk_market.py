@@ -78,3 +78,22 @@ class HkBoardLotScanResult(BaseModel):
         description="抽验样本(00700=100 / 00005=400 / 01211=100 验解析对)",
     )
     error: str | None = Field(default=None, description="失败原因(ok=False 时)")
+
+
+class HkKlineSourceProbe(BaseModel):
+    """`GET /api/v1/hk/kline-source-probe` 响应 · 方案A 阶段1 生产实测可达(只读)。
+
+    探测新浪 stock_hk_daily(主源候选)+ yfinance(现备用)对同一冷门股的可达性 + 行数。
+    确认新浪生产可达后,阶段2 再正式接入降级链主源。
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    symbol: str
+    sina_ok: bool = Field(description="新浪 stock_hk_daily 生产可达 + 有数据")
+    sina_rows: int = Field(description="新浪返回行数(本机 00980=5388)")
+    sina_last: str | None = Field(default=None, description="新浪最后一根 date close")
+    sina_error: str | None = Field(default=None, description="新浪失败原因")
+    yfinance_ok: bool = Field(description="yfinance 现备用源可达")
+    yfinance_rows: int = Field(description="yfinance 返回行数(探测用 1mo)")
+    yfinance_error: str | None = Field(default=None, description="yfinance 失败原因")
