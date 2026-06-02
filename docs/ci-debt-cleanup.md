@@ -16,13 +16,13 @@
   - 若维持「bot 不带免责噪音」→ 改测试断言(去掉 `模拟交易` 检查 / 改成检查新行为)。
   - 若要求 bot 也带免责 → 改渲染器加回(那是红线增强,不是改测试)。
 
-## 存量债② · ruff(23)
-多数 `--fix` 可自动修。按文件:
-- `scripts/diagnose_accuracy.py`(7)· `scripts/cleanup_virtual_dirty_data.py`(3)
-- `tests/factories.py`(4)· `tests/api/test_auth.py`(2)
-- `app/services/ai/agents/technical.py`(2)· `app/services/virtual_trading/perp_dispatcher.py`(1)
-- `app/services/data_sources/coingecko_source.py`(1)· `app/services/auth.py`(1)
-- `app/services/ai/llm.py`(1)· `app/api/v1/auth.py`(1)
+## ✅ 存量债② · ruff(23 → 0)· 批1 已清(2026-06-03)
+已清完 · test.yml 的 ruff 步骤已**转硬卡**(去 continue-on-error)。清法(纯 lint · 零逻辑改 · import 冒烟过):
+- auto-fix:I001 import 排序(auth/test_auth)· F401 未用 import(diagnose Decimal)· UP037 注解去引号(factories)
+- 手动:E501 行长(technical/coingecko 抽变量/换行)· SIM108 三元(technical)· SIM103 直接返条件(llm)·
+  RET504 去临时变量(auth)· ERA001 中文注释括号改 ·(perp_dispatcher/diagnose · ruff 误判)·
+  PTH os.path→pathlib(diagnose/cleanup 脚本)· F821 前向引用注解(factories 加 TYPE_CHECKING import)·
+  DTZ005 noqa(diagnose 脚本 · CN 本地日期查 A 股故意 naive)
 
 ## 存量债③ · mypy(17 · 10 文件)
 - `app/services/auth.py`(4)· `app/api/v1/auth.py`(3)· `app/services/virtual_trading/perp_engine.py`(2)

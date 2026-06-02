@@ -277,8 +277,7 @@ async def verify_session(
     sess.expires_at = now + SESSION_TTL
     await db.commit()
 
-    user = await find_user_by_id(db, sess.user_id)
-    return user
+    return await find_user_by_id(db, sess.user_id)
 
 
 async def revoke_session(db: AsyncSession, *, token: str) -> bool:

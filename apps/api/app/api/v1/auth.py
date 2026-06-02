@@ -313,9 +313,9 @@ async def _verify_google_id_token(
     token: str, expected_aud: str,
 ) -> dict[str, object]:
     """验签 Google id_token · 失败抛 ValueError。"""
+    import httpx  # noqa: PLC0415
     from jose import jwt as jose_jwt  # noqa: PLC0415
     from jose.exceptions import JWTError  # noqa: PLC0415
-    import httpx  # noqa: PLC0415
 
     # 拉 Google 公钥(M1 不缓存 · 每次拉 · M2+ 改 LRU)
     # 网络错 / 非 2xx 都归类成 ValueError · 让上层返 401 带明细而不是裸 500

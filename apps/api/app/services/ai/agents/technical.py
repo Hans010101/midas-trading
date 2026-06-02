@@ -33,7 +33,9 @@ _SYSTEM_BASE = (
     "**必须严格返回 JSON,不能有其他文本。**"
 )
 
-_SYSTEM_CN = _SYSTEM_BASE + "\n\n市场:A 股 · 注意 T+1 制度 · 单日 ±10% 涨跌停 · 复权口径为「不复权」"
+_SYSTEM_CN = _SYSTEM_BASE + (
+    "\n\n市场:A 股 · 注意 T+1 制度 · 单日 ±10% 涨跌停 · 复权口径为「不复权」"
+)
 _SYSTEM_US = _SYSTEM_BASE + "\n\n市场:美股 · T+0 · 无单日涨跌停 · 复权口径为「后复权」"
 _SYSTEM_CRYPTO = (
     _SYSTEM_BASE
@@ -138,10 +140,7 @@ def _parse_response(
         confidence = max(0.0, min(1.0, confidence))
         rationale = str(data.get("rationale", "(分析内容暂时不可用)"))[:400]
         raw_levels = data.get("key_levels", [])
-        if isinstance(raw_levels, list):
-            key_levels = [float(x) for x in raw_levels[:4]]
-        else:
-            key_levels = []
+        key_levels = [float(x) for x in raw_levels[:4]] if isinstance(raw_levels, list) else []
         return score, confidence, rationale, key_levels
     except (json.JSONDecodeError, ValueError, TypeError) as e:
         logger.warning("[ai.agent.technical] parse failed err=%s content=%s", e, content[:200])

@@ -114,9 +114,8 @@ jobs:
         continue-on-error: true
         run: pytest "tests/api/test_feishu_order.py::test_feishu_order_preview_is_confirm_card" -v
 
-      - name: "存量债② · ruff(23 处 · scripts/factories/auth 等历史 · 多数 auto-fix)"
+      - name: "★ 硬卡 · ruff(批1 已清 23→0 · 自验闸进 CI · 守新债)"
         if: always()
-        continue-on-error: true
         run: ruff check .
 
       - name: "存量债③ · mypy app/(17 处 · auth/perp_engine/workflow 等历史)"

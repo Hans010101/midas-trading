@@ -54,9 +54,7 @@ def is_mock_mode() -> bool:
     """
     if settings.llm_mock_mode:
         return True
-    if not settings.deepseek_api_key:
-        return True
-    return False
+    return not settings.deepseek_api_key
 
 
 async def ainvoke(
