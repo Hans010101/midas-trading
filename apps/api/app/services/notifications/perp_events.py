@@ -48,7 +48,7 @@ def build_perp_filled_event(
         notional=order.notional or Decimal("0"),
         fee=order.fee or Decimal("0"),
         realized_pnl=order.realized_pnl if is_close else None,
-        currency=account.currency.value,
+        currency=account.currency,
     )
 
 
@@ -69,7 +69,7 @@ def build_liquidation_event_single(
         ),
         realized_pnl=order.realized_pnl,
         position_count=1,
-        currency=account.currency.value,
+        currency=account.currency,
     )
 
 
@@ -87,5 +87,5 @@ def build_trade_filled_event(
         notional=order.notional or Decimal("0"),
         commission=order.commission or Decimal("0"),
         realized_pnl=order.realized_pnl,
-        currency=account.currency.value,
+        currency=account.currency,
     )
