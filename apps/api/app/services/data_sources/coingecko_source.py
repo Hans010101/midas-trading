@@ -124,8 +124,9 @@ class CoinGeckoSource(BaseDataSource):
                     derivatives_volume_24h_usd=0,
                 )
             except (KeyError, ValueError, TypeError) as exc:
+                keys = list(body.keys()) if isinstance(body, dict) else type(body)
                 raise DataFormatError(
-                    f"CoinGecko /global 解析失败: {exc} · body keys={list(body.keys()) if isinstance(body, dict) else type(body)}",
+                    f"CoinGecko /global 解析失败: {exc} · body keys={keys}",
                     market="crypto", upstream="coingecko",
                 ) from exc
 

@@ -15,10 +15,10 @@ import asyncio
 import os
 import sys
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from pathlib import Path
 
 # 让脚本能 import app
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("SECRET_KEY", "diag-only")
 os.environ.setdefault(
     "DATABASE_URL",
@@ -147,13 +147,14 @@ async def main() -> None:  # noqa: C901
                 ref = float(last["close"])
                 print(f"\n  偏差 close: {pct(ours, ref)}  · 可接受阈值 ±0.2%")
 
-        # 再用东方财富做交叉验证(权威性更高)
+        # 再用东方财富做交叉验证 · 权威性更高
         try:
             df2 = ak.stock_zh_a_hist(
                 symbol="600519",
                 period="daily",
-                start_date=(datetime.now() - timedelta(days=10)).strftime("%Y%m%d"),
-                end_date=datetime.now().strftime("%Y%m%d"),
+                # 诊断脚本 · 用 CN 本地日期查 A 股(naive 故意 · tz=UTC 边界会漏当日)
+                start_date=(datetime.now() - timedelta(days=10)).strftime("%Y%m%d"),  # noqa: DTZ005
+                end_date=datetime.now().strftime("%Y%m%d"),  # noqa: DTZ005
                 adjust="",  # 不复权 · 跟现价对齐
             )
             if not df2.empty:

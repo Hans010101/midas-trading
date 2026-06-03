@@ -419,18 +419,19 @@ async def _reduce(
 async def _find_crypto_account(
     db: AsyncSession, user_id: UUID,
 ) -> VirtualAccount | None:
-    return await db.scalar(
+    acct: VirtualAccount | None = await db.scalar(
         select(VirtualAccount).where(
             VirtualAccount.user_id == user_id,
             VirtualAccount.market == _CRYPTO_MARKET,
         ),
     )
+    return acct
 
 
 async def _active_position(
     db: AsyncSession, account_id: int, symbol: str,
 ) -> VirtualPerpPosition | None:
-    return await db.scalar(
+    pos: VirtualPerpPosition | None = await db.scalar(
         select(VirtualPerpPosition)
         .where(
             VirtualPerpPosition.account_id == account_id,
@@ -439,6 +440,7 @@ async def _active_position(
         )
         .with_for_update(),
     )
+    return pos
 
 
 async def _atomic_debit(db: AsyncSession, account_id: int, total: Decimal) -> bool:

@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
@@ -253,8 +253,8 @@ async def oauth_google(
             detail=f"Google id_token 验证失败:{e}",
         ) from e
 
-    google_sub = claims["sub"]
-    email = claims["email"]
+    google_sub = cast(str, claims["sub"])
+    email = cast(str, claims["email"])
     logger.info("[oauth.google] id_token 验签通过 · sub=%s email=%s", google_sub, email)
 
     if not claims.get("email_verified", False):
@@ -313,9 +313,9 @@ async def _verify_google_id_token(
     token: str, expected_aud: str,
 ) -> dict[str, object]:
     """验签 Google id_token · 失败抛 ValueError。"""
+    import httpx  # noqa: PLC0415
     from jose import jwt as jose_jwt  # noqa: PLC0415
     from jose.exceptions import JWTError  # noqa: PLC0415
-    import httpx  # noqa: PLC0415
 
     # 拉 Google 公钥(M1 不缓存 · 每次拉 · M2+ 改 LRU)
     # 网络错 / 非 2xx 都归类成 ValueError · 让上层返 401 带明细而不是裸 500
@@ -349,7 +349,7 @@ async def _verify_google_id_token(
             key,
             algorithms=["RS256"],
             audience=expected_aud,
-            issuer=_GOOGLE_ISSUERS,  # type: ignore[arg-type]
+            issuer=_GOOGLE_ISSUERS,
             # NextAuth 走 id_token 流程 · 只把 id_token 转给后端 · 没有 access_token。
             # jose 默认 verify_at_hash=True · 检测到 id_token 里有 at_hash claim 但
             # 没传 access_token 就抛 "No access_token provided to compare against

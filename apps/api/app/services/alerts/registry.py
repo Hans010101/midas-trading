@@ -26,7 +26,9 @@ from app.services.ai import indicators
 from app.services.analysis import chan
 
 if TYPE_CHECKING:
+    from app.schemas.cn_market import CnSector
     from app.schemas.market import Kline, Period
+    from app.schemas.us_market import UsSector
     from app.services.clickhouse_client import ClickHouseClient
 
 # 单次扫描每标的拉的 K 线根数:覆盖 MA60(60)+ 缠论(≥30)。
@@ -204,6 +206,7 @@ async def _f_cn_breadth_up_ratio(ctx: ScanContext, market: str, symbol: str | No
 
 async def _f_sector_change_pct(ctx: ScanContext, market: str, symbol: str | None, tf: str | None) -> float | None:
     name = cast(str, symbol)
+    sectors: list[CnSector] | list[UsSector]
     if market == "cn":
         sectors = await clickhouse_cn_market.select_latest_sectors(ctx.raw, limit=200)
     else:

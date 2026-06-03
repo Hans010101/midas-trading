@@ -111,7 +111,7 @@ async def delete_cached_card(
     key = make_cache_key(market, symbol, period, trading_day)
     try:
         redis = await get_redis()
-        return await redis.delete(key)
+        return int(await redis.delete(key))
     except Exception as e:  # noqa: BLE001
         logger.warning("[ai.cache] delete failed key=%s err=%s", key, e)
         return 0

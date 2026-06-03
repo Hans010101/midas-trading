@@ -42,7 +42,7 @@ def _stdev(values: list[float], period: int) -> float:
     window = values[-period:]
     mean = sum(window) / period
     var = sum((v - mean) ** 2 for v in window) / (period - 1)
-    return var ** 0.5
+    return float(var ** 0.5)
 
 
 def compute_ma(klines: list[Kline]) -> dict[int, float]:

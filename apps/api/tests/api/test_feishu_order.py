@@ -162,7 +162,11 @@ async def test_feishu_full_order_flow_fills(db_session: AsyncSession) -> None:
 
 @pytest.mark.asyncio
 async def test_feishu_order_preview_is_confirm_card(db_session: AsyncSession) -> None:
-    """二次确认卡本身保留(决策④:不加飞书原生弹窗,但确认卡必经)· 带交易口径免责。"""
+    """二次确认卡本身保留(决策④:不加飞书原生弹窗,但确认卡必经)· 含订单明细。
+
+    ★ 产品决策「bot 输出不带免责句 / VIRTUAL 徽章噪音(平台层已说明全程虚拟)」(见 replies.py):
+    确认卡不再有免责 note · 本测试锁定该决策(notes 为空)+ 验确认卡含订单明细 + ordok/ordno 按钮。
+    """
     user = await make_user(db_session)
     await make_virtual_account(db_session, user_id=user.id, market="us")
     await _bind(db_session, user.id, "ou_pv")
@@ -174,13 +178,16 @@ async def test_feishu_order_preview_is_confirm_card(db_session: AsyncSession) ->
 
     assert rp is not None
     card = _card(rp)
-    # 确认卡有 header(非 prerendered)+ ordok/ordno 按钮 + 交易口径免责 note
+    # 确认卡有 header(非 prerendered)+ ordok/ordno 按钮
     assert "header" in card
     assert {"ordok", "ordno"} <= set(_actions(rp))
-    notes = [
-        e["elements"][0]["content"] for e in card["elements"] if e["tag"] == "note"
-    ]
-    assert any("模拟交易" in n for n in notes)  # 交易口径免责(四-A 分级)
+    # 正文含订单明细(方向 / 标的)· 证明是该单的确认卡(非空壳)
+    body = _body(rp)
+    assert "买入" in body
+    assert "NVDA" in body
+    # ★产品决策「bot 不带免责噪音」:确认卡不再有免责 note(平台层已说明全程虚拟 · 锁定该决策)
+    notes = [e for e in card["elements"] if e["tag"] == "note"]
+    assert notes == []
 
 
 # ── 🔴 下单二次确认红线(飞书入口)─────────────────────────────────────

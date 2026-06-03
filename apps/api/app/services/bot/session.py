@@ -10,7 +10,7 @@ ADR 0032:键按 (channel, uid) 命名。Telegram 前缀保持 `tg_session:{chat_
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from redis.asyncio import Redis
@@ -27,7 +27,7 @@ def _key(channel: str, uid: str) -> str:
 
 async def get_session(redis: Redis, channel: str, uid: str) -> dict[str, Any] | None:
     """读会话态;无 / 损坏 → None。"""
-    raw: str | None = await redis.get(_key(channel, uid))
+    raw: str | None = cast("str | None", await redis.get(_key(channel, uid)))
     if not raw:
         return None
     try:

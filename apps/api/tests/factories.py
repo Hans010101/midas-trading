@@ -12,7 +12,7 @@ import secrets
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +21,10 @@ from app.models.user import User
 from app.models.verification_token import TokenPurpose, VerificationToken
 from app.models.watchlist import WatchlistItem
 from app.services.auth import hash_password
+
+if TYPE_CHECKING:
+    from app.models.virtual import VirtualAccount
+    from app.services.virtual_trading.engine import PriceFetcher
 
 
 def random_email() -> str:
@@ -123,7 +127,7 @@ async def make_virtual_account(
     user_id: UUID,
     market: str = "us",
     initial_capital: Decimal = Decimal("100000"),
-) -> "VirtualAccount":
+) -> VirtualAccount:
     from app.models.virtual import MARKET_CURRENCY, VirtualAccount
 
     account = VirtualAccount(
@@ -140,7 +144,7 @@ async def make_virtual_account(
 
 def make_static_price_fetcher(
     prices: dict[tuple[str, str], Decimal | None],
-) -> "PriceFetcher":  # type: ignore[name-defined]
+) -> PriceFetcher:
     """造一个固定价 fetcher · 给 engine 测试用 · key 是 (symbol, market)。"""
 
     async def fetcher(symbol: str, market: str) -> Decimal | None:

@@ -216,8 +216,9 @@ async def test_session_max_5_devices_evicts_oldest(
     client: AsyncClient, db_session: AsyncSession,
 ):
     """单用户最多 5 设备 · 第 6 次登录时最早的失效。"""
-    from app.models.session import Session as AuthSession
     from sqlalchemy import select as sqla_select
+
+    from app.models.session import Session as AuthSession
 
     user = await make_user(db_session)
     tokens = []
@@ -258,8 +259,9 @@ async def test_session_rolling_ttl(
     """每次 verify 续 7 天 · last_used_at 更新。"""
     from datetime import UTC, datetime, timedelta
 
-    from app.models.session import Session as AuthSession
     from sqlalchemy import select as sqla_select
+
+    from app.models.session import Session as AuthSession
 
     user = await make_user(db_session)
     token = await issue_session(db_session, user_id=user.id)
