@@ -154,7 +154,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return true
     },
     async jwt({ token, user, account }) {
-      // 第一次登录(Credentials):把后端 session token + user_id + email 塞进 NextAuth JWT
+      // ★ Google OAuth 优先:signIn callback 已把后端 session token 塞进 account(token 在 account 不在 user)。
+      //   必须在 if(user) 之前判 —— OAuth 初次登录 user 也存在,但 user.accessToken 是 undefined;
+      //   放后面会被 if(user) 截断、丢掉后端 token → session.accessToken 空 → 鉴权 API 401(2026-06 修)。
+      if (account?.midas_access_token) {
+        return {
+          ...token,
+          accessToken: account.midas_access_token as string,
+          userId: account.midas_user_id as string,
+          email: account.midas_email as string,
+        } as typeof token & AugmentedToken
+      }
+      // 凭据登录(邮箱/密码):authorize 把后端 session token 放进 user.accessToken
       if (user) {
         const u = user as User & { accessToken?: string }
         return {
@@ -162,15 +173,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           accessToken: u.accessToken,
           userId: u.id,
           email: u.email,
-        } as typeof token & AugmentedToken
-      }
-      // Google OAuth · signIn callback 已经把 backend session 塞到 account 里
-      if (account?.midas_access_token) {
-        return {
-          ...token,
-          accessToken: account.midas_access_token as string,
-          userId: account.midas_user_id as string,
-          email: account.midas_email as string,
         } as typeof token & AugmentedToken
       }
       return token
