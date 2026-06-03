@@ -25,12 +25,14 @@ from app.schemas.hk_market import (
     HkBoardLotScanResult,
     HkBoardResponse,
     HkKlineSourceProbe,
+    HkSectorProbeResult,
 )
 from app.schemas.market_home import MarketHomeOverview
 from app.services.clickhouse_hk_market import select_latest_breadth, select_latest_spot
 from app.services.clickhouse_market_home import select_latest_indices
 from app.services.hk_board_lot import fetch_hkex_board_lots
 from app.services.hk_kline_probe import probe_hk_kline_sources
+from app.services.hk_sector_probe import probe_hk_sectors
 from app.services.market_calendar import compute_market_status
 from app.services.market_home_config import HK_INDEX_CODES
 
@@ -136,4 +138,35 @@ async def hk_kline_source_probe(
         symbol=r.symbol, sina_ok=r.sina_ok, sina_rows=r.sina_rows, sina_last=r.sina_last,
         sina_error=r.sina_error, yfinance_ok=r.yfinance_ok, yfinance_rows=r.yfinance_rows,
         yfinance_error=r.yfinance_error,
+    )
+
+
+@router.get(
+    "/sector-probe",
+    response_model=HkSectorProbeResult,
+    summary="[板块探测] yfinance HK .info sector 生产可达 + 批量速率(只读 · 不写库)",
+    description=(
+        "抽样行情池成交额前 N 只,线程池并发调 yfinance `.info` 拿 GICS sector,返成功率 + 批量"
+        "耗时 + sector 分布 + 限流错误。★ 港股板块唯一可达免费行业源,全量 ~900 只前先验速率/限流/"
+        "拿到率(yfinance .info 单只 ~2s · 有 Yahoo 速率限制)。只读 · 不写库、不改板块、不碰下单。"
+    ),
+)
+async def hk_sector_probe(
+    ch: ClickHouseDep,
+    n: Annotated[int, Query(ge=1, le=60, description="抽样数 · 成交额前 N(限 60 控耗时)")] = 30,
+) -> HkSectorProbeResult:
+    # 抽样行情池成交额前 N(主流股 · 板块聚合的主体)· 经 to_thread 跑并发探测不阻塞事件循环
+    spot = await select_latest_spot(
+        ch._client, sort_by="amount", order="DESC", limit=n,  # noqa: SLF001
+    )
+    codes = [row.symbol for row in spot]
+    r = await asyncio.to_thread(probe_hk_sectors, codes)
+    logger.info(
+        "[hk-sector-probe] n=%d ok=%d empty=%d failed=%d total=%.1fs",
+        r.requested, r.ok, r.empty_sector, r.failed, r.total_seconds,
+    )
+    return HkSectorProbeResult(
+        requested=r.requested, ok=r.ok, empty_sector=r.empty_sector, failed=r.failed,
+        total_seconds=r.total_seconds, avg_seconds=r.avg_seconds,
+        sector_dist=r.sector_dist, samples=r.samples, errors=r.errors,
     )
