@@ -201,10 +201,6 @@ export default function CryptoMarketPage() {
       <TopNav />
 
       <main className="flex-1">
-        <div className="border-b border-dashed border-gold/60 bg-gold/10 px-6 py-2 text-center text-xs text-gold">
-          加密市场 · 全市场 USDT 永续真实行情(M2-A /api/v1/crypto/*)· 全域排序 + 下拉无限加载 · 点行进详情页
-        </div>
-
         <div className="mx-auto max-w-[1600px] px-6 py-5">
           {/* H1「加密市场」已删 · 顶部市场切换 Tab 已有「加密」· 标题冗余。 */}
           {/* 顶部 4 指标卡 */}
@@ -336,7 +332,7 @@ export default function CryptoMarketPage() {
           </div>
 
           <p className="mt-3 text-[11px] text-muted-foreground/60">
-            交易对/价格/涨跌/高低/成交额 = 真实(M2-A ticker · 全市场 USDT 永续)· 资金费率/账户多空比/OI 24H变化 =
+            交易对/价格/涨跌/高低/成交额 = 真实(全市场 USDT 永续)· 资金费率/账户多空比/OI 24H变化 =
             采集范围内真实,范围外(如 USDC 本位)「—」· 点行新标签打开详情页
           </p>
         </div>

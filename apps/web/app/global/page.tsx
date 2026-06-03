@@ -50,10 +50,6 @@ export default function GlobalOverviewPage() {
       <TopNav />
 
       <main className="flex-1">
-        <div className="flex items-center justify-center gap-2 border-b border-dashed border-gold/60 bg-gold/10 px-6 py-2 text-center text-xs text-gold">
-          <span className="font-bold">全球市场概览</span>
-        </div>
-
         <div className="mx-auto max-w-[1600px] px-6 py-5">
           {q.isPending && <LoadingNote className="py-10" />}
           {q.isError && <EmptyState title="暂时无法读取行情" hint="后端不可达 · 稍后自动重试" />}
