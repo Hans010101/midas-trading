@@ -109,9 +109,6 @@ jobs:
         if: always()
         run: ruff check .
 
-      # ═══ 历史腐烂(continue-on-error · 可见不阻塞 · 渐进清 · 见 docs 清债清单)═══
-      # 方案 B:存量债不阻塞合并,但每次 CI 可见红 → 清一个从这里移出一个(转硬卡)。
-      - name: "存量债③ · mypy app/(17 处 · auth/perp_engine/workflow 等历史 · 批3 待清)"
+      - name: "★ 硬卡 · mypy app/(批3 已清 17→0 · 全闸硬卡 · 三批清债完成)"
         if: always()
-        continue-on-error: true
         run: mypy app/

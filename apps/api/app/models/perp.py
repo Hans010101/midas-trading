@@ -46,7 +46,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
 # 0008 复用:订单成交 / 拒单状态(filled / rejected),不重复定义
-from app.models.virtual import OrderStatus
+from app.models.virtual import OrderStatus as OrderStatus  # 显式 re-export 给下游
 
 # ===== Enum =====
 

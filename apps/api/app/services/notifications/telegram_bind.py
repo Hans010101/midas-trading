@@ -17,7 +17,7 @@ import hmac
 import logging
 import secrets
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -94,7 +94,7 @@ async def create_bind_token(redis: Redis, user_id: UUID) -> str:
 
 async def peek_bind_token(redis: Redis, token: str) -> str | None:
     """查 token 对应的 user_id(不删 · 成功绑定后才 consume)。"""
-    user_id: str | None = await redis.get(_bind_key(token))
+    user_id: str | None = cast("str | None", await redis.get(_bind_key(token)))
     return user_id
 
 

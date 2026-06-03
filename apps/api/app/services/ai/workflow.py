@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 from langgraph.graph import END, StateGraph
 
@@ -190,7 +190,7 @@ async def _node_exit(state: DecisionState) -> dict[str, Any]:
     chan_signals = [
         ChanBuySellPoint(
             ts=p.ts, price=p.price,
-            kind=p.kind,  # type: ignore[arg-type]
+            kind=p.kind,
             description=p.description,
         )
         for p in chan_result.buy_sell_points
@@ -262,7 +262,7 @@ async def run_decision_workflow(
         "klines": klines,
     }
     final_state = await _compiled.ainvoke(state)
-    return final_state["card"]
+    return cast("DecisionCardResponse", final_state["card"])
 
 
 __all__ = ["run_decision_workflow"]

@@ -17,11 +17,12 @@ import hashlib
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 from uuid import UUID
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from sqlalchemy import delete, select
+from sqlalchemy import CursorResult, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -286,7 +287,7 @@ async def revoke_session(db: AsyncSession, *, token: str) -> bool:
     result = await db.execute(
         delete(AuthSession).where(AuthSession.token_hash == token_hash),
     )
-    return result.rowcount > 0
+    return cast("CursorResult[Any]", result).rowcount > 0
 
 
 async def revoke_all_user_sessions(db: AsyncSession, *, user_id: UUID) -> int:
@@ -294,7 +295,7 @@ async def revoke_all_user_sessions(db: AsyncSession, *, user_id: UUID) -> int:
     result = await db.execute(
         delete(AuthSession).where(AuthSession.user_id == user_id),
     )
-    return result.rowcount or 0
+    return cast("CursorResult[Any]", result).rowcount or 0
 
 
 async def cleanup_expired_sessions(db: AsyncSession) -> int:
@@ -303,4 +304,4 @@ async def cleanup_expired_sessions(db: AsyncSession) -> int:
     result = await db.execute(
         delete(AuthSession).where(AuthSession.expires_at < now),
     )
-    return result.rowcount or 0
+    return cast("CursorResult[Any]", result).rowcount or 0

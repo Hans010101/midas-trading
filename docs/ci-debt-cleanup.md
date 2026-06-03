@@ -23,10 +23,22 @@
   PTH os.path→pathlib(diagnose/cleanup 脚本)· F821 前向引用注解(factories 加 TYPE_CHECKING import)·
   DTZ005 noqa(diagnose 脚本 · CN 本地日期查 A 股故意 naive)
 
-## 存量债③ · mypy(17 · 10 文件)
-- `app/services/auth.py`(4)· `app/api/v1/auth.py`(3)· `app/services/virtual_trading/perp_engine.py`(2)
-- `app/services/ai/workflow.py`(2)· `perp_dispatcher.py`(1 · OrderStatus export)
-- `telegram_bind.py` / `feishu_bind.py` / `bot/session.py` / `alerts/registry.py` / `ai/indicators.py`(各 1)
+## ✅ 存量债③ · mypy(18 → 0)· 批3 已清(2026-06-03)· 全是标注/typing-gap 无真 bug
+全纯类型标注(import 冒烟过 · pytest 仍 664 · 零逻辑改):
+- **no-any-return(6)**:indicators/cache builtin `float()`/`int()` · perp_engine ×2 typed-var · workflow `cast`
+- **attr-defined(4)**:auth rowcount ×3 `cast(CursorResult)`(DELETE 运行时是 CursorResult)· perp_dispatcher OrderStatus(perp.py `as` 显式 re-export)
+- **unused-ignore(2)**:workflow/auth 删陈旧 `# type: ignore`
+- **arg-type(2)**:api/auth google_sub/email `cast(str, claims[...])`(JWT 值 typed object · 运行时 Google 保证 str)
+- **assignment(1)**:registry sectors `list[CnSector] | list[UsSector]`(mypy 分支收窄)
+- **redis bytes|str|None →str|None(3)**:session/telegram_bind/feishu_bind `cast("str|None")`(decode_responses=True 运行时是 str)
+
+### ★教训:本地 mypy vs CI 漂移(redis 7.4.0 vs 8.0.0)
+本地 redis 7.4.0 stub 报 `str|None`(0 错),CI 装 redis 8.0.0 stub 报 `bytes|str|None`(3 错)。
+`strict=true` 开 warn_redundant_casts → cast 在两版本下「冗余/需要」互斥,**无法盲修**。
+解法:本地 `pip install redis==8.0.0` 对齐 CI → 复现 3 错 → cast 在 redis8 下窄化非冗余 → 本地验 == CI。
+**铁律:mypy 硬卡后,本地依赖版本要对齐 CI(尤其有 stub 的 redis/sqlalchemy),否则本地绿 CI 红。**
+
+## ✅ 三批全清完成 → test.yml 全闸硬卡(hk + 全套 pytest + ruff + mypy 全 must-pass)
 
 ## 清债纪律
 1. 每清完一类(或一文件)→ 本地 + CI 确认绿 → 从 `test.yml` 对应 `continue-on-error` 步骤移除(转硬卡)。
