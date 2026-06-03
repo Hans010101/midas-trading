@@ -13,6 +13,7 @@ import { useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 
+import { SectorHeatmap } from '@/components/market-home/sector-heatmap'
 import { DataTable, TCell, TH, THead, TRow } from '@/components/ui/data-table'
 import { EmptyState, LoadingNote } from '@/components/ui/state'
 import { fetchUsBoard, type UsSpotRow } from '@/lib/api/us-market'
@@ -69,6 +70,18 @@ export function UsSections() {
 
   return (
     <div className="mt-8 space-y-6">
+      {/* 行业板块热力图(上移到榜单前 · 当市场概览 · 中概股帝王金高亮)*/}
+      {q.isSuccess && sectors.length > 0 && (
+        <section>
+          <h2 className="mb-3 font-serif text-sm font-bold text-foreground">行业板块 · 中概股板块</h2>
+          <SectorHeatmap
+            sectors={sectors.map((s) => ({ ...s, highlighted: s.name === '中概股' }))}
+            fmtAmount={fmtUsd}
+            weightNote="板块涨跌 = 池内成分等权均值 · 中概股为策展集合"
+          />
+        </section>
+      )}
+
       <section>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-serif text-sm font-bold text-foreground">热门美股 · 重点关注池</h2>
@@ -145,44 +158,6 @@ export function UsSections() {
         )}
       </section>
 
-      {/* 行业板块 + 中概股板块(中概股高亮)*/}
-      {q.isSuccess && sectors.length > 0 && (
-        <section>
-          <h2 className="mb-3 font-serif text-sm font-bold text-foreground">行业板块 · 中概股板块</h2>
-          <DataTable minWidth="560px">
-            <THead>
-              <TH>板块</TH>
-              <TH align="right">涨跌幅</TH>
-              <TH align="right">池内家数</TH>
-              <TH align="right">成交额</TH>
-            </THead>
-            <tbody>
-              {sectors.map((s) => (
-                <TRow key={s.name} className={s.name === '中概股' ? 'bg-gold/10' : undefined}>
-                  <TCell className="font-medium text-foreground">
-                    {s.name}
-                    {s.name === '中概股' && (
-                      <span className="ml-1 text-[10px] text-gold">中概股板块</span>
-                    )}
-                  </TCell>
-                  <TCell align="right" mono className={upDown(s.change_pct)}>
-                    {fmtPct(s.change_pct)}
-                  </TCell>
-                  <TCell align="right" mono className="text-muted-foreground/80">
-                    {s.stock_count}
-                  </TCell>
-                  <TCell align="right" mono className="text-muted-foreground/80">
-                    {fmtUsd(s.total_amount)}
-                  </TCell>
-                </TRow>
-              ))}
-            </tbody>
-          </DataTable>
-          <p className="mt-2 text-[11px] text-muted-foreground/60">
-            板块涨跌幅 = 池内成分等权均值 · 中概股板块为策展中概股集合
-          </p>
-        </section>
-      )}
     </div>
   )
 }
