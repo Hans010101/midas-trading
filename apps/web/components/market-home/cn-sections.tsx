@@ -9,7 +9,7 @@
  * 红线:只读行情。
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 
@@ -17,7 +17,7 @@ import { SectorHeatmap } from '@/components/market-home/sector-heatmap'
 import { DataTable, TCell, TH, THead, TRow } from '@/components/ui/data-table'
 import { Panel } from '@/components/ui/panel'
 import { EmptyState, LoadingNote } from '@/components/ui/state'
-import { fetchCnBoard, type CnBreadth, type CnSpotRow } from '@/lib/api/cn-market'
+import { fetchCnBoard, searchCnSpot, type CnBreadth, type CnSpotRow } from '@/lib/api/cn-market'
 import { cn } from '@/lib/utils'
 
 type Tab = 'gainers' | 'losers' | 'amount'
@@ -52,21 +52,41 @@ function openDetail(symbol: string, name: string) {
 export function CnSections() {
   const q = useQuery({
     queryKey: ['cn-board'],
-    queryFn: ({ signal }) => fetchCnBoard(signal),
+    queryFn: ({ signal }) => fetchCnBoard(100, signal),
     retry: 0,
     staleTime: 30_000,
     refetchInterval: 60_000,
   })
   const [tab, setTab] = useState<Tab>('gainers')
+  const [query, setQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+
+  // 搜索输入防抖 300ms → 减少 /cn/search 请求(全市场搜索走后端)
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 300)
+    return () => clearTimeout(t)
+  }, [query])
+
+  // 全市场搜索(后端 /cn/search · 覆盖 ~5500)· 仅在有关键词时启用
+  const searchQ = useQuery({
+    queryKey: ['cn-search', debouncedQuery],
+    queryFn: ({ signal }) => searchCnSpot(debouncedQuery, 30, signal),
+    enabled: debouncedQuery.length > 0,
+    retry: 0,
+    staleTime: 30_000,
+  })
+  const isSearching = debouncedQuery.length > 0
 
   const breadth = q.data?.breadth ?? null
-  const rows: CnSpotRow[] =
+  const boardRows: CnSpotRow[] =
     tab === 'gainers'
       ? (q.data?.gainers ?? [])
       : tab === 'losers'
         ? (q.data?.losers ?? [])
         : (q.data?.top_amount ?? [])
   const sectors = q.data?.sectors ?? []
+  // 搜索态 → 显示搜索结果(替代榜单);否则显示当前 tab 前 100
+  const rows = isSearching ? (searchQ.data ?? []) : boardRows
 
   return (
     <div className="mt-8 space-y-6">
@@ -97,22 +117,40 @@ export function CnSections() {
       {/* 榜单 3 Tab */}
       {q.isSuccess && breadth && (
         <section>
-          <div className="mb-3 flex overflow-hidden rounded-md border border-paper text-sm">
-            {TABS.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => setTab(t.key)}
-                className={cn(
-                  'px-4 py-1.5 transition-colors',
-                  tab === t.key
-                    ? 'bg-midas-red text-white'
-                    : 'text-muted-foreground hover:bg-midas-red-glow/50',
-                )}
-              >
-                {t.label}
-              </button>
-            ))}
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            {/* 搜索态隐藏 tab(搜索是全市场,与涨跌/成交额排序无关)*/}
+            {isSearching ? (
+              <span className="text-sm text-muted-foreground">全市场搜索结果</span>
+            ) : (
+              <div className="flex overflow-hidden rounded-md border border-paper text-sm">
+                {TABS.map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => setTab(t.key)}
+                    className={cn(
+                      'px-4 py-1.5 transition-colors',
+                      tab === t.key
+                        ? 'bg-midas-red text-white'
+                        : 'text-muted-foreground hover:bg-midas-red-glow/50',
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* 搜索框 · 服务端搜全市场 ~5500(覆盖榜单外的标的)*/}
+            <div className="flex items-center gap-1.5 rounded-md border border-paper bg-surface-card px-3 py-1.5 text-sm">
+              <SearchIcon />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="搜索 A股全市场(代码 / 名称 · ~5500)"
+                className="w-52 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+              />
+            </div>
           </div>
           <DataTable minWidth="640px">
             <THead>
@@ -124,10 +162,17 @@ export function CnSections() {
               <TH align="right">成交额</TH>
             </THead>
             <tbody>
-              {rows.length === 0 && (
+              {isSearching && searchQ.isPending && (
                 <TRow>
                   <TCell align="center" className="py-8 text-muted-foreground/60" colSpan={6}>
-                    暂无数据
+                    搜索中…
+                  </TCell>
+                </TRow>
+              )}
+              {!(isSearching && searchQ.isPending) && rows.length === 0 && (
+                <TRow>
+                  <TCell align="center" className="py-8 text-muted-foreground/60" colSpan={6}>
+                    {isSearching ? '无匹配标的(试试代码或名称)' : '暂无数据'}
                   </TCell>
                 </TRow>
               )}
@@ -157,7 +202,9 @@ export function CnSections() {
             </tbody>
           </DataTable>
           <p className="mt-2 text-[11px] text-muted-foreground/60">
-            点击个股看详情 / 下单 · 数据 Sina 实时快照
+            {isSearching
+              ? `搜索 A股全市场(~5500)· 命中 ${rows.length} 只 · 点击看详情 / 下单`
+              : '榜单显示前 100 · 更多股票请直接搜索查询 · 点击个股看详情 / 下单 · 数据 Sina 实时快照'}
           </p>
         </section>
       )}
@@ -194,5 +241,22 @@ function BreadthBar({ b }: { b: CnBreadth }) {
         </span>
       </div>
     </Panel>
+  )
+}
+
+function SearchIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      className="text-muted-foreground/50"
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
   )
 }

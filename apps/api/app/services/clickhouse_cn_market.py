@@ -101,6 +101,34 @@ async def select_latest_spot(
     ]
 
 
+async def select_spot_search(
+    client: AsyncClient, *, query: str, limit: int,
+) -> list[CnSpotRow]:
+    """A股全市场搜索(最新快照 · symbol / name 子串命中 · 成交额降序)· 覆盖全 ~5500。
+
+    照搬 clickhouse_client.search_symbols 的 positionCaseInsensitive 模式(子串匹配,
+    非 LIKE → 无 % / _ 通配注入风险)· 中文名同样适用(无大小写概念,子串即可)。
+    """
+    sql = """
+        SELECT symbol, name, last_price, change_pct, change_amount, amount, volume
+        FROM cn_spot_snapshot
+        WHERE ts = (SELECT max(ts) FROM cn_spot_snapshot)
+          AND (positionCaseInsensitive(symbol, %(q)s) > 0
+               OR positionCaseInsensitive(name, %(q)s) > 0)
+        ORDER BY amount DESC
+        LIMIT %(n)s
+    """
+    result = await client.query(sql, parameters={"q": query, "n": limit})
+    return [
+        CnSpotRow(
+            symbol=str(r[0]), name=str(r[1]), last_price=float(r[2]),
+            change_pct=float(r[3]), change_amount=float(r[4]),
+            amount=float(r[5]), volume=float(r[6]),
+        )
+        for r in result.result_rows
+    ]
+
+
 # ============================================================================
 # 2 · 情绪条
 # ============================================================================
