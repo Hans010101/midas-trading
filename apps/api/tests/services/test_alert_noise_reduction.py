@@ -134,21 +134,31 @@ def test_is_quiet_exempt_alert_and_price_anomaly_not_exempt():
 
 
 @pytest.mark.asyncio
-async def test_dispatch_quiet_drops_alert(db_session: AsyncSession):
-    """quiet 时段 + AlertTriggeredEvent(非豁免)→ 不发 + dropped_quiet=True。"""
+async def test_dispatch_quiet_drops_alert(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+):
+    """quiet 时段 + AlertTriggeredEvent(非豁免)→ 不发 + dropped_quiet=True。
+
+    ★ 确定化:monkeypatch is_in_quiet_now→True(不依赖运行时 wall-clock · 否则跨 CI run 时刻
+    不同会 flaky)· 本测验的是「quiet=True 时 dispatch 丢弃告警」的 dispatch 行为;quiet 窗口
+    边界([start,end) 端点排他)已由 is_in_quiet_now 注入-now 单测覆盖,此处不重复测边界。
+    """
     user = await make_user(db_session)
     db_session.add(NotificationConfig(
         user_id=user.id, tg_chat_id="123",  # 已绑(但不应真发)
-        quiet_hours_enabled=True, quiet_hours_start=0, quiet_hours_end=23,  # 全天 quiet
+        quiet_hours_enabled=True, quiet_hours_start=0, quiet_hours_end=23,
         quiet_hours_tz="UTC",
     ))
     await db_session.commit()
+    # 确定化 quiet=True(dispatch 默认用真实 wall-clock · 不注入 now → 不 stub 会时间依赖 flaky)
+    monkeypatch.setattr(
+        "app.services.notifications.dispatcher.is_in_quiet_now", lambda *_a, **_k: True,
+    )
 
     evt = AlertTriggeredEvent(
         market="crypto", symbol="BTC/USDT", indicator_label="RSI",
         operator="gt", threshold=70.0, value=80.0,
     )
-    # 用 freeze 的 now(虽然 enabled+0-23 全天 quiet,无需 freeze)
     result = await dispatch(db_session, user.id, evt)
     assert result.any_sent is False
     assert result.dropped_quiet is True
