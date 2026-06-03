@@ -23,7 +23,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { MarketSwitcher } from '@/components/layout/market-switcher'
 import { TopNav } from '@/components/layout/top-nav'
 import {
   fetchCryptoOverview,
@@ -200,9 +199,6 @@ export default function CryptoMarketPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <TopNav />
-      <div className="shrink-0 border-b border-paper bg-background px-6 py-2">
-        <MarketSwitcher />
-      </div>
 
       <main className="flex-1">
         <div className="border-b border-dashed border-gold/60 bg-gold/10 px-6 py-2 text-center text-xs text-gold">

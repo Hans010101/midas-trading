@@ -13,7 +13,6 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
-import { MarketSwitcher } from '@/components/layout/market-switcher'
 import { OrderConfirmDialog } from '@/components/workbench/order-confirm-dialog'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useAccount, usePortfolio } from '@/hooks/use-virtual'
@@ -59,10 +58,7 @@ export function Header() {
   return (
     <header className="h-14 shrink-0 border-b border-midas-red bg-background">
       <div className="flex h-full items-center justify-between gap-4 px-6">
-        {/* 左侧:市场 Tab(抽成全站共用 MarketSwitcher · 行为/样式不变)*/}
-        <MarketSwitcher />
-
-        {/* 中间:钱包指示(随 market 切换)*/}
+        {/* 钱包指示(随 market 切换)· 市场 Tab 已上移到全站 TopNav(2026-06 顶栏重构)*/}
         <WalletIndicator
           market={market}
           isActivated={isActivated}
