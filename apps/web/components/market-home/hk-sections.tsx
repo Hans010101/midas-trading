@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 
+import { SectorHeatmap } from '@/components/market-home/sector-heatmap'
 import { DataTable, TCell, TH, THead, TRow } from '@/components/ui/data-table'
 import { Panel } from '@/components/ui/panel'
 import { EmptyState, LoadingNote } from '@/components/ui/state'
@@ -134,6 +135,18 @@ export function HkSections() {
         {breadth && <BreadthBar b={breadth} />}
       </section>
 
+      {/* 行业板块热力图(上移到榜单前 · 当市场概览 · 独立端点 yfinance GICS)*/}
+      {sectorQ.isSuccess && sectors.length > 0 && (
+        <section>
+          <h2 className="mb-3 font-serif text-sm font-bold text-foreground">行业板块</h2>
+          <SectorHeatmap
+            sectors={sectors}
+            fmtAmount={fmtAmount}
+            weightNote="行业 GICS(yfinance)· 成交额加权 · 范围主要成分 ~900 只"
+          />
+        </section>
+      )}
+
       {/* 工具条(榜单 Tab + 搜索框)+ 榜单(无限滚动到 ~900 只) */}
       {q.isSuccess && breadth && (
         <section>
@@ -224,46 +237,6 @@ export function HkSections() {
         </section>
       )}
 
-      {/* 行业板块(yfinance GICS 行业源 · A2)· sector 待 worker 采时不显示(空则整段不渲染)*/}
-      {sectorQ.isSuccess && sectors.length > 0 && (
-        <section>
-          <h2 className="mb-3 font-serif text-sm font-bold text-foreground">行业板块</h2>
-          <DataTable minWidth="640px">
-            <THead>
-              <TH>板块</TH>
-              <TH align="right">涨跌幅</TH>
-              <TH align="right">家数</TH>
-              <TH>领涨股</TH>
-              <TH align="right">成交额</TH>
-            </THead>
-            <tbody>
-              {sectors.slice(0, 20).map((s) => (
-                <TRow key={s.name}>
-                  <TCell className="font-medium text-foreground">{s.name}</TCell>
-                  <TCell align="right" mono className={upDown(s.change_pct)}>
-                    {fmtPct(s.change_pct)}
-                  </TCell>
-                  <TCell align="right" mono className="text-muted-foreground/80">
-                    {s.stock_count}
-                  </TCell>
-                  <TCell className="text-muted-foreground/80">
-                    {s.leader_name}
-                    <span className={cn('ml-1 font-mono', upDown(s.leader_change_pct))}>
-                      {fmtPct(s.leader_change_pct)}
-                    </span>
-                  </TCell>
-                  <TCell align="right" mono className="text-muted-foreground/80">
-                    {fmtAmount(s.total_amount)}
-                  </TCell>
-                </TRow>
-              ))}
-            </tbody>
-          </DataTable>
-          <p className="mt-2 text-[11px] text-muted-foreground/60">
-            行业分类 GICS(yfinance)· 板块涨跌按成交额加权 · 范围 = 主要成分股 ~900 只
-          </p>
-        </section>
-      )}
     </div>
   )
 }
