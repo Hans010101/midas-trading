@@ -32,7 +32,7 @@ export interface HkBoardResponse {
   gainers: HkSpotRow[]
   losers: HkSpotRow[]
   top_amount: HkSpotRow[]
-  // ★ 无 sectors:港股全市场无现成行业源(对比 CnBoardResponse)· 留后续
+  // ★ 板块不放 /board:走独立端点 /hk/sectors(yfinance GICS 行业源 · A2 · 见 fetchHkSectors)
 }
 
 export class HkMarketApiError extends Error {
@@ -63,4 +63,24 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
 /** 港股榜单 + 情绪条(主要成分股)· limit 默认 900 = 数据池全量 · 供前端滚动加载到底。 */
 export function fetchHkBoard(limit = 900, signal?: AbortSignal): Promise<HkBoardResponse> {
   return getJson<HkBoardResponse>(`/api/v1/hk/board?limit=${limit}`, signal)
+}
+
+/** 港股行业板块单行(yfinance GICS 行业 + spot 聚合 · 对标 A股 CnSector)。 */
+export interface HkSectorAgg {
+  name: string
+  change_pct: number
+  stock_count: number
+  total_amount: number
+  leader_name: string
+  leader_change_pct: number
+}
+
+export interface HkSectorsResponse {
+  sectors: HkSectorAgg[]
+  data_as_of: string | null
+}
+
+/** 港股行业板块(yfinance GICS 行业 + 新浪 spot 聚合)· 只读 · sector 待 worker 采时 sectors 为空。 */
+export function fetchHkSectors(signal?: AbortSignal): Promise<HkSectorsResponse> {
+  return getJson<HkSectorsResponse>('/api/v1/hk/sectors', signal)
 }

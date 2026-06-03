@@ -116,3 +116,25 @@ class HkSectorProbeResult(BaseModel):
     sector_dist: dict[str, int] = Field(default_factory=dict, description="sector → 命中数(看分布)")
     samples: dict[str, str] = Field(default_factory=dict, description="code → sector 抽样(人眼看)")
     errors: list[str] = Field(default_factory=list, description="失败原因抽样(★看有没有 429 限流)")
+
+
+class HkSectorAgg(BaseModel):
+    """港股行业板块单行 · yfinance GICS sector 分类 + 新浪 spot 聚合(对标 A股 CnSector)。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    name: str = Field(min_length=1, description="板块中文名(GICS 英→中 · 空/未知归「其他」)")
+    change_pct: float = Field(description="板块涨跌幅 %(成交额加权 · 可负)")
+    stock_count: int = Field(ge=0, description="成分股家数(行情池内)")
+    total_amount: float = Field(ge=0, description="板块总成交额(港币元)")
+    leader_name: str = Field(default="", description="领涨股名")
+    leader_change_pct: float = Field(default=0.0, description="领涨股涨跌幅 %")
+
+
+class HkSectorsResponse(BaseModel):
+    """`GET /api/v1/hk/sectors` 响应 · 港股行业板块(对标 A股 board 的 sectors · 只读)。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    sectors: list[HkSectorAgg] = Field(description="板块列表(按涨跌% 降序)· 空表示 sector 待采")
+    data_as_of: AwareDatetime | None = Field(default=None, description="行情快照最新时间 · 截至")

@@ -18,25 +18,31 @@ import logging
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import ClickHouseDep
+from app.core.database import get_db
 from app.schemas.hk_market import (
     HkBoardLotScanResult,
     HkBoardResponse,
     HkKlineSourceProbe,
     HkSectorProbeResult,
+    HkSectorsResponse,
 )
 from app.schemas.market_home import MarketHomeOverview
 from app.services.clickhouse_hk_market import select_latest_breadth, select_latest_spot
 from app.services.clickhouse_market_home import select_latest_indices
 from app.services.hk_board_lot import fetch_hkex_board_lots
 from app.services.hk_kline_probe import probe_hk_kline_sources
+from app.services.hk_sector import aggregate_hk_sectors, load_sector_map
 from app.services.hk_sector_probe import probe_hk_sectors
 from app.services.market_calendar import compute_market_status
 from app.services.market_home_config import HK_INDEX_CODES
 
 logger = logging.getLogger(__name__)
+
+DbDep = Annotated[AsyncSession, Depends(get_db)]
 
 router = APIRouter(prefix="/hk", tags=["hk"])
 
@@ -90,6 +96,30 @@ async def get_hk_board(
         losers=losers,
         top_amount=top_amount,
     )
+
+
+@router.get(
+    "/sectors",
+    response_model=HkSectorsResponse,
+    summary="港股行业板块(yfinance GICS 行业 + 新浪 spot 聚合 · 对标 A股 · 只读)",
+    description=(
+        "join hk_sector 表(worker yfinance 周采 · code→GICS sector)+ 行情池 spot(~900)→ "
+        "按【中文板块】聚合涨跌%(成交额加权)/ 家数 / 成交额 / 领涨股 · 按涨跌% 降序。"
+        "★ 只读 · 行业分类待 worker 采(表空则返空 sectors)· 不碰下单/红线。"
+    ),
+)
+async def get_hk_sectors(ch: ClickHouseDep, db: DbDep) -> HkSectorsResponse:
+    # 行情池(成交额前 900)+ PG 行业表 → Python 聚合(纯函数 · 可单测)
+    spot = await select_latest_spot(
+        ch._client, sort_by="amount", order="DESC", limit=900,  # noqa: SLF001
+    )
+    sector_map = await load_sector_map(db)
+    sectors = aggregate_hk_sectors(
+        sector_map, [(r.symbol, r.name, r.change_pct, r.amount) for r in spot],
+    )
+    # data_as_of 取情绪条快照 ts(与 /board 一致 · 同一份行情快照)
+    breadth = await select_latest_breadth(ch._client)  # noqa: SLF001
+    return HkSectorsResponse(sectors=sectors, data_as_of=breadth.ts if breadth else None)
 
 
 @router.get(
