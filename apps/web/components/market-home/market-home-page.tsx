@@ -1,50 +1,26 @@
 'use client'
 
 /**
- * A股 / 美股 市场首页骨架(0023 阶段③ · 3.1 基建)· cn / us 共用同一份。
+ * A股 / 美股 / 港股 市场首页骨架(0023 阶段③)· cn / us / hk 共用同一份。
  *
- * 借用加密列表页架构 + 0022 阶段② 共用组件库(Panel / StatusPill / EmptyState / LoadingNote)。
- * 3.1 内容:顶部市场切换 + 市场状态条(交易时段)+ 大盘指数卡(4 张)+ 榜单占位(3.2 / 3.3)。
- *
- * 数据走只读端点 /api/v1/{cn|us}/overview(lib/api/market-home.ts)。
+ * 大盘指数卡(4 张)+ 各市场榜单 sections。数据走只读端点 /api/v1/{cn|us|hk}/overview。
  * 红线:大盘指数为真实行情快照(只读)· 非交易时段为最新收盘快照。
+ *
+ * 2026-06 顶栏重构:市场 Tab 上移到全站 TopNav(去掉本页独立 MarketSwitcher 行)·
+ * 去掉「{市场}市场 盘中 截至」状态条(原 StatusBanner · 无实质信息价值 · status 数据不再展示)。
  */
 
 import { useQuery } from '@tanstack/react-query'
 
-import { MarketSwitcher } from '@/components/layout/market-switcher'
 import { TopNav } from '@/components/layout/top-nav'
 import { CnSections } from '@/components/market-home/cn-sections'
 import { HkSections } from '@/components/market-home/hk-sections'
 import { QuoteCard } from '@/components/market-home/index-card'
 import { UsSections } from '@/components/market-home/us-sections'
-import { StatusPill } from '@/components/ui/direction-badge'
 import { EmptyState, LoadingNote } from '@/components/ui/state'
-import {
-  fetchMarketOverview,
-  type MarketKind,
-  type MarketStatusCode,
-  type MarketStatusInfo,
-} from '@/lib/api/market-home'
+import { fetchMarketOverview, type MarketKind } from '@/lib/api/market-home'
 
 const MARKET_NAME: Record<MarketKind, string> = { cn: 'A 股', us: '美股', hk: '港股' }
-
-const STATUS_TONE: Record<MarketStatusCode, 'success' | 'warn' | 'muted' | 'neutral'> = {
-  open: 'success',
-  pre_market: 'warn',
-  post_market: 'warn',
-  closed: 'muted',
-  closed_holiday: 'neutral',
-}
-
-function fmtTime(iso: string | null): string {
-  if (!iso) return ''
-  try {
-    return new Date(iso).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  } catch {
-    return ''
-  }
-}
 
 export function MarketHomePage({ market }: { market: MarketKind }) {
   const q = useQuery({
@@ -60,13 +36,8 @@ export function MarketHomePage({ market }: { market: MarketKind }) {
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <TopNav />
-      <div className="shrink-0 border-b border-paper bg-background px-6 py-2">
-        <MarketSwitcher />
-      </div>
 
       <main className="flex-1">
-        <StatusBanner market={market} status={q.data?.status} loading={q.isPending} />
-
         <div className="mx-auto max-w-[1600px] px-6 py-5">
           <h2 className="mb-3 font-serif text-sm font-bold text-foreground">大盘指数</h2>
           {q.isPending && <LoadingNote className="py-10" />}
@@ -103,27 +74,6 @@ export function MarketHomePage({ market }: { market: MarketKind }) {
           </p>
         </div>
       </main>
-    </div>
-  )
-}
-
-function StatusBanner({
-  market,
-  status,
-  loading,
-}: {
-  market: MarketKind
-  status?: MarketStatusInfo
-  loading: boolean
-}) {
-  const tone = status ? STATUS_TONE[status.status] : 'muted'
-  const label = loading ? '载入中…' : (status?.label ?? '—')
-  const dataAt = status?.data_as_of ? fmtTime(status.data_as_of) : ''
-  return (
-    <div className="flex items-center justify-center gap-2 border-b border-dashed border-gold/60 bg-gold/10 px-6 py-2 text-center text-xs text-gold">
-      <span className="font-bold">{MARKET_NAME[market]}市场</span>
-      <StatusPill tone={tone}>{label}</StatusPill>
-      {dataAt && <span className="text-muted-foreground/70">截至 {dataAt}</span>}
     </div>
   )
 }

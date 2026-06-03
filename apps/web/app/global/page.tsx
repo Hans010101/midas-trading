@@ -12,7 +12,6 @@ import { useQuery } from '@tanstack/react-query'
 import dynamic from 'next/dynamic'
 import { useMemo } from 'react'
 
-import { MarketSwitcher } from '@/components/layout/market-switcher'
 import { TopNav } from '@/components/layout/top-nav'
 import { QuoteCard } from '@/components/market-home/index-card'
 import type { MapQuote } from '@/components/market-home/world-map'
@@ -49,9 +48,6 @@ export default function GlobalOverviewPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <TopNav />
-      <div className="shrink-0 border-b border-paper bg-background px-6 py-2">
-        <MarketSwitcher />
-      </div>
 
       <main className="flex-1">
         <div className="flex items-center justify-center gap-2 border-b border-dashed border-gold/60 bg-gold/10 px-6 py-2 text-center text-xs text-gold">
