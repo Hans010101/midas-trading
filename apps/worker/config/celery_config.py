@@ -48,6 +48,13 @@ beat_schedule = {
         "schedule": crontab(hour="16", minute="45", day_of_week="mon-fri"),
         "options": {"expires": 3600},
     },
+    "update-hk-sector": {
+        "task": "tasks.market.hk_sector_scan",
+        # 港股行业分类(板块 A2)· 周级(GICS 行业稳定 · 不需每日)· 周一 17:00 HKT 收盘后 ·
+        # yfinance .info 采行情池 ~900(实测 ~35s 不限流)· worker_ready 启动也采一次(部署即填)
+        "schedule": crontab(hour="17", minute="0", day_of_week="mon"),
+        "options": {"expires": 3600},
+    },
     "daily-equity-snapshot": {
         "task": "tasks.equity_snapshot.take_daily_snapshots",
         # 每日 23:59 给所有激活子账户写一条 daily 快照

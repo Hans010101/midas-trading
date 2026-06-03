@@ -6,7 +6,8 @@
  * ★★ 标注「主要成分股 / 活跃精选」· 【绝不写"全市场"】(新浪限页 ~900 只 · 非 2764)· 诚实。
  * 三块:情绪条(涨跌平 + 总成交额 · ★港股无涨跌停)+ 工具条(榜单 Tab + 搜索框)+ 榜单(无限滚动到 ~900 只到底)。
  * 搜索 = 本地过滤当前榜单 ~900 只主要成分(代码 / 名称)· 点行 → /hk-preview(K线+缠论)。
- * 板块暂不做(全市场无行业源 · 留后续)· 红线:只读 · 港股不下单不接 AI(阶段三)。
+ * 行业板块(A2)走独立端点 /hk/sectors(yfinance GICS 行业源 · worker 周采 · 见下方板块区)。
+ * 红线:只读 · 港股下单走详情页(阶段三 · 本页不下单)。
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -16,7 +17,7 @@ import { useQuery } from '@tanstack/react-query'
 import { DataTable, TCell, TH, THead, TRow } from '@/components/ui/data-table'
 import { Panel } from '@/components/ui/panel'
 import { EmptyState, LoadingNote } from '@/components/ui/state'
-import { fetchHkBoard, type HkBreadth, type HkSpotRow } from '@/lib/api/hk-market'
+import { fetchHkBoard, fetchHkSectors, type HkBreadth, type HkSpotRow } from '@/lib/api/hk-market'
 import { cn } from '@/lib/utils'
 
 const PAGE_STEP = 30 // 无限滚动每次续加载行数(数据池 ~900 只 · 到底为止)
@@ -58,11 +59,20 @@ export function HkSections() {
     staleTime: 30_000,
     refetchInterval: 60_000,
   })
+  // 行业板块(独立端点 · yfinance GICS 行业源 · A2)· 不和 board 混 · 频率低些
+  const sectorQ = useQuery({
+    queryKey: ['hk-sectors'],
+    queryFn: ({ signal }) => fetchHkSectors(signal),
+    retry: 0,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+  })
   const [tab, setTab] = useState<Tab>('gainers')
   const [query, setQuery] = useState('')
   const [visibleCount, setVisibleCount] = useState(PAGE_STEP)
 
   const breadth = q.data?.breadth ?? null
+  const sectors = sectorQ.data?.sectors ?? []
 
   // 当前 tab 全集(~900 只 · 后端已按对应维度排序)
   const fullRows: HkSpotRow[] = useMemo(() => {
@@ -210,6 +220,47 @@ export function HkSections() {
           <p className="mt-2 text-[11px] text-muted-foreground/60">
             ★ 主要成分股 / 活跃精选(~900 只 · 非全市场 2764)· 共 {viewRows.length} 只 ·
             点击看 K线 + 缠论 · 港股只读不下单
+          </p>
+        </section>
+      )}
+
+      {/* 行业板块(yfinance GICS 行业源 · A2)· sector 待 worker 采时不显示(空则整段不渲染)*/}
+      {sectorQ.isSuccess && sectors.length > 0 && (
+        <section>
+          <h2 className="mb-3 font-serif text-sm font-bold text-foreground">行业板块</h2>
+          <DataTable minWidth="640px">
+            <THead>
+              <TH>板块</TH>
+              <TH align="right">涨跌幅</TH>
+              <TH align="right">家数</TH>
+              <TH>领涨股</TH>
+              <TH align="right">成交额</TH>
+            </THead>
+            <tbody>
+              {sectors.slice(0, 20).map((s) => (
+                <TRow key={s.name}>
+                  <TCell className="font-medium text-foreground">{s.name}</TCell>
+                  <TCell align="right" mono className={upDown(s.change_pct)}>
+                    {fmtPct(s.change_pct)}
+                  </TCell>
+                  <TCell align="right" mono className="text-muted-foreground/80">
+                    {s.stock_count}
+                  </TCell>
+                  <TCell className="text-muted-foreground/80">
+                    {s.leader_name}
+                    <span className={cn('ml-1 font-mono', upDown(s.leader_change_pct))}>
+                      {fmtPct(s.leader_change_pct)}
+                    </span>
+                  </TCell>
+                  <TCell align="right" mono className="text-muted-foreground/80">
+                    {fmtAmount(s.total_amount)}
+                  </TCell>
+                </TRow>
+              ))}
+            </tbody>
+          </DataTable>
+          <p className="mt-2 text-[11px] text-muted-foreground/60">
+            行业分类 GICS(yfinance)· 板块涨跌按成交额加权 · 范围 = 主要成分股 ~900 只
           </p>
         </section>
       )}

@@ -22,6 +22,7 @@ from tasks import (  # noqa: E402, F401
     data_ingest,
     equity_snapshot,
     hk_board_lot_ingest,
+    hk_sector_ingest,
     incremental,
     market_home_ingest,
     notifications,
@@ -48,3 +49,8 @@ def _on_worker_ready(**_kwargs: object) -> None:
         hk_board_lot_ingest.hk_board_lot_scan.delay()
     except Exception:  # noqa: BLE001
         logger.exception("[worker_ready] 入队 hk_board_lot_scan 失败")
+    try:
+        # 港股板块 A2:启动采一次行业分类(部署即填 hk_sector,不必等周 beat · ~35s)
+        hk_sector_ingest.hk_sector_scan.delay()
+    except Exception:  # noqa: BLE001
+        logger.exception("[worker_ready] 入队 hk_sector_scan 失败")
