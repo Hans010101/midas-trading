@@ -97,3 +97,22 @@ class HkKlineSourceProbe(BaseModel):
     yfinance_ok: bool = Field(description="yfinance 现备用源可达")
     yfinance_rows: int = Field(description="yfinance 返回行数(探测用 1mo)")
     yfinance_error: str | None = Field(default=None, description="yfinance 失败原因")
+
+
+class HkSectorProbeResult(BaseModel):
+    """`GET /api/v1/hk/sector-probe` 响应 · 港股板块源 yfinance `.info` sector 生产探测(只读)。
+
+    验唯一可达免费行业源(yfinance GICS sector)的【批量速率 + 限流 + 拿到率】· 不写库不改板块。
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    requested: int = Field(description="抽样请求数(行情池成交额前 N)")
+    ok: int = Field(description="拿到非空 sector 数")
+    empty_sector: int = Field(description=".info 成功但 sector 空(小盘常见 → 归其他)")
+    failed: int = Field(description="调用异常数(含限流 / 超时)")
+    total_seconds: float = Field(description="批量总耗时(并发 wall-clock)· 折算 ~900 看撑不撑得起")
+    avg_seconds: float = Field(description="摊到每只")
+    sector_dist: dict[str, int] = Field(default_factory=dict, description="sector → 命中数(看分布)")
+    samples: dict[str, str] = Field(default_factory=dict, description="code → sector 抽样(人眼看)")
+    errors: list[str] = Field(default_factory=list, description="失败原因抽样(★看有没有 429 限流)")
