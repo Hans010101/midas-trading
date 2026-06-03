@@ -70,7 +70,18 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await r.json()) as T
 }
 
-/** A股榜单 + 情绪条 + 行业板块(一次取齐)。 */
-export function fetchCnBoard(signal?: AbortSignal): Promise<CnBoardResponse> {
-  return getJson<CnBoardResponse>('/api/v1/cn/board', signal)
+/** A股榜单 + 情绪条 + 行业板块(一次取齐)· limit 默认 100 = 各榜显示前 100。 */
+export function fetchCnBoard(limit = 100, signal?: AbortSignal): Promise<CnBoardResponse> {
+  return getJson<CnBoardResponse>(`/api/v1/cn/board?limit=${limit}`, signal)
+}
+
+/**
+ * A股全市场搜索(代码 / 中文名 · 覆盖全 ~5500)。
+ * 走后端 /cn/search(查 cn_spot_snapshot 全市场快照)· 返带价/涨跌的行,可直接渲染 + 点进详情。
+ */
+export function searchCnSpot(q: string, limit = 30, signal?: AbortSignal): Promise<CnSpotRow[]> {
+  return getJson<CnSpotRow[]>(
+    `/api/v1/cn/search?q=${encodeURIComponent(q)}&limit=${limit}`,
+    signal,
+  )
 }

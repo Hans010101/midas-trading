@@ -17,12 +17,13 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from app.api.deps import ClickHouseDep
-from app.schemas.cn_market import CnBoardResponse
+from app.schemas.cn_market import CnBoardResponse, CnSpotRow
 from app.schemas.market_home import MarketHomeOverview
 from app.services.clickhouse_cn_market import (
     select_latest_breadth,
     select_latest_sectors,
     select_latest_spot,
+    select_spot_search,
 )
 from app.services.clickhouse_market_home import select_latest_indices, select_trade_days
 from app.services.market_calendar import compute_market_status
@@ -90,3 +91,23 @@ async def get_cn_board(
         top_amount=top_amount,
         sectors=sectors,
     )
+
+
+@router.get(
+    "/search",
+    response_model=list[CnSpotRow],
+    summary="A股全市场标的搜索(代码 / 中文名 模糊匹配 · 覆盖全 ~5500)",
+    description=(
+        "查最新全市场快照(cn_spot_snapshot · ~5500 只)· symbol / name 子串命中 · "
+        "成交额降序 · 返带价/涨跌的行,前端可直接渲染 + 点进详情。只读。"
+    ),
+)
+async def search_cn_symbols(
+    ch: ClickHouseDep,
+    q: Annotated[str, Query(min_length=1, max_length=32, description="搜索关键词(代码 / 中文名)")],
+    limit: Annotated[int, Query(ge=1, le=50)] = 30,
+) -> list[CnSpotRow]:
+    keyword = q.strip()
+    if not keyword:  # 全空白 → 视为无关键词,返回空(不退化成「匹配全部」)
+        return []
+    return await select_spot_search(ch._client, query=keyword, limit=limit)  # noqa: SLF001
