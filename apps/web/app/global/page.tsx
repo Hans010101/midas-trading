@@ -84,10 +84,6 @@ export default function GlobalOverviewPage() {
               </div>
             </section>
           ))}
-
-          <p className="mt-4 text-[11px] text-muted-foreground/60">
-            全球核心市场指标 · 数据先采集进库再展示(~15min 延迟)
-          </p>
         </div>
       </main>
     </div>
