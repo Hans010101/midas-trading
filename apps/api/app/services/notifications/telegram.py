@@ -107,6 +107,34 @@ async def _post_json(
     return cast(dict[str, Any], body)
 
 
+async def send_photo(
+    bot_token: str,
+    chat_id: str,
+    photo_url: str,
+    *,
+    caption: str | None = None,
+    parse_mode: str = "Markdown",
+    reply_markup: dict[str, Any] | None = None,
+    timeout: float = 10.0,
+    client: httpx.AsyncClient | None = None,
+) -> dict[str, Any]:
+    """sendPhoto(photo=URL · TG 服务端拉取渲图)· KLINE-001 K线图截图。失败抛 TelegramApiError。
+
+    photo 用 URL(JSON · 无需 multipart)· URL 404/不可达 → TG 返 ok=false → _post_json 抛错
+    → 调用方(_send_photo_safe)回退发文本网页链接。caption 支持 Markdown · reply_markup 保留按钮。
+    timeout 比纯文本长(TG 要拉图渲染)。
+    """
+    payload: dict[str, Any] = {"chat_id": chat_id, "photo": photo_url}
+    if caption is not None:
+        payload["caption"] = caption
+        payload["parse_mode"] = parse_mode
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
+    return await _post_json(
+        bot_token, "sendPhoto", payload, timeout=timeout, client=client,
+    )
+
+
 async def answer_callback_query(
     bot_token: str,
     callback_query_id: str,

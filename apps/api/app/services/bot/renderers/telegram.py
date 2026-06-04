@@ -27,6 +27,8 @@ class BotReply:
 
     text: str
     keyboard: Keyboard | None = None
+    # KLINE-001:非空 → transport 优先 sendPhoto(text 作 caption · 失败回退 sendMessage 文本)。
+    photo_url: str | None = None
 
 
 def _to_keyboard(buttons: tuple[tuple[Button, ...], ...]) -> Keyboard | None:
@@ -62,4 +64,6 @@ def render_for_telegram(reply: ReplyModel) -> BotReply:
         text = f"{header}\n\n{reply.text}"
     if reply.disclaimer is not None:
         text = f"{text}\n\n_{reply.disclaimer}_"
-    return BotReply(text=text, keyboard=_to_keyboard(reply.buttons))
+    return BotReply(
+        text=text, keyboard=_to_keyboard(reply.buttons), photo_url=reply.photo_url,
+    )

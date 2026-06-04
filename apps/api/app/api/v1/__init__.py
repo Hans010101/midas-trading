@@ -4,6 +4,7 @@ from app.api.v1.alert_rules import router as alert_rules_router
 from app.api.v1.analysis import router as analysis_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.bot_preset import router as bot_preset_router
+from app.api.v1.chart import router as chart_router
 from app.api.v1.cn import router as cn_router
 from app.api.v1.crypto import router as crypto_router
 from app.api.v1.feishu import router as feishu_router
@@ -30,6 +31,8 @@ router.include_router(feishu_router)
 router.include_router(analysis_router)
 router.include_router(alert_rules_router)
 router.include_router(bot_preset_router)
+# KLINE-001 · K线图 PNG 端点(bot sendPhoto · 只读渲染)
+router.include_router(chart_router)
 router.include_router(crypto_router)
 # 0023 阶段③ · A股/美股 市场首页(3.1 基建:状态 + 大盘指数)
 router.include_router(cn_router)

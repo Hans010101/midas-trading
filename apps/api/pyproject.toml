@@ -31,6 +31,11 @@ dependencies = [
     "czsc>=0.10.12",
     "litellm>=1.55.0",
     "langgraph>=0.2.50",
+    # KLINE-001:bot「K线」按钮服务端渲染截图(mplfinance 画蜡烛+均线+RSI/MACD → PNG · matplotlib 后端)。
+    # matplotlib 原经 akshare 传递引入,但 KLINE-001 直接 import 必须显式列(避隐形 extra 坑 · 同 cryptography/openpyxl)。
+    # 生产 slim 镜像中文渲染需 Dockerfile apt 装 fonts-noto-cjk(否则豆腐块 · 已 docker 实测验)。
+    "matplotlib>=3.9.0",
+    "mplfinance>=0.12.10b0",
 ]
 
 [project.optional-dependencies]
@@ -101,6 +106,7 @@ module = [
     "celery.*",
     "litellm.*",
     "langgraph.*",
+    "mplfinance.*",
 ]
 ignore_missing_imports = true
 
