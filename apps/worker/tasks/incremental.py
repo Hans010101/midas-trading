@@ -73,7 +73,13 @@ def update_crypto_demo(self: Any) -> dict[str, Any]:
     M0 用 5 分钟轮询足够 demo 验收(BTCUSDT 日 K 一天才 1 根,5 分钟轮询冗余覆盖)。
     """
     try:
-        return asyncio.run(_backfill_one("BTC/USDT", "crypto", "Bitcoin", "1d", _INCREMENTAL_LIMIT))
+        # KLINE-001:加密以 perp 为主体(详情页/chart/AI 全 perp)· demo 预采改 perp(BTCUSDT 无斜杠)·
+        # 写库 instrument=perp,和读取侧对齐(原 BT/USDT spot 回填没人读 = 孤儿)。
+        return asyncio.run(
+            _backfill_one(
+                "BTCUSDT", "crypto", "Bitcoin", "1d", _INCREMENTAL_LIMIT, instrument="perp",
+            ),
+        )
     except DataSourceError as exc:
         logger.warning("update_crypto_demo 失败,重试 %d/3:%s", self.request.retries + 1, exc)
         raise self.retry(exc=exc) from exc
