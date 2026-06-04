@@ -10,7 +10,7 @@
  * 红线:只读 · 港股下单走详情页(阶段三 · 本页不下单)。
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 
@@ -21,7 +21,7 @@ import { EmptyState, LoadingNote } from '@/components/ui/state'
 import { fetchHkBoard, fetchHkSectors, type HkBreadth, type HkSpotRow } from '@/lib/api/hk-market'
 import { cn } from '@/lib/utils'
 
-const PAGE_STEP = 30 // 无限滚动每次续加载行数(数据池 ~900 只 · 到底为止)
+const BOARD_SIZE = 100 // 榜单显示前 100(去无限滚动 · 更多走搜索 · 四市场统一)· 搜索仍覆盖全 ~900
 
 type Tab = 'gainers' | 'losers' | 'amount'
 const TABS: { key: Tab; label: string }[] = [
@@ -70,7 +70,6 @@ export function HkSections() {
   })
   const [tab, setTab] = useState<Tab>('gainers')
   const [query, setQuery] = useState('')
-  const [visibleCount, setVisibleCount] = useState(PAGE_STEP)
 
   const breadth = q.data?.breadth ?? null
   const sectors = sectorQ.data?.sectors ?? []
@@ -94,30 +93,8 @@ export function HkSections() {
     )
   }, [fullRows, query])
 
-  const visibleRows = useMemo(() => viewRows.slice(0, visibleCount), [viewRows, visibleCount])
-
-  // tab / 搜索变 → 重置滚动到首屏
-  useEffect(() => {
-    setVisibleCount(PAGE_STEP)
-  }, [tab, query])
-
-  // 无限滚动:sentinel 进视口 → 续加载(到 viewRows.length = ~900 只到底 · 不假装更多)
-  const sentinelRef = useRef<HTMLTableRowElement | null>(null)
-  const hasMore = visibleCount < viewRows.length
-  useEffect(() => {
-    const el = sentinelRef.current
-    if (!el || !hasMore) return
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          setVisibleCount((c) => Math.min(c + PAGE_STEP, viewRows.length))
-        }
-      },
-      { rootMargin: '300px' }, // 提前 300px 预加载 · 滚动更顺
-    )
-    obs.observe(el)
-    return () => obs.disconnect()
-  }, [hasMore, viewRows.length, visibleCount])
+  // 榜单显示前 100(去无限滚动)· 搜索仍覆盖全 viewRows(~900 主要成分),只是显示截断前 100
+  const visibleRows = useMemo(() => viewRows.slice(0, BOARD_SIZE), [viewRows])
 
   return (
     <div className="mt-8 space-y-6">
@@ -220,19 +197,12 @@ export function HkSections() {
                   </TCell>
                 </TRow>
               ))}
-              {/* 无限滚动哨兵 · 进视口续加载 · 到 ~900 只到底自动消失(不假装更多) */}
-              {hasMore && (
-                <tr ref={sentinelRef}>
-                  <td colSpan={6} className="px-3 py-4 text-center text-xs text-muted-foreground/50">
-                    下拉加载更多…
-                  </td>
-                </tr>
-              )}
             </tbody>
           </DataTable>
           <p className="mt-2 text-[11px] text-muted-foreground/60">
-            ★ 主要成分股 / 活跃精选(~900 只 · 非全市场 2764)· 共 {viewRows.length} 只 ·
-            点击看 K线 + 缠论 · 港股只读不下单
+            {query.trim()
+              ? `搜索港股主要成分(已采 ~900 · 非全 2764 · 池外搜不到)· 命中 ${viewRows.length} 只 · 显示前 ${Math.min(BOARD_SIZE, viewRows.length)}`
+              : '榜单显示前 100 · 更多请搜索查询 · ★主要成分股 ~900(非全市场 2764)· 点击看 K线 + 缠论 · 港股只读不下单'}
           </p>
         </section>
       )}
