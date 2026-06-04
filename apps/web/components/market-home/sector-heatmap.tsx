@@ -6,7 +6,7 @@
  * 响应式色块网格(手机 2 列 → 桌面 6 列)· 每块:板块名 + 涨跌%(JetBrains Mono 大字)+ 家数。
  * 底色 = 涨 var(--color-up #DC143C)/ 跌 var(--color-down #0F6E5F)· 深浅按 |涨跌%| 映射透明度
  * (浅色洗 · 深字保持可读 · 契合白底暖米白基调)· 用 color-mix 走 CSS 变量 → 自动随「红涨绿跌/绿涨红跌」偏好翻转。
- * 降序排(强左上 → 弱右下)· 美股「中概股」块帝王金描边(highlighted)· hover 提示领涨/家数/成交额。
+ * 降序排(强左上 → 弱右下)· hover(title)提示领涨/家数/成交额 · 色块不可点。
  *
  * 红线:只读行情展示 · 色块不可点(暂无板块详情页)· 不碰下单/撮合。
  */
@@ -19,8 +19,6 @@ export interface HeatmapSector {
   /** A股 / 港股有领涨股;美股聚合无 → 可选(hover 提示按有无渲染)。 */
   leader_name?: string
   leader_change_pct?: number
-  /** 美股「中概股」块 → 帝王金描边高亮。 */
-  highlighted?: boolean
 }
 
 interface SectorHeatmapProps {
@@ -29,8 +27,6 @@ interface SectorHeatmapProps {
   fmtAmount: (n: number) => string
   /** 色块上限(A股 ~49 板块 → cap 24 清爽;美股/港股 ~12 不传即全显)。 */
   max?: number
-  /** 底部口径说明(如「成交额加权 · 范围 ~900 只」)。 */
-  weightNote?: string
 }
 
 function fmtPct(n: number): string {
@@ -51,7 +47,7 @@ function tileTip(s: HeatmapSector, fmtAmount: (n: number) => string): string {
   return base
 }
 
-export function SectorHeatmap({ sectors, fmtAmount, max, weightNote }: SectorHeatmapProps) {
+export function SectorHeatmap({ sectors, fmtAmount, max }: SectorHeatmapProps) {
   // 降序排(强左上 → 弱右下)· 后端通常已 DESC,这里防御性再排一次
   const sorted = [...sectors].sort((a, b) => b.change_pct - a.change_pct)
   const shown = max ? sorted.slice(0, max) : sorted
@@ -67,15 +63,9 @@ export function SectorHeatmap({ sectors, fmtAmount, max, weightNote }: SectorHea
               key={s.name}
               title={tileTip(s, fmtAmount)}
               style={{ backgroundColor: bg }}
-              className={
-                'rounded-md border px-3 py-2.5 transition-colors ' +
-                (s.highlighted ? 'border-2 border-gold' : 'border-border/50')
-              }
+              className="rounded-md border border-border/50 px-3 py-2.5 transition-colors"
             >
-              <div className="flex items-center gap-1 truncate text-sm font-medium text-foreground">
-                <span className="truncate">{s.name}</span>
-                {s.highlighted && <span className="shrink-0 text-[10px] text-gold">中概股</span>}
-              </div>
+              <div className="truncate text-sm font-medium text-foreground">{s.name}</div>
               <div className="mt-1 font-mono text-lg font-bold text-foreground">
                 {fmtPct(s.change_pct)}
               </div>
@@ -84,11 +74,6 @@ export function SectorHeatmap({ sectors, fmtAmount, max, weightNote }: SectorHea
           )
         })}
       </div>
-      {weightNote && (
-        <p className="mt-2 text-[11px] text-muted-foreground/60">
-          {weightNote} · 色深 = 涨跌幅强弱 · 悬停看领涨/家数/成交额
-        </p>
-      )}
     </div>
   )
 }

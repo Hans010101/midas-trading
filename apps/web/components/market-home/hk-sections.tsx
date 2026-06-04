@@ -115,12 +115,13 @@ export function HkSections() {
       {/* 行业板块热力图(上移到榜单前 · 当市场概览 · 独立端点 yfinance GICS)*/}
       {sectorQ.isSuccess && sectors.length > 0 && (
         <section>
-          <h2 className="mb-3 font-serif text-sm font-bold text-foreground">行业板块</h2>
-          <SectorHeatmap
-            sectors={sectors}
-            fmtAmount={fmtAmount}
-            weightNote="行业 GICS(yfinance)· 成交额加权 · 范围主要成分 ~900 只"
-          />
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <h2 className="font-serif text-sm font-bold text-foreground">行业板块</h2>
+            <span className="text-xs text-muted-foreground/70">
+              活跃精选 ~900 只 · 色深=涨跌幅强弱 · 悬停看领涨/家数/成交
+            </span>
+          </div>
+          <SectorHeatmap sectors={sectors} fmtAmount={fmtAmount} />
         </section>
       )}
 
@@ -199,10 +200,10 @@ export function HkSections() {
               ))}
             </tbody>
           </DataTable>
-          <p className="mt-2 text-[11px] text-muted-foreground/60">
+          <p className="mt-2 text-center text-[11px] text-muted-foreground/60">
             {query.trim()
-              ? `搜索港股主要成分(已采 ~900 · 非全 2764 · 池外搜不到)· 命中 ${viewRows.length} 只 · 显示前 ${Math.min(BOARD_SIZE, viewRows.length)}`
-              : '榜单显示前 100 · 更多请搜索查询 · ★主要成分股 ~900(非全市场 2764)· 点击看 K线 + 缠论 · 港股只读不下单'}
+              ? `命中 ${viewRows.length} 只 · 显示前 ${Math.min(BOARD_SIZE, viewRows.length)}`
+              : '榜单显示前 100 · 更多请搜索查询'}
           </p>
         </section>
       )}
@@ -234,7 +235,6 @@ function BreadthBar({ b }: { b: HkBreadth }) {
         <span>
           主要成分股成交额 <b className="font-mono text-foreground">HK${fmtAmt(b.total_amount)}</b>
         </span>
-        <span className="text-muted-foreground/50">(港股无涨跌停制度 · 涨跌家数基于 ~900 只主要成分)</span>
       </div>
     </Panel>
   )

@@ -84,15 +84,16 @@ export function UsSections() {
 
   return (
     <div className="mt-8 space-y-6">
-      {/* 行业板块热力图(上移到榜单前 · 当市场概览 · 中概股帝王金高亮)*/}
+      {/* 行业板块热力图(上移到榜单前 · 当市场概览)*/}
       {q.isSuccess && sectors.length > 0 && (
         <section>
-          <h2 className="mb-3 font-serif text-sm font-bold text-foreground">行业板块 · 中概股板块</h2>
-          <SectorHeatmap
-            sectors={sectors.map((s) => ({ ...s, highlighted: s.name === '中概股' }))}
-            fmtAmount={fmtUsd}
-            weightNote="板块涨跌 = 池内成分等权均值 · 中概股为策展集合"
-          />
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <h2 className="font-serif text-sm font-bold text-foreground">行业板块 · 中概股板块</h2>
+            <span className="text-xs text-muted-foreground/70">
+              等权均值 · 色深=涨跌幅强弱 · 悬停看领涨/家数/成交额
+            </span>
+          </div>
+          <SectorHeatmap sectors={sectors} fmtAmount={fmtUsd} />
         </section>
       )}
 
@@ -190,10 +191,10 @@ export function UsSections() {
                 ))}
               </tbody>
             </DataTable>
-            <p className="mt-2 text-[11px] text-muted-foreground/60">
+            <p className="mt-2 text-center text-[11px] text-muted-foreground/60">
               {isSearching
-                ? `搜索重点关注池(策展 128 · 非全美股 · 池外搜不到)· 命中 ${rows.length} 只 · 点击看详情`
-                : '榜单显示前 100 · 更多股票请直接搜索查询(策展池 · 非全美股)· 成交额为美元估 · 点击个股看详情 / 做多 · 卖空下单'}
+                ? `命中 ${rows.length} 只 · 点击看详情`
+                : '榜单显示前 100 · 更多请搜索查询'}
             </p>
           </>
         )}
