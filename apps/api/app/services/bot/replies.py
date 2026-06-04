@@ -82,6 +82,9 @@ class ReplyModel:
     kind: Literal["text", "card"] = "card"
     force_new: bool = False
     prerendered: bool = False
+    # KLINE-001:非空 = 该回复应作为【图片】发送(photo_url 指向 K线图 PNG 端点)·
+    # transport 优先 sendPhoto(text 作 caption + 按钮保留)· 发图失败/数据不足回退发 text(网页链接)。
+    photo_url: str | None = None
 
 
 # ── 中立入站模型 ──────────────────────────────────────────────────────
@@ -150,6 +153,20 @@ def web_chart_url(market: str, symbol: str) -> str:
     path = _PREVIEW_PATH.get(market, "workbench")
     sym = symbol.replace("/", "") if market == "crypto" else symbol
     return f"{base}/{path}?symbol={sym}"
+
+
+def chart_png_url(market: str, symbol: str, name: str = "") -> str:
+    """拼 K线图 PNG 端点 URL(KLINE-001 · bot sendPhoto 用)· 公网 api 域名。
+
+    symbol 原样传(端点内部 crypto 去斜杠对齐 CH)· URL 编码防斜杠/中文名破坏 query。
+    """
+    from urllib.parse import quote
+
+    base = settings.public_api_base_url.rstrip("/")
+    q = f"market={market}&symbol={quote(symbol, safe='')}"
+    if name:
+        q += f"&name={quote(name, safe='')}"
+    return f"{base}/api/v1/chart/kline.png?{q}"
 
 
 def _fmt_hour(h: int) -> str:
@@ -326,14 +343,15 @@ def build_symbol_not_found(market: str, symbol: str) -> ReplyModel:
 
 
 def build_kline_link(market: str, symbol: str) -> ReplyModel:
+    """K线回复(KLINE-001)· 优先发【此刻 K线图截图】(photo_url)· 文本作 caption ·
+    保留「网页看K线」按钮(交互式缠论/指标)· 发图失败/数据不足由 transport 回退发文本链接。
+    """
     mlabel = _MARKET_LABEL.get(market, market)
-    text = (
-        f"📈 {symbol} · {mlabel}\n"
-        "点下方按钮在网页打开完整 K 线图(含缠论 / 指标)。"
-    )
+    text = f"📈 {symbol} · {mlabel} · K线(MA / RSI / MACD · 此刻)"
     return ReplyModel(
         text=text, title="K线", disclaimer=None,
         buttons=_quote_buttons(market, symbol),
+        photo_url=chart_png_url(market, symbol),
     )
 
 

@@ -4,10 +4,13 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# 系统依赖 + curl(healthcheck)
+# 系统依赖 + curl(healthcheck)+ fonts-noto-cjk(KLINE-001:matplotlib 渲染 K线图中文标题/标的名,
+# 默认 DejaVu 无中文字形会渲成豆腐块 · slim 镜像必须装 CJK 字体 · 已 docker 实测中文不豆腐)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     curl \
+    fonts-noto-cjk \
+    fontconfig \
     && rm -rf /var/lib/apt/lists/*
 
 # 拷源码(避免 setuptools.packages.find 在空目录返回空报错)

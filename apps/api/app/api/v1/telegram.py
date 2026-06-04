@@ -116,6 +116,23 @@ async def _send_reply_safe(
         logger.warning("[tg-webhook] 回执发送失败 chat_id=%s:%s", chat_id, e)
 
 
+async def _send_photo_safe(
+    chat_id: int, photo_url: str, caption: str, keyboard: dict[str, Any] | None = None,
+) -> None:
+    """后台发 K线图(sendPhoto · KLINE-001)· 失败【回退发文本网页链接】(数据不足 404 /
+    TG 拉图失败都走这条 · 别让用户啥也收不到)。caption = 原文本(也作回退正文)。"""
+    try:
+        await telegram.send_photo(
+            settings.tg_bot_token, str(chat_id), photo_url,
+            caption=caption, reply_markup=keyboard,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.info(
+            "[tg-webhook] sendPhoto 失败 chat_id=%s · 回退文本链接:%s", chat_id, e,
+        )
+        await _send_reply_safe(chat_id, caption, keyboard)
+
+
 async def _edit_reply_safe(
     chat_id: int, message_id: int, text: str, keyboard: dict[str, Any] | None = None,
 ) -> None:
@@ -190,7 +207,12 @@ async def telegram_webhook(
     if ch is not None:
         reply: BotReply = await bot_router.handle_command(db, redis, ch, chat_id, text)
         if settings.tg_bot_token:
-            background.add_task(_send_reply_safe, chat_id, reply.text, reply.keyboard)
+            if reply.photo_url:  # KLINE-001:K线 → sendPhoto(失败回退文本链接)
+                background.add_task(
+                    _send_photo_safe, chat_id, reply.photo_url, reply.text, reply.keyboard,
+                )
+            else:
+                background.add_task(_send_reply_safe, chat_id, reply.text, reply.keyboard)
     return {"ok": True}
 
 
@@ -217,6 +239,11 @@ async def _handle_callback_update(
 
     reply = await bot_router.handle_callback(db, redis, ch, chat_id, callback.get("data"))
     if settings.tg_bot_token:
+        if reply.photo_url:  # KLINE-001:K线图发新消息(无法把文本编辑成图)· 失败回退文本
+            background.add_task(
+                _send_photo_safe, chat_id, reply.photo_url, reply.text, reply.keyboard,
+            )
+            return {"ok": True}
         message_id = msg.get("message_id")
         if message_id is not None:
             background.add_task(

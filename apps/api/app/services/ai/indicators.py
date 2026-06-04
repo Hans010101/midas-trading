@@ -128,6 +128,44 @@ def compute_boll(
     }
 
 
+def compute_atr(klines: list[Kline], period: int = 14) -> float:
+    """ATR · 平均真实波幅(Wilder 平滑)· 返回最新值。
+
+    TR = max(high-low, |high-prevClose|, |low-prevClose|);ATR = TR 的 Wilder 平滑(period)。
+    KLINE-001 标题用(对标 CryptoSharp)· 数据不足返 0.0。
+    """
+    if len(klines) < 2:
+        return 0.0
+    trs: list[float] = []
+    for i in range(1, len(klines)):
+        high = float(klines[i].high)
+        low = float(klines[i].low)
+        prev_close = float(klines[i - 1].close)
+        trs.append(max(high - low, abs(high - prev_close), abs(low - prev_close)))
+    if not trs:
+        return 0.0
+    p = min(period, len(trs))
+    atr = sum(trs[:p]) / p
+    for tr in trs[p:]:
+        atr = (atr * (period - 1) + tr) / period
+    return atr
+
+
+def compute_volume_ratio(klines: list[Kline], period: int = 5) -> float:
+    """量比 · 最新成交量 / 前 period 根均量 · 返回最新值(KLINE-001 标题用)。
+
+    日线近似口径(>1 放量 · <1 缩量)· 数据不足或均量为 0 返 0.0。
+    """
+    vols = [float(k.volume) for k in klines]
+    if len(vols) < period + 1:
+        return 0.0
+    prior = vols[-period - 1 : -1]  # 最新之前的 period 根
+    avg = sum(prior) / period
+    if avg <= 0:
+        return 0.0
+    return vols[-1] / avg
+
+
 def compute_trend_5d(klines: list[Kline]) -> Literal["up", "down", "sideways"]:
     """近 5 根 K 线趋势 · 收盘价 5 日斜率简单判断。"""
     if len(klines) < 5:

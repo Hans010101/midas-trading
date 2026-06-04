@@ -84,7 +84,7 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
  'symbol_not_found': {'text': '*点金 Midas*\n\n未找到 600519(A股)的数据。\n请确认代码,或换一个再试(只查已采集标的)。',
                       'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                          'callback_data': 'menu:main'}]]}},
- 'kline_link': {'text': '*点金 Midas · K线*\n\n📈 NVDA · 美股\n点下方按钮在网页打开完整 K 线图(含缠论 / 指标)。',
+ 'kline_link': {'text': '*点金 Midas · K线*\n\n📈 NVDA · 美股 · K线(MA / RSI / MACD · 此刻)',
                 'keyboard': {'inline_keyboard': [[{'text': '📈 网页看K线',
                                                    'url': 'http://localhost:3000/us-preview?symbol=NVDA'}],
                                                  [{'text': '⬅️ 返回菜单',
