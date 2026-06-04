@@ -52,21 +52,35 @@ function openDetail(symbol: string, name: string) {
 export function UsSections() {
   const q = useQuery({
     queryKey: ['us-board'],
-    queryFn: ({ signal }) => fetchUsBoard(signal),
+    queryFn: ({ signal }) => fetchUsBoard(128, signal),
     retry: 0,
     staleTime: 30_000,
     refetchInterval: 60_000,
   })
   const [tab, setTab] = useState<Tab>('gainers')
+  const [query, setQuery] = useState('')
 
   const poolSize = q.data?.pool_size ?? 0
-  const rows: UsSpotRow[] =
+  // 全策展池(limit=128 → gainers 即全池 · 搜索覆盖整池,与 tab 排序无关)
+  const fullPool = q.data?.gainers ?? []
+  const boardRows: UsSpotRow[] =
     tab === 'gainers'
       ? (q.data?.gainers ?? [])
       : tab === 'losers'
         ? (q.data?.losers ?? [])
         : (q.data?.top_amount ?? [])
   const sectors = q.data?.sectors ?? []
+
+  const isSearching = query.trim().length > 0
+  const ql = query.trim().toLowerCase()
+  // 本地过滤整池 128(代码 / 名称)· 池小,前端过滤轻(同港股本地过滤)
+  const searchRows = isSearching
+    ? fullPool.filter(
+        (r) => r.symbol.toLowerCase().includes(ql) || r.name.toLowerCase().includes(ql),
+      )
+    : []
+  // 搜索态 → 过滤结果(整池 128);否则当前 tab 前 100
+  const rows = isSearching ? searchRows : boardRows.slice(0, 100)
 
   return (
     <div className="mt-8 space-y-6">
@@ -97,22 +111,40 @@ export function UsSections() {
 
         {q.isSuccess && poolSize > 0 && (
           <>
-            <div className="mb-3 flex overflow-hidden rounded-md border border-paper text-sm">
-              {TABS.map((t) => (
-                <button
-                  key={t.key}
-                  type="button"
-                  onClick={() => setTab(t.key)}
-                  className={cn(
-                    'px-4 py-1.5 transition-colors',
-                    tab === t.key
-                      ? 'bg-midas-red text-white'
-                      : 'text-muted-foreground hover:bg-midas-red-glow/50',
-                  )}
-                >
-                  {t.label}
-                </button>
-              ))}
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              {/* 搜索态隐藏 tab(搜索覆盖整池,与涨跌/成交额排序无关)*/}
+              {isSearching ? (
+                <span className="text-sm text-muted-foreground">重点关注池搜索结果</span>
+              ) : (
+                <div className="flex overflow-hidden rounded-md border border-paper text-sm">
+                  {TABS.map((t) => (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => setTab(t.key)}
+                      className={cn(
+                        'px-4 py-1.5 transition-colors',
+                        tab === t.key
+                          ? 'bg-midas-red text-white'
+                          : 'text-muted-foreground hover:bg-midas-red-glow/50',
+                      )}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* 搜索框 · 本地过滤策展池 128(★非全美股 · 池外搜不到)*/}
+              <div className="flex items-center gap-1.5 rounded-md border border-paper bg-surface-card px-3 py-1.5 text-sm">
+                <SearchIcon />
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="搜索重点关注池(策展 128 · 非全美股)"
+                  className="w-56 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+                />
+              </div>
             </div>
             <DataTable minWidth="640px">
               <THead>
@@ -125,6 +157,13 @@ export function UsSections() {
                 <TH align="right">成交额</TH>
               </THead>
               <tbody>
+                {rows.length === 0 && (
+                  <TRow>
+                    <TCell align="center" className="py-8 text-muted-foreground/60" colSpan={7}>
+                      {isSearching ? '无匹配(池内仅策展 128 只 · 池外搜不到)' : '暂无数据'}
+                    </TCell>
+                  </TRow>
+                )}
                 {rows.map((r, i) => (
                   <TRow
                     key={r.symbol}
@@ -152,12 +191,31 @@ export function UsSections() {
               </tbody>
             </DataTable>
             <p className="mt-2 text-[11px] text-muted-foreground/60">
-              重点关注池排行(非全市场)· 成交额为美元估(现价 × 成交量)· 点击个股看详情 / 做多 · 卖空下单
+              {isSearching
+                ? `搜索重点关注池(策展 128 · 非全美股 · 池外搜不到)· 命中 ${rows.length} 只 · 点击看详情`
+                : '榜单显示前 100 · 更多股票请直接搜索查询(策展池 · 非全美股)· 成交额为美元估 · 点击个股看详情 / 做多 · 卖空下单'}
             </p>
           </>
         )}
       </section>
 
     </div>
+  )
+}
+
+function SearchIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      className="text-muted-foreground/50"
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
   )
 }

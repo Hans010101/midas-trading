@@ -58,7 +58,10 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await r.json()) as T
 }
 
-/** 美股重点关注池榜单 + 行业/中概板块(一次取齐)。 */
-export function fetchUsBoard(signal?: AbortSignal): Promise<UsBoardResponse> {
-  return getJson<UsBoardResponse>('/api/v1/us/board', signal)
+/**
+ * 美股重点关注池榜单 + 行业/中概板块(一次取齐)。
+ * limit 默认 128 = 取全策展池(每个榜按对应维度排序的全池)· 供本地搜索过滤 + 榜单显示前 100。
+ */
+export function fetchUsBoard(limit = 128, signal?: AbortSignal): Promise<UsBoardResponse> {
+  return getJson<UsBoardResponse>(`/api/v1/us/board?limit=${limit}`, signal)
 }
