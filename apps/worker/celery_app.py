@@ -54,3 +54,8 @@ def _on_worker_ready(**_kwargs: object) -> None:
         hk_sector_ingest.hk_sector_scan.delay()
     except Exception:  # noqa: BLE001
         logger.exception("[worker_ready] 入队 hk_sector_scan 失败")
+    try:
+        # KLINE-001 性能 B:部署即预热热门标的 1d K线(bot K线常查 → 命中缓存秒出图 · 免冷拉)
+        incremental.warm_popular_klines.delay()
+    except Exception:  # noqa: BLE001
+        logger.exception("[worker_ready] 入队 warm_popular_klines 失败")

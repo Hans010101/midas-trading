@@ -191,7 +191,7 @@ def render_kline_png(
         addplot=apds,
         panel_ratios=(6, 2, 2, 2),
         figratio=(16, 11),
-        figscale=1.15,
+        figscale=1.0,
         title=title,
         datetime_format="%m-%d",
         xrotation=0,
@@ -199,7 +199,9 @@ def render_kline_png(
         tight_layout=True,
     )
     try:
-        fig.savefig(buf, format="png", dpi=110, bbox_inches="tight")
+        # KLINE-001 性能:dpi 100 + figscale 1.0 压像素(仍清晰)· 去 bbox=tight 省一次重渲 pass
+        # (tight_layout 已管间距)→ 压低生产 VPS ~2s 渲染地板。
+        fig.savefig(buf, format="png", dpi=100)
     finally:
         plt.close(fig)
     return buf.getvalue()
