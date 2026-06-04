@@ -34,6 +34,13 @@ beat_schedule = {
         # 加密 7×24 市场,每 5 分钟一次
         "schedule": crontab(minute="*/5"),
     },
+    "warm-popular-klines": {
+        "task": "tasks.incremental.warm_popular_klines",
+        # KLINE-001 性能 B:预热热门标的 1d K线(bot K线命中缓存秒出图)· 每 30 分钟刷新保鲜
+        # (worker_ready 部署即预热一次 · 此 beat 保持新鲜)· ~11 只 + sleep 错峰 · expires 防堆积
+        "schedule": crontab(minute="*/30"),
+        "options": {"expires": 1500},
+    },
     "update-hk-pool": {
         "task": "tasks.incremental.update_hk_pool",
         # 港股策展池日 K · 每交易日 16:30 HKT 收盘后(timezone Asia/Shanghai · 16:30 CST = 16:30 HKT)

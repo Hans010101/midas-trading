@@ -27,6 +27,13 @@ _INCREMENTAL_LIMIT = 10  # 每次只拉最近 10 根,够覆盖任何短停机窗
 # 港股池每只采最近 300 根日 K(首次充足历史 · 后续 insert 去重幂等增量)
 _HK_POOL_LIMIT = 300
 
+# KLINE-001 性能 B:预热热门标的(bot「K线」常查 → 命中缓存秒出图 · 免冷拉等待)。
+# 拉够画图根数(≥ chart 的 150)· crypto=perp(对齐主体)· us/cn=spot · 范围适度(~11 只,别 big batch)。
+_WARM_LIMIT = 200
+_WARM_CRYPTO = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"]
+_WARM_US = [("AAPL", "Apple"), ("NVDA", "NVIDIA"), ("TSLA", "Tesla")]
+_WARM_CN = [("600519", "贵州茅台"), ("000001", "平安银行"), ("300750", "宁德时代")]
+
 
 @shared_task(
     bind=True,
@@ -110,4 +117,37 @@ def update_hk_pool(self: Any) -> dict[str, int]:  # noqa: ARG001
             fail += 1
         time.sleep(0.5)  # 错峰防限流
     logger.info("[hk-pool] 港股池采集完成 ok=%d fail=%d", ok, fail)
+    return {"ok": ok, "fail": fail}
+
+
+@shared_task(
+    bind=True,
+    name="tasks.incremental.warm_popular_klines",
+    max_retries=1,
+    default_retry_delay=120,
+)
+def warm_popular_klines(self: Any) -> dict[str, int]:  # noqa: ARG001
+    """预热热门标的 1d K线进 CH(KLINE-001 性能 B)· bot「K线」常查命中缓存即秒出图,免冷拉等待。
+
+    crypto=perp(对齐主体)· us/cn=spot · 拉 _WARM_LIMIT 根(≥ chart 150)· 单只失败不中断(记
+    warning + 计数)· sleep 错峰 · 整体不 retry(下个 beat 补)。范围适度 ~11 只,别拖 worker。
+    """
+    ok = 0
+    fail = 0
+    jobs: list[tuple[str, str, str, str]] = (
+        [(s, "crypto", s, "perp") for s in _WARM_CRYPTO]
+        + [(s, "us", n, "spot") for s, n in _WARM_US]
+        + [(s, "cn", n, "spot") for s, n in _WARM_CN]
+    )
+    for sym, market, name, instrument in jobs:
+        try:
+            asyncio.run(
+                _backfill_one(sym, market, name, "1d", _WARM_LIMIT, instrument=instrument),  # type: ignore[arg-type]
+            )
+            ok += 1
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("warm_popular_klines %s/%s 失败:%s", market, sym, exc)
+            fail += 1
+        time.sleep(0.5)  # 错峰防限流
+    logger.info("[warm_popular_klines] ok=%d fail=%d", ok, fail)
     return {"ok": ok, "fail": fail}
