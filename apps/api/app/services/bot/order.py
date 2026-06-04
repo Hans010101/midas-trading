@@ -265,6 +265,7 @@ async def _active_perp(
 
 async def _active_spot(
     db: AsyncSession, user_id: UUID, market: str, symbol: str, side: PositionSide,
+    *, lock: bool = False,
 ) -> VirtualPosition | None:
     acct: VirtualAccount | None = await db.scalar(
         select(VirtualAccount).where(
@@ -273,14 +274,19 @@ async def _active_spot(
     )
     if acct is None:
         return None
-    pos: VirtualPosition | None = await db.scalar(
-        select(VirtualPosition).where(
-            VirtualPosition.account_id == acct.id,
-            VirtualPosition.symbol == symbol,
-            VirtualPosition.position_side == side,
-            VirtualPosition.closed_at.is_(None),
-        ),
+    # ★STRAT-001 TOCTOU 修复:平仓量解析时 lock=True 锁活仓,和引擎 _execute_sell 的 with_for_update
+    # 对齐(同 perp 的 _active_position 带锁模式)· 并发/重复的第二单会阻塞到第一单提交后,读到已平仓
+    # 的 None → 干净返「无可平持仓」,而非拿陈旧全量撞引擎守卫拒「持仓不足」(超量误报)。
+    # 预览(_order_preview · lock 默认 False)是只读展示,不加锁(不持锁阻塞真实下单)。
+    stmt = select(VirtualPosition).where(
+        VirtualPosition.account_id == acct.id,
+        VirtualPosition.symbol == symbol,
+        VirtualPosition.position_side == side,
+        VirtualPosition.closed_at.is_(None),
     )
+    if lock:
+        stmt = stmt.with_for_update()
+    pos: VirtualPosition | None = await db.scalar(stmt)
     return pos
 
 
@@ -512,7 +518,9 @@ async def _resolve_spot_order(
     # 平仓(sell=平多 / cover=平空)· 平全仓
     pside = PositionSide.LONG if direction == "sell" else PositionSide.SHORT
     side = OrderSide.SELL if direction == "sell" else OrderSide.BUY
-    pos = await _active_spot(db, user_id, market, symbol, pside)
+    # ★STRAT-001:平仓量从活仓全量来 → 必须锁读(lock=True),消除「无锁读出陈旧全量 → 引擎锁内
+    # 已被并发单平掉 → 拒『持仓不足』超量误报」的 TOCTOU。锁持到本请求 commit,串行化并发平仓。
+    pos = await _active_spot(db, user_id, market, symbol, pside, lock=True)
     if pos is None:
         return side, pside, None
     return side, pside, Decimal(pos.quantity)
