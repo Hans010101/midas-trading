@@ -62,6 +62,18 @@ function toBinanceSymbol(ccxt: string): string {
   return ccxt.replace('/', '') // 'BTC/USDT' → 'BTCUSDT'
 }
 
+// 恐慌贪婪指数 状态值 英→中(今后统一中文)
+const FGI_ZH: Record<string, string> = {
+  'Extreme Fear': '极度恐惧',
+  Fear: '恐惧',
+  Neutral: '中性',
+  Greed: '贪婪',
+  'Extreme Greed': '极度贪婪',
+}
+function fgClassZh(c: string): string {
+  return FGI_ZH[c] ?? c
+}
+
 export default function CryptoMarketPage() {
   const [tab, setTab] = useState<Instrument>('perp')
   const [sortKey, setSortKey] = useState<SortKey>('chgPct')
@@ -198,7 +210,7 @@ export default function CryptoMarketPage() {
               label="恐慌贪婪指数"
               loading={overviewQ.isPending}
               value={fgiOk ? String(ov!.fear_greed_value) : '—'}
-              sub={fgiOk ? ov!.fear_greed_classification : '暂无数据'}
+              sub={fgiOk ? fgClassZh(ov!.fear_greed_classification) : '暂无数据'}
               tone="bull"
             />
             <MetricCard
@@ -300,18 +312,11 @@ export default function CryptoMarketPage() {
             </table>
           </div>
 
-          {/* 计数(榜单显示前 100 · 搜索覆盖全域 ~623)*/}
-          <div className="mt-4 flex items-center justify-between">
-            <span className="text-xs text-muted-foreground/70">
-              {query.trim()
-                ? `搜索全市场 USDT 永续(~623)· 命中 ${viewRows.length} 个 · 显示前 ${Math.min(BOARD_SIZE, viewRows.length)}`
-                : `榜单显示前 ${Math.min(BOARD_SIZE, viewRows.length)} · 更多币种请直接搜索查询(全市场 USDT 永续 ~623)`}
-            </span>
-          </div>
-
-          <p className="mt-3 text-[11px] text-muted-foreground/60">
-            交易对/价格/涨跌/高低/成交额 = 真实(全市场 USDT 永续)· 资金费率/账户多空比/OI 24H变化 =
-            采集范围内真实,范围外(如 USDC 本位)「—」· 点行新标签打开详情页
+          {/* 底部一行(榜单显示前 100 · 更多请搜索 · 居中 · 四市场统一)*/}
+          <p className="mt-4 text-center text-xs text-muted-foreground/70">
+            {query.trim()
+              ? `命中 ${viewRows.length} 个 · 显示前 ${Math.min(BOARD_SIZE, viewRows.length)}`
+              : '榜单显示前 100 · 更多请搜索查询'}
           </p>
         </div>
       </main>

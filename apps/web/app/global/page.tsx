@@ -73,7 +73,8 @@ export default function GlobalOverviewPage() {
                 {group.items.map((it) => (
                   <QuoteCard
                     key={it.symbol}
-                    name={it.name}
+                    // 加密组币名统一代币符号(BTC/USDT → BTC · 比特币/以太坊… → BTC/ETH…)
+                    name={group.category === 'crypto' ? it.symbol.split('/')[0] : it.name}
                     lastPoint={it.last_point}
                     changePoint={it.change_point}
                     changePct={it.change_pct}

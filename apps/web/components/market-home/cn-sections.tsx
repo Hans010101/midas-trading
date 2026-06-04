@@ -104,13 +104,13 @@ export function CnSections() {
       {/* 行业板块热力图(上移到榜单前 · 当市场概览)*/}
       {q.isSuccess && sectors.length > 0 && (
         <section>
-          <h2 className="mb-3 font-serif text-sm font-bold text-foreground">行业板块</h2>
-          <SectorHeatmap
-            sectors={sectors}
-            fmtAmount={fmtAmount}
-            max={24}
-            weightNote="行业涨跌按成交额加权 · 取主要 24 板块(Sina 新浪行业)"
-          />
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <h2 className="font-serif text-sm font-bold text-foreground">行业板块</h2>
+            <span className="text-xs text-muted-foreground/70">
+              成交额加权 · 取主要 24 板块 · 色深=涨跌幅强弱 · 悬停看领涨/家数/成交额
+            </span>
+          </div>
+          <SectorHeatmap sectors={sectors} fmtAmount={fmtAmount} max={24} />
         </section>
       )}
 
@@ -201,10 +201,10 @@ export function CnSections() {
               ))}
             </tbody>
           </DataTable>
-          <p className="mt-2 text-[11px] text-muted-foreground/60">
+          <p className="mt-2 text-center text-[11px] text-muted-foreground/60">
             {isSearching
-              ? `搜索 A股全市场(~5500)· 命中 ${rows.length} 只 · 点击看详情 / 下单`
-              : '榜单显示前 100 · 更多股票请直接搜索查询 · 点击个股看详情 / 下单 · 数据 Sina 实时快照'}
+              ? `命中 ${rows.length} 只 · 点击看详情`
+              : '榜单显示前 100 · 更多请搜索查询'}
           </p>
         </section>
       )}
