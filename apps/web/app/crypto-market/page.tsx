@@ -34,8 +34,10 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 
-const PAGE_STEP = 20 // 无限滚动每次续加载行数
+const BOARD_SIZE = 100 // 榜单显示前 100(去无限滚动 · 更多币种走搜索 · 四市场统一)
 const METRICS_CHUNK = 100 // metrics-batch 单次最多请求 symbol 数(接口上限 200,留余量)
+// ★ 首屏 metrics 有界:visibleRows 封顶 BOARD_SIZE=100,want ≤ 100 = 单个 chunk(≤ METRICS_CHUNK 100)
+//   → 首屏只发 1 个 metrics-batch 请求(100 symbols ≤ 接口 200)· 异步填充,不阻塞行(行用 ticker 先渲染)。
 
 // 全域可排序列(均为 ticker 表字段,前端内存排)
 type SortKey = 'chgPct' | 'turnover' | 'price'
@@ -65,7 +67,6 @@ export default function CryptoMarketPage() {
   const [sortKey, setSortKey] = useState<SortKey>('chgPct')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [query, setQuery] = useState('')
-  const [visibleCount, setVisibleCount] = useState(PAGE_STEP)
 
   const overviewQ = useQuery({
     queryKey: ['crypto-overview'],
@@ -103,11 +104,11 @@ export default function CryptoMarketPage() {
     return [...filtered].sort((a, b) => (get(a) - get(b)) * dir)
   }, [allItems, query, sortKey, sortDir])
 
-  const visibleRows = useMemo(() => viewRows.slice(0, visibleCount), [viewRows, visibleCount])
+  // 榜单显示前 100(去无限滚动)· 搜索仍覆盖全域 viewRows(全市场 ~623),只是显示截断前 100
+  const visibleRows = useMemo(() => viewRows.slice(0, BOARD_SIZE), [viewRows])
 
-  // 排序/搜索/切 tab 变化 → 重置可见行数到首屏 20 + 滚回顶部(否则停在原位、哨兵在视口会立即续加载)
+  // 排序/搜索/切 tab 变化 → 滚回顶部
   useEffect(() => {
-    setVisibleCount(PAGE_STEP)
     if (typeof window !== 'undefined') window.scrollTo({ top: 0 })
   }, [tab, sortKey, sortDir, query])
 
@@ -160,24 +161,6 @@ export default function CryptoMarketPage() {
         .finally(() => { chunk.forEach((s) => inFlightRef.current.delete(s)) })
     }
   }, [visibleRows, tab])
-
-  // ── 无限滚动:sentinel 进视口 → 续加载 20 ──────────────────────────────────
-  const sentinelRef = useRef<HTMLTableRowElement | null>(null)
-  const hasMore = visibleCount < viewRows.length
-  useEffect(() => {
-    const el = sentinelRef.current
-    if (!el || !hasMore) return
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          setVisibleCount((c) => Math.min(c + PAGE_STEP, viewRows.length))
-        }
-      },
-      { rootMargin: '300px' }, // 提前 300px 预加载,滚动更顺
-    )
-    obs.observe(el)
-    return () => obs.disconnect()
-  }, [hasMore, viewRows.length, visibleCount])
 
   // ── 指标卡 ────────────────────────────────────────────────────────────────
   const ov = overviewQ.data?.market_overview
@@ -251,7 +234,7 @@ export default function CryptoMarketPage() {
               <div className="flex items-center gap-1.5 rounded-md border border-paper bg-surface-card px-3 py-1.5 text-sm">
                 <SearchIcon />
                 <input type="text" value={query} onChange={(e) => setQuery(e.target.value)}
-                  placeholder="搜索交易对(全市场)"
+                  placeholder="搜索全市场 USDT 永续(~623)"
                   className="w-44 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50" />
               </div>
               <button type="button" title="刷新" onClick={() => { void overviewQ.refetch(); void tickersQ.refetch() }}
@@ -313,21 +296,16 @@ export default function CryptoMarketPage() {
                     </tr>
                   )
                 })}
-                {/* 无限滚动哨兵行 · 进视口续加载 */}
-                {tickersQ.isSuccess && hasMore && (
-                  <tr ref={sentinelRef}>
-                    <td colSpan={11} className="px-3 py-4 text-center text-xs text-muted-foreground/50">下拉加载更多…</td>
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>
 
-          {/* 计数(全域 · 无限滚动)*/}
+          {/* 计数(榜单显示前 100 · 搜索覆盖全域 ~623)*/}
           <div className="mt-4 flex items-center justify-between">
             <span className="text-xs text-muted-foreground/70">
-              共 {viewRows.length} 个 · 已显示 {Math.min(visibleCount, viewRows.length)}
-              {!hasMore && viewRows.length > 0 && ' · 已全部加载'}
+              {query.trim()
+                ? `搜索全市场 USDT 永续(~623)· 命中 ${viewRows.length} 个 · 显示前 ${Math.min(BOARD_SIZE, viewRows.length)}`
+                : `榜单显示前 ${Math.min(BOARD_SIZE, viewRows.length)} · 更多币种请直接搜索查询(全市场 USDT 永续 ~623)`}
             </span>
           </div>
 
