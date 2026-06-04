@@ -21,6 +21,7 @@ from celery import shared_task
 from app.core.logging import configure_logging
 from app.schemas.market import Market, Period, SymbolMeta
 from app.services.clickhouse_client import ClickHouseClient
+from app.services.data_sources.binance_futures_source import BinanceFuturesSource
 from app.services.data_sources.cn_source import AKShareCnSource
 from app.services.data_sources.crypto_source import CcxtBinanceCryptoSource
 from app.services.data_sources.exceptions import DataSourceError
@@ -43,19 +44,33 @@ async def _backfill_one(
     name: str,
     period: Period,
     limit: int,
+    *,
+    instrument: str = "spot",
 ) -> dict[str, Any]:
     """单标的回填:fetch upstream → 写 CH kline → upsert symbol_meta。
 
     ccxt async exchange 在本函数内创建并 close —— Celery 任务的事件循环是
     一次性的(asyncio.run 每次新建 loop),不能复用 FastAPI lifespan 的单例。
+
+    instrument(KLINE-001):'spot'(默认 · cn/us/hk 及加密现货)· 'perp' = 加密 USDT-M 永续。
+    ★ 加密以 perp 为主体(详情页/chart/AI 全 perp)· demo 预采改走 perp(BinanceFuturesSource)·
+      写库带 instrument=perp,和读取侧对齐(原 spot 回填没人读 = 孤儿数据)。
     """
     ch = await ClickHouseClient.create()
     exchange: ccxt_async.binance | None = None
+    futures_source: BinanceFuturesSource | None = None
     try:
-        if market == "cn":
-            source: (
-                AKShareCnSource | YFinanceUsSource | AKShareHkSource | CcxtBinanceCryptoSource
-            )
+        source: (
+            AKShareCnSource
+            | YFinanceUsSource
+            | AKShareHkSource
+            | CcxtBinanceCryptoSource
+            | BinanceFuturesSource
+        )
+        if market == "crypto" and instrument == "perp":
+            futures_source = BinanceFuturesSource()  # 永续 K(httpx · 对齐 perp 主体)
+            source = futures_source
+        elif market == "cn":
             source = AKShareCnSource()
         elif market == "us":
             source = YFinanceUsSource()
@@ -70,7 +85,7 @@ async def _backfill_one(
 
         rows = await source.fetch_kline(symbol, period, limit=limit)
         written = await ch.insert_kline(
-            rows, symbol=symbol, market=market, period=period,
+            rows, symbol=symbol, market=market, period=period, instrument=instrument,
         )
         await ch.upsert_symbol_meta(
             [
@@ -91,6 +106,8 @@ async def _backfill_one(
     finally:
         if exchange is not None:
             await exchange.close()
+        if futures_source is not None:
+            await futures_source.close()
         await ch.close()
 
 
