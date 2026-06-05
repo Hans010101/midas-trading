@@ -15,6 +15,7 @@
 import { useSearchParams } from 'next/navigation'
 import { useMemo, useState } from 'react'
 
+import { TopNav } from '@/components/layout/top-nav'
 import { AiDecisionCard } from '@/components/workbench/ai-decision-card'
 import { SpotHeader } from '@/components/spot-preview/spot-header'
 import { SpotMainChart } from '@/components/spot-preview/spot-main-chart'
@@ -44,6 +45,7 @@ export function SpotDetail({ market }: SpotDetailProps) {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
+      <TopNav />
       <SpotHeader
         symbol={symbol}
         name={name}
