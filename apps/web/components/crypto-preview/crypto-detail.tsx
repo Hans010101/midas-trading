@@ -17,6 +17,7 @@
 import { useSearchParams } from 'next/navigation'
 import { useMemo, useState } from 'react'
 
+import { TopNav } from '@/components/layout/top-nav'
 import { CryptoAiCard } from '@/components/crypto-preview/crypto-ai-card'
 import { CryptoHeader } from '@/components/crypto-preview/crypto-header'
 import { CryptoMainChart } from '@/components/crypto-preview/crypto-main-chart'
@@ -60,11 +61,7 @@ export function CryptoDetail() {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      {/* 顶部说明条:本页真实 / 占位的边界 */}
-      <div className="border-b border-dashed border-gold/60 bg-gold/10 px-6 py-2 text-center text-xs text-gold">
-        M2-D 详情页 · 主图 / OI / 大户多空比 / 主动买卖 = 真实数据 ·
-        多空人数比 / 基差 = M2-B 待补 · 下单指导 / 策略清单 = M2-C 待接
-      </div>
+      <TopNav />
 
       <CryptoHeader
         klineSymbol={klineSymbol}

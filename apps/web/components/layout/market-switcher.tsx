@@ -41,11 +41,22 @@ export function MarketSwitcher({ className }: { className?: string }) {
           ? 'hk'
           : null
   // 全球概览(ADR 0035)· 排最前的入口 + 默认落地页 · 非交易市场,单独高亮
+  // 详情页(*-preview)· TopNav 复用到详情页(2026-06)· 高亮当前市场 + 点 Tab 跳对应市场首页
+  const detailMarket: Market | null = pathname?.startsWith('/cn-preview')
+    ? 'cn'
+    : pathname?.startsWith('/us-preview')
+      ? 'us'
+      : pathname?.startsWith('/crypto-preview')
+        ? 'crypto'
+        : pathname?.startsWith('/hk-preview')
+          ? 'hk'
+          : null
   const onGlobal = pathname?.startsWith('/global') ?? false
   // 自选汇总页(3.6)· 末位 Tab · 非市场,单独高亮
   const onWatchlist = pathname === '/watchlist'
   // 在全球/自选页时不高亮任何交易市场 Tab(否则会回退到 storeMarket 误亮)
-  const active: Market | null = onGlobal || onWatchlist ? null : (homeMarket ?? storeMarket)
+  const active: Market | null =
+    onGlobal || onWatchlist ? null : (homeMarket ?? detailMarket ?? storeMarket)
 
   function handleSelect(m: Market) {
     // 港股(hk)阶段二单元3:行情页(/hk-market 策展池 18 只列表)已上线 →
@@ -55,8 +66,8 @@ export function MarketSwitcher({ className }: { className?: string }) {
       router.push('/hk-market')
       return
     }
-    // 在任一市场首页 / 全球概览(ADR 0035):点市场 → 跳对应市场首页(已在本页则 no-op)
-    if (homeMarket || onGlobal) {
+    // 在任一市场首页 / 详情页(*-preview)/ 全球概览:点市场 → 跳对应市场首页(已在本页则 no-op)
+    if (homeMarket || detailMarket || onGlobal) {
       if (m === homeMarket) return
       if (m === 'cn') router.push('/cn-market')
       else if (m === 'us') router.push('/us-market')
