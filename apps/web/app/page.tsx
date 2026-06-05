@@ -5,7 +5,7 @@
  *   1. TopNav · 顶部导航(logo + 印章 + 锚点 + 进入终端 CTA)
  *   2. Hero · 主视觉(水墨山形 + 朱红 K 线 + 帝王金脉络)
  *   3. Showcase · 产品实拍(工作台真实截图)
- *   4. Markets · 三市场(A 股 / 美股 / 加密)
+ *   4. Markets · 四市场(A 股 / 美股 / 港股 / 加密)
  *   5. Features · 4 张核心功能卡
  *   6. AiChan · AI + 缠论差异化展示(左右分栏 + 强制 disclaimer)
  *   7. Pricing · 定价占位(M1 限时免费 · 不写价格)
@@ -23,6 +23,7 @@ import {
   Bot,
   CandlestickChart,
   Globe,
+  Landmark,
   ScrollText,
   Sparkles,
   Trophy,
@@ -160,12 +161,12 @@ function Hero() {
             AI 原生金融分析终端
           </p>
           <h1 className="font-serif text-5xl font-bold leading-tight tracking-tight text-foreground lg:text-6xl">
-            三市通览
+            四市通览
             <span className="mx-2 text-midas-red">·</span>
             <span className="text-midas-red">点石成金</span>
           </h1>
           <p className="mt-5 max-w-xl text-base leading-relaxed text-foreground/80 lg:text-lg">
-            覆盖 A 股、美股与加密货币三大市场,以虚拟资金零风险磨练交易直觉,让 AI 辅助你的每一次决策。
+            覆盖 A 股、美股、港股与加密货币四大市场,以虚拟资金零风险磨练交易直觉,让 AI 辅助你的每一次决策。
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link
@@ -217,7 +218,7 @@ function Showcase() {
           打开即是专业终端
         </h2>
         <p className="mt-3 text-sm text-muted-foreground">
-          K 线 · 缠论标注 · AI 决策卡 · 三市场切换 · 虚拟交易 · 一屏到位
+          K 线 · 缠论标注 · AI 决策卡 · 四市场切换 · 虚拟交易 · 一屏到位
         </p>
         <div className="relative mt-8">
           <div className="overflow-hidden rounded-xl border border-paper bg-background shadow-2xl">
@@ -241,7 +242,7 @@ function Showcase() {
 
 
 // ============================================================
-// 4 · Markets(三市场)
+// 4 · Markets(四市场)
 // ============================================================
 
 
@@ -250,13 +251,13 @@ function Markets() {
     <section className="mx-auto max-w-6xl px-6 py-16">
       <div className="text-center">
         <h2 className="font-serif text-3xl font-bold lg:text-4xl">
-          三市场统一体验
+          四市场统一体验
         </h2>
         <p className="mt-3 text-sm text-muted-foreground">
           一个终端,覆盖全球主流交易市场
         </p>
       </div>
-      <div className="mt-10 grid gap-5 md:grid-cols-3">
+      <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
         <MarketCard
           icon={<BarChart3 className="h-6 w-6 text-midas-red" />}
           name="A 股"
@@ -272,8 +273,14 @@ function Markets() {
         <MarketCard
           icon={<Bitcoin className="h-6 w-6 text-midas-red" />}
           name="加密"
-          desc="24/7 不停盘 · Binance OHLCV"
+          desc="24/7 不停盘 · Binance 永续合约"
           examples="BTC/USDT · ETH/USDT · SOL/USDT"
+        />
+        <MarketCard
+          icon={<Landmark className="h-6 w-6 text-midas-red" />}
+          name="港股"
+          desc="恒生指数 · 国企指数 · 港交所主板"
+          examples="00700 · 09988 · 03690"
         />
       </div>
     </section>
@@ -326,12 +333,12 @@ function Features() {
           <FeatureCard
             icon={<CandlestickChart className="h-6 w-6 text-midas-red" />}
             title="K 线工作台"
-            desc="MA / MACD / RSI / BOLL 指标 + 多周期(1m → 1w) + 三市场标的搜索"
+            desc="MA / MACD / RSI / BOLL 指标 + 多周期(1m → 1w) + 四市场标的搜索"
           />
           <FeatureCard
             icon={<Wallet className="h-6 w-6 text-midas-red" />}
             title="虚拟交易"
-            desc="三市场独立钱包 · CNY / USD / USDT 原币结算 · 永远不接真实交易"
+            desc="四市场独立钱包 · CNY / USD / HKD / USDT 原币结算 · 永远不接真实交易"
           />
           <FeatureCard
             icon={<BellRing className="h-6 w-6 text-midas-red" />}
