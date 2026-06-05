@@ -26,6 +26,7 @@ import {
   Landmark,
   ScrollText,
   Sparkles,
+  Target,
   Trophy,
   Wallet,
 } from 'lucide-react'
@@ -329,7 +330,7 @@ function Features() {
             为认真对待投资的你而设计
           </p>
         </div>
-        <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-5">
           <FeatureCard
             icon={<CandlestickChart className="h-6 w-6 text-midas-red" />}
             title="K 线工作台"
@@ -349,6 +350,11 @@ function Features() {
             icon={<Sparkles className="h-6 w-6 text-midas-red" />}
             title="AI 决策卡"
             desc="LangGraph + DeepSeek 多维研判 · 自动生成结构化分析与关键位"
+          />
+          <FeatureCard
+            icon={<Target className="h-6 w-6 text-midas-red" />}
+            title="策略信号"
+            desc="多策略形态扫描 · 关键价位与信号成色 · 四市场主图实时标注 · 仅供参考,不构成投资建议"
           />
         </div>
       </div>
@@ -432,7 +438,7 @@ function AiChan() {
             <h3 className="font-serif text-xl font-bold">AI 决策卡</h3>
           </div>
           <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
-            LangGraph workflow 把 K 线 + 缠论结构 + 4 项指标喂给 DeepSeek · 输出结构化评分(强多/弱多/中性/弱空/强空)+ 关键支撑阻力位 + 中文解读。缓存命中 35× 提速,百用户月费仅 ¥1.7。
+            LangGraph workflow 把 K 线 + 缠论结构 + 4 项指标喂给 DeepSeek · 输出结构化评分(强多/弱多/中性/弱空/强空)+ 关键支撑阻力位 + 中文解读,秒级生成、随市更新。看好信号可一键模拟下单,全程虚拟、零风险验证你的判断。
           </p>
           <div className="grid flex-1 grid-cols-2 gap-3">
             {/* 上半 · 综合评分 + 标签 + 置信度 */}
