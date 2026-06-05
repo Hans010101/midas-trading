@@ -219,15 +219,15 @@ function Showcase() {
           打开即是专业终端
         </h2>
         <p className="mt-3 text-sm text-muted-foreground">
-          K 线 · 缠论标注 · AI 决策卡 · 四市场切换 · 虚拟交易 · 一屏到位
+          全球四市场一屏俯瞰 · A 股 · 美股 · 港股 · 加密 · 实时指数纵览
         </p>
         <div className="relative mt-8">
           <div className="overflow-hidden rounded-xl border border-paper bg-background shadow-2xl">
             <Image
-              src="/marketing/workbench.png"
-              alt="点金 Midas 工作台:K 线 + 缠论 + AI 决策卡"
-              width={1440}
-              height={900}
+              src="/marketing/global.png"
+              alt="点金 Midas 全球市场页:四市场实时指数 + 全球行情地图"
+              width={1528}
+              height={951}
               className="h-auto w-full"
             />
           </div>
@@ -441,35 +441,35 @@ function AiChan() {
             LangGraph workflow 把 K 线 + 缠论结构 + 4 项指标喂给 DeepSeek · 输出结构化评分(强多/弱多/中性/弱空/强空)+ 关键支撑阻力位 + 中文解读,秒级生成、随市更新。看好信号可一键模拟下单,全程虚拟、零风险验证你的判断。
           </p>
           <div className="grid flex-1 grid-cols-2 gap-3">
-            {/* 上半 · 综合评分 + 标签 + 置信度 */}
+            {/* 上半 · 综合评分 + 技术面研判 + 一键下单 */}
             <figure className="flex flex-col">
               <div className="relative aspect-[5/6] overflow-hidden rounded-xl border border-paper bg-background shadow-lg">
                 <Image
                   src="/marketing/ai-card-top.png"
-                  alt="AI 决策卡上半 · 综合评分 + 弱空标签 + 置信度"
+                  alt="AI 决策卡:综合评分 + 技术面研判 + 一键下单(开多)"
                   fill
-                  className="object-cover object-top"
+                  className="object-contain"
                   sizes="(max-width: 1024px) 50vw, 25vw"
                 />
               </div>
               <figcaption className="mt-2 text-center text-[11px] text-muted-foreground/70">
-                评分 · 标签 · 置信度
+                评分 · 研判 · 一键下单
               </figcaption>
             </figure>
 
-            {/* 下半 · 关键位 + AI 分析 + 缠论买卖点 */}
+            {/* 下半 · 一键模拟下单面板(全程虚拟)*/}
             <figure className="flex flex-col">
               <div className="relative aspect-[5/6] overflow-hidden rounded-xl border border-paper bg-background shadow-lg">
                 <Image
                   src="/marketing/ai-card-bottom.png"
-                  alt="AI 决策卡下半 · 关键位 + AI 分析 + 缠论买卖点"
+                  alt="AI 一键模拟下单面板:杠杆 + 保证金 + 确认(全程虚拟)"
                   fill
-                  className="object-cover object-top"
+                  className="object-contain"
                   sizes="(max-width: 1024px) 50vw, 25vw"
                 />
               </div>
               <figcaption className="mt-2 text-center text-[11px] text-muted-foreground/70">
-                关键位 · 分析 · 买卖点
+                虚拟下单 · 杠杆 · 一键确认
               </figcaption>
             </figure>
           </div>
