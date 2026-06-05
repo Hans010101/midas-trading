@@ -10,9 +10,6 @@
  * 跟 crypto-header 同构,去掉资金费(现货无)· instrument 默认 spot。
  */
 
-import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
-
 import { WatchlistToggleButton } from '@/components/watchlist/watchlist-toggle-button'
 import { useKline } from '@/hooks/use-kline'
 import { cn } from '@/lib/utils'
@@ -25,11 +22,6 @@ export const SPOT_PREVIEW_PERIODS: Period[] = ['15m', '1h', '1d']
 const HK_PERIODS: Period[] = ['1d', '1w']
 
 const MARKET_LABEL: Record<'cn' | 'us' | 'hk', string> = { cn: 'A股', us: '美股', hk: '港股' }
-const MARKET_HOME: Record<'cn' | 'us' | 'hk', '/cn-market' | '/us-market' | '/hk-market'> = {
-  cn: '/cn-market',
-  us: '/us-market',
-  hk: '/hk-market',
-}
 
 interface SpotHeaderProps {
   symbol: string
@@ -69,14 +61,6 @@ export function SpotHeader({ symbol, name, market, period, onPeriodChange }: Spo
   return (
     <header className="border-b border-paper bg-surface-card px-6 py-3">
       <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-6 gap-y-2">
-        <Link
-          href={MARKET_HOME[market]}
-          className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-midas-red"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          {MARKET_LABEL[market]}首页
-        </Link>
-
         <div className="flex items-baseline gap-2">
           <span className="font-serif text-2xl font-bold">{symbol}</span>
           {name && <span className="text-sm text-muted-foreground">{name}</span>}
