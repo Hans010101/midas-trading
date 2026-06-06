@@ -182,6 +182,10 @@ class MidasCHLoader:
                 raise RuntimeError(msg)
             frame = pd.DataFrame(rows, columns=["trade_date", *_OHLCV_COLUMNS])
             frame = frame.set_index("trade_date").sort_index()
+            # 实测兜底:CH crypto perp 日线有重复日期(503 根 > 实际天数),
+            # 引擎 _align reindex 会报 "duplicate labels";同日留最后写入。
+            # 采集端为何写重 = 另行排查的数据质量问题(非本 loader 职责)。
+            frame = frame[~frame.index.duplicated(keep="last")]
             frame.index = pd.DatetimeIndex(frame.index, name="trade_date")
             out[code] = frame[_OHLCV_COLUMNS].astype(float)
         return out
