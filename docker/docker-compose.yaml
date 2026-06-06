@@ -160,14 +160,23 @@ services:
       - -n
       - vibe@%h
       - --loglevel=info
-    # ★ 补强1:不用 env_file ../.env(常驻服务最小权限,不塞 DB/SECRET 全量)·
-    #   只显式给 CH 连接 + Redis broker;密码从 compose 环境(.env)引,不硬编码、不进镜像。
+    # ★ S1a 修(R1b update.sh:292 compose up 失败修复 · Hans 拍板):
+    #   原 P1-4b-1 用 ${CLICKHOUSE_PASSWORD} 插值取凭证 → compose 插值找 .env 是在
+    #   project-directory(= 第一个 -f 文件目录 = docker/)找,docker/ 下无 .env →
+    #   CLICKHOUSE_USER/PASSWORD 取空 → vibe-worker recreate 失败 → 292 行炸 → 自动回滚。
+    #   改为 env_file: ../.env(与 api/worker/web 逐字一致):路径相对 compose 文件位置(docker/)
+    #   解析到仓库根 /opt/midas/.env,与运行 CWD 无关,稳定不踩插值坑。
+    #   ⚠ 取舍:env_file 全量注入 .env(牺牲原"最小权限"设计,vibe 容器拿到全量 env)。Hans 拍板
+    #   S1a:换稳定 + 与现有一致。vibe 在内网 / 不暴露端口 / 镜像不含 DB 驱动(连不了 PG),全量
+    #   .env 风险有限;env 最小化(走 --env-file 显式路径)作为后续优化项。
+    env_file:
+      - path: ../.env
+        required: true
     environment:
+      # 容器内固定的非密配置(域名/端口/broker · 覆盖 env_file 里可能的 localhost 值)· 不走插值。
+      # 凭证(CLICKHOUSE_USER/PASSWORD/DATABASE)由上面 env_file ../.env 提供。
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: "8123"
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
-      CLICKHOUSE_DATABASE: ${CLICKHOUSE_DATABASE:-default}
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
       PYTHONUNBUFFERED: "1"
