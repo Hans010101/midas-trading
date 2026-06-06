@@ -75,11 +75,14 @@ def _build_sma_signal_engine(sma_fast: int, sma_slow: int):
     return _SmaCrossSignalEngine()
 
 
-def main() -> int:
-    cfg = _load_config(sys.argv)
+def run_one(config: dict) -> dict:
+    """路径B 跑一次回测,返回结构化结果 dict(CLI main 与 vibe Celery task 共用)。
 
-    run_dir = Path(cfg.get("run_dir") or tempfile.mkdtemp(prefix="vibe_bt_"))
-    run_id = str(cfg.get("run_id") or run_dir.name or uuid.uuid4().hex[:12])
+    永远返回 {status: "ok"|"error", run_id, run_dir, artifacts_dir, metrics?/error?}
+    —— 不 print、不 sys.exit、不 raise(顶层兜底转 error dict),便于经 Celery result 传回主 worker。
+    """
+    run_dir = Path(config.get("run_dir") or tempfile.mkdtemp(prefix="vibe_bt_"))
+    run_id = str(config.get("run_id") or run_dir.name or uuid.uuid4().hex[:12])
     run_dir.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -88,45 +91,41 @@ def main() -> int:
 
         from midas_ch_loader import MidasCHLoader
 
-        sma_fast = int(cfg.get("sma_fast", 5))
-        sma_slow = int(cfg.get("sma_slow", 20))
-        bars_per_year = int(cfg.get("bars_per_year", _DEFAULT_BARS_PER_YEAR))
+        sma_fast = int(config.get("sma_fast", 5))
+        sma_slow = int(config.get("sma_slow", 20))
+        bars_per_year = int(config.get("bars_per_year", _DEFAULT_BARS_PER_YEAR))
 
-        engine = CryptoEngine(cfg)
+        engine = CryptoEngine(config)
         loader = MidasCHLoader()
         signal_engine = _build_sma_signal_engine(sma_fast, sma_slow)
 
         metrics = engine.run_backtest(
-            cfg, loader, signal_engine, run_dir=run_dir, bars_per_year=bars_per_year,
+            config, loader, signal_engine, run_dir=run_dir, bars_per_year=bars_per_year,
         )
         scalar = {k: v for k, v in metrics.items() if not isinstance(v, dict)}
-        print(
-            json.dumps(
-                {
-                    "status": "ok",
-                    "run_id": run_id,
-                    "run_dir": str(run_dir),
-                    "artifacts_dir": str(run_dir / "artifacts"),
-                    "metrics": scalar,
-                },
-                ensure_ascii=False,
-            ),
-        )
-        return 0
-    except Exception as exc:  # noqa: BLE001 — 顶层兜底:任何失败转结构化 JSON + 非零退出
-        print(
-            json.dumps(
-                {
-                    "status": "error",
-                    "run_id": run_id,
-                    "run_dir": str(run_dir),
-                    "error": f"{type(exc).__name__}: {exc}",
-                    "traceback": traceback.format_exc(),
-                },
-                ensure_ascii=False,
-            ),
-        )
-        return 1
+        return {
+            "status": "ok",
+            "run_id": run_id,
+            "run_dir": str(run_dir),
+            "artifacts_dir": str(run_dir / "artifacts"),
+            "metrics": scalar,
+        }
+    except Exception as exc:  # noqa: BLE001 — 顶层兜底:任何失败转 error dict(不 raise · 便于 Celery result)
+        return {
+            "status": "error",
+            "run_id": run_id,
+            "run_dir": str(run_dir),
+            "error": f"{type(exc).__name__}: {exc}",
+            "traceback": traceback.format_exc(),
+        }
+
+
+def main() -> int:
+    """CLI 入口(保持 P1-4a 实测的 argv/env 行为):读 config → run_one → print JSON → 退出码。"""
+    cfg = _load_config(sys.argv)
+    result = run_one(cfg)
+    print(json.dumps(result, ensure_ascii=False))
+    return 0 if result.get("status") == "ok" else 1
 
 
 if __name__ == "__main__":

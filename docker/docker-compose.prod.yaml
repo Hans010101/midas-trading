@@ -133,6 +133,20 @@ services:
         limits:
           memory: 1G
 
+  # P1-4b 方案戊:vibe-worker 资源限额(★ 初值 768M · P1-4b-2 建好必 docker stats 实测调 ·
+  # 余 ~2.5G / CH 已吃 2G,防 OOM;不够再降或调限额)
+  vibe-worker:
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
   web:
     # Vercel 模式下不启动这个 service ·
     # 自托管全栈模式才用:`docker compose --profile self-hosted up`

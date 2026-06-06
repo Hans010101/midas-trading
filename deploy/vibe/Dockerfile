@@ -20,11 +20,15 @@ ENV PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/ \
     PYTHONUNBUFFERED=1
 
 # 钉死 vibe==0.1.9 + clickhouse-connect(HTTP 8123 读 CH · 对齐 apps/api 的 >=0.8.0)。
+# P1-4b 加 celery + redis(py 客户端):vibe-worker 消费 backtest 队列。
+# ★ 不加 app.* / 不加 DB 驱动(psycopg/SQLAlchemy)/ 不塞 DB 凭证 —— vibe-worker 只算不落库(解耦)。
 # --no-cache-dir 省镜像体积(盘紧)· 单条 RUN。
 # 注:python:3.12-slim 实测 pip 即可装通(P1-3 路径B 在 slim 上退出码0),无需额外 apt。
 RUN pip install --no-cache-dir \
     "vibe-trading-ai==0.1.9" \
-    "clickhouse-connect>=0.8.0"
+    "clickhouse-connect>=0.8.0" \
+    "celery>=5.3" \
+    "redis>=5.0"
 
 # 非 root:vibe(未来)会在容器内跑生成的策略代码,非 root 收敛风险。
 # 固定 uid 便于挂载卷权限对齐;/work 为运行时挂载点(loader + harness 放这)。
