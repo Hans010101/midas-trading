@@ -16,6 +16,16 @@ accept_content = ["json"]
 timezone = "Asia/Shanghai"
 enable_utc = True
 
+# ── 队列路由(P1-4b · 方案戊)─────────────────────────────────────────────────
+# 主 worker 启动【无 -Q】→ 只消费默认队列 "celery"(此处显式化)· ★绝不订阅 backtest。
+# vibe 回测任务路由到 backtest 队列 → 由 midas-vibe 容器内的 vibe-worker(-Q backtest)消费。
+# 主 worker 没装 vibe;若误给它加 -Q backtest 会 import 崩 → 主 worker 命令永不加 -Q backtest。
+# 注:task_routes 只影响【发送时】落哪个队列,不会让主 worker 去消费 backtest(消费由 -Q 决定)。
+task_default_queue = "celery"
+task_routes = {
+    "vibe.run_backtest_job": {"queue": "backtest"},
+}
+
 # Beat schedule(时刻是 CN 本地)
 # TODO(Task 4.3): 加密增量从 5 分钟轮询升级为 WebSocket 实时推送 + 1 分钟 K 落库
 beat_schedule = {
@@ -213,6 +223,19 @@ beat_schedule = {
         "task": "tasks.crypto.fear_greed_refresh",
         # alternative.me FGI 每日更新一次 · 每 6 小时一轮即可保证当日值及时合并入 overview
         "schedule": crontab(minute="47", hour="*/6"),
+        "options": {"expires": 3000},
+    },
+    # ── P1-4b-2 研究室回测兜底(默认 celery 队列 · 主 worker 跑 · 不碰 backtest 队列)──────
+    "backtest-scan-stale-pending": {
+        "task": "tasks.backtest.scan_stale_pending",
+        # 超时③:每 5 分钟扫 pending 超 10min 的回测行 → 标 error(vibe-worker 抖动/丢任务兜底)
+        "schedule": crontab(minute="*/5"),
+        "options": {"expires": 280},
+    },
+    "backtest-cleanup-run-dirs": {
+        "task": "tasks.backtest.cleanup_run_dirs",
+        # 清孤儿 run_dir:vibe-worker 异常退出残留、超 6h 的目录 · 每 2 小时清(防撑爆共享卷)
+        "schedule": crontab(minute="15", hour="*/2"),
         "options": {"expires": 3000},
     },
 }

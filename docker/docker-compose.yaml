@@ -138,6 +138,53 @@ services:
         condition: service_started
     networks:
       - midas-net
+    volumes:
+      # 共享回测 artifacts 卷:vibe-worker 写 / 主 worker 读 + 落库后清(P1-4b 方案戊)
+      - backtest_runs:/work/runs
+
+  # ── P1-4b 方案戊:vibe 专用 Celery worker(消费 backtest 队列)──────────────────
+  # 主 worker enqueue 到 backtest 队列 → 本服务跑 run_backtest_job 逻辑 → 写 artifacts 共享卷
+  # → 结果经 Celery 回主 worker 落库。★ 不挂 docker.sock · 不装 app./不拿 DB 凭证(只算不落库)。
+  vibe-worker:
+    image: midas-vibe:0.1.9            # ★ 独立镜像(非 compose build)· update.sh 单独 docker build
+    container_name: midas-vibe-worker
+    restart: unless-stopped
+    command:
+      - celery
+      - -A
+      - vibe_celery_app
+      - worker
+      - -Q
+      - backtest                       # ★ 只消费 backtest 队列(主 worker 永不加 -Q backtest)
+      - --concurrency=1                # 内存现实:一次一个回测
+      - -n
+      - vibe@%h
+      - --loglevel=info
+    # ★ 补强1:不用 env_file ../.env(常驻服务最小权限,不塞 DB/SECRET 全量)·
+    #   只显式给 CH 连接 + Redis broker;密码从 compose 环境(.env)引,不硬编码、不进镜像。
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DATABASE: ${CLICKHOUSE_DATABASE:-default}
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - midas-net
+    volumes:
+      # ★ 相对路径以 compose 所在 docker/ 为基:../ = 仓库根
+      - backtest_runs:/work/runs                                                         # 写 artifacts
+      - ../apps/api/app/services/backtest/midas_ch_loader.py:/work/midas_ch_loader.py:ro  # loader 单一来源挂载
+      - ../deploy/vibe/run_backtest_job.py:/work/run_backtest_job.py:ro
+      - ../deploy/vibe/vibe_celery_app.py:/work/vibe_celery_app.py:ro
+    # 镜像已 USER vibe(非 root)· 不映射端口(不经 Caddy / 不面向公网)
 
   web:
     build:
@@ -189,3 +236,5 @@ volumes:
     name: midas-clickhouse-data
   redis_data:
     name: midas-redis-data
+  backtest_runs:
+    name: midas-backtest-runs

@@ -133,6 +133,21 @@ services:
         limits:
           memory: 1G
 
+  # P1-4b 方案戊:vibe-worker 资源限额。
+  # ★ P1-4b-1 实测 RSS ~64.5MiB @ concurrency=1 → 768M 严重高估;调到 256M(留 ~4x 余量,
+  #   且省紧张内存 ~512M)。如未来 vibe 任务更重(多标的/更长周期)再上调 + docker stats 复测。
+  vibe-worker:
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
   web:
     # Vercel 模式下不启动这个 service ·
     # 自托管全栈模式才用:`docker compose --profile self-hosted up`

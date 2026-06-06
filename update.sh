@@ -184,6 +184,8 @@ NEED_BUILD_WEB=false
 NEED_COMPOSE_UP=false
 NEED_CADDY_RELOAD=false
 NEED_ALEMBIC=false
+NEED_BUILD_VIBE=false      # P1-4b:midas-vibe 镜像源(deploy/vibe/Dockerfile)改 → 重建镜像
+NEED_RESTART_VIBE=false    # P1-4b:vibe 运行时挂载文件(job/celery_app/loader)改 → 只重起 vibe-worker
 
 # api / worker 共用一个 Dockerfile 体系(worker context 是仓库根 · COPY apps/api + apps/worker)
 if echo "$CHANGED" | grep -qE "^apps/api/|^apps/worker/"; then
@@ -207,6 +209,17 @@ fi
 if echo "$CHANGED" | grep -q "^deploy/Caddyfile$"; then
   NEED_CADDY_RELOAD=true
   echo "  ${MAGENTA}▸${NC} 检测到 deploy/Caddyfile 改动 → 更新 /etc/caddy/Caddyfile + reload"
+fi
+
+# P1-4b 方案戊:midas-vibe 是 image:(非 compose build)· Dockerfile 改 → 必须手动 docker build
+if echo "$CHANGED" | grep -qE "^deploy/vibe/Dockerfile$"; then
+  NEED_BUILD_VIBE=true
+  echo "  ${MAGENTA}▸${NC} 检测到 deploy/vibe/Dockerfile 改动 → 重建 midas-vibe 镜像 + 重起 vibe-worker"
+fi
+# vibe 运行时挂载代码(run_backtest_job/vibe_celery_app)或 loader 改 → 只重起 vibe-worker(不重建镜像)
+if echo "$CHANGED" | grep -qE "^deploy/vibe/.*\.py$|^apps/api/app/services/backtest/midas_ch_loader\.py$"; then
+  NEED_RESTART_VIBE=true
+  echo "  ${MAGENTA}▸${NC} 检测到 vibe 挂载代码/loader 改动 → 重起 vibe-worker(挂载即生效 · 不重建镜像)"
 fi
 
 # alembic migration 新增(只看新文件 · 不看修改)
@@ -246,6 +259,17 @@ RECREATE_SVCS=()
 [ "$NEED_BUILD_API" = "true" ] && RECREATE_SVCS+=("api" "worker")
 [ "$NEED_BUILD_WEB" = "true" ] && RECREATE_SVCS+=("web")
 
+# ── P1-4b 方案戊:midas-vibe 是 image:(非 compose build)→ 任何 compose up 前先确保镜像存在 ──
+# 首次(镜像不存在)或 deploy/vibe/Dockerfile 改 → docker build(compose 不会自动 build image: 服务)。
+# ⚠ 必须在下方 compose up 之前:否则 plain `compose up -d` 引用 midas-vibe:0.1.9 会因镜像缺失失败。
+if [ "$NEED_BUILD_VIBE" = "true" ] || ! docker image inspect midas-vibe:0.1.9 >/dev/null 2>&1; then
+  section "构建 midas-vibe:0.1.9 镜像(image: · compose 不自动 build)"
+  export DOCKER_BUILDKIT=1
+  timeout 600 docker build -t midas-vibe:0.1.9 deploy/vibe
+  NEED_RESTART_VIBE=true   # 新镜像 → 标记重起 vibe-worker 应用
+  ok "midas-vibe:0.1.9 镜像就绪"
+fi
+
 if [ ${#RECREATE_SVCS[@]} -gt 0 ]; then
   section "强制重建有代码改动的无状态服务:${RECREATE_SVCS[*]}"
   # --build         重建镜像
@@ -275,6 +299,15 @@ elif [ "$NEED_COMPOSE_UP" = "true" ]; then
   ok "compose up 返回"
 else
   skip "docker 容器无需变更"
+fi
+
+# ── P1-4b 方案戊:vibe-worker 重起(应用运行时挂载代码/loader 改动,或新镜像)──────
+# midas-vibe 是 image: · 不随上面 RECREATE_SVCS 的 --build 走 · 单独 force-recreate 应用。
+# --no-deps 只动 vibe-worker(不碰 redis/clickhouse 等有状态依赖)。
+if [ "$NEED_RESTART_VIBE" = "true" ]; then
+  section "重起 vibe-worker(应用挂载代码/新镜像 · --no-deps 不碰其它服务)"
+  $COMPOSE up -d --force-recreate --no-deps vibe-worker 2>&1 | tail -20
+  ok "vibe-worker 重起"
 fi
 
 # ============================================================
