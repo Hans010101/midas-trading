@@ -225,4 +225,17 @@ beat_schedule = {
         "schedule": crontab(minute="47", hour="*/6"),
         "options": {"expires": 3000},
     },
+    # ── P1-4b-2 研究室回测兜底(默认 celery 队列 · 主 worker 跑 · 不碰 backtest 队列)──────
+    "backtest-scan-stale-pending": {
+        "task": "tasks.backtest.scan_stale_pending",
+        # 超时③:每 5 分钟扫 pending 超 10min 的回测行 → 标 error(vibe-worker 抖动/丢任务兜底)
+        "schedule": crontab(minute="*/5"),
+        "options": {"expires": 280},
+    },
+    "backtest-cleanup-run-dirs": {
+        "task": "tasks.backtest.cleanup_run_dirs",
+        # 清孤儿 run_dir:vibe-worker 异常退出残留、超 6h 的目录 · 每 2 小时清(防撑爆共享卷)
+        "schedule": crontab(minute="15", hour="*/2"),
+        "options": {"expires": 3000},
+    },
 }

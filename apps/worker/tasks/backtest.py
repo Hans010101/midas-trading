@@ -25,10 +25,12 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import settings
 from app.models.backtest_run import BacktestRun
+from app.services.backtest.maintenance import cleanup_stale_run_dirs
 from app.services.backtest.persistence import (
     create_pending_run,
     persist_error,
     persist_result,
+    sweep_stale_pending,
 )
 from app.services.backtest.service import build_backtest_config, parse_artifacts
 from app.services.backtest.types import BacktestParams
@@ -40,6 +42,15 @@ _SHARED_RUNS_ROOT = "/work/runs"
 
 # vibe-worker 任务名(★ 与 deploy/vibe/vibe_celery_app.py @app.task(name=...) 逐字一致 · 易踩坑2)
 _VIBE_TASK = "vibe.run_backtest_job"
+
+# ── P1-4b-2 超时三层(回测实测几秒,阈值给宽松值)──────────────────────────────
+# ① 入队 expires:vibe 任务入队后 N 秒没被消费就作废(vibe-worker 全挂时不堆任务)。
+_ENQUEUE_EXPIRES_S = 600
+# ② task 执行超时:在 vibe_celery_app.py 的 @task(soft_time_limit/time_limit)设(执行层)。
+# ③ pending 兜底:beat 扫 created_at 超 N 分钟仍 pending 的行 → 标 error(最后一道,防永久转圈)。
+_PENDING_TIMEOUT_MIN = 10
+# 孤儿 run_dir TTL:vibe-worker 异常退出残留的目录,超 N 小时清(防撑爆共享卷)。
+_RUN_DIR_TTL_HOURS = 6.0
 
 
 async def _create_pending(params: BacktestParams, user_id: UUID | None) -> int:
@@ -117,12 +128,9 @@ def run_backtest(self: Any, params: dict[str, Any], user_id: str | None = None) 
         _VIBE_TASK,
         args=[config],
         queue="backtest",
+        expires=_ENQUEUE_EXPIRES_S,  # 超时①:入队 N 秒没被消费即作废
         link=signature("tasks.backtest.persist_outcome", args=[run_pk], queue="celery"),
     )
-
-    # TODO(P1-4b-2 加固 · 超时兜底):vibe-worker 若卡死/丢任务,pending 行会永远悬着。
-    #   落点:① persist_outcome 加 soft_time_limit;② 一个 beat 任务扫 created_at 超 N 分钟仍
-    #   pending 的行 → 标 error/timeout。本步先留 TODO,不写复杂逻辑。
     logger.info("[backtest] run %s 落 pending + enqueue 到 backtest 队列", run_pk)
     return {"backtest_run_id": run_pk, "status": "pending"}
 
@@ -140,3 +148,39 @@ def persist_outcome(vibe_result: dict[str, Any], run_pk: int) -> dict[str, Any]:
     """
     asyncio.run(_persist(vibe_result, run_pk))
     return {"backtest_run_id": run_pk, "persisted": vibe_result.get("status")}
+
+
+async def _sweep_pending() -> int:
+    engine = create_async_engine(settings.database_url)
+    maker = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with maker() as session:
+            n = await sweep_stale_pending(session, older_than_minutes=_PENDING_TIMEOUT_MIN)
+            await session.commit()
+            return n
+    finally:
+        await engine.dispose()
+
+
+@shared_task(name="tasks.backtest.scan_stale_pending", max_retries=0)
+def scan_stale_pending() -> dict[str, Any]:
+    """超时③:beat 定时扫 created_at 超 _PENDING_TIMEOUT_MIN 仍 pending 的行 → 标 error。
+
+    最后一道兜底:vibe-worker 抖动/OOM/丢任务时,pending 不会永久转圈。
+    """
+    swept = asyncio.run(_sweep_pending())
+    if swept:
+        logger.warning("[backtest] 兜底扫描:%d 个超时 pending 标 error", swept)
+    return {"swept": swept}
+
+
+@shared_task(name="tasks.backtest.cleanup_run_dirs", max_retries=0)
+def cleanup_run_dirs() -> dict[str, Any]:
+    """清孤儿 run_dir:vibe-worker 异常退出残留、超 _RUN_DIR_TTL_HOURS 的目录(防撑爆共享卷)。
+
+    persist_outcome 正常落库后已 rmtree(run_dir);本任务清【异常未清】的残留。
+    """
+    removed = cleanup_stale_run_dirs(Path(_SHARED_RUNS_ROOT), ttl_hours=_RUN_DIR_TTL_HOURS)
+    if removed:
+        logger.info("[backtest] 清理孤儿 run_dir:%d 个", removed)
+    return {"removed": removed}

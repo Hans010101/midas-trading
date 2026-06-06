@@ -22,10 +22,16 @@ app = Celery("midas-vibe", broker=_BROKER, backend=_BACKEND)
 # 必须由【主 worker 侧】在 send_task 的 link 上显式 queue="celery"(见 tasks/backtest.py),
 # 否则会被这里的默认队列吞进 backtest → 主 worker 收不到。
 app.conf.task_default_queue = "backtest"
-app.conf.task_acks_late = True  # 任务执行完才 ack(worker 崩则重投 · b-2 再配合超时/幂等加固)
+app.conf.task_acks_late = True  # 任务执行完才 ack(worker 崩则重投)
+
+# P1-4b-2 超时②(执行层):回测实测几秒 → 宽松值。soft 先抛 SoftTimeLimitExceeded(可被
+# run_one 的兜底 except 捕获转 error dict),hard 强杀 worker 进程兜底。配合主 worker 侧
+# 入队 expires(超时①)+ beat 扫 pending(超时③)三层防卡死。
+_SOFT_TIME_LIMIT_S = 180
+_HARD_TIME_LIMIT_S = 240
 
 
-@app.task(name="vibe.run_backtest_job")
+@app.task(name="vibe.run_backtest_job", soft_time_limit=_SOFT_TIME_LIMIT_S, time_limit=_HARD_TIME_LIMIT_S)
 def run_backtest_job_task(config: dict) -> dict:
     """消费 backtest 队列 · 跑一次回测 · 返回 {status,run_id,run_dir,artifacts_dir,metrics?/error?}。
 

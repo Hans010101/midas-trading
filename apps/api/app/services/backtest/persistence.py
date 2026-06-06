@@ -5,8 +5,10 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.backtest_run import BacktestRun
@@ -63,3 +65,22 @@ async def persist_error(
     if run_id is not None:
         run.run_id = run_id
     await session.flush()
+
+
+async def sweep_stale_pending(session: AsyncSession, *, older_than_minutes: int) -> int:
+    """超时兜底:把超过 older_than_minutes 仍 pending 的回测行标 error · 返回标记数 · 调用方 commit。
+
+    防 vibe-worker 抖动/OOM/丢任务导致 pending 永远转圈(P1-4b-2 三层超时的最后一层)。
+    created_at 是 tz-aware(server_default now())· 与 aware UTC cutoff 比较。
+    """
+    cutoff = datetime.now(UTC) - timedelta(minutes=older_than_minutes)
+    stmt = select(BacktestRun).where(
+        BacktestRun.status == "pending",
+        BacktestRun.created_at < cutoff,
+    )
+    rows = list((await session.execute(stmt)).scalars().all())
+    for run in rows:
+        run.status = "error"
+        run.error = f"timeout: 超过 {older_than_minutes} 分钟未返回结果(vibe-worker 兜底扫描)"
+    await session.flush()
+    return len(rows)

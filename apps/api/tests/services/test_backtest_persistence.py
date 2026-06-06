@@ -4,6 +4,8 @@
 """
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +14,7 @@ from app.services.backtest.persistence import (
     create_pending_run,
     persist_error,
     persist_result,
+    sweep_stale_pending,
 )
 from app.services.backtest.types import BacktestParams, BacktestResult
 
@@ -76,3 +79,23 @@ async def test_create_pending_then_error(db_session: AsyncSession) -> None:
     assert run.status == "error"
     assert run.error is not None
     assert "查无数据" in run.error
+
+
+async def test_sweep_stale_pending_marks_only_old(db_session: AsyncSession) -> None:
+    # 新鲜 pending(server now · 不该被扫)
+    fresh = await create_pending_run(
+        db_session, BacktestParams(symbol="BTCUSDT", start="2025-01-01", end="2025-02-01"),
+    )
+    # 陈旧 pending(手动 backdate created_at 到 1 小时前)
+    stale = await create_pending_run(
+        db_session, BacktestParams(symbol="ETHUSDT", start="2025-01-01", end="2025-02-01"),
+    )
+    stale.created_at = datetime.now(UTC) - timedelta(hours=1)
+    await db_session.flush()
+
+    swept = await sweep_stale_pending(db_session, older_than_minutes=10)
+    assert swept == 1
+    assert stale.status == "error"
+    assert stale.error is not None
+    assert "timeout" in stale.error
+    assert fresh.status == "pending"  # 新鲜的不动
