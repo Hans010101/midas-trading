@@ -1,6 +1,7 @@
 from app.core.database import Base  # noqa: F401
 from app.models.ai_analysis_memory import AIAnalysisMemory  # noqa: F401
 from app.models.ai_usage import AIUsageLog  # noqa: F401
+from app.models.backtest_run import BacktestRun  # noqa: F401
 from app.models.bot_order_preset import BotOrderPreset  # noqa: F401
 from app.models.hk_board_lot import HkBoardLot  # noqa: F401
 from app.models.hk_sector import HkSector  # noqa: F401
