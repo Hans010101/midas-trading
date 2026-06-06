@@ -9,8 +9,15 @@
 from __future__ import annotations
 
 import os
+import sys
 
 from celery import Celery
+
+# ★ celery worker 进程的 sys.path 不保证含 /work(WorkingDir=/work ≠ 进 sys.path · PYTHONPATH 空)·
+#   手动 python 会自动把 cwd 加 sys.path[0],celery worker 不会 → 显式自定位本文件目录(/work),
+#   保证下面 task 内 `from run_backtest_job import run_one` 找得到同目录模块(run_backtest_job 自己
+#   有同样的自定位才能 import midas_ch_loader;本文件原缺这行 → celery 进程里报 ModuleNotFoundError)。
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # broker/backend env 名对齐主 worker(apps/worker/config/celery_config.py)。
 _BROKER = os.environ.get("CELERY_BROKER_URL", "redis://redis:6379/1")
