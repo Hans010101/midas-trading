@@ -149,17 +149,19 @@ services:
     image: midas-vibe:0.1.9            # ★ 独立镜像(非 compose build)· update.sh 单独 docker build
     container_name: midas-vibe-worker
     restart: unless-stopped
+    # ── M1b 卷权限持久化(取代 M1a 手动 chown)─────────────────────────────────────
+    # 容器以 root 起 → chown 共享卷 /work/runs 给 vibe(uid 10001)→ celery 原生 --uid/--gid
+    # 在初始化后把 worker 进程降到 10001(★ 主进程非 root · 红线不破)。
+    # ★ 每次容器启动都 re-apply chown → 删卷重建 / 换机后 vibe-worker 仍能写 /work/runs(M1b 核心,
+    #   区别于 M1a 一次性手动 chown)。不挂 docker.sock、不改镜像、无 gosu(用 celery 自带降权)·
+    #   短暂 root 仅做 chown + celery 特权初始化,随即降权。
+    user: "0:0"
     command:
-      - celery
-      - -A
-      - vibe_celery_app
-      - worker
-      - -Q
-      - backtest                       # ★ 只消费 backtest 队列(主 worker 永不加 -Q backtest)
-      - --concurrency=1                # 内存现实:一次一个回测
-      - -n
-      - vibe@%h
-      - --loglevel=info
+      - sh
+      - -c
+      - |
+        chown -R 10001:10001 /work/runs 2>/dev/null || true
+        exec celery -A vibe_celery_app worker -Q backtest --concurrency=1 -n vibe@%h --loglevel=info --uid=10001 --gid=10001
     # ★ S1a 修(R1b update.sh:292 compose up 失败修复 · Hans 拍板):
     #   原 P1-4b-1 用 ${CLICKHOUSE_PASSWORD} 插值取凭证 → compose 插值找 .env 是在
     #   project-directory(= 第一个 -f 文件目录 = docker/)找,docker/ 下无 .env →
