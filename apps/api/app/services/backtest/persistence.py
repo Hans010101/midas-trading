@@ -44,9 +44,14 @@ async def persist_result(
     *,
     run_id: str | None = None,
 ) -> None:
-    """回填成功结果(status=done + 16 指标 metrics_json + run_id)· 调用方 commit。"""
+    """回填成功结果(status=done + 16 指标 + equity/trades/run_card + run_id)· 调用方 commit。"""
     run.status = "done"
     run.metrics_json = dict(result["metrics"])
+    # P1-4c.5 full-data:equity/trades/run_card 一并落 PG(此前被丢 · B 档报告 UI 用)。
+    #   EquityPoint/Trade 是 TypedDict(运行时即 dict)· dict() 转成可入 JSONB 的 list[dict]。
+    run.equity_json = [dict(point) for point in result["equity"]]
+    run.trades_json = [dict(trade) for trade in result["trades"]]
+    run.run_card_json = result["run_card"]
     if run_id is not None:
         run.run_id = run_id
     await session.flush()

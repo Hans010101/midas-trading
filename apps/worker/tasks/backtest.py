@@ -87,9 +87,9 @@ async def _persist(vibe_result: dict[str, Any], run_pk: int) -> None:
             await session.commit()
     finally:
         await engine.dispose()
-    # 落库后清共享卷 run_dir(防堆积 · 16 指标已进 PG)。
-    # TODO(P1-4b-2 加固):若 B 档报告 UI 需 equity/trades 曲线,改为持久化进 PG 后再清,
-    #   或保留 run_dir + beat 定期清 N 天前目录(本步先落库即删,卷只做中转)。
+    # 落库后清共享卷 run_dir(防堆积)。
+    # ✅ P1-4c.5 已实现:equity/trades/run_card 已由 persist_result 落 PG(连同 16 指标)→ rmtree 安全
+    #   (commit 在前、rmtree 在后 · 全量结果已持久化,卷只做中转)。B 档报告 UI 从 PG 取数,不依赖 run_dir。
     run_dir = vibe_result.get("run_dir")
     if run_dir:
         shutil.rmtree(run_dir, ignore_errors=True)
