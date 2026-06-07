@@ -58,9 +58,6 @@ export default function LabPage() {
       <main className="mx-auto w-full max-w-5xl px-6 py-8">
         <div className="mb-6 flex items-center gap-3">
           <h1 className="font-serif text-2xl font-bold">策略研究室 · 回测</h1>
-          <span className="rounded bg-gold/15 px-2 py-0.5 font-mono text-[11px] text-gold">
-            VIRTUAL · 模拟研究
-          </span>
         </div>
 
         {authStatus === 'unauthenticated' ? (
@@ -128,8 +125,7 @@ export default function LabPage() {
                 )}
               </div>
               <p className="mt-3 text-xs text-faint">
-                策略 = SMA 双均线交叉(确定性 · 零 LLM)· 数据只读 ClickHouse ·
-                全程虚拟研究,不构成投资建议。
+                策略 = SMA 双均线交叉(确定性 · 零 LLM)· 数据只读 ClickHouse。
               </p>
             </section>
 

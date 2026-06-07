@@ -6,7 +6,8 @@
  * 结构照 components/crypto-preview/crypto-detail.tsx:'use client' + useSearchParams 读 ?id=。
  * 曲线照 account EquityCurveCard(单线)+ dimension OiChart(双线):equity 红实线 + benchmark 灰虚线。
  *
- * 🔴 红线:纯虚拟研究展示 · 绝不下单 / 撮合 / 真实交易 · 必带 VIRTUAL 徽章 + 免责页脚。
+ * 🔴 红线:纯虚拟研究展示 · 绝不下单 / 撮合 / 真实交易。
+ *    研究页不挂 VIRTUAL 徽章 / 免责(Hans 授权去除 · 与「虚拟下单 UI」红线区分,后者徽章/免责保留)。
  */
 
 import { useSession } from 'next-auth/react'
@@ -109,13 +110,10 @@ function ReportBody({ run }: { run: BacktestRunResponse }) {
 
   return (
     <div className="space-y-8">
-      {/* (a) 结论先行 + VIRTUAL 徽章 + 标的/区间 */}
+      {/* (a) 结论先行 + 标的/区间 */}
       <section>
         <div className="mb-2 flex flex-wrap items-center gap-3">
           <h1 className="font-serif text-2xl font-bold">回测报告</h1>
-          <span className="rounded bg-gold/15 px-2 py-0.5 font-mono text-[11px] text-gold">
-            VIRTUAL · 模拟研究
-          </span>
         </div>
         <p className="font-mono text-sm text-muted-foreground">
           {run.symbol} · crypto perp · {run.period} · {run.start_date} → {run.end_date}
@@ -247,11 +245,6 @@ function ReportBody({ run }: { run: BacktestRunResponse }) {
 
       {/* (e) run_card 方法学脚注 */}
       <MethodologyFootnote runCard={run.run_card_json} />
-
-      {/* (f) 免责页脚 */}
-      <footer className="border-t border-paper pt-4 text-xs text-faint">
-        历史回测不代表未来表现;数据为虚拟研究用途,不构成投资建议。
-      </footer>
     </div>
   )
 }
@@ -323,7 +316,7 @@ function conclusion(symbol: string, m: BacktestMetrics): string {
     `结论:SMA 双均线策略在 ${symbol}(crypto perp)区间内总收益 ${fmtPct(m.total_return)},` +
     `${beat ? '跑赢' : '跑输'}买入持有基准(超额 ${fmtPct(m.excess_return)});` +
     `夏普 ${m.sharpe.toFixed(2)}、最大回撤 ${fmtPct(m.max_drawdown)}、` +
-    `胜率 ${fmtPct(m.win_rate)}(共 ${fmtInt(m.trade_count)} 笔)。仅供研究参考,不构成投资建议。`
+    `胜率 ${fmtPct(m.win_rate)}(共 ${fmtInt(m.trade_count)} 笔)。`
   )
 }
 
