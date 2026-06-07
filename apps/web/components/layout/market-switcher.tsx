@@ -54,9 +54,11 @@ export function MarketSwitcher({ className }: { className?: string }) {
   const onGlobal = pathname?.startsWith('/global') ?? false
   // 自选汇总页(3.6)· 末位 Tab · 非市场,单独高亮
   const onWatchlist = pathname === '/watchlist'
-  // 在全球/自选页时不高亮任何交易市场 Tab(否则会回退到 storeMarket 误亮)
+  // 策略研究室(P1-4d)· 非市场 · /lab 与 /lab/report 都算 · 单独高亮
+  const onLab = pathname?.startsWith('/lab') ?? false
+  // 在全球/自选/研究室页时不高亮任何交易市场 Tab(否则会回退到 storeMarket 误亮)
   const active: Market | null =
-    onGlobal || onWatchlist ? null : (homeMarket ?? detailMarket ?? storeMarket)
+    onGlobal || onWatchlist || onLab ? null : (homeMarket ?? detailMarket ?? storeMarket)
 
   function handleSelect(m: Market) {
     // 港股(hk)阶段二单元3:行情页(/hk-market 策展池 18 只列表)已上线 →
@@ -124,6 +126,18 @@ export function MarketSwitcher({ className }: { className?: string }) {
         )}
       >
         自选
+      </button>
+      <button
+        type="button"
+        onClick={() => router.push('/lab')}
+        className={cn(
+          'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+          onLab
+            ? 'bg-midas-red text-primary-foreground'
+            : 'text-muted-foreground hover:bg-midas-red-glow hover:text-foreground',
+        )}
+      >
+        策略研究室
       </button>
     </nav>
   )
