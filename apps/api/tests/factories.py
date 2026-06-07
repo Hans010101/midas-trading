@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import secrets
 from collections.abc import Awaitable, Callable
+from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -21,6 +22,7 @@ from app.models.user import User
 from app.models.verification_token import TokenPurpose, VerificationToken
 from app.models.watchlist import WatchlistItem
 from app.services.auth import hash_password
+from app.services.backtest.types import BacktestParams, BacktestResult
 
 if TYPE_CHECKING:
     from app.models.virtual import VirtualAccount
@@ -162,3 +164,66 @@ def make_perp_price_fetcher(
         return prices.get(symbol)
 
     return fetcher
+
+
+# ===== 研究室回测 fixtures(P1-4c.5)=====
+
+
+def make_backtest_result(params: BacktestParams) -> BacktestResult:
+    """造一个完整 BacktestResult(16 指标 + 2 个 equity 点 + 1 笔 trade + run_card)。
+
+    persist_result 扩写 / 读端点 full-data 测试共用 · 字段形状对齐 service.parse_artifacts 产出。
+    """
+    return {
+        "params": asdict(params),
+        "metrics": {
+            "final_value": 1_100_000.0,
+            "total_return": 0.1,
+            "annual_return": 0.08,
+            "max_drawdown": -0.05,
+            "sharpe": 1.2,
+            "calmar": 1.6,
+            "sortino": 1.8,
+            "win_rate": 0.55,
+            "profit_loss_ratio": 1.3,
+            "profit_factor": 1.4,
+            "max_consecutive_loss": 3,
+            "avg_holding_days": 4.5,
+            "trade_count": 12,
+            "benchmark_return": 0.06,
+            "excess_return": 0.04,
+            "information_ratio": 0.9,
+        },
+        "equity": [
+            {
+                "timestamp": "2025-01-17",
+                "equity": 1_000_000.0,
+                "drawdown": 0.0,
+                "benchmark_equity": 1_000_000.0,
+                "ret": 0.0,
+                "active_ret": 0.0,
+            },
+            {
+                "timestamp": "2025-01-18",
+                "equity": 1_010_000.0,
+                "drawdown": 0.0,
+                "benchmark_equity": 1_005_000.0,
+                "ret": 0.01,
+                "active_ret": 0.005,
+            },
+        ],
+        "trades": [
+            {
+                "timestamp": "2025-01-18",
+                "code": "BTCUSDT",
+                "side": "buy",
+                "price": 95_000.0,
+                "qty": 0.1,
+                "reason": "entry",
+                "pnl": 0.0,
+                "holding_days": 0.0,
+                "return_pct": 0.0,
+            },
+        ],
+        "run_card": {"data_sources": ["ccxt"], "reproducibility": {"config_hash": "abc"}},
+    }
