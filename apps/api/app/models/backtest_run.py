@@ -48,6 +48,11 @@ class BacktestRun(Base):
     )
     # 16 个标量指标(done 时回填 · 见 service.BacktestMetrics)
     metrics_json: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    # P1-4c.5 full-data:收益曲线 / 逐笔 / run_card 方法学脚注(done 时回填 · 与 metrics_json 一致)·
+    #   数据来自 parse_artifacts 返回的 BacktestResult,B 档报告 UI 取数渲染(ADR 0038 D4)。
+    equity_json: Mapped[list[dict[str, object]] | None] = mapped_column(JSONB)
+    trades_json: Mapped[list[dict[str, object]] | None] = mapped_column(JSONB)
+    run_card_json: Mapped[dict[str, object] | None] = mapped_column(JSONB)
     error: Mapped[str | None] = mapped_column(Text)
 
     created_at: Mapped[datetime] = mapped_column(

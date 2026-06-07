@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.v1.alert_rules import router as alert_rules_router
 from app.api.v1.analysis import router as analysis_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.backtest import router as backtest_router
 from app.api.v1.bot_preset import router as bot_preset_router
 from app.api.v1.chart import router as chart_router
 from app.api.v1.cn import router as cn_router
@@ -41,3 +42,5 @@ router.include_router(us_router)
 router.include_router(hk_router)
 # ADR 0035 阶段 A · 全球指标概览(只读 · 不涉及交易)
 router.include_router(overview_router)
+# P1-4c.5(ADR 0038)· 研究室回测 full-data 读端点(只读 · authed-only 按 user 过滤 · 不涉及交易)
+router.include_router(backtest_router)

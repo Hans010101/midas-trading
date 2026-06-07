@@ -87,9 +87,9 @@ async def _persist(vibe_result: dict[str, Any], run_pk: int) -> None:
             await session.commit()
     finally:
         await engine.dispose()
-    # 落库后清共享卷 run_dir(防堆积 · 16 指标已进 PG)。
-    # TODO(P1-4b-2 加固):若 B 档报告 UI 需 equity/trades 曲线,改为持久化进 PG 后再清,
-    #   或保留 run_dir + beat 定期清 N 天前目录(本步先落库即删,卷只做中转)。
+    # 落库后清共享卷 run_dir(防堆积)。
+    # ✅ P1-4c.5 已实现:equity/trades/run_card 已由 persist_result 落 PG(连同 16 指标)→ rmtree 安全
+    #   (commit 在前、rmtree 在后 · 全量结果已持久化,卷只做中转)。B 档报告 UI 从 PG 取数,不依赖 run_dir。
     run_dir = vibe_result.get("run_dir")
     if run_dir:
         shutil.rmtree(run_dir, ignore_errors=True)
@@ -100,12 +100,20 @@ async def _persist(vibe_result: dict[str, Any], run_pk: int) -> None:
     name="tasks.backtest.run_backtest",
     max_retries=0,
 )
-def run_backtest(self: Any, params: dict[str, Any], user_id: str | None = None) -> dict[str, Any]:  # noqa: ARG001
+def run_backtest(
+    self: Any,
+    params: dict[str, Any],
+    user_id: str | None = None,
+    backtest_run_id: int | None = None,
+) -> dict[str, Any]:  # noqa: ARG001
     """触发一次研究室回测:落 pending → enqueue 到 backtest 队列(vibe-worker 消费)。
 
     Args:
         params: BacktestParams 的字段 dict(symbol/start/end/market/period/sma_fast/sma_slow/...)。
         user_id: 触发者 UUID 字符串(可空 · 匿名研究跑)。
+        backtest_run_id: P1-4c.5 · API 端已 create_pending_run 拿到的行 id;传入则复用,
+            不再自建(避免「API 建一行 + worker 又建一行」双 pending)。旧调用方(beat/编程触发)
+            不传 → 自建,向后兼容。
 
     Returns:
         契约 dict:{backtest_run_id, status:"pending"}(异步 · 结果由 persist_outcome 回填)。
@@ -115,7 +123,12 @@ def run_backtest(self: Any, params: dict[str, Any], user_id: str | None = None) 
     config = build_backtest_config(bt_params)
     uid = UUID(user_id) if user_id else None
 
-    run_pk = asyncio.run(_create_pending(bt_params, uid))
+    # P1-4c.5:API 传入 backtest_run_id 则复用其 pending 行;否则(beat/编程触发)自建。
+    run_pk = (
+        backtest_run_id
+        if backtest_run_id is not None
+        else asyncio.run(_create_pending(bt_params, uid))
+    )
 
     # 共享卷 run_dir(vibe + 主 worker 同挂 /work/runs)· vibe job 用 config["run_dir"]
     config["run_id"] = str(run_pk)
