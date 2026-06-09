@@ -25,6 +25,8 @@ const STATUS_LABEL: Record<BacktestStatus, string> = {
   error: '失败',
 }
 
+const PAGE_SIZE = 10 // 列表每页条数(纯前端切片分页 · 后端 limit 50 已够覆盖,不碰后端)
+
 export default function LabPage() {
   const router = useRouter()
   const { status: authStatus } = useSession()
@@ -36,6 +38,13 @@ export default function LabPage() {
   const [end, setEnd] = useState('2026-05-31')
   const [smaFast, setSmaFast] = useState(5)
   const [smaSlow, setSmaSlow] = useState(20)
+  const [page, setPage] = useState(1)
+
+  // 前端切片分页(数据已由 useBacktestList 一次取回 ≤50 条)· currentPage 夹取防越界
+  const rows = list.data ?? []
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const pageRows = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
   function submit() {
     create.mutate(
@@ -136,45 +145,70 @@ export default function LabPage() {
                 <LoadingNote className="py-12" />
               ) : list.isError ? (
                 <EmptyState title="暂时无法读取" hint="后端不可达 · 稍后重试" />
-              ) : (list.data ?? []).length === 0 ? (
+              ) : rows.length === 0 ? (
                 <EmptyState icon="🧪" title="还没有回测" hint="用上方表单发起第一个" />
               ) : (
-                <div className="overflow-x-auto rounded-lg border border-paper">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-paper bg-surface-card text-xs text-muted-foreground">
-                        <th className="px-3 py-2 text-left font-medium">#</th>
-                        <th className="px-3 py-2 text-left font-medium">标的</th>
-                        <th className="px-3 py-2 text-left font-medium">区间</th>
-                        <th className="px-3 py-2 text-left font-medium">状态</th>
-                        <th className="px-3 py-2 text-left font-medium">创建时间</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(list.data ?? []).map((r) => (
-                        <tr
-                          key={r.id}
-                          onClick={() => router.push(`/lab/report?id=${r.id}`)}
-                          className="cursor-pointer border-b border-paper/60 transition-colors hover:bg-midas-red-glow/30"
-                        >
-                          <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground/70">
-                            {r.id}
-                          </td>
-                          <td className="px-3 py-2.5 font-mono font-bold">{r.symbol}</td>
-                          <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                            {r.start_date} → {r.end_date}
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <StatusBadge status={r.status} />
-                          </td>
-                          <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                            {new Date(r.created_at).toLocaleString('zh-CN')}
-                          </td>
+                <>
+                  <div className="overflow-x-auto rounded-lg border border-paper">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-paper bg-surface-card text-xs text-muted-foreground">
+                          <th className="px-3 py-2 text-left font-medium">#</th>
+                          <th className="px-3 py-2 text-left font-medium">标的</th>
+                          <th className="px-3 py-2 text-left font-medium">区间</th>
+                          <th className="px-3 py-2 text-left font-medium">状态</th>
+                          <th className="px-3 py-2 text-left font-medium">创建时间</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {pageRows.map((r) => (
+                          <tr
+                            key={r.id}
+                            onClick={() => router.push(`/lab/report?id=${r.id}`)}
+                            className="cursor-pointer border-b border-paper/60 transition-colors hover:bg-midas-red-glow/30"
+                          >
+                            <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground/70">
+                              {r.id}
+                            </td>
+                            <td className="px-3 py-2.5 font-mono font-bold">{r.symbol}</td>
+                            <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                              {r.start_date} → {r.end_date}
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <StatusBadge status={r.status} />
+                            </td>
+                            <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                              {new Date(r.created_at).toLocaleString('zh-CN')}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {totalPages > 1 && (
+                    <div className="mt-4 flex items-center justify-center gap-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage <= 1}
+                        onClick={() => setPage(currentPage - 1)}
+                      >
+                        上一页
+                      </Button>
+                      <span className="font-mono text-xs text-muted-foreground">
+                        第 {currentPage} / {totalPages} 页
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage >= totalPages}
+                        onClick={() => setPage(currentPage + 1)}
+                      >
+                        下一页
+                      </Button>
+                    </div>
+                  )}
+                </>
               )}
             </section>
           </>
