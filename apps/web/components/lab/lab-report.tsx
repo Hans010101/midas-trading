@@ -14,6 +14,8 @@ import { useSession } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import type { ReactNode } from 'react'
 import {
+  Area,
+  AreaChart,
   CartesianGrid,
   Legend,
   Line,
@@ -50,6 +52,7 @@ interface MetricDef {
   label: string
   fmt: (v: number) => string
   tone?: boolean
+  sub?: string
 }
 const METRIC_DEFS: MetricDef[] = [
   { key: 'total_return', label: '总收益率', fmt: fmtPct, tone: true },
@@ -61,7 +64,7 @@ const METRIC_DEFS: MetricDef[] = [
   { key: 'win_rate', label: '胜率', fmt: fmtPct },
   { key: 'profit_loss_ratio', label: '盈亏比', fmt: fmtRatio },
   { key: 'profit_factor', label: '盈利因子', fmt: fmtRatio },
-  { key: 'trade_count', label: '交易笔数', fmt: fmtInt },
+  { key: 'trade_count', label: '交易笔数', fmt: fmtInt, sub: '完整回合(开+平)' },
   { key: 'max_consecutive_loss', label: '最大连亏', fmt: fmtInt },
   { key: 'avg_holding_days', label: '平均持仓(天)', fmt: (v) => v.toFixed(1) },
   { key: 'benchmark_return', label: '基准收益', fmt: fmtPct, tone: true },
@@ -107,6 +110,13 @@ function ReportBody({ run }: { run: BacktestRunResponse }) {
   const m = run.metrics_json
   const equity = run.equity_json ?? []
   const trades = run.trades_json ?? []
+  // 回撤副图数据 · 防御式:drawdown 符号/量纲未实测确认 → Math.abs 统一成「回撤深度」正值;
+  //   raw 保留原值供 tooltip 真机核对量纲(若实际是正比率,Math.abs 不改值;若是负比率,翻正显示)。
+  const drawdownData = equity.map((p) => ({
+    timestamp: p.timestamp,
+    dd: Math.abs(p.drawdown ?? 0),
+    raw: p.drawdown,
+  }))
 
   return (
     <div className="space-y-8">
@@ -148,6 +158,7 @@ function ReportBody({ run }: { run: BacktestRunResponse }) {
                   <div className={`mt-1 font-mono text-xl font-bold tabular-nums ${toneCls}`}>
                     {d.fmt(v)}
                   </div>
+                  {d.sub && <div className="mt-0.5 text-[10px] text-faint">{d.sub}</div>}
                 </div>
               )
             })}
@@ -208,11 +219,65 @@ function ReportBody({ run }: { run: BacktestRunResponse }) {
             </ResponsiveContainer>
           )}
         </div>
+
+        {/* 回撤副图 · 防御式(Math.abs 统一回撤深度正值 · Y 轴 reversed 使「更深」向下)·
+            tooltip 带原值供真机核对量纲 · 回撤用中国红系(负面) */}
+        <div className="mt-4 rounded-lg border border-paper bg-cream p-4 shadow-sm">
+          <h3 className="mb-2 font-serif text-sm font-bold">回撤</h3>
+          {equity.length === 0 ? (
+            <div className="flex h-24 items-center justify-center text-sm text-faint">
+              暂无回撤数据
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={120}>
+              <AreaChart data={drawdownData} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F7F6F1" />
+                <XAxis
+                  dataKey="timestamp"
+                  fontSize={10}
+                  tick={{ fill: '#94949C' }}
+                  minTickGap={48}
+                  tickLine={false}
+                />
+                <YAxis
+                  fontSize={10}
+                  tick={{ fill: '#94949C' }}
+                  width={56}
+                  reversed
+                  domain={[0, 'auto']}
+                  tickFormatter={(v) => `${(Number(v) * 100).toFixed(1)}%`}
+                />
+                <Tooltip
+                  contentStyle={{ background: '#FCFCF9', border: '1px solid #C8102E', fontSize: 12 }}
+                  labelStyle={{ color: '#1A1A1A' }}
+                  labelFormatter={(label, payload) => {
+                    const raw = payload?.[0]?.payload?.raw
+                    return `${label}${raw != null ? ` · 原值 ${raw}` : ''}`
+                  }}
+                  formatter={(v) => [`${(Number(v) * 100).toFixed(2)}%`, '回撤']}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="dd"
+                  name="回撤"
+                  stroke="#9E1024"
+                  strokeWidth={1.5}
+                  fill="#C8102E"
+                  fillOpacity={0.15}
+                  dot={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </div>
       </section>
 
       {/* (d) 逐笔明细 · 开仓笔 pnl/收益率 显「—」 */}
       <section>
-        <h2 className="mb-3 font-serif text-lg font-bold">逐笔明细 · {trades.length} 笔</h2>
+        <h2 className="mb-3 font-serif text-lg font-bold">
+          逐笔明细 · {m ? `${fmtInt(m.trade_count)} 笔交易 · ` : ''}
+          {trades.length} 条买卖记录
+        </h2>
         {trades.length === 0 ? (
           <EmptyState title="无成交" hint="该区间策略未触发任何买卖" />
         ) : (
