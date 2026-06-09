@@ -35,6 +35,11 @@ import type { BacktestMetrics, BacktestRunResponse, Trade } from '@/lib/api/back
 function fmtPct(v: number): string {
   return `${v >= 0 ? '+' : ''}${(v * 100).toFixed(2)}%`
 }
+// ★ 专用于 trades.return_pct:vibe 的 trades.csv return_pct 已是【百分比数值】(如 -2.76 = -2.76%),
+//   不能再 ×100(P1-4e.fix · 误用 fmtPct 曾显示 -276%)。metrics 是【比率】仍用 fmtPct。
+function fmtPctNum(v: number): string {
+  return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`
+}
 function fmtRatio(v: number): string {
   return v.toFixed(2)
 }
@@ -341,7 +346,7 @@ function TradeRow({ trade: t }: { trade: Trade }) {
       <td
         className={`px-3 py-2 text-right font-mono tabular-nums ${isOpen ? 'text-faint' : pnlTone}`}
       >
-        {isOpen ? '—' : fmtPct(t.return_pct)}
+        {isOpen ? '—' : fmtPctNum(t.return_pct)}
       </td>
       <td className="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">
         {t.holding_days.toFixed(1)}
