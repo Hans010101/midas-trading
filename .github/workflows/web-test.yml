@@ -79,3 +79,10 @@ jobs:
       - name: "★ 硬卡 · pnpm build(web: next build)"
         if: always()
         run: pnpm build
+
+      # P2-prep 任务2(ADR 0040):vitest 进闸 —— 量纲契约单测(fmtPct 比率×100 vs fmtPctNum
+      # 百分比数值不×100)在 CI 守回归,防 return_pct ×100 类翻车再犯。root pnpm test = turbo
+      # fan-out(apps/web: vitest run;无 test script 的包自动跳过)。
+      - name: "★ 硬卡 · pnpm test(web: vitest · 量纲契约单测)"
+        if: always()
+        run: pnpm test
