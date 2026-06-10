@@ -32,6 +32,17 @@ def test_build_backtest_config_crypto_1d() -> None:
     assert cfg["sma_slow"] == 20
     assert cfg["start_date"] == "2025-01-17"
     assert cfg["end_date"] == "2026-05-31"
+    assert cfg["bars_per_year"] == 365  # 1d 年化基数(P2-period)
+
+
+def test_build_backtest_config_bars_per_year_by_period() -> None:
+    """P2-period:bars_per_year 按 period 映射(1h 不补会把每根小时 bar 当一天年化 · 差 24×)。"""
+    base = {"symbol": "BTCUSDT", "start": "2026-05-08", "end": "2026-06-08"}
+    cfg_1h = build_backtest_config(BacktestParams(**base, period="1h"))
+    assert cfg_1h["interval"] == "1H"
+    assert cfg_1h["bars_per_year"] == 8760  # 24×365 · crypto 7×24
+    cfg_1w = build_backtest_config(BacktestParams(**base, period="1w"))
+    assert cfg_1w["bars_per_year"] == 52
 
 
 def test_build_backtest_config_bad_period() -> None:

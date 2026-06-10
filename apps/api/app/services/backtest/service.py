@@ -39,8 +39,18 @@ _PERIOD_TO_INTERVAL: dict[str, str] = {
     "1w": "1W",
 }
 
-# crypto 7×24 → 日线按 365 年化(供块2 job 传 bars_per_year)
+# crypto 7×24 年化基数 · 防御回退值(period 不在映射表时用 · P2-period 起按 period 映射)
 CRYPTO_BARS_PER_YEAR = 365
+
+# period → bars_per_year(crypto 7×24:1h=24×365=8760 · 1d=365 · 1w=52)。
+# ★ P2-period 关键补丁:此前 config 不带 bars_per_year,vibe job 永远回退 365 → 1h 的
+#   年化类指标(annual_return/sharpe/sortino/calmar/IR)会差 ~24× 量级(把每根小时 bar 当一天年化)。
+#   分钟档(1m/5m/15m/30m)当前产品不放开,真要放开时在此补映射,缺省回退 365 是防御不是正确值。
+_PERIOD_BARS_PER_YEAR: dict[str, int] = {
+    "1h": 8760,
+    "1d": 365,
+    "1w": 52,
+}
 
 # metrics.csv 的 16 字段(顺序对齐 vibe calc_metrics);两个整型字段单列。
 _METRIC_FIELDS: tuple[str, ...] = (
@@ -91,6 +101,8 @@ def build_backtest_config(params: BacktestParams) -> dict[str, object]:
         # 确定性 SMA 交叉参数(块2 job 据此手搓 signal_engine)
         "sma_fast": params.sma_fast,
         "sma_slow": params.sma_slow,
+        # 年化基数按 period 传给 vibe job(P2-period:1h=8760 · 1d=365;缺省防御回退 365)
+        "bars_per_year": _PERIOD_BARS_PER_YEAR.get(params.period, CRYPTO_BARS_PER_YEAR),
     }
 
 
