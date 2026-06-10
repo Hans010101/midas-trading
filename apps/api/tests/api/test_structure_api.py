@@ -41,6 +41,9 @@ def _canned_snapshot() -> StructureSnapshot:
 
 @pytest.mark.asyncio
 async def test_snapshot_unauthenticated_401(client: AsyncClient) -> None:
+    # CH 依赖也要覆盖:FastAPI 先解析 ch 依赖再走鉴权 · 测试不跑 lifespan,
+    # 不覆盖会在 401 之前炸 app.state.clickhouse(CI 实测教训)。
+    app.dependency_overrides[get_clickhouse] = lambda: SimpleNamespace(_client=object())
     r = await client.get("/api/v1/structure/snapshot/BTCUSDT")
     assert r.status_code == 401
 
