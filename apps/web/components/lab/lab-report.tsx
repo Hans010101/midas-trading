@@ -152,6 +152,14 @@ function ReportBody({ run }: { run: BacktestRunResponse }) {
               )
             })}
           </div>
+          {/* P2-period 收尾:日内周期的年化夏普类指标统计学 caveat(诊断结论:非 bug ·
+              收益非 i.i.d. 时 ×√bars_per_year 放大且跨频率不可比 · Lo 2002)· 1d 不显示。 */}
+          {run.period !== '1d' && (
+            <p className="mt-2 text-xs text-faint">
+              注:小时级回测的年化夏普/索提诺/信息比率按收益独立假设计算,趋势策略下会被放大,
+              且不宜与日线策略直接比较;评估小时级策略请优先参考总收益与最大回撤。
+            </p>
+          )}
         </section>
       )}
 
