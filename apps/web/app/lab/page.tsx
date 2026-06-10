@@ -12,6 +12,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useState, type ReactNode } from 'react'
 
+import { LabNav } from '@/components/lab/lab-nav'
 import { TopNav } from '@/components/layout/top-nav'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -78,6 +79,7 @@ export default function LabPage() {
         <div className="mb-6 flex items-center gap-3">
           <h1 className="font-serif text-2xl font-bold">策略研究室 · 回测</h1>
         </div>
+        <LabNav />
 
         {authStatus === 'unauthenticated' ? (
           <EmptyState title="请先登录" hint="研究室回测需要登录后访问" />
