@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input'
 import { EmptyState, LoadingNote } from '@/components/ui/state'
 import { useBacktestList, useCreateBacktest } from '@/hooks/use-backtest'
 import type { BacktestStatus } from '@/lib/api/backtest'
+import { cn } from '@/lib/utils'
 
 const STATUS_LABEL: Record<BacktestStatus, string> = {
   pending: '进行中',
@@ -26,6 +27,14 @@ const STATUS_LABEL: Record<BacktestStatus, string> = {
 }
 
 const PAGE_SIZE = 10 // 列表每页条数(纯前端切片分页 · 后端 limit 50 已够覆盖,不碰后端)
+
+// P2-period:放开 1h + 1d 两档(15m 数据太浅不放 · 后端 schema 虽允许但前端不给选项)。
+// 控件范式照 crypto-header.tsx 周期切换器;1h 年化基数由后端 bars_per_year 补丁保证(同刀)。
+const LAB_PERIODS = [
+  { value: '1h', label: '1h' },
+  { value: '1d', label: '1d · 日线' },
+] as const
+type LabPeriod = (typeof LAB_PERIODS)[number]['value']
 
 export default function LabPage() {
   const router = useRouter()
@@ -38,6 +47,7 @@ export default function LabPage() {
   const [end, setEnd] = useState('2026-05-31')
   const [smaFast, setSmaFast] = useState(5)
   const [smaSlow, setSmaSlow] = useState(20)
+  const [period, setPeriod] = useState<LabPeriod>('1d')
   const [page, setPage] = useState(1)
 
   // 前端切片分页(数据已由 useBacktestList 一次取回 ≤50 条)· currentPage 夹取防越界
@@ -53,7 +63,7 @@ export default function LabPage() {
         start,
         end,
         market: 'crypto', // 红线:锁 crypto perp,不从表单取
-        period: '1d',
+        period, // P2-period:1h / 1d 从段控件取(LabPeriod 仅两档)
         sma_fast: smaFast,
         sma_slow: smaSlow,
       },
@@ -92,13 +102,29 @@ export default function LabPage() {
                     className="cursor-not-allowed bg-surface-subtle text-muted-foreground"
                   />
                 </Field>
-                <Field label="周期(锁定)">
-                  <Input
-                    value="1d · 日线"
-                    disabled
-                    readOnly
-                    className="cursor-not-allowed bg-surface-subtle text-muted-foreground"
-                  />
+                <Field label="周期">
+                  <div className="flex h-10 items-center gap-1">
+                    {LAB_PERIODS.map((p) => (
+                      <button
+                        key={p.value}
+                        type="button"
+                        onClick={() => setPeriod(p.value)}
+                        className={cn(
+                          'rounded px-2 py-1 text-sm transition-colors',
+                          p.value === period
+                            ? 'bg-midas-red-glow text-midas-red'
+                            : 'text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                  {period === '1h' && (
+                    <p className="mt-1 text-xs text-faint">
+                      1h 数据自 2026-05-08 起,选更早的开始日期将提示查无数据
+                    </p>
+                  )}
                 </Field>
                 <Field label="开始日期">
                   <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
