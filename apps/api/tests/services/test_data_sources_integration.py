@@ -3,6 +3,8 @@
 特点:
 - 真打 AKShare(Sina) / yfinance / ccxt Binance
 - 网络 / 限流 / 服务挂掉时 `pytest.skip`,不让 CI 因为外网原因炸
+- 上游回脏数据(如 yfinance 未 finalize 日 bar OHLC 全 NaN → DataFormatError)同属
+  「外网原因」→ 同样 skip(2026-06-10 CI 实测翻车:NVDA 2026-06-09 行 NaN 挡了无关分支)
 - 验证:K 线非空、ts 升序、OHLC 几何关系、ts 是 tz-aware UTC
 
 只测「日 K + 一只标的」抓最容易出问题的链路;
@@ -19,7 +21,7 @@ import pytest
 from app.schemas.market import Kline
 from app.services.data_sources.cn_source import AKShareCnSource
 from app.services.data_sources.crypto_source import CcxtBinanceCryptoSource
-from app.services.data_sources.exceptions import UpstreamUnavailableError
+from app.services.data_sources.exceptions import DataFormatError, UpstreamUnavailableError
 from app.services.data_sources.us_source import YFinanceUsSource
 
 
@@ -43,6 +45,8 @@ class TestCnIntegration:
             rows = await src.fetch_kline("600519", "1d", limit=10)
         except UpstreamUnavailableError as e:
             pytest.skip(f"AKShare Sina 不可达:{e}")
+        except DataFormatError as e:
+            pytest.skip(f"upstream returned malformed data:{e}")
         _assert_klines_valid(rows)
         # 茅台日 K 价格应在合理量级(几百 ~ 几千元)
         assert 100 < rows[-1].close < 10_000
@@ -55,6 +59,8 @@ class TestUsIntegration:
             rows = await src.fetch_kline("NVDA", "1d", limit=10)
         except UpstreamUnavailableError as e:
             pytest.skip(f"yfinance 不可达(可能 IP 451 / 网络):{e}")
+        except DataFormatError as e:
+            pytest.skip(f"upstream returned malformed data:{e}")
         _assert_klines_valid(rows)
         # NVDA 价格量级
         assert 10 < rows[-1].close < 1_000
@@ -69,6 +75,8 @@ class TestCryptoIntegration:
                 rows = await src.fetch_kline("BTC/USDT", "1d", limit=10)
             except UpstreamUnavailableError as e:
                 pytest.skip(f"ccxt Binance 不可达:{e}")
+            except DataFormatError as e:
+                pytest.skip(f"upstream returned malformed data:{e}")
             _assert_klines_valid(rows)
             assert 1_000 < rows[-1].close < 1_000_000
         finally:

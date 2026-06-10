@@ -14,6 +14,7 @@ from app.api.v1.market import router as market_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.overview import router as overview_router
 from app.api.v1.perp import router as perp_router
+from app.api.v1.structure import router as structure_router
 from app.api.v1.telegram import router as telegram_router
 from app.api.v1.us import router as us_router
 from app.api.v1.virtual import router as virtual_router
@@ -44,3 +45,5 @@ router.include_router(hk_router)
 router.include_router(overview_router)
 # P1-4c.5(ADR 0038)· 研究室回测 full-data 读端点(只读 · authed-only 按 user 过滤 · 不涉及交易)
 router.include_router(backtest_router)
+# 结构分析助手第1刀 · 7 因子结构快照(只读 CH · authed · 非预测不交易)
+router.include_router(structure_router)
