@@ -39,45 +39,51 @@ export interface BacktestRunListItem {
   created_at: string
 }
 
-/** vibe calc_metrics 的 16 个标量指标(都是 number;max_consecutive_loss / trade_count 是整数)。 */
+/**
+ * vibe calc_metrics 的 16 个标量指标(metrics.csv 单行)。
+ * ★ 量纲契约(ADR 0040):本 interface 的收益/回撤/胜率类全是【比率】(0.1=10% · 前端 fmtPct ×100);
+ *   与 Trade.return_pct(百分比数值)量纲不同 —— 同一引擎两套量纲,选错格式化函数差 100 倍。
+ */
 export interface BacktestMetrics {
-  final_value: number
-  total_return: number
-  annual_return: number
-  max_drawdown: number
-  sharpe: number
-  calmar: number
-  sortino: number
-  win_rate: number
-  profit_loss_ratio: number
-  profit_factor: number
-  max_consecutive_loss: number
-  avg_holding_days: number
-  trade_count: number
-  benchmark_return: number
-  excess_return: number
-  information_ratio: number
+  final_value: number // 绝对额(报价币 USDT)· fmtNum
+  total_return: number // 比率(0.1=10% · P1-3 实测 -0.185=-18.5%)· fmtPct
+  annual_return: number // 比率 · fmtPct
+  max_drawdown: number // 比率(≤0)· fmtPct
+  sharpe: number // 无量纲比值 · fmtRatio
+  calmar: number // 无量纲比值 · fmtRatio
+  sortino: number // 无量纲比值 · fmtRatio
+  win_rate: number // 比率(0.55=55%)· fmtPct
+  profit_loss_ratio: number // 无量纲比值 · fmtRatio
+  profit_factor: number // 无量纲比值 · fmtRatio
+  max_consecutive_loss: number // 整数计数 · fmtInt
+  avg_holding_days: number // 天(推断+弱印证 · 见量纲审计报告)
+  trade_count: number // 整数计数 · 完整回合(开+平 · 17 回合=34 条买卖腿)· fmtInt
+  benchmark_return: number // 比率 · fmtPct
+  excess_return: number // 比率 · fmtPct
+  information_ratio: number // 无量纲比值 · fmtRatio
 }
 
+/** equity.csv 一行。数值列全是【比率/绝对额】(与 metrics 同侧,无百分比数值)。 */
 export interface EquityPoint {
-  timestamp: string
-  equity: number
-  drawdown: number
-  benchmark_equity: number
-  ret: number
-  active_ret: number
+  timestamp: string // 日期串("2025-01-18" · 1d 粒度)
+  equity: number // 绝对额(策略权益)
+  drawdown: number // 比率 ≤0(真机实测 -0.0201=回撤2.01% · 前端 ×100)
+  benchmark_equity: number // 绝对额(买入持有基准)
+  ret: number // 比率(推断 · 前端未渲染 · 上屏前须真机核原值)
+  active_ret: number // 比率(推断 · 前端未渲染 · 上屏前须真机核原值)
 }
 
+/** trades.csv 一行(一条买卖腿 · 17 回合=34 条)。★return_pct 量纲与 metrics 不同! */
 export interface Trade {
-  timestamp: string
-  code: string
-  side: string
-  price: number
-  qty: number
-  reason: string
-  pnl: number
-  holding_days: number
-  return_pct: number
+  timestamp: string // 日期串
+  code: string // 'BTCUSDT'(无斜杠 vibe code)
+  side: string // 'buy'=开仓腿 / 'sell'=平仓腿(当前 SMA 纯多头;若放开做空策略此语义需重审)
+  price: number // 绝对价 · fmtNum
+  qty: number // base 币数量(当前裸渲染 · 长尾显示待打磨,见审计报告)
+  reason: string // 可读原因('entry' 等)
+  pnl: number // 绝对额(报价币 · 真机实测 -27547.76)· fmtNum · 开仓腿无意义显「—」
+  holding_days: number // 天(推断+弱印证)
+  return_pct: number // ★【百分比数值】(-2.76=-2.76% · 真机实测)· fmtPctNum 绝不 ×100(P1-4e.fix)
 }
 
 export interface BacktestRunResponse {

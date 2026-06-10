@@ -30,25 +30,9 @@ import { TopNav } from '@/components/layout/top-nav'
 import { EmptyState, LoadingNote } from '@/components/ui/state'
 import { useBacktestRun } from '@/hooks/use-backtest'
 import type { BacktestMetrics, BacktestRunResponse, Trade } from '@/lib/api/backtest'
-
-// ── 格式化 ──────────────────────────────────────────────────────────────────
-function fmtPct(v: number): string {
-  return `${v >= 0 ? '+' : ''}${(v * 100).toFixed(2)}%`
-}
-// ★ 专用于 trades.return_pct:vibe 的 trades.csv return_pct 已是【百分比数值】(如 -2.76 = -2.76%),
-//   不能再 ×100(P1-4e.fix · 误用 fmtPct 曾显示 -276%)。metrics 是【比率】仍用 fmtPct。
-function fmtPctNum(v: number): string {
-  return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`
-}
-function fmtRatio(v: number): string {
-  return v.toFixed(2)
-}
-function fmtInt(v: number): string {
-  return String(Math.round(v))
-}
-function fmtNum(v: number): string {
-  return v.toLocaleString('en-US', { maximumFractionDigits: 2 })
-}
+// 格式化函数已抽到 lib/format-backtest.ts(量纲契约唯一实现 + vitest 锁死 · ADR 0040)。
+// 选用规则:比率→fmtPct(×100)· 百分比数值→fmtPctNum(仅 return_pct)· 详见该文件头注释。
+import { fmtInt, fmtNum, fmtPct, fmtPctNum, fmtRatio } from '@/lib/format-backtest'
 
 // ── 16 指标卡定义(tone:true → 按正负染 涨/跌 色)──────────────────────────────
 type MetricKey = keyof BacktestMetrics
