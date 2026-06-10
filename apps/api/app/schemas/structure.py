@@ -11,6 +11,8 @@ premium 表仅 7 天 —— 下游(含 LLM prompt)绝不允许把这些窗口冒
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 
@@ -43,3 +45,43 @@ class StructureSnapshot(BaseModel):
     funding_rate: StructureFactor | None = None         # 资金费率(latest + 7d avg/max/min)
     basis: StructureFactor | None = None                # 基差 mark-index(premium 表仅 7d)
     sentiment: StructureFactor | None = None            # FGI + BTC dominance(全市场 · 非单 symbol)
+
+
+# ═══ 第2刀 · LLM 结构诊断 ═══════════════════════════════════════════════════
+
+# 自然语言问题 → 5 类归一意图(枚举化 = 诊断层可缓存的前提)
+IntentKind = Literal[
+    "long_crowding", "short_crowding", "leverage_buildup", "funding_extreme", "overall",
+]
+
+
+class FactorFinding(BaseModel):
+    """单因子状态结论(LLM 产出 · validator 改写后)。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    factor: str = Field(min_length=1, max_length=32)   # 因子键名(对齐快照字段)
+    state: str = Field(min_length=1, max_length=40)    # 状态短语(偏多拥挤/中性/费率偏高…)
+    detail: str = Field(min_length=1, max_length=300)  # 客观描述(含数值 · 非预测)
+    window: str = Field(min_length=1, max_length=16)   # 数据口径(照抄快照 window · 红线②)
+
+
+class DiagnoseRequest(BaseModel):
+    """POST /api/v1/structure/diagnose 请求体。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str = Field(min_length=3, max_length=32)
+    question: str = Field(min_length=2, max_length=200)
+
+
+class StructureDiagnosis(BaseModel):
+    """结构诊断结果(结论先行 · 分因子状态 · 口径随行)· 🔴 非价格预测。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    conclusion: str = Field(min_length=1, max_length=400)   # 一句话总体结构判断
+    factor_findings: list[FactorFinding]                    # 分因子状态(相关因子在前)
+    intent: IntentKind                                      # 归一意图
+    unsupported_note: str | None = Field(default=None, max_length=200)  # 缺失维度说明(红线③)
+    snapshot: StructureSnapshot                             # 因子快照(前端数据下钻用)
