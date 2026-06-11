@@ -332,7 +332,8 @@ async def place_ai_order(
     )
     # ★ 走 U0 的 execute(db, ch, user_id, intent)· 与手动单 / bot 单同一虚拟撮合引擎
     #   execute 内部按市场分流(现货 place_market_order / 加密 perp_dispatcher)并 commit。
-    result = await bot_order.execute(db, ch, current_user.id, intent)
+    #   notify_user=True:网页 AI 一键路径恢复成交异步推送(bot 默认 False 保持 #296 去重)。
+    result = await bot_order.execute(db, ch, current_user.id, intent, notify_user=True)
     return AiOrderResponse(filled=result.filled, title=result.title, detail=result.detail)
 
 
