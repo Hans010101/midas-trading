@@ -316,3 +316,43 @@ class CryptoOverviewResponse(BaseModel):
     # 主页 BTC/ETH 价格卡专用 · 按 symbol 精确取(不依赖涨跌幅榜,否则大盘币不在榜上 → 卡空)
     btc_ticker: Ticker24h | None = Field(default=None, description="BTC/USDT 永续最新 ticker")
     eth_ticker: Ticker24h | None = Field(default=None, description="ETH/USDT 永续最新 ticker")
+
+
+# ============================================================================
+# 8 · 采集新鲜度监控(刀D 还债 · /api/v1/crypto/ingest-status)
+# ============================================================================
+
+
+class IngestSourceStatus(BaseModel):
+    """加密采集源新鲜度(判 stale)· 阈值 = max(数据栅格, 任务频率) × 3。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source: str
+    table: str
+    latest_ts: AwareDatetime | None = Field(default=None, description="None = 从未采")
+    age_seconds: float | None = Field(default=None, ge=0)
+    expected_max_age_seconds: int = Field(ge=0)
+    stale: bool
+
+
+class EquityIngestStatus(BaseModel):
+    """股票表裸报(v1 不判 stale:周末滞后是交易时段语义,非故障)。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source: str
+    table: str
+    latest_ts: AwareDatetime | None = None
+    age_seconds: float | None = Field(default=None, ge=0)
+
+
+class IngestStatusResponse(BaseModel):
+    """采集监控总览 · any_stale 给一眼/脚本判断。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    as_of: AwareDatetime
+    any_stale: bool
+    crypto: list[IngestSourceStatus]
+    equities: list[EquityIngestStatus]
