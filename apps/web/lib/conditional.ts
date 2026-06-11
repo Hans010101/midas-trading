@@ -51,3 +51,40 @@ export function deviationPct(triggerPrice: number, currentPrice: number | null):
   if (currentPrice == null || currentPrice <= 0 || !Number.isFinite(triggerPrice)) return null
   return Math.abs((triggerPrice - currentPrice) / currentPrice) * 100
 }
+
+/**
+ * 快捷档位方向(+1 现价上方 / −1 现价下方)—— 永远取【不立即触发】的一侧,
+ * 恰为 wouldTriggerNow 矩阵的反方向(单测互证):
+ *   STOP_LOSS  平多 −1(下方)· 平空 +1(上方)
+ *   TAKE_PROFIT 平多 +1(上方)· 平空 −1(下方)
+ *   LIMIT buy −1(挂更低买价)· sell +1(挂更高卖价)
+ */
+export function presetDirection(
+  kind: ConditionalKind,
+  side: OrderSide,
+  positionSide: PositionSide,
+): 1 | -1 {
+  if (kind === 'limit') return side === 'buy' ? -1 : 1
+  const closingLong = positionSide === 'long'
+  if (kind === 'stop_loss') return closingLong ? -1 : 1
+  // take_profit
+  return closingLong ? 1 : -1
+}
+
+/**
+ * 快捷档位触发价:现价 ×(1 ± pct),按 presetDirection 取不立即触发的一侧。
+ * 精度按现价小数位对齐(<1 的小币固定展开 8 位再去尾零,绝不截断成 0)。
+ */
+export function presetTriggerPrice(
+  kind: ConditionalKind,
+  side: OrderSide,
+  positionSide: PositionSide,
+  currentPrice: number,
+  pct: number,
+): string {
+  const raw = currentPrice * (1 + presetDirection(kind, side, positionSide) * pct)
+  const refDecimals = (String(currentPrice).split('.')[1] ?? '').length
+  const decimals = currentPrice < 1 ? Math.max(refDecimals, 8) : Math.max(refDecimals, 2)
+  // toFixed 保精度 · Number→String 去尾零(0.08502500 → 0.085025)
+  return String(Number(raw.toFixed(Math.min(decimals, 12))))
+}
