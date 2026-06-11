@@ -14,6 +14,7 @@ import { useSession } from 'next-auth/react'
 import { useState } from 'react'
 
 import { LabNav } from '@/components/lab/lab-nav'
+import { SymbolSuggest } from '@/components/lab/symbol-suggest'
 import { TopNav } from '@/components/layout/top-nav'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -78,12 +79,8 @@ export default function LabAssistantPage() {
             <section className="mb-8 rounded-lg border border-paper bg-cream p-5 shadow-sm">
               <h2 className="mb-4 font-serif text-lg font-bold">向助手提问</h2>
               <div className="flex flex-col gap-3 md:flex-row">
-                <Input
-                  value={symbol}
-                  onChange={(e) => setSymbol(e.target.value)}
-                  placeholder="BTCUSDT"
-                  className="md:w-44"
-                />
+                {/* symbol 联想(输 eth → 下拉 ETHUSDT)· 无匹配可直输,后端补后缀兜底 */}
+                <SymbolSuggest value={symbol} onChange={setSymbol} className="md:w-44" />
                 <Input
                   value={question}
                   onChange={(e) => setQuestion(e.target.value)}
