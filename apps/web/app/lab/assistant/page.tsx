@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * 结构分析助手 · /lab/assistant(助手第3刀 · 收官)。
+ * AI 沙盘助手 · /lab/assistant(原「结构分析助手」· 路由保留只改显示名)。
  *
  * 自然语言提问 → POST /structure/diagnose(后端:意图归一→7因子快照→单次LLM→validator)
  * → 结论先行四层渲染(照 lab-report 范式:结论卡 / 指标卡 grid / 脚注 section / details 下钻)。
@@ -72,7 +72,7 @@ export default function LabAssistantPage() {
         <LabNav />
 
         {authStatus === 'unauthenticated' ? (
-          <EmptyState title="请先登录" hint="结构分析助手需要登录后访问" />
+          <EmptyState title="请先登录" hint="AI 沙盘助手需要登录后访问" />
         ) : (
           <>
             {/* ── 提问区 ──────────────────────────────────────────── */}

@@ -76,9 +76,7 @@ export default function LabPage() {
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <TopNav />
       <main className="mx-auto w-full max-w-5xl px-6 py-8">
-        <div className="mb-6 flex items-center gap-3">
-          <h1 className="font-serif text-2xl font-bold">策略研究室 · 回测</h1>
-        </div>
+        {/* 大标题已删(同 assistant 页口径):TopNav 高亮 + LabNav 已标位,重复是噪声 */}
         <LabNav />
 
         {authStatus === 'unauthenticated' ? (
