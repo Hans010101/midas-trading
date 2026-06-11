@@ -18,6 +18,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { useFuturesInfo } from '@/hooks/use-crypto'
 import { useKline } from '@/hooks/use-kline'
 import { usePlaceConditionalOrder } from '@/hooks/use-conditional-orders'
 import { ConditionalApiError } from '@/lib/api/conditional-order'
@@ -62,7 +63,10 @@ export function ConditionalOrderDialog({
   const [quantity, setQuantity] = useState(defaultQuantity ?? '')
   const place = usePlaceConditionalOrder()
 
-  // 现价(提示用)· 与后端触发器价源同源:spot/crypto 都取 1d 末根 close
+  // 现价(提示 + 快捷档位基准):
+  //   crypto(perp)→ 标记价优先(premium_index 1min 新鲜 · 与触发器 route_close_perp 同源,刀A1)
+  //   股票(cn/us/hk)→ 1d 末根 close 不变(各市场有 kline 采集任务,新鲜)
+  //   kline 末根对 crypto 仅兜底(缓存零新鲜度 · 旧快照事故 H/USDT $0.09,A2 治本)
   const { data: kline } = useKline({
     symbol: klineSymbol ?? symbol,
     market,
@@ -70,7 +74,10 @@ export function ConditionalOrderDialog({
     limit: 1,
     ...(market === 'crypto' ? { instrument: 'perp' as const } : {}),
   })
-  const currentPrice = kline?.items?.at(-1)?.close ?? null
+  // crypto 入口的 symbol prop 即 Binance 风格(BTCUSDT)· 非 crypto 不请求
+  const { data: futuresInfo } = useFuturesInfo(symbol, market === 'crypto')
+  const klineClose = kline?.items?.at(-1)?.close ?? null
+  const currentPrice = market === 'crypto' ? (futuresInfo?.mark_price ?? klineClose) : klineClose
 
   if (!open) return null
 
