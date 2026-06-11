@@ -10,10 +10,8 @@
  * symbol 用 Binance Futures 风格 `BTCUSDT`(无斜杠)· 跟现货 kline 的
  * ccxt 风格 `BTC/USDT` 不同 · 调用方负责转换。
  *
- * 数据缺口(M2-B 待补 · 本 client 不提供):
- *   · globalLongShortAccountRatio(多空人数比值)
- *   · basis(基差 mark − index)
- *   接不上 = 前端保持占位卡 · 绝不硬编假数据(CLAUDE.md 红线)。
+ * 数据缺口:已全部补齐 —— basis(M2-C.2.4)· globalLongShortAccountRatio(刀C)。
+ * 原则不变:接不上 = 前端占位/空态 · 绝不硬编假数据(CLAUDE.md 红线)。
  */
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
@@ -68,6 +66,10 @@ export interface LongShortPoint {
   taker_buy_vol: number
   taker_sell_vol: number
   taker_ratio: number
+  // 刀C · 全市场人数比(globalLongShortAccountRatio)· 0 = 该行未采(老行哨兵 · 前端过滤)
+  global_account_long: number
+  global_account_short: number
+  global_account_ratio: number
 }
 export interface LongShortRatioResponse {
   symbol: string

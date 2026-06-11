@@ -206,12 +206,31 @@ _ALTER_OVERVIEW_UNIT = (
     "ALTER TABLE market_index_snapshot ADD COLUMN IF NOT EXISTS unit String DEFAULT 'point'"
 )
 
+# 刀C · crypto_long_short_ratio 幂等加列(globalLongShortAccountRatio 全市场人数比)·
+#   与 docker/clickhouse-init.sql 保持一致 · 老库靠 ALTER IF NOT EXISTS,新库靠 init.sql ·
+#   ADD COLUMN 是元数据级操作(瞬时 · 不重写数据)· DEFAULT 0 = 老行「未采」哨兵
+_ALTER_LS_GLOBAL_LONG = (
+    "ALTER TABLE crypto_long_short_ratio"
+    " ADD COLUMN IF NOT EXISTS global_account_long Float64 DEFAULT 0"
+)
+_ALTER_LS_GLOBAL_SHORT = (
+    "ALTER TABLE crypto_long_short_ratio"
+    " ADD COLUMN IF NOT EXISTS global_account_short Float64 DEFAULT 0"
+)
+_ALTER_LS_GLOBAL_RATIO = (
+    "ALTER TABLE crypto_long_short_ratio"
+    " ADD COLUMN IF NOT EXISTS global_account_ratio Float64 DEFAULT 0"
+)
+
 # 未来新增 CH 表 → 往这个 list 里加一条幂等 DDL 即可
 _DDL_STATEMENTS: tuple[str, ...] = (
     _CREATE_PREMIUM_INDEX,
     _CREATE_MARKET_INDEX_SNAPSHOT,
     _ALTER_OVERVIEW_CATEGORY,
     _ALTER_OVERVIEW_UNIT,
+    _ALTER_LS_GLOBAL_LONG,
+    _ALTER_LS_GLOBAL_SHORT,
+    _ALTER_LS_GLOBAL_RATIO,
     _CREATE_MARKET_TRADE_CALENDAR,
     _CREATE_CN_SPOT_SNAPSHOT,
     _CREATE_CN_MARKET_BREADTH,

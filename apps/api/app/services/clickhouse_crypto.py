@@ -48,6 +48,8 @@ _LONG_SHORT_COLUMNS = (
     "top_account_long", "top_account_short", "top_account_ratio",
     "top_position_long", "top_position_short", "top_position_ratio",
     "taker_buy_vol", "taker_sell_vol", "taker_ratio",
+    # 刀C · 全市场人数比(globalLongShortAccountRatio)· 0 = 未采哨兵
+    "global_account_long", "global_account_short", "global_account_ratio",
 )
 _TICKER_24H_COLUMNS = (
     "symbol", "instrument", "ts",
@@ -178,6 +180,7 @@ async def insert_long_short(
             it.top_account_long, it.top_account_short, it.top_account_ratio,
             it.top_position_long, it.top_position_short, it.top_position_ratio,
             it.taker_buy_vol, it.taker_sell_vol, it.taker_ratio,
+            it.global_account_long, it.global_account_short, it.global_account_ratio,
         ]
         for it in items
     ]
@@ -192,7 +195,8 @@ async def select_long_short(
         "SELECT symbol, ts, "
         "top_account_long, top_account_short, top_account_ratio, "
         "top_position_long, top_position_short, top_position_ratio, "
-        "taker_buy_vol, taker_sell_vol, taker_ratio "
+        "taker_buy_vol, taker_sell_vol, taker_ratio, "
+        "global_account_long, global_account_short, global_account_ratio "
         "FROM crypto_long_short_ratio "
         "WHERE symbol = %(s)s ORDER BY ts DESC LIMIT %(n)s"
     )
@@ -207,6 +211,8 @@ async def select_long_short(
             top_position_long=float(r[5]), top_position_short=float(r[6]),
             top_position_ratio=float(r[7]),
             taker_buy_vol=float(r[8]), taker_sell_vol=float(r[9]), taker_ratio=float(r[10]),
+            global_account_long=float(r[11]), global_account_short=float(r[12]),
+            global_account_ratio=float(r[13]),
         )
         for r in rows
     ]
