@@ -1,5 +1,5 @@
 /**
- * 市场结构分析助手 API client · 助手第3刀(ADR 待编 · authed-only)。
+ * AI 沙盘助手(原市场结构分析助手)API client · 助手第3刀(ADR 待编 · authed-only)。
  * 照 lib/api/backtest.ts 的 authed 范式:authHeaders(token) + 自定义 Error 类 + readDetail。
  *
  * 🔴 红线:纯【客观结构描述】—— 非价格预测 · 不下单 · 后端 prompt 三红线焊死(prompts.py)。

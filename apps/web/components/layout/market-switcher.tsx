@@ -22,7 +22,12 @@ import { usePathname, useRouter } from 'next/navigation'
 import { MARKET_LABEL } from '@/lib/format-money'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
 import { cn } from '@/lib/utils'
-import { MARKETS, type Market } from '@midas/shared'
+import type { Market } from '@midas/shared'
+
+// 顶部导航的市场【显示次序】(加密前移 · 功能最全)· 本地常量纯渲染序:
+// ⛔ 不动 shared MARKETS(它还被 wallet-section 列序 + 后端校验引用,改了有隐性波及);
+// handleSelect / active 按 market 值工作,与渲染顺序无关。
+const NAV_MARKETS: readonly Market[] = ['crypto', 'us', 'cn', 'hk']
 
 export function MarketSwitcher({ className }: { className?: string }) {
   const pathname = usePathname()
@@ -99,7 +104,7 @@ export function MarketSwitcher({ className }: { className?: string }) {
       >
         全球市场
       </button>
-      {MARKETS.map((m) => (
+      {NAV_MARKETS.map((m) => (
         <button
           key={m}
           type="button"
@@ -129,7 +134,8 @@ export function MarketSwitcher({ className }: { className?: string }) {
       </button>
       <button
         type="button"
-        onClick={() => router.push('/lab')}
+        // 方案乙:研究室默认落 AI 沙盘助手(/lab 回测 URL 不动不破书签)
+        onClick={() => router.push('/lab/assistant')}
         className={cn(
           'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
           onLab
