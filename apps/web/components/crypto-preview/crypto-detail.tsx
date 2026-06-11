@@ -18,6 +18,7 @@ import { useSearchParams } from 'next/navigation'
 import { useMemo, useState } from 'react'
 
 import { TopNav } from '@/components/layout/top-nav'
+import { ConditionalOrdersList } from '@/components/trading/conditional-orders-list'
 import { CryptoAiCard } from '@/components/crypto-preview/crypto-ai-card'
 import { CryptoHeader } from '@/components/crypto-preview/crypto-header'
 import { CryptoMainChart } from '@/components/crypto-preview/crypto-main-chart'
@@ -85,6 +86,8 @@ export function CryptoDetail() {
             period={period}
           />
           <PerpOrderGuidance futuresSymbol={futuresSymbol} klineSymbol={klineSymbol} />
+          {/* 本币条件单(ADR 0041 刀3)· 共享列表 · 有单才显示 */}
+          <ConditionalOrdersList symbol={futuresSymbol} market="crypto" />
           <CryptoPerpOrders futuresSymbol={futuresSymbol} />
           <StrategyChecklist
             futuresSymbol={futuresSymbol}

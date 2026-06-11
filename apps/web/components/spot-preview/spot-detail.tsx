@@ -17,6 +17,7 @@ import { useMemo, useState } from 'react'
 
 import { TopNav } from '@/components/layout/top-nav'
 import { AiDecisionCard } from '@/components/workbench/ai-decision-card'
+import { ConditionalOrdersList } from '@/components/trading/conditional-orders-list'
 import { SpotHeader } from '@/components/spot-preview/spot-header'
 import { SpotMainChart } from '@/components/spot-preview/spot-main-chart'
 import { SpotOrderPanel } from '@/components/spot-preview/spot-order-panel'
@@ -67,6 +68,8 @@ export function SpotDetail({ market }: SpotDetailProps) {
         <aside className="w-full shrink-0 space-y-4 lg:w-[360px]">
           <AiDecisionCard symbol={symbol} market={market} period={period} />
           <SpotOrderPanel symbol={symbol} name={name} market={market} />
+          {/* 本币条件单(ADR 0041 刀3)· 共享列表 · 30s 轮询 · 有单才显示 */}
+          <ConditionalOrdersList symbol={symbol} market={market} />
         </aside>
       </div>
     </main>
