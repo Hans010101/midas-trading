@@ -9,6 +9,7 @@
 
 import { useState } from 'react'
 
+import { ConditionalOrderDialog } from '@/components/trading/conditional-order-dialog'
 import { OrderConfirmDialog } from '@/components/workbench/order-confirm-dialog'
 import { usePortfolio } from '@/hooks/use-virtual'
 import { currencyOf, formatMoney, formatPct } from '@/lib/format-money'
@@ -20,6 +21,7 @@ export function CurrentPositionCard() {
   const market = useWorkbenchStore((s) => s.market)
   const { data: portfolio } = usePortfolio()
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [sltpOpen, setSltpOpen] = useState(false)
 
   // 找当前 market 子账户 + 当前 symbol 活仓
   const summary = portfolio?.find((s) => s.market === market)
@@ -89,13 +91,26 @@ export function CurrentPositionCard() {
         </div>
       </dl>
 
-      <button
-        type="button"
-        onClick={() => setConfirmOpen(true)}
-        className="mt-3 w-full rounded-md bg-midas-red px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-midas-red-deep"
-      >
-        一键平仓
-      </button>
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={() => setConfirmOpen(true)}
+          className="flex-1 rounded-md bg-midas-red px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-midas-red-deep"
+        >
+          一键平仓
+        </button>
+        {/* 持仓挂 SL/TP(共享 ConditionalOrderDialog)· crypto tab 不出:workbench crypto 是
+            spot 持仓,而条件单 crypto 语义=perp(后端按 perp 活仓校验/平仓),错位 → 留二期 */}
+        {market !== 'crypto' && (
+          <button
+            type="button"
+            onClick={() => setSltpOpen(true)}
+            className="rounded-md border border-gold/60 px-3 py-1.5 text-xs text-gold transition-colors hover:bg-gold/10"
+          >
+            止损/止盈
+          </button>
+        )}
+      </div>
 
       <OrderConfirmDialog
         open={confirmOpen}
@@ -105,6 +120,17 @@ export function CurrentPositionCard() {
         side="sell"
         closeAllQuantity={position.quantity}
       />
+      {sltpOpen && (
+        <ConditionalOrderDialog
+          open
+          onClose={() => setSltpOpen(false)}
+          symbol={position.symbol}
+          market={position.market}
+          mode="sltp"
+          positionSide={position.position_side}
+          heldQuantity={position.quantity}
+        />
+      )}
     </section>
   )
 }

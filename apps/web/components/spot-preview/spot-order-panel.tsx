@@ -22,6 +22,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { useSession } from 'next-auth/react'
+import { ConditionalOrderDialog } from '@/components/trading/conditional-order-dialog'
 import { useAccount, useHkBoardLot, usePlaceOrder, usePositions } from '@/hooks/use-virtual'
 import { useKline } from '@/hooks/use-kline'
 import { VirtualApiError, type OrderSide, type PositionSide } from '@/lib/api/virtual'
@@ -61,6 +62,9 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
   const [tab, setTab] = useState<Tab>('long')
   const [quantity, setQuantity] = useState(defaultQty(market))
   const [pending, setPending] = useState<PendingAction | null>(null)
+  // 条件单(ADR 0041 刀3):市价 ⇄ 限价切换(仅做多边 · 空头限价留二期)+ 持仓挂 SL/TP
+  const [orderMode, setOrderMode] = useState<'market' | 'conditional'>('market')
+  const [conditional, setConditional] = useState<{ mode: 'limit' | 'sltp'; side?: OrderSide } | null>(null)
 
   // 港股每手股数(board lot)· 只读配置 · 非 hk 不请求(enabled=false)· 用于按手取整 + UI 提示 + 不在池禁用
   const boardLotQuery = useHkBoardLot(symbol, market === 'hk')
@@ -152,6 +156,7 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
               onClick={() => {
                 setTab(t)
                 setQuantity(defaultQty(market))
+                if (t === 'short') setOrderMode('market') // 空头限价留二期 · 切回市价
               }}
               className={cn(
                 'flex-1 px-3 py-1.5 transition-colors',
@@ -164,15 +169,45 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
         </div>
       )}
 
-      {/* 持仓提示 */}
+      {/* 市价 ⇄ 限价(条件单)切换 · 仅做多边(空头限价留二期) */}
+      {activePositionSide === 'long' && (
+        <div className="mb-2 flex overflow-hidden rounded-md border border-paper text-xs">
+          {(['market', 'conditional'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setOrderMode(m)}
+              className={cn(
+                'flex-1 px-3 py-1 transition-colors',
+                orderMode === m
+                  ? 'bg-gold/15 font-medium text-gold'
+                  : 'text-muted-foreground hover:bg-cream',
+              )}
+            >
+              {m === 'market' ? '市价' : '限价(到价触发)'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* 持仓提示 + 持仓挂 SL/TP 入口(共享 ConditionalOrderDialog) */}
       <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
         <span>
           当前{market === 'us' && tab === 'short' ? '空头' : '持仓'}
         </span>
-        <span className="font-mono text-foreground">
+        <span className="flex items-center gap-2 font-mono text-foreground">
           {heldQty > 0
             ? `${heldQty} @ ${formatMoney(heldPosition!.avg_entry_price, currencyOf(market))}`
             : '无'}
+          {heldQty > 0 && (
+            <button
+              type="button"
+              onClick={() => setConditional({ mode: 'sltp' })}
+              className="rounded border border-gold/60 px-1.5 py-0.5 font-sans text-[10px] text-gold transition-colors hover:bg-gold/10"
+            >
+              止损/止盈
+            </button>
+          )}
         </span>
       </div>
 
@@ -196,8 +231,18 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
         </p>
       )}
 
-      {/* 操作按钮 · 开仓 / 平仓 两枚 */}
+      {/* 操作按钮 · 开仓 / 平仓 两枚(限价模式:改挂条件单 · 提交走 conditional-orders 不走 placeOrder) */}
       {activePositionSide === 'long' ? (
+        orderMode === 'conditional' ? (
+          <div className="grid grid-cols-2 gap-2">
+            <OrderButton variant="solid" onClick={() => setConditional({ mode: 'limit', side: 'buy' })}>
+              限价买入
+            </OrderButton>
+            <OrderButton variant="outline" onClick={() => setConditional({ mode: 'limit', side: 'sell' })}>
+              限价卖出
+            </OrderButton>
+          </div>
+        ) : (
         <div className="grid grid-cols-2 gap-2">
           <OrderButton variant="solid" onClick={() => openConfirm('buy', 'open', '买入(做多)')}>
             买入
@@ -206,6 +251,7 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
             卖出
           </OrderButton>
         </div>
+        )
       ) : (
         <div className="grid grid-cols-2 gap-2">
           <OrderButton variant="solid" onClick={() => openConfirm('sell', 'open', '卖出(开空)')}>
@@ -247,6 +293,22 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
           heldQty={heldQty}
           availableCash={account.data ? Number(account.data.cash_balance) : 0}
           onClose={() => setPending(null)}
+        />
+      )}
+
+      {/* 共享条件单弹层(限价 / 持仓 SL/TP 同一组件 · F1 教训防漏页面) */}
+      {conditional && (
+        <ConditionalOrderDialog
+          open
+          onClose={() => setConditional(null)}
+          symbol={symbol}
+          name={name}
+          market={market}
+          mode={conditional.mode}
+          side={conditional.side}
+          positionSide={activePositionSide}
+          heldQuantity={heldPosition?.quantity ?? null}
+          defaultQuantity={conditional.mode === 'limit' ? quantity : undefined}
         />
       )}
     </PanelShell>

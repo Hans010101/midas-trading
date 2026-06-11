@@ -18,6 +18,7 @@ import { useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 
+import { ConditionalOrderDialog } from '@/components/trading/conditional-order-dialog'
 import { useKline } from '@/hooks/use-kline'
 import { usePerpPositions, usePlacePerpOrder } from '@/hooks/use-perp'
 import { useAccount } from '@/hooks/use-virtual'
@@ -87,6 +88,8 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
   const [margin, setMargin] = useState('1000')
   const [marginMode, setMarginMode] = useState<'isolated' | 'cross'>('isolated')
   const [confirm, setConfirm] = useState<PerpIntent | null>(null)
+  // 持仓挂 SL/TP(ADR 0041 刀3 · 共享 ConditionalOrderDialog · 触发走 route_close_perp)
+  const [sltpOpen, setSltpOpen] = useState(false)
 
   // 加仓(开同向)沿用持仓杠杆;反向 / 新开可调
   const sameSideAsPos = activePos != null && activePos.side === side
@@ -153,6 +156,7 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
         <ActivePositionCard
           pos={activePos}
           onClose={() => setConfirm('close')}
+          onSetSltp={() => setSltpOpen(true)}
           closing={placeOrder.isPending}
         />
       )}
@@ -326,14 +330,28 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
           onConfirm={() => void submit(confirm)}
         />
       )}
+
+      {/* 持仓挂 SL/TP · 共享条件单弹层(触发时后端 route_close_perp 平仓) */}
+      {sltpOpen && activePos && (
+        <ConditionalOrderDialog
+          open
+          onClose={() => setSltpOpen(false)}
+          symbol={futuresSymbol}
+          market="crypto"
+          mode="sltp"
+          positionSide={activePos.side}
+          heldQuantity={activePos.quantity}
+          klineSymbol={klineSymbol}
+        />
+      )}
     </div>
   )
 }
 
 // ── 活仓卡 ───────────────────────────────────────────────────────────────────
 function ActivePositionCard({
-  pos, onClose, closing,
-}: { pos: PerpPosition; onClose: () => void; closing: boolean }) {
+  pos, onClose, onSetSltp, closing,
+}: { pos: PerpPosition; onClose: () => void; onSetSltp: () => void; closing: boolean }) {
   const upnl = pos.unrealized_pnl != null ? Number(pos.unrealized_pnl) : null
   const roe = pos.roe_pct != null ? Number(pos.roe_pct) : null
   const dist = pos.liquidation_distance_pct != null ? Number(pos.liquidation_distance_pct) : null
@@ -347,14 +365,23 @@ function ActivePositionCard({
           </span>
           <span className="font-mono">{Number(pos.quantity)} @ ${fmtP(Number(pos.entry_price))}</span>
         </span>
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={closing}
-          className="rounded border border-midas-red px-2 py-0.5 text-[11px] text-midas-red hover:bg-midas-red-glow/40 disabled:opacity-50"
-        >
-          平仓
-        </button>
+        <span className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onSetSltp}
+            className="rounded border border-gold/60 px-2 py-0.5 text-[11px] text-gold hover:bg-gold/10"
+          >
+            止损/止盈
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={closing}
+            className="rounded border border-midas-red px-2 py-0.5 text-[11px] text-midas-red hover:bg-midas-red-glow/40 disabled:opacity-50"
+          >
+            平仓
+          </button>
+        </span>
       </div>
       <div className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono">
         <Cell label="浮动盈亏" v={upnl != null ? `${upnl >= 0 ? '+' : ''}${fmtU(upnl)}` : '—'} tone={upnl == null ? undefined : upnl >= 0 ? 'bull' : 'bear'} />

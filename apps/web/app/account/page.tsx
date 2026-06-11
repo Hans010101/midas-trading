@@ -26,6 +26,7 @@ import {
 
 import { PerpPositionsSection } from '@/components/account/perp-positions-section'
 import { WalletSection } from '@/components/account/wallet-section'
+import { ConditionalOrdersList } from '@/components/trading/conditional-orders-list'
 import { TopNav } from '@/components/layout/top-nav'
 import { OrderConfirmDialog } from '@/components/workbench/order-confirm-dialog'
 import {
@@ -187,6 +188,9 @@ export default function AccountPage() {
 
         {/* 加密合约(永续)持仓 / 订单中心 · M2-C.1 · 独立 Section,自身按 crypto 激活态门控 */}
         <PerpPositionsSection />
+
+        {/* 条件单(ADR 0041 刀3)· 全市场全量列表(挂/撤在详情页与持仓卡 · 这里看全部) */}
+        <ConditionalOrdersList />
 
       </main>
 
