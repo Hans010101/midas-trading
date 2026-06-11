@@ -526,6 +526,12 @@ async def create_conditional_order(
         symbol = symbol.upper().replace("/", "")  # perp 语义 · Binance 风格(与持仓表一致)
 
     if payload.order_kind == ConditionalKind.LIMIT:
+        # 刀2 缺口补:perp 限价单范围外(ADR 0041 只含 perp 止损止盈 · 触发器另有防御跳过)
+        if payload.market == "crypto":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="perp 限价单暂不支持(v1)",
+            )
         if payload.quantity is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
