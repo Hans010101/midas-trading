@@ -4,7 +4,15 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { deviationPct, kindLabel, wouldTriggerNow } from './conditional'
+import {
+  type ConditionalKind,
+  deviationPct,
+  kindLabel,
+  presetDirection,
+  presetTriggerPrice,
+  wouldTriggerNow,
+} from './conditional'
+import type { OrderSide, PositionSide } from '@/lib/api/virtual'
 
 describe('wouldTriggerNow(与后端触发矩阵同口径)', () => {
   const T = 100
@@ -55,5 +63,51 @@ describe('kindLabel', () => {
     expect(kindLabel('limit', 'sell')).toBe('限价卖出')
     expect(kindLabel('stop_loss', 'sell')).toBe('止损')
     expect(kindLabel('take_profit', 'buy')).toBe('止盈')
+  })
+})
+
+describe('presetDirection / presetTriggerPrice(快捷档位)', () => {
+  // 全部合法组合(side = 平仓方向 / limit 的买卖方向,与后端端点口径一致)
+  const COMBOS: [ConditionalKind, OrderSide, PositionSide][] = [
+    ['stop_loss', 'sell', 'long'],
+    ['stop_loss', 'buy', 'short'],
+    ['take_profit', 'sell', 'long'],
+    ['take_profit', 'buy', 'short'],
+    ['limit', 'buy', 'long'],
+    ['limit', 'sell', 'long'],
+  ]
+
+  it('方向矩阵:SL 平多下/平空上 · TP 平多上/平空下 · LIMIT buy下/sell上', () => {
+    expect(presetDirection('stop_loss', 'sell', 'long')).toBe(-1)
+    expect(presetDirection('stop_loss', 'buy', 'short')).toBe(1)
+    expect(presetDirection('take_profit', 'sell', 'long')).toBe(1)
+    expect(presetDirection('take_profit', 'buy', 'short')).toBe(-1)
+    expect(presetDirection('limit', 'buy', 'long')).toBe(-1)
+    expect(presetDirection('limit', 'sell', 'long')).toBe(1)
+  })
+
+  it('★ 全组合 × 全档位:档位价绝不立即触发(与 wouldTriggerNow 互证)', () => {
+    for (const [kind, side, pside] of COMBOS) {
+      for (const pct of [0.02, 0.05, 0.1]) {
+        const price = Number(presetTriggerPrice(kind, side, pside, 100, pct))
+        expect(wouldTriggerNow(kind, side, pside, price, 100)).toBe(false)
+      }
+    }
+  })
+
+  it('算价:止损平多 −5% = 95 · 止盈平空 −2% = 98 · 限价卖出 +10% = 110', () => {
+    expect(presetTriggerPrice('stop_loss', 'sell', 'long', 100, 0.05)).toBe('95')
+    expect(presetTriggerPrice('take_profit', 'buy', 'short', 100, 0.02)).toBe('98')
+    expect(presetTriggerPrice('limit', 'sell', 'long', 100, 0.1)).toBe('110')
+  })
+
+  it('精度:小币按现价位数展开不截断成 0 · 整数价干净', () => {
+    // 0.0895 × 0.95 = 0.085025(完整保留,绝不为 0)
+    expect(presetTriggerPrice('stop_loss', 'sell', 'long', 0.0895, 0.05)).toBe('0.085025')
+    // 96000 × 0.95 = 91200(无多余尾零)
+    expect(presetTriggerPrice('stop_loss', 'sell', 'long', 96000, 0.05)).toBe('91200')
+    // 232.45 × 1.02 = 237.099(现价 2 位 → 237.1)
+    expect(presetTriggerPrice('take_profit', 'sell', 'long', 232.45, 0.02)).toBe('237.1')
+    expect(Number(presetTriggerPrice('stop_loss', 'sell', 'long', 0.0895, 0.05))).toBeGreaterThan(0)
   })
 })

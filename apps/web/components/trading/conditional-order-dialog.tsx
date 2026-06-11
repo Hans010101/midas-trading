@@ -26,6 +26,8 @@ import {
   type ConditionalKind,
   deviationPct,
   kindLabel,
+  presetDirection,
+  presetTriggerPrice,
   wouldTriggerNow,
 } from '@/lib/conditional'
 import { cn } from '@/lib/utils'
@@ -171,8 +173,32 @@ export function ConditionalOrderDialog({
           onChange={(e) => setTriggerPrice(e.target.value)}
           min={0}
           placeholder="必填 · 到价即触发"
-          className="mb-3 h-9 w-full rounded border border-paper bg-background px-3 text-right font-mono text-sm"
+          className="mb-1.5 h-9 w-full rounded border border-paper bg-background px-3 text-right font-mono text-sm"
         />
+
+        {/* 快捷档位:按【不立即触发】方向取价填入(presetDirection 与触发矩阵互证)·
+            只填值不提交 · 用户可再微调 · 不预填(初始仍空) */}
+        {currentPrice != null && currentPrice > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-1.5">
+            {[0.02, 0.05, 0.1].map((pct) => {
+              const dir = presetDirection(effKind, effSide, effPositionSide)
+              const price = presetTriggerPrice(effKind, effSide, effPositionSide, currentPrice, pct)
+              return (
+                <button
+                  key={pct}
+                  type="button"
+                  onClick={() => setTriggerPrice(price)}
+                  title={`现价×${(1 + dir * pct).toFixed(2)} = ${price}(现价${dir === -1 ? '下' : '上'}方 ${pct * 100}%)`}
+                  className="rounded border border-paper px-2 py-0.5 font-mono text-[11px] text-muted-foreground transition-colors hover:border-gold/60 hover:text-gold"
+                >
+                  {dir === -1 ? '−' : '+'}
+                  {pct * 100}%
+                </button>
+              )
+            })}
+            <span className="text-[10px] text-muted-foreground/60">点档位按方向取价 · 可微调</span>
+          </div>
+        )}
 
         {/* 数量 */}
         <label className="mb-1 block text-xs text-muted-foreground">
