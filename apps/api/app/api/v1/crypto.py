@@ -40,6 +40,7 @@ from app.schemas.crypto import (
     FuturesMetricItem,
     FuturesMetricsBatchResponse,
     FuturesSymbolInfo,
+    IngestStatusResponse,
     LongShortRatioResponse,
     MarketOverview,
     OpenInterestResponse,
@@ -58,6 +59,7 @@ from app.services.clickhouse_crypto import (
     select_premium_index_series,
     select_tickers_by_symbols,
 )
+from app.services.ingest_monitor import build_ingest_status, select_ingest_freshness
 
 logger = logging.getLogger(__name__)
 
@@ -431,6 +433,31 @@ async def get_fear_greed(
         ch._client, limit=limit,  # noqa: SLF001
     )
     return FearGreedResponse(items=items)
+
+
+# ============================================================================
+# 9 · GET /ingest-status · 采集新鲜度监控(刀D 还债 · 丙方案纯读 max(ts))
+# ============================================================================
+
+
+@router.get(
+    "/ingest-status",
+    response_model=IngestStatusResponse,
+    summary="采集新鲜度监控(各 CH 表 max(ts) vs now · 防数据 stale 无人发现)",
+    description=(
+        "刀D 还债:纯读各表 maxOrNull(ts) 推断每个数据源新鲜度,零侵入采集任务。"
+        "加密 7 源判 stale(阈值=max(数据栅格,任务频率)×3 · funding 按 8h 结算栅格、"
+        "kline 脉搏按缺今日 bar 超 1 天);股票表 v1 裸报不判(交易时段语义)。"
+        "any_stale=true 即有源过期 · curl/浏览器直接看。"
+    ),
+)
+async def get_ingest_status(ch: ClickHouseDep) -> IngestStatusResponse:
+    latest_map = await select_ingest_freshness(ch._client)  # noqa: SLF001
+    now = datetime.now(tz=UTC)
+    crypto_items, equity_items, any_stale = build_ingest_status(latest_map, now)
+    return IngestStatusResponse(
+        as_of=now, any_stale=any_stale, crypto=crypto_items, equities=equity_items,
+    )
 
 
 # ============================================================================
