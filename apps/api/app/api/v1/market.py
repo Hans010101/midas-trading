@@ -28,6 +28,7 @@ from app.services.data_sources.exceptions import (
     UpstreamUnavailableError,
 )
 from app.services.hk_pool import HK_POOL
+from app.services.kline_freshness import get_fresh_kline
 
 # M2-B(0017 ADR)· instrument 区分 spot/perp · 默认 spot 向后兼容
 Instrument = Literal["spot", "perp"]
@@ -70,30 +71,24 @@ async def get_kline(
             detail=f"instrument=perp 只支持 market=crypto · 当前 market={market}",
         )
 
-    # 1. 缓存命中:CH 已有 ≥ limit 条 → 直接返回(最近 limit 条)
-    cached = await ch.select_kline(
-        symbol=symbol, market=market, period=period, limit=limit, instrument=instrument,
+    # 刀A2-1:cache-aside 收敛进 get_fresh_kline(端点 + 撮合 fetcher 共用)——
+    #   行数不足 → 回源(原行为);行数够但末根过期(仅 crypto)→ 也回源(治多周期永久 stale)。
+    #   perp symbol 归一 / 同 ts 重复行去重在 ClickHouseClient 内部(所有调用方生效)。
+    source: BaseDataSource = (
+        binance_futures
+        if instrument == "perp"
+        else _source_for(market, cn=cn, us=us, crypto=crypto, hk=hk)
     )
-    if len(cached) >= limit:
-        logger.info(
-            "[market.kline] cache hit · symbol=%s market=%s instrument=%s period=%s rows=%d",
-            symbol, market, instrument, period, len(cached),
-        )
-        return KlineResponse(symbol=symbol, market=market, period=period, items=cached[-limit:])
-
-    # 2. 缓存未命中(或不足):回源
-    # M2-B · perp 走 BinanceFuturesSource;spot 走原有 _source_for 逻辑
-    if instrument == "perp":
-        # perp symbol 用 Binance Futures 风格(BTCUSDT 无斜杠)· 如果传入 BTC/USDT 转一下
-        binance_symbol = symbol.replace("/", "") if "/" in symbol else symbol
-        source: BaseDataSource = binance_futures
-        fetch_symbol = binance_symbol
-    else:
-        source = _source_for(market, cn=cn, us=us, crypto=crypto, hk=hk)
-        fetch_symbol = symbol
-
     try:
-        upstream_rows = await source.fetch_kline(fetch_symbol, period, limit=limit)
+        items = await get_fresh_kline(
+            ch,
+            symbol=symbol,
+            market=market,
+            period=period,
+            limit=limit,
+            instrument=instrument,
+            source=source,
+        )
     except SymbolNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -111,22 +106,7 @@ async def get_kline(
             detail=str(e),
         ) from e
 
-    # 3. 写回 CH(insert_kline 内部已经做去重,幂等)· 带上 instrument
-    written = await ch.insert_kline(
-        upstream_rows, symbol=symbol, market=market, period=period, instrument=instrument,
-    )
-    logger.info(
-        "[market.kline] upstream fetch + write · symbol=%s market=%s instrument=%s"
-        " period=%s upstream=%d ch_new=%d",
-        symbol, market, instrument, period, len(upstream_rows), written,
-    )
-
-    return KlineResponse(
-        symbol=symbol,
-        market=market,
-        period=period,
-        items=upstream_rows[-limit:],
-    )
+    return KlineResponse(symbol=symbol, market=market, period=period, items=items)
 
 
 @router.get(

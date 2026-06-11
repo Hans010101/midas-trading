@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import delete, desc, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,8 +54,11 @@ from app.schemas.virtual import (
 )
 from app.services.bot import order as bot_order
 from app.services.clickhouse_client import ClickHouseClient
+from app.services.data_sources.base import BaseDataSource
+from app.services.data_sources.exceptions import DataSourceError
 from app.services.hk_board_lot import resolve_hk_board_lot
 from app.services.hk_pool import normalize_hk_code
+from app.services.kline_freshness import get_fresh_kline
 from app.services.virtual_trading.engine import (
     PlaceOrderRequest,
     PriceFetcher,
@@ -76,22 +79,41 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 # ===== 价格 fetcher · 注入式 =====
 
 
-def make_price_fetcher(ch: ClickHouseClient) -> PriceFetcher:
-    """走 ClickHouse 拉最新 1d K 的 close · cache-aside 同源。"""
+def make_price_fetcher(
+    ch: ClickHouseClient, *, crypto_source: BaseDataSource | None = None,
+) -> PriceFetcher:
+    """走 ClickHouse 拉最新 1d K 的 close · cache-aside 同源。
+
+    刀A2-1 甲案:crypto(spot)末根过期时经 get_fresh_kline 回源刷新 ——
+    撮合/估值价不再吃 stale kline 快照(BTC/USDT 停 5/31 价偏 18% 事故)。
+    cn/us/hk 有采集任务保新鲜、crypto_source=None(测试/无 lifespan)时,
+    均退化为纯读缓存 = 原行为。🔴 只换取数路径 · 撮合入口/engine 零碰。
+    """
 
     async def fetcher(symbol: str, market: str) -> Decimal | None:
         # market 在 engine 层已校验 Market Literal,但 fetcher 签名宽容 str
-        rows = await ch.select_kline(
-            symbol=symbol,
-            market=market,  # type: ignore[arg-type]
-            period="1d",
-            limit=1,
-        )
+        try:
+            rows = await get_fresh_kline(
+                ch,
+                symbol=symbol,
+                market=market,  # type: ignore[arg-type]
+                period="1d",
+                limit=1,
+                source=crypto_source if market == "crypto" else None,
+            )
+        except DataSourceError:
+            # 空缓存 + 回源失败 → 维持「无法取价 → 拒单」语义(不冒 500)
+            return None
         if not rows:
             return None
         return Decimal(str(rows[-1].close))
 
     return fetcher
+
+
+def _crypto_source_of(request: Request) -> BaseDataSource | None:
+    """app.state 取 crypto spot source(lifespan 单例)· 测试无 lifespan 时 None=纯读缓存。"""
+    return getattr(request.app.state, "crypto_source", None)
 
 
 # ===== /accounts CRUD =====
@@ -206,9 +228,9 @@ async def activate_or_reset_account(
     summary="聚合 · 全部已激活市场 + 活仓 + 实时估值",
 )
 async def get_portfolio(
-    ch: ClickHouseDep, current_user: CurrentUserDep, db: DbDep,
+    request: Request, ch: ClickHouseDep, current_user: CurrentUserDep, db: DbDep,
 ) -> list[AccountSummaryResponse]:
-    fetcher = make_price_fetcher(ch)
+    fetcher = make_price_fetcher(ch, crypto_source=_crypto_source_of(request))
     summaries = await aggregate_portfolio(
         db, user_id=current_user.id, price_fetcher=fetcher,
     )
@@ -250,12 +272,13 @@ async def get_portfolio(
     summary="市价单下单 · 200 + status=filled/rejected",
 )
 async def place_order(
+    request: Request,
     payload: OrderPlaceIn,
     ch: ClickHouseDep,
     current_user: CurrentUserDep,
     db: DbDep,
 ) -> OrderResponse:
-    fetcher = make_price_fetcher(ch)
+    fetcher = make_price_fetcher(ch, crypto_source=_crypto_source_of(request))
     # 港股按手取整(board lot)· ★全程虚拟 · 复用 place_market_order · 不接真实通道。
     #   floor(qty/lot)*lot:不能买零散股 · lot 取自 lot 表(HKEX 官方 ~2406 · 表无回退 18 种子)。
     #   不在池 → 拒;不足一手 → 拒。cn/us/crypto 不进此分支(零影响)。

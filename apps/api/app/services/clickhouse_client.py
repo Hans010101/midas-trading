@@ -48,6 +48,19 @@ _KLINE_COLUMNS: tuple[str, ...] = (
 # 当前 spot / perp 只有 crypto market 有意义 · cn/us 永远是 spot
 KLINE_INSTRUMENT_DEFAULT = "spot"
 
+
+def normalize_kline_symbol(symbol: str, market: str, instrument: str) -> str:
+    """crypto perp symbol 归一到 Binance 风格无斜杠(刀A2-1 双形态治理)。
+
+    采集任务(update_crypto_demo)与币安回源都写 'BTCUSDT';历史上端点 persist
+    用过 'BTC/USDT' → 同 symbol 两套行,前端命中 stale 孤儿(H/USDT 三处三价根因之一)。
+    select / insert 内部统一归一 → 所有调用方一次性全修;旧带斜杠 perp 行从此
+    无人命中(毒数据 · 物理清理留 A2-2)。crypto spot(ccxt 形态)与股票不动。
+    """
+    if market == "crypto" and instrument == "perp":
+        return symbol.replace("/", "")
+    return symbol
+
 _SYMBOL_META_COLUMNS: tuple[str, ...] = (
     "symbol",
     "market",
@@ -116,6 +129,8 @@ class ClickHouseClient:
         """
         if not rows:
             return 0
+        # 刀A2-1:crypto perp 写入形态归一(与采集任务/币安同形态 · 杜绝双形态再生)
+        symbol = normalize_kline_symbol(symbol, market, instrument)
 
         ts_set_aware_utc = {self._to_aware_utc(r.ts) for r in rows}
         min_ts = min(ts_set_aware_utc)
@@ -209,9 +224,18 @@ class ClickHouseClient:
           · 'perp'        · USDT-M 永续合约 K 线
           · 不传 = 默认 spot · 向后兼容现有调用方
           · 缠论引擎跟工作台直接复用本方法 · 改 instrument 参数即可读 perp
+
+        刀A2-1 两处治理(叠在 0010 之上):
+          · symbol 归一:crypto perp 统一无斜杠 → 所有调用方一次性修掉双形态孤儿命中。
+          · 同 ts 重复行读端无害化:裸 MergeTree + check-then-insert 并发竞态会留
+            重复行(K2)· GROUP BY ts 任取一行(重复 bar 近似等价)· 不物理删(A2-2)。
         """
+        # 刀A2-1:crypto perp 查询形态归一(与写入/采集任务同形态)
+        symbol = normalize_kline_symbol(symbol, market, instrument)
         sql = (
-            "SELECT ts, open, high, low, close, volume, amount FROM kline "
+            "SELECT ts, any(open) AS open, any(high) AS high, any(low) AS low, "
+            "any(close) AS close, any(volume) AS volume, any(amount) AS amount "
+            "FROM kline "
             "WHERE symbol = %(symbol)s AND market = %(market)s "
             "AND instrument = %(instrument)s AND period = %(period)s"
         )
@@ -224,8 +248,8 @@ class ClickHouseClient:
         if since is not None:
             sql += " AND ts >= %(since)s"
             params["since"] = self._to_aware_utc(since)
-        # DESC 拿最新 N 根 · Python 端再 reverse 还原 ASC
-        sql += " ORDER BY ts DESC LIMIT %(limit)s"
+        # GROUP BY ts 去重(K2 读端无害化)· DESC 拿最新 N 根 · Python 端 reverse 还原 ASC
+        sql += " GROUP BY ts ORDER BY ts DESC LIMIT %(limit)s"
         params["limit"] = limit
 
         result = await self._client.query(sql, parameters=params)
