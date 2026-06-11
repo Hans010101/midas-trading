@@ -123,6 +123,24 @@ def test_prompt_red_lines_locked() -> None:
     assert "暂不支持该维度" in SYSTEM_PROMPT
 
 
+# ── prompt 专业化指令锁字(v1.1 · 防被改回罗列式)────────────────────────────
+
+
+def test_prompt_professional_instructions_locked() -> None:
+    # (a) 因子关系
+    assert "背离" in SYSTEM_PROMPT
+    assert "共振" in SYSTEM_PROMPT
+    assert "孤立罗列" in SYSTEM_PROMPT
+    # (b) 结构定性
+    assert "结构类型" in SYSTEM_PROMPT
+    # (c) 触发条件 = 可观察因子变化 · 仍非预测
+    assert "可观察的因子变化" in SYSTEM_PROMPT
+    assert "触发条件(非预测)" in SYSTEM_PROMPT
+    # (d) 诚实不确定性 · 禁安全废话
+    assert "不装确定" in SYSTEM_PROMPT
+    assert "无信息增量的安全话术" in SYSTEM_PROMPT
+
+
 # ── validator 复用(祈使句改写)──────────────────────────────────────────────
 
 

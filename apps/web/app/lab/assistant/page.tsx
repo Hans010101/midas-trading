@@ -67,9 +67,7 @@ export default function LabAssistantPage() {
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <TopNav />
       <main className="mx-auto w-full max-w-5xl px-6 py-8">
-        <div className="mb-6 flex items-center gap-3">
-          <h1 className="font-serif text-2xl font-bold">策略研究室 · 结构分析助手</h1>
-        </div>
+        {/* v1.1:大标题删除 —— TopNav「策略研究室」高亮 + LabNav 已标明位置,第三遍重复是噪声 */}
         <LabNav />
 
         {authStatus === 'unauthenticated' ? (
@@ -151,10 +149,7 @@ function DiagnosisResult({ diag }: { diag: StructureDiagnosis }) {
             {INTENT_LABEL[diag.intent]}
           </span>
         </div>
-        <p className="font-mono text-sm text-muted-foreground">
-          {diag.snapshot.symbol} · crypto perp ·{' '}
-          {new Date(diag.snapshot.generated_at).toLocaleString('zh-CN')}
-        </p>
+        {/* v1.1:删 symbol·perp·时间戳元信息行(Hans 反馈无效信息 · symbol 在输入框已示)*/}
         <div className="mt-3 rounded-lg border border-paper bg-cream p-4 shadow-sm">
           <p className="text-sm leading-relaxed text-foreground">{diag.conclusion}</p>
         </div>
