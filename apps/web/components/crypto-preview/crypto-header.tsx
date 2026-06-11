@@ -41,7 +41,10 @@ export function CryptoHeader({
   const items = dailyKline.data?.items ?? []
   const last = items.at(-1)
   const prev = items.at(-2)
-  const price = last?.close ?? null
+  // 刀A1(价格一致性):报价改标记价优先(premium_index 1min 新鲜 · 与撮合/强平/条件单触发同源)。
+  // kline 末根只作兜底 —— kline 缓存零新鲜度会停在旧快照(H/USDT $0.09 事故),A2 治本。
+  // 日涨跌仍由 kline 末两根算(无单 symbol 24H 涨跌轻量端点 · 随 A2 kline 新鲜后自动修正)。
+  const price = info.data?.mark_price ?? last?.close ?? null
   const changePct =
     last && prev && prev.close !== 0
       ? ((last.close - prev.close) / prev.close) * 100

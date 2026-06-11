@@ -19,6 +19,7 @@ import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 
 import { ConditionalOrderDialog } from '@/components/trading/conditional-order-dialog'
+import { useFuturesInfo } from '@/hooks/use-crypto'
 import { useKline } from '@/hooks/use-kline'
 import { usePerpPositions, usePlacePerpOrder } from '@/hooks/use-perp'
 import { useAccount } from '@/hooks/use-virtual'
@@ -73,8 +74,11 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
   const klineQ = useKline({
     symbol: klineSymbol, market: 'crypto', period: '1d', limit: 1, instrument: 'perp',
   })
+  const infoQ = useFuturesInfo(futuresSymbol)
 
-  const markPrice = klineQ.data?.items?.at(-1)?.close ?? null
+  // 刀A1:预估价源改真标记价优先(premium_index 1min · 与后端撮合价同源);
+  // kline 末根仅兜底(缓存零新鲜度 · 旧快照会让预估开仓量/强平价整组失真)。
+  const markPrice = infoQ.data?.mark_price ?? klineQ.data?.items?.at(-1)?.close ?? null
   const activePos = useMemo<PerpPosition | null>(
     () =>
       (positionsQ.data ?? []).find(
