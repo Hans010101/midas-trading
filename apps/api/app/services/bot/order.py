@@ -43,6 +43,7 @@ from app.services.clickhouse_crypto import (
     select_tickers_by_symbols,
 )
 from app.services.hk_board_lot import resolve_hk_board_lot
+from app.services.notifications.emit import emit_perp_order
 from app.services.notifications.perp_events import (
     build_perp_filled_event,
     build_trade_filled_event,
@@ -381,17 +382,26 @@ async def build_preview(
 
 async def execute(
     db: AsyncSession, ch: ClickHouseClient, user_id: UUID, intent: OrderIntent,
+    *, notify_user: bool = False,
 ) -> OrderResult:
-    """执行虚拟下单 · user_id 必须由调用方从已验证 chat 解析后传入(红线 R1)。"""
+    """执行虚拟下单 · user_id 必须由调用方从已验证 chat 解析后传入(红线 R1)。
+
+    notify_user(AI 一键下单无通知修复):
+      - False(默认 = bot 现状):#296 去重 —— bot 调用方拿 OrderResult.body 自己回 chat,
+        不发异步成交推送(spot notify=False · perp 不 emit)。bot/router 不传 → 零回归。
+      - True(ai-order 网页路径传):恢复异步推送(spot notify=True 走 engine emit ·
+        perp 成交后补 emit_perp_order)。富回执 body 仍只是返回值(HTTP 响应),不构成双发。
+    """
     if not direction_valid(intent.market, intent.direction):
         return OrderResult(filled=False, title="下单失败", detail="不支持的操作")
     if intent.market == "crypto":
-        return await _exec_perp(db, ch, user_id, intent)
-    return await _exec_spot(db, ch, user_id, intent)
+        return await _exec_perp(db, ch, user_id, intent, notify_user=notify_user)
+    return await _exec_spot(db, ch, user_id, intent, notify_user=notify_user)
 
 
 async def _exec_perp(
     db: AsyncSession, ch: ClickHouseClient, user_id: UUID, intent: OrderIntent,
+    *, notify_user: bool = False,
 ) -> OrderResult:
     bsym = _to_binance(intent.symbol)
 
@@ -420,6 +430,10 @@ async def _exec_perp(
     order.source = intent.source  # 0036 U0:来源标记 · 引擎不设、facade 在 commit 前标
     await db.commit()
     if order.status == OrderStatus.FILLED:
+        # AI 一键下单无通知修复:ai-order(网页)路径补异步推送(照 perp.py:156 范式 ·
+        # commit 后 · 仅成交单);bot 路径 notify_user=False 保持 #296 去重不变。
+        if notify_user:
+            emit_perp_order(order.id)
         # #296 去重:bot 不再发异步 A(网页 perp.py 的 emit 保留)· 改用富回执:
         # 复用 A 的事件 + 模板(build_perp_filled_event + render_telegram)· 文案单一事实源。
         account = await db.scalar(
@@ -450,6 +464,7 @@ async def _exec_perp(
 
 async def _exec_spot(
     db: AsyncSession, ch: ClickHouseClient, user_id: UUID, intent: OrderIntent,
+    *, notify_user: bool = False,
 ) -> OrderResult:
     market, symbol, direction = intent.market, intent.symbol, intent.direction
 
@@ -474,7 +489,8 @@ async def _exec_spot(
         PlaceOrderRequest(
             user_id=user_id, symbol=symbol, market=market,
             side=side, quantity=qty, position_side=pside,
-            notify=False,  # #296 去重:bot 走富回执 · 抑制引擎异步成交推送(网页默认 True 不变)
+            # #296 去重:bot 传 False 走富回执;ai-order 传 True 恢复 engine 异步推送(无通知修复)
+            notify=notify_user,
         ),
         fetcher,
     )
