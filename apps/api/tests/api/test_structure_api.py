@@ -140,6 +140,34 @@ async def test_diagnose_authed_200_shape(
 
 
 @pytest.mark.asyncio
+async def test_diagnose_no_factor_data_422(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """合约因子全 null(无效 symbol)→ 422 友好提示(symbol 模糊输入刀)。"""
+    from app.services.structure.workflow import NoFactorDataError
+
+    app.dependency_overrides[get_clickhouse] = lambda: SimpleNamespace(_client=object())
+
+    async def no_data(client: Any, symbol: str, question: str) -> StructureDiagnosis:  # noqa: ARG001
+        raise NoFactorDataError("XYZUSDT")
+
+    monkeypatch.setattr("app.api.v1.structure.get_structure_diagnosis", no_data)
+
+    user = await make_user(db_session)
+    token = await issue_session(db_session, user_id=user.id)
+    await db_session.commit()
+
+    r = await client.post(
+        "/api/v1/structure/diagnose",
+        json={"symbol": "xyz", "question": "结构怎么样"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 422
+    assert "XYZUSDT" in r.json()["detail"]
+    assert "USDT 永续" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_diagnose_llm_parse_failure_502(
     client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

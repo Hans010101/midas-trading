@@ -16,7 +16,11 @@ from app.schemas.structure import StructureFactor, StructureSnapshot
 from app.services.ai.llm import LLMResponse
 from app.services.ai.validator import has_imperative
 from app.services.structure.prompts import SYSTEM_PROMPT
-from app.services.structure.workflow import parse_intent, run_structure_diagnosis
+from app.services.structure.workflow import (
+    NoFactorDataError,
+    parse_intent,
+    run_structure_diagnosis,
+)
 
 _TS = datetime(2026, 6, 10, 8, 0, tzinfo=UTC)
 
@@ -154,6 +158,38 @@ async def test_validator_rewrites_imperative(monkeypatch: pytest.MonkeyPatch) ->
     assert not has_imperative(diag.conclusion)  # 已被改写
     assert "建议立即买入" not in diag.conclusion
     assert "买入信号" in diag.conclusion  # 词表改写产物(陈述句)
+
+
+# ── 友好闸:合约因子全 null → 不进 LLM(省成本 · symbol 模糊输入刀)────────────
+
+
+@pytest.mark.asyncio
+async def test_no_factor_data_skips_llm(monkeypatch: pytest.MonkeyPatch) -> None:
+    """6 合约因子全 null(如无效 symbol / 非 USDT 永续)→ NoFactorDataError 且 ainvoke 零调用。"""
+    sentiment_only = StructureSnapshot(
+        symbol="XYZUSDT", generated_at=_TS,
+        account_long_short=None, position_long_short=None, taker_flow=None,
+        open_interest=None, funding_rate=None, basis=None,
+        # sentiment 是全局因子(不吃 symbol)· 正是 Hans 实证 "eth" 只剩 FGI 的形态
+        sentiment=StructureFactor(value={"fear_greed": 30.0}, window="latest", asof=_TS),
+    )
+    calls = {"n": 0}
+
+    async def fake_snapshot(client: Any, symbol: str) -> StructureSnapshot:  # noqa: ARG001
+        return sentiment_only
+
+    async def counting_ainvoke(prompt: str, **kwargs: Any) -> LLMResponse:  # noqa: ARG001
+        calls["n"] += 1
+        return LLMResponse(content="{}", prompt_tokens=0, completion_tokens=0,
+                           total_tokens=0, is_mock=True)
+
+    monkeypatch.setattr(wf_mod, "build_structure_snapshot", fake_snapshot)
+    monkeypatch.setattr(wf_mod, "ainvoke", counting_ainvoke)
+    monkeypatch.setattr(wf_mod, "is_mock_mode", lambda: True)
+
+    with pytest.raises(NoFactorDataError, match="XYZUSDT"):
+        await run_structure_diagnosis(object(), "xyz", "结构怎么样")
+    assert calls["n"] == 0  # ★ 没进 LLM 节点 = 零成本
 
 
 # ── LLM 坏输出 → 明确 raise(不产假诊断 · 不污染缓存)──────────────────────────

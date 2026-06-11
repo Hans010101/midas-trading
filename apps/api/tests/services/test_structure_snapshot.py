@@ -76,9 +76,21 @@ def _patch_all(monkeypatch: pytest.MonkeyPatch, *, funding_empty: bool = False) 
     monkeypatch.setattr(snap_mod, "select_fear_greed_series", fake_fgi)
 
 
-def test_normalize_symbol() -> None:
-    assert normalize_symbol(" btc/usdt ") == "BTCUSDT"
-    assert normalize_symbol("ETH-USDT") == "ETHUSDT"
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (" btc/usdt ", "BTCUSDT"),
+        ("ETH-USDT", "ETHUSDT"),
+        # symbol 模糊输入刀:无后缀补 USDT(Hans 实证 "eth" 查空的根治)
+        ("eth", "ETHUSDT"),
+        ("ETHUSDT", "ETHUSDT"),  # 已规范 → 原样
+        ("btcusdc", "BTCUSDC"),  # 已带其它 quote 后缀 → 不误补(诚实 null 路径)
+        ("ETH/USDT", "ETHUSDT"),
+        ("usdc", "USDCUSDT"),  # 纯 quote 词不算带后缀(len 不大于后缀)→ 补 USDT(币安真有此对)
+    ],
+)
+def test_normalize_symbol(raw: str, expected: str) -> None:
+    assert normalize_symbol(raw) == expected
 
 
 @pytest.mark.asyncio

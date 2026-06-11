@@ -16,7 +16,7 @@ from fastapi import APIRouter, HTTPException, Path, status
 from app.api.deps import ClickHouseDep, CurrentUserDep
 from app.schemas.structure import DiagnoseRequest, StructureDiagnosis, StructureSnapshot
 from app.services.structure.snapshot import get_structure_snapshot
-from app.services.structure.workflow import get_structure_diagnosis
+from app.services.structure.workflow import NoFactorDataError, get_structure_diagnosis
 
 router = APIRouter(prefix="/structure", tags=["structure"])
 
@@ -58,6 +58,12 @@ async def post_diagnose(
     raw_client = ch._client  # noqa: SLF001 — 房规:读层收裸 AsyncClient(同上)
     try:
         return await get_structure_diagnosis(raw_client, payload.symbol, payload.question)
+    except NoFactorDataError as e:
+        # 友好闸:无效 symbol / 非 USDT 永续 → 422(用户输入面 · 未进 LLM 零成本)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"未找到 {e.symbol} 的合约因子数据,请确认是 USDT 永续合约",
+        ) from e
     except ValueError as e:
         # LLM 输出解析失败(不产兜底假诊断 · 不污染缓存)→ 502 让用户重试
         raise HTTPException(
