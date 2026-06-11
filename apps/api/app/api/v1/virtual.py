@@ -17,13 +17,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import ClickHouseDep, CurrentUserDep
 from app.core.database import get_db
+from app.models.conditional_order import (
+    ConditionalKind,
+    ConditionalOrder,
+    ConditionalStatus,
+)
+from app.models.perp import PerpSide, VirtualPerpPosition
 from app.models.virtual import (
     MARKET_CURRENCY,
+    OrderSide,
+    PositionSide,
     SnapshotTrigger,
     VirtualAccount,
     VirtualEquitySnapshot,
     VirtualOrder,
     VirtualPosition,
+)
+from app.schemas.conditional_order import (
+    ConditionalOrderCreate,
+    ConditionalOrderResponse,
 )
 from app.schemas.market import Market
 from app.schemas.virtual import (
@@ -458,6 +470,158 @@ def _serialize_order(order: VirtualOrder) -> OrderResponse:
         placed_at=order.placed_at if order.id else None,
         filled_at=order.filled_at,
     )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 条件单挂单簿(ADR 0041 刀1)· 挂 / 撤 / 列
+# 🔴 红线:这些端点只读写 conditional_orders 表 —— 不调 place_market_order、不碰 engine。
+#   本刀条件单【不会触发成交】(刀2 扫描器才接触发),是有意分界。
+# ════════════════════════════════════════════════════════════════════════════
+
+# SL/TP 的平仓方向:LONG 仓只能 SELL 平 · SHORT 仓只能 BUY 平(与触发矩阵自洽,防脏数据)
+_CLOSING_SIDE = {PositionSide.LONG: OrderSide.SELL, PositionSide.SHORT: OrderSide.BUY}
+
+
+async def _has_active_position(
+    db: AsyncSession, account_id: int, market: str, symbol: str, position_side: PositionSide,
+) -> bool:
+    """SL/TP 挂单软校验:有无对应活仓(纯读 · 活仓条件照 engine 口径 closed_at IS NULL)。"""
+    if market == "crypto":
+        # crypto 语义=perp(symbol Binance 风格)· PerpSide 与 PositionSide 同名映射
+        return (
+            await db.scalar(
+                select(VirtualPerpPosition.id).where(
+                    VirtualPerpPosition.account_id == account_id,
+                    VirtualPerpPosition.symbol == symbol,
+                    VirtualPerpPosition.side == PerpSide[position_side.name],
+                    VirtualPerpPosition.closed_at.is_(None),
+                ),
+            )
+            is not None
+        )
+    return (
+        await db.scalar(
+            select(VirtualPosition.id).where(
+                VirtualPosition.account_id == account_id,
+                VirtualPosition.symbol == symbol,
+                VirtualPosition.position_side == position_side,
+                VirtualPosition.closed_at.is_(None),
+            ),
+        )
+        is not None
+    )
+
+
+@router.post(
+    "/conditional-orders",
+    response_model=ConditionalOrderResponse,
+    summary="挂条件单(限价/止损/止盈)· 本刀仅挂单簿,触发成交随刀2",
+)
+async def create_conditional_order(
+    payload: ConditionalOrderCreate, current_user: CurrentUserDep, db: DbDep,
+) -> ConditionalOrderResponse:
+    """挂单不冻结资金(ADR 0041 决策二)· 触发时由 place_market_order 现有余额校验把关。"""
+    symbol = payload.symbol.strip()
+    if payload.market == "crypto":
+        symbol = symbol.upper().replace("/", "")  # perp 语义 · Binance 风格(与持仓表一致)
+
+    if payload.order_kind == ConditionalKind.LIMIT:
+        if payload.quantity is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="限价单必须填写数量",
+            )
+    else:
+        # SL/TP(未决②定型 (a):持仓后独立挂)—— side 必须是该仓向的平仓方向 + 须有活仓
+        expected = _CLOSING_SIDE[payload.position_side]
+        if payload.side != expected:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"止损/止盈是平仓单:{payload.position_side.value} 仓须用 {expected.value}",
+            )
+        account = await db.scalar(
+            select(VirtualAccount).where(
+                VirtualAccount.user_id == current_user.id,
+                VirtualAccount.market == payload.market,
+            ),
+        )
+        if account is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="该市场虚拟资金未设置 · 请先去个人设置页填写",
+            )
+        if not await _has_active_position(
+            db, account.id, payload.market, symbol, payload.position_side,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="无对应活仓 · 止损/止盈需先持有该方向仓位",
+            )
+
+    row = ConditionalOrder(
+        user_id=current_user.id,
+        symbol=symbol,
+        market=payload.market,
+        order_kind=payload.order_kind,
+        side=payload.side,
+        position_side=payload.position_side,
+        trigger_price=payload.trigger_price,
+        quantity=payload.quantity,
+        status=ConditionalStatus.ACTIVE,
+    )
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return ConditionalOrderResponse.model_validate(row)
+
+
+@router.get(
+    "/conditional-orders",
+    response_model=list[ConditionalOrderResponse],
+    summary="我的条件单(倒序 · 可按状态过滤)",
+)
+async def list_conditional_orders(
+    current_user: CurrentUserDep,
+    db: DbDep,
+    status_filter: Annotated[ConditionalStatus | None, Query(alias="status")] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> list[ConditionalOrderResponse]:
+    stmt = (
+        select(ConditionalOrder)
+        .where(ConditionalOrder.user_id == current_user.id)
+        .order_by(desc(ConditionalOrder.created_at))
+        .limit(limit)
+    )
+    if status_filter is not None:
+        stmt = stmt.where(ConditionalOrder.status == status_filter)
+    rows = (await db.execute(stmt)).scalars().all()
+    return [ConditionalOrderResponse.model_validate(r) for r in rows]
+
+
+@router.delete(
+    "/conditional-orders/{cond_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="撤条件单(仅本人 ACTIVE · 状态机转 cancelled 留审计)",
+)
+async def cancel_conditional_order(
+    cond_id: int, current_user: CurrentUserDep, db: DbDep,
+) -> None:
+    """ADR 0041 状态机:撤单 = ACTIVE → CANCELLED(保留行供审计,非物理删除);
+    鉴权与 404 口径照 alert_rules 范式(不存在/非本人/非 ACTIVE 统一 404,不泄露状态)。
+    """
+    row = await db.scalar(
+        select(ConditionalOrder).where(
+            ConditionalOrder.id == cond_id,
+            ConditionalOrder.user_id == current_user.id,
+            ConditionalOrder.status == ConditionalStatus.ACTIVE,
+        ),
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="条件单不存在或不可撤销",
+        )
+    row.status = ConditionalStatus.CANCELLED
+    await db.commit()
 
 
 # Public re-export for celery beat job
