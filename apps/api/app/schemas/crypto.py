@@ -80,14 +80,17 @@ class OpenInterestResponse(BaseModel):
 
 
 class LongShortRatio(BaseModel):
-    """多空比单点 · 5min 栅格 · 同时含三套指标。
+    """多空比单点 · 5min 栅格 · 同时含四套指标。
 
     上游 Binance:
-    - topLongShortAccountRatio   → top_account_*(top trader 账户多空比)
-    - topLongShortPositionRatio  → top_position_*(top trader 持仓多空比)
-    - takerlongshortRatio        → taker_*(taker buy/sell 量比)
+    - topLongShortAccountRatio    → top_account_*(top trader 账户多空比)
+    - topLongShortPositionRatio   → top_position_*(top trader 持仓多空比)
+    - takerlongshortRatio         → taker_*(taker buy/sell 量比)
+    - globalLongShortAccountRatio → global_account_*(全市场人数比 · 刀C)
 
-    一次 Celery 任务并发拉三个上游 · 合并写入 ClickHouse。
+    一次 Celery 任务拉四个上游 · 合并写入 ClickHouse。
+    ★ global 是 left-join 语义(top 三件套 ts 交集为主干 · global 配不上留 0,
+      绝不因 global 缺失丢整行);0 = 未采哨兵(真值恒 >0 · 前端据此过滤老行)。
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -103,6 +106,10 @@ class LongShortRatio(BaseModel):
     taker_buy_vol: float = Field(ge=0)
     taker_sell_vol: float = Field(ge=0)
     taker_ratio: float = Field(ge=0)
+    # 刀C · 全市场人数比 · default 0 = 该 ts 未采到 global(老行/上游错位)
+    global_account_long: float = Field(default=0.0, ge=0, le=1)
+    global_account_short: float = Field(default=0.0, ge=0, le=1)
+    global_account_ratio: float = Field(default=0.0, ge=0)
 
 
 class LongShortRatioResponse(BaseModel):

@@ -37,6 +37,7 @@ from app.schemas.market import Kline, Period
 from app.services.data_sources.base import BaseDataSource
 from app.services.data_sources.exceptions import (
     DataFormatError,
+    DataSourceError,
     RateLimitError,
     SymbolNotFoundError,
     UpstreamUnavailableError,
@@ -266,15 +267,17 @@ class BinanceFuturesSource(BaseDataSource):
         *,
         limit: int = 100,
     ) -> list[LongShortRatio]:
-        """三套多空比指标合并 · 按 ts 对齐。
+        """四套多空比指标合并 · 按 ts 对齐。
 
-        并发拉:
+        串行拉(刀C 测算:串行加第 4 路不改变瞬时请求速率,只拉长单轮 ~33%):
         - /futures/data/topLongShortAccountRatio
         - /futures/data/topLongShortPositionRatio
         - /futures/data/takerlongshortRatio
+        - /futures/data/globalLongShortAccountRatio(刀C · 全市场人数比)
 
-        三个 endpoint 都按 5min 栅格 · ts 对齐(理论上)。
-        实际可能错位 · 此版本按 timestamp 严格匹配 · 任一缺失则跳过。
+        top 三件套按 timestamp 严格交集(任一缺失跳过 · 原行为);
+        ★ global 是 left-join:配得上就填、配不上留 0,绝不因 global 缺失丢整行。
+        global 拉取失败降级为空列表 · 不挡 top 三件套主干。
         """
         # M2-A 简化:串行拉 · M2-B 可改并发(asyncio.gather)
         # 这里写串行先保正确性
@@ -294,7 +297,26 @@ class BinanceFuturesSource(BaseDataSource):
                 params={"symbol": symbol, "period": _LONG_SHORT_PERIOD, "limit": min(limit, 500)},
                 symbol_for_error=symbol,
             )
-            return _merge_long_short(account=account, position=position, taker=taker, symbol=symbol)
+            # 刀C · 第 4 路:失败不挡主干(该轮 global 列留 0)
+            try:
+                global_account = await self._get_json(
+                    "/futures/data/globalLongShortAccountRatio",
+                    params={
+                        "symbol": symbol, "period": _LONG_SHORT_PERIOD,
+                        "limit": min(limit, 500),
+                    },
+                    symbol_for_error=symbol,
+                )
+            except DataSourceError as exc:
+                logger.warning(
+                    "[binance-futures] globalLongShortAccountRatio %s 失败(不挡主干):%s",
+                    symbol, exc,
+                )
+                global_account = []
+            return _merge_long_short(
+                account=account, position=position, taker=taker,
+                global_account=global_account, symbol=symbol,
+            )
 
         return await self._retry(op="fetch_long_short_ratio", symbol=symbol, coro_factory=_do)
 
@@ -536,14 +558,21 @@ def _merge_long_short(
     position: list[dict[str, Any]],
     taker: list[dict[str, Any]],
     symbol: str,
+    global_account: list[dict[str, Any]] | None = None,
 ) -> list[LongShortRatio]:
-    """三套指标按 timestamp 对齐合并。"""
+    """top 三套指标按 timestamp 严格交集合并;global 为 left-join(刀C)。
+
+    ★ 交集回归红线:common_ts 仍只由 top 三件套决定 —— global 配得上就填、
+      配不上留 0(default),绝不因 global 缺失丢整行,也绝不让「只有 global
+      没有 top」的 ts 混进来;global 单点脏数据只丢 global 三列,不丢整行。
+    """
     # 按 timestamp 索引化
     by_ts_account = {int(r["timestamp"]): r for r in account}
     by_ts_position = {int(r["timestamp"]): r for r in position}
     by_ts_taker = {int(r["timestamp"]): r for r in taker}
+    by_ts_global = {int(r["timestamp"]): r for r in (global_account or [])}
 
-    # 取三者交集 ts(避免缺数)
+    # 取三者交集 ts(避免缺数)· global 不参与交集
     common_ts = sorted(set(by_ts_account) & set(by_ts_position) & set(by_ts_taker))
 
     results: list[LongShortRatio] = []
@@ -551,6 +580,20 @@ def _merge_long_short(
         a = by_ts_account[ts_ms]
         p = by_ts_position[ts_ms]
         t = by_ts_taker[ts_ms]
+        # global left-join:解析失败按未采处理(留 0)· 不影响主干
+        g_long = g_short = g_ratio = 0.0
+        g = by_ts_global.get(ts_ms)
+        if g is not None:
+            try:
+                g_long = float(g["longAccount"])
+                g_short = float(g["shortAccount"])
+                g_ratio = float(g["longShortRatio"])
+            except (KeyError, ValueError, TypeError) as exc:
+                logger.warning(
+                    "[binance-futures] global long_short 解析失败 ts=%s(留 0)· %s",
+                    ts_ms, exc,
+                )
+                g_long = g_short = g_ratio = 0.0
         try:
             results.append(LongShortRatio(
                 symbol=symbol,
@@ -564,6 +607,9 @@ def _merge_long_short(
                 taker_buy_vol=float(t["buyVol"]),
                 taker_sell_vol=float(t["sellVol"]),
                 taker_ratio=float(t["buySellRatio"]),
+                global_account_long=g_long,
+                global_account_short=g_short,
+                global_account_ratio=g_ratio,
             ))
         except (KeyError, ValueError, TypeError) as exc:
             logger.warning("[binance-futures] long_short merge skip ts=%s · %s", ts_ms, exc)

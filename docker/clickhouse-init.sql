@@ -107,6 +107,10 @@ CREATE TABLE IF NOT EXISTS crypto_long_short_ratio (
     taker_buy_vol Float64,
     taker_sell_vol Float64,
     taker_ratio Float64,
+    -- 刀C · 全市场人数比(globalLongShortAccountRatio)· 0 = 该行未采 global(老行哨兵)
+    global_account_long Float64 DEFAULT 0,
+    global_account_short Float64 DEFAULT 0,
+    global_account_ratio Float64 DEFAULT 0,
     ingested_at DateTime DEFAULT now()
 ) ENGINE = ReplacingMergeTree(ingested_at)
 PARTITION BY toYYYYMM(ts)

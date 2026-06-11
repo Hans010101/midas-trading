@@ -110,6 +110,10 @@ export function DimensionSection({ futuresSymbol }: DimensionSectionProps) {
   }
   const accData = lsrItems.map((p) => toStack(p.top_account_long, p.top_account_short, p.top_account_ratio, p.ts))
   const posData = lsrItems.map((p) => toStack(p.top_position_long, p.top_position_short, p.top_position_ratio, p.ts))
+  // 刀C · ④ 全市场人数比:同一 lsr 响应映射(零新请求)· 过滤 global=0 老行(未采哨兵,真值恒 >0)
+  const globalData = lsrItems
+    .filter((p) => p.global_account_ratio > 0)
+    .map((p) => toStack(p.global_account_long, p.global_account_short, p.global_account_ratio, p.ts))
   const takerData = lsrItems.map((p) => ({
     t: hhmm(p.ts), full: mmddhhmm(p.ts),
     buy: p.taker_buy_vol, sell: -p.taker_sell_vol, // sell 取负 · 对称展示
@@ -145,11 +149,11 @@ export function DimensionSection({ futuresSymbol }: DimensionSectionProps) {
           </ChartState>
         </ChartCard>
 
-        {/* ④ 多空人数比值 · 占位(M2-B 待补)· 按目标样式画示意 */}
-        <ChartCard title="④ 多空人数比值" sub="globalLongShortAccountRatio · 上游未采集" pending>
-          <SchematicOverlay reason="数据源 M2-B 待补 · 仅示意样式 · 不接真实数据">
-            <RatioStackChart data={SAMPLE_RATIO} />
-          </SchematicOverlay>
+        {/* ④ 多空人数比值 · 真实数据(刀C · globalLongShortAccountRatio 全市场人数比) */}
+        <ChartCard title="④ 多空人数比值" sub="globalLongShortAccountRatio · 全市场人数比 · 多空占比 + 比值 · 5min">
+          <ChartState isLoading={lsr.isPending} isError={lsr.isError} isEmpty={lsr.isSuccess && globalData.length === 0}>
+            <RatioStackChart data={globalData} />
+          </ChartState>
         </ChartCard>
 
         {/* ⑤ 合约主动买卖量 · 对称双色柱 */}
@@ -255,28 +259,6 @@ function BasisChart({ data }: { data: { t: string; full: string; mark: number; i
     </ResponsiveContainer>
   )
 }
-
-// ── 占位示意外壳:渲染目标样式图(示意数据)· 压暗 + pointer 关 + 醒目标注 ──────
-function SchematicOverlay({ reason, children }: { reason: string; children: React.ReactNode }) {
-  return (
-    <div className="relative h-full w-full">
-      <div className="pointer-events-none h-full w-full opacity-40 grayscale">{children}</div>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="rounded-md border border-dashed border-gold/60 bg-background/80 px-3 py-1.5 text-center">
-          <div className="font-mono text-[11px] font-bold text-gold">数据 M2-B 待补</div>
-          <div className="mt-0.5 text-[10px] text-muted-foreground/70">{reason}</div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── 占位示意数据(确定性 · 仅用于画目标样式 · 已醒目标注「示意/待补」)──────────
-const SAMPLE_RATIO = Array.from({ length: 24 }, (_, i) => {
-  const long = 50 + 6 * Math.sin(i / 3) + 2
-  const short = 100 - long
-  return { t: '', full: '示意', long: +long.toFixed(1), short: +short.toFixed(1), ratio: +(long / short).toFixed(3) }
-})
 
 // ── 卡片外壳 ──────────────────────────────────────────────────────────────
 function ChartCard({
