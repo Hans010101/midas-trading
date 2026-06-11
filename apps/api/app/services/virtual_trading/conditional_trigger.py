@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from decimal import Decimal
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
@@ -101,7 +101,7 @@ async def _spot_close_quantity(
             VirtualPosition.closed_at.is_(None),
         ),
     )
-    return cast("Decimal | None", qty)
+    return qty  # noqa: RET504 — 赋值供 mypy 窄化(直接 return 会 no-any-return)
 
 
 async def process_active_conditionals(
@@ -142,6 +142,7 @@ async def process_active_conditionals(
             if locked is not None:
                 locked.status = ConditionalStatus.EXPIRED
                 locked.note = "perp 限价单暂不支持(v1)"
+                await session.flush()
                 stats["expired"] += 1
             continue
 
@@ -188,6 +189,7 @@ async def process_active_conditionals(
                 if qty is None or qty <= 0:
                     locked.status = ConditionalStatus.EXPIRED
                     locked.note = "触发时无可平持仓"
+                    await session.flush()
                     stats["expired"] += 1
                     continue
 
@@ -220,6 +222,8 @@ async def process_active_conditionals(
             locked.status = ConditionalStatus.EXPIRED
             locked.note = (order.reject_reason or "触发成交被拒")[:_NOTE_MAX]
             stats["expired"] += 1
+        # 状态流转落 flush(房规:调用方 commit;flush 保证同事务内可见 · 不靠 autoflush 时机)
+        await session.flush()
 
     return stats, perp_filled_ids
 
@@ -234,4 +238,4 @@ async def _lock_active(session: AsyncSession, cond_id: int) -> ConditionalOrder 
         )
         .with_for_update(),
     )
-    return cast("ConditionalOrder | None", locked)
+    return locked  # noqa: RET504 — 同上 · mypy 窄化需要
