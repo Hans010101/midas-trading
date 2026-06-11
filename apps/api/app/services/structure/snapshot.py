@@ -47,9 +47,25 @@ _CACHE_TTL_S = 3600
 T = TypeVar("T")
 
 
+# 已知 quote 后缀(长优先匹配)· 因子表 universe 全是 {COIN}USDT(_all_usdt_perp_symbols 采集口径)。
+# ★ structure 域内自有规则,独立于 vibe loader 的 to_ch_symbol(那是 vibe 域,不碰不复制)。
+_KNOWN_QUOTES: tuple[str, ...] = ("USDT", "USDC", "BUSD", "FDUSD", "USD")
+
+
 def normalize_symbol(symbol: str) -> str:
-    """入参归一成 Binance 风格无斜杠('btc/usdt' → 'BTCUSDT' · 衍生品表的 symbol 形态)。"""
-    return symbol.strip().upper().replace("/", "").replace("-", "")
+    """入参归一成 Binance 风格无斜杠 + 缺省补 USDT 后缀('eth' → 'ETHUSDT')。
+
+    规则(symbol 模糊输入根治 · Hans 真机实证 "eth" 只剩 FGI 的根因 = 缺后缀查空):
+      - strip/upper/去斜杠横杠(原有);
+      - 已带任一已知 quote 后缀(长优先)→ 原样(BTCUSDC 保持 · 查空走诚实 null,零误伤);
+      - 无后缀 → 补 USDT(因子 universe 全 {COIN}USDT)。
+    """
+    s = symbol.strip().upper().replace("/", "").replace("-", "")
+    if not s:
+        return s
+    if any(s.endswith(q) and len(s) > len(q) for q in _KNOWN_QUOTES):
+        return s
+    return f"{s}USDT"
 
 
 async def _safe(label: str, coro: Awaitable[T]) -> T | None:

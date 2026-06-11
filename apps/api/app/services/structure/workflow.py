@@ -40,6 +40,17 @@ _CACHE_TTL_S = 3600  # 诊断层 TTL 1h(对齐快照层 · 意图枚举化后才
 _DIAGNOSE_MAX_TOKENS = 900  # 结论+分因子足够 · 低于 llm.py 默认 1024 硬上限
 
 
+class NoFactorDataError(Exception):
+    """6 个合约因子全 null(symbol 无衍生品数据)· 友好闸:不进 LLM(省成本防垃圾诊断)。
+
+    ★ 不继承 ValueError:端点对 ValueError 走 502(LLM 解析失败),本异常走 422(用户输入面)。
+    """
+
+    def __init__(self, symbol: str) -> None:
+        self.symbol = symbol
+        super().__init__(f"未找到 {symbol} 的合约因子数据")
+
+
 # ── 意图归一(轻量规则 + 关键词 · 零 LLM · 枚举化是诊断缓存的前提)──────────────
 
 
@@ -100,6 +111,18 @@ async def _node_intent(state: DiagnoseState) -> dict[str, Any]:
 
 async def _node_snapshot(state: DiagnoseState) -> dict[str, Any]:
     snapshot = await build_structure_snapshot(state["client"], state["symbol"])
+    # 友好闸:6 个合约因子全 null(sentiment 是全局因子不计入)→ 不进 LLM 节点。
+    # 场景:无效 symbol(XYZUSDT)/ 非 USDT 永续(BTCUSDC)—— 省一次 LLM 成本 + 防贫瘠垃圾诊断。
+    contract_factors = (
+        snapshot.account_long_short,
+        snapshot.position_long_short,
+        snapshot.taker_flow,
+        snapshot.open_interest,
+        snapshot.funding_rate,
+        snapshot.basis,
+    )
+    if all(f is None for f in contract_factors):
+        raise NoFactorDataError(state["symbol"])
     return {"snapshot": snapshot}
 
 
@@ -258,4 +281,9 @@ async def get_structure_diagnosis(
     return diagnosis
 
 
-__all__ = ["get_structure_diagnosis", "parse_intent", "run_structure_diagnosis"]
+__all__ = [
+    "NoFactorDataError",
+    "get_structure_diagnosis",
+    "parse_intent",
+    "run_structure_diagnosis",
+]
