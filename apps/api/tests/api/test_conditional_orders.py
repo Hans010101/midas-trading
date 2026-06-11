@@ -70,6 +70,20 @@ async def test_limit_create_ok(client: AsyncClient, db_session: AsyncSession) ->
 
 
 @pytest.mark.asyncio
+async def test_crypto_limit_rejected_400(client: AsyncClient, db_session: AsyncSession) -> None:
+    """刀2 缺口补:perp 限价单范围外(ADR 0041 只含 perp SL/TP)→ 400。"""
+    user = await make_user(db_session)
+    r = await client.post(
+        "/api/v1/virtual/conditional-orders",
+        json={"symbol": "BTCUSDT", "market": "crypto", "order_kind": "limit",
+              "side": "buy", "trigger_price": "100000", "quantity": "1"},
+        headers=await _auth(user, db_session),
+    )
+    assert r.status_code == 400
+    assert "perp 限价单暂不支持" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_limit_requires_quantity(client: AsyncClient, db_session: AsyncSession) -> None:
     user = await make_user(db_session)
     r = await client.post(

@@ -19,6 +19,7 @@ from tasks import (  # noqa: E402, F401
     ai_reflection,
     alert_scan,
     backtest,
+    conditional_orders,
     crypto_metrics_ingest,
     data_ingest,
     equity_snapshot,

@@ -106,6 +106,13 @@ beat_schedule = {
         "schedule": crontab(minute="*"),
         "options": {"expires": 50},
     },
+    "conditional-orders-scan": {
+        "task": "tasks.conditional.scan_triggers",
+        # ADR 0041 刀2 · 条件单触发扫描(照强平 60s 母版)· 无 ACTIVE 单早退零成本 ·
+        # 股票休市整组跳过(compute_market_status)· 成交只走唯一入口(红线见内核)
+        "schedule": crontab(minute="*"),
+        "options": {"expires": 50},
+    },
     "perp-cross-liquidation-scan": {
         "task": "tasks.perp.scan_cross_liquidations",
         # ADR-0027 MC-3 · 全仓账户级强平监控 · 独立于逐仓那条(只扫 margin_mode='cross')
