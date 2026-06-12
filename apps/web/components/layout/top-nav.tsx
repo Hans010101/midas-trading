@@ -77,6 +77,12 @@ export function TopNav() {
                 <DropdownMenuItem asChild className="justify-end">
                   <Link href="/account/profile">账号与偏好</Link>
                 </DropdownMenuItem>
+                {/* 用户管理(刀2)· admin 才渲染 —— 仅 UX,安全边界在后端 AdminDep 403 */}
+                {session.user.role === 'admin' && (
+                  <DropdownMenuItem asChild className="justify-end">
+                    <Link href="/admin">用户管理</Link>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => {

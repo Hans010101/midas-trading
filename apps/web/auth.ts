@@ -27,10 +27,12 @@ const API_BASE = process.env.API_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_URL
 declare module 'next-auth' {
   interface Session {
     accessToken: string
-    user: { id: string; email: string } & DefaultSession['user']
+    // role:刀1 后端已带(login//me/oauth)· 'admin' 才显用户管理入口(仅 UX,边界在后端 403)
+    user: { id: string; email: string; role: string } & DefaultSession['user']
   }
   interface User {
     accessToken?: string
+    role?: string
   }
 }
 
@@ -38,6 +40,7 @@ type AugmentedToken = {
   accessToken?: string
   userId?: string
   email?: string
+  role?: string
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -71,11 +74,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           access_token: string
           user_id: string
           email: string
+          role: string
         }
         const user: User = {
           id: data.user_id,
           email: data.email,
           accessToken: data.access_token,
+          role: data.role,
         }
         return user
       },
@@ -138,6 +143,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             access_token: string
             user_id: string
             email: string
+            role: string
           }
           // 把后端 session token + user_id 塞进 account 临时字段 ·
           // jwt() callback 会读这些字段写到 NextAuth JWT。
@@ -146,6 +152,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           bag.midas_access_token = data.access_token
           bag.midas_user_id = data.user_id
           bag.midas_email = data.email
+          bag.midas_role = data.role
         } catch (e) {
           console.warn('[auth.google] backend call failed:', e)
           return false
@@ -163,6 +170,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           accessToken: account.midas_access_token as string,
           userId: account.midas_user_id as string,
           email: account.midas_email as string,
+          role: account.midas_role as string,
         } as typeof token & AugmentedToken
       }
       // 凭据登录(邮箱/密码):authorize 把后端 session token 放进 user.accessToken
@@ -173,6 +181,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           accessToken: u.accessToken,
           userId: u.id,
           email: u.email,
+          role: u.role,
         } as typeof token & AugmentedToken
       }
       return token
@@ -181,6 +190,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const tk = token as typeof token & AugmentedToken
       session.accessToken = tk.accessToken ?? ''
       session.user.id = tk.userId ?? ''
+      // ★ 存量 JWT(本刀上线前签发)无 role → 兜 'user':已登录用户(含 Hans)
+      // 需重新登录一次才拿到 admin(JWT 只在登录时写入 · 行为如实报)
+      session.user.role = tk.role ?? 'user'
       if (tk.email) session.user.email = tk.email
       return session
     },
