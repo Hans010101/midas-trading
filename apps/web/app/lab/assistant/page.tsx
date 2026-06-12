@@ -13,12 +13,21 @@
 import { useSession } from 'next-auth/react'
 import { useState } from 'react'
 
+import { FactorCard } from '@/components/lab/factor-card'
+import { ForceBar } from '@/components/lab/force-bar'
 import { LabNav } from '@/components/lab/lab-nav'
+import type { SparkPoint } from '@/components/lab/sparkline'
 import { SymbolSuggest } from '@/components/lab/symbol-suggest'
 import { TopNav } from '@/components/layout/top-nav'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/ui/state'
+import {
+  useBasisSeries,
+  useFundingRate,
+  useLongShortRatio,
+  useOpenInterest,
+} from '@/hooks/use-crypto'
 import { useStructureDiagnose } from '@/hooks/use-structure'
 import type { IntentKind, StructureDiagnosis } from '@/lib/api/structure'
 
@@ -136,6 +145,37 @@ export default function LabAssistantPage() {
 
 // ── 四层渲染(照 lab-report 范式)────────────────────────────────────────────
 function DiagnosisResult({ diag }: { diag: StructureDiagnosis }) {
+  // sparkline 数据旁路:crypto 现有端点(🔴 不进诊断链 · services/structure 零碰)。
+  // hooks 固定提升到本层(React 规则:不能在 factor map 循环里调)· 窗口对齐 snapshot 口径。
+  const symbol = diag.snapshot.symbol
+  const lsr = useLongShortRatio(symbol, 288) // 5min×288 = 24h · 喂 3 个多空类因子卡
+  const oi = useOpenInterest(symbol, 288)
+  const funding = useFundingRate(symbol, 21) // 8h×21 = 7d
+  const basis = useBasisSeries(symbol, 288)
+
+  // 因子 key → sparkline 序列(sentiment 无现成时序 hook → null 留文字 · 优雅降级)
+  function seriesFor(factor: string): SparkPoint[] | null {
+    const lsrItems = lsr.data?.items ?? []
+    switch (factor) {
+      case 'account_long_short':
+        return lsrItems.map((p) => ({ t: p.ts, v: p.top_account_ratio }))
+      case 'position_long_short':
+        return lsrItems.map((p) => ({ t: p.ts, v: p.top_position_ratio }))
+      case 'taker_flow':
+        return lsrItems.map((p) => ({ t: p.ts, v: p.taker_ratio }))
+      case 'open_interest':
+        return (oi.data?.items ?? []).map((p) => ({ t: p.ts, v: p.oi_usd }))
+      case 'funding_rate':
+        return (funding.data?.items ?? []).map((p) => ({ t: p.ts, v: p.rate }))
+      case 'basis':
+        return (basis.data?.items ?? []).map((p) => ({ t: p.ts, v: p.basis_pct }))
+      default:
+        return null
+    }
+  }
+
+  const accountRatio = diag.snapshot.account_long_short?.value?.latest
+
   return (
     <div className="space-y-8">
       {/* ① 结论先行卡(抄 lab-report 结论卡 markup)*/}
@@ -149,30 +189,25 @@ function DiagnosisResult({ diag }: { diag: StructureDiagnosis }) {
         {/* v1.1:删 symbol·perp·时间戳元信息行(Hans 反馈无效信息 · symbol 在输入框已示)*/}
         <div className="mt-3 rounded-lg border border-paper bg-cream p-4 shadow-sm">
           <p className="text-sm leading-relaxed text-foreground">{diag.conclusion}</p>
+          {/* 多空力量对比条(snapshot 已有字段旁路展示 · 比值非法/缺失自动不渲染) */}
+          {accountRatio != null && (
+            <ForceBar ratio={accountRatio} sourceLabel="大户账户多空比 · latest" />
+          )}
         </div>
       </section>
 
-      {/* ② 因子状态卡(抄指标卡 grid markup · state/detail/window)*/}
+      {/* ② 因子状态卡(FactorCard:state/detail/window + sparkline + 背离金框)*/}
       {diag.factor_findings.length > 0 && (
         <section>
           <h2 className="mb-3 font-serif text-lg font-bold">分因子状态</h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {diag.factor_findings.map((f) => (
-              <div
+              <FactorCard
                 key={`${f.factor}-${f.state}`}
-                className="rounded-lg border border-paper bg-cream p-4 shadow-sm"
-              >
-                <div className="flex items-baseline justify-between">
-                  <div className="text-xs text-muted-foreground">
-                    {FACTOR_LABEL[f.factor] ?? f.factor}
-                  </div>
-                  <span className="rounded bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-faint">
-                    {f.window}
-                  </span>
-                </div>
-                <div className="mt-1 font-serif text-base font-bold text-foreground">{f.state}</div>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{f.detail}</p>
-              </div>
+                finding={f}
+                label={FACTOR_LABEL[f.factor] ?? f.factor}
+                series={seriesFor(f.factor)}
+              />
             ))}
           </div>
         </section>
