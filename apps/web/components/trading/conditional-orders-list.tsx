@@ -140,8 +140,8 @@ function StatusCell({
   if (status === 'triggered') {
     return (
       <Link
-        href="/account"
-        title="去「我的账户」查看成交单"
+        href="/account/positions?tab=orders"
+        title="去「持仓与订单」查看成交流水"
         className="rounded bg-midas-red px-1 py-0.5 text-white hover:bg-midas-red-deep"
       >
         {STATUS_ZH.triggered}

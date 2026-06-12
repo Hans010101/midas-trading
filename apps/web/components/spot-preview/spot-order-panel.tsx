@@ -128,10 +128,11 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
   if (account.isSuccess && account.data === null) {
     return (
       <PanelShell>
+        {/* 重组刀4:修存量死链 /settings/wallet(wallet 早已迁走)→ 资产总览(资金管理所在) */}
         <GateNote
           title={`${MARKET_LABEL[market]}账户资金未激活`}
-          hint="先到设置页设定该市场的初始账户资金,再来下单。"
-          href="/settings/wallet"
+          hint="先到「资产总览」设定该市场的初始账户资金,再来下单。"
+          href="/account"
           cta="去激活"
         />
       </PanelShell>
@@ -519,7 +520,7 @@ function PanelShell({ children }: { children: React.ReactNode }) {
 function GateNote({
   title, hint, href, cta,
 }: {
-  title: string; hint: string; href: '/login' | '/settings/wallet'; cta: string
+  title: string; hint: string; href: '/login' | '/account'; cta: string
 }) {
   return (
     <div className="rounded-md border border-dashed border-paper bg-cream p-4 text-center">
