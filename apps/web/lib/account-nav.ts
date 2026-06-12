@@ -21,3 +21,20 @@ export function isActiveNavItem(pathname: string | null, item: AccountNavItem): 
   if (!pathname) return false
   return item.exact ? pathname === item.href : pathname.startsWith(item.href)
 }
+
+// ── 模块② 持仓与订单 · 页内 tab(重组刀3)──────────────────────────────────
+
+export const POSITIONS_TABS = [
+  { key: 'positions', label: '当前持仓' },
+  { key: 'history', label: '历史持仓' },
+  { key: 'orders', label: '订单流水' },
+  { key: 'conditional', label: '条件单' },
+] as const
+
+export type PositionsTabKey = (typeof POSITIONS_TABS)[number]['key']
+
+/** URL ?tab= 归一(非法/缺省 → 'positions')· 刷新/分享不丢 tab。 */
+export function normalizePositionsTab(param: string | null): PositionsTabKey {
+  const valid = POSITIONS_TABS.some((t) => t.key === param)
+  return valid ? (param as PositionsTabKey) : 'positions'
+}
