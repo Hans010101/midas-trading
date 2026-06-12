@@ -231,10 +231,6 @@ function Showcase() {
               className="h-auto w-full"
             />
           </div>
-          {/* 角标 · VIRTUAL 徽章贴在右上 */}
-          <div className="absolute right-4 top-4 rounded-full border border-gold/40 bg-gold/10 px-3 py-1 font-mono text-xs text-gold">
-            VIRTUAL · 模拟
-          </div>
         </div>
       </div>
     </section>
