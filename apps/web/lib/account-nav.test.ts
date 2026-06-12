@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { ACCOUNT_NAV_ITEMS, isActiveNavItem } from './account-nav'
+import { ACCOUNT_NAV_ITEMS, isActiveNavItem, normalizePositionsTab } from './account-nav'
 
 const byHref = (href: string) => ACCOUNT_NAV_ITEMS.find((i) => i.href === href)!
 
@@ -21,5 +21,20 @@ describe('isActiveNavItem', () => {
 
   it('pathname null → 不高亮', () => {
     expect(isActiveNavItem(null, byHref('/account'))).toBe(false)
+  })
+})
+
+describe('normalizePositionsTab(模块② URL tab 归一 · 刀3)', () => {
+  it('四合法值原样通过', () => {
+    expect(normalizePositionsTab('positions')).toBe('positions')
+    expect(normalizePositionsTab('history')).toBe('history')
+    expect(normalizePositionsTab('orders')).toBe('orders')
+    expect(normalizePositionsTab('conditional')).toBe('conditional')
+  })
+
+  it('非法/缺省 → 默认 positions', () => {
+    expect(normalizePositionsTab(null)).toBe('positions')
+    expect(normalizePositionsTab('')).toBe('positions')
+    expect(normalizePositionsTab('hack')).toBe('positions')
   })
 })
