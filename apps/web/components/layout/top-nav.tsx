@@ -63,11 +63,21 @@ export function TopNav() {
                   {email}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                {/* 用户中心四模块直达(重组刀1)+ 自选入口 */}
                 <DropdownMenuItem asChild>
-                  <Link href="/account">我的账户</Link>
+                  <Link href="/account">资产总览</Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/settings">设置</Link>
+                  <Link href="/account/positions">持仓与订单</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/account/alerts">通知与提醒</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/account/profile">账号与偏好</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/watchlist">自选</Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem

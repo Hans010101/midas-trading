@@ -27,7 +27,6 @@ import {
 import { PerpPositionsSection } from '@/components/account/perp-positions-section'
 import { WalletSection } from '@/components/account/wallet-section'
 import { ConditionalOrdersList } from '@/components/trading/conditional-orders-list'
-import { TopNav } from '@/components/layout/top-nav'
 import { OrderConfirmDialog } from '@/components/workbench/order-confirm-dialog'
 import {
   useAccounts,
@@ -63,13 +62,13 @@ export default function AccountPage() {
     quantity: string
   }>({ open: false, symbol: '', market: 'us', quantity: '0' })
 
+  // 重组刀1:TopNav / main 容器由 app/account/layout.tsx 提供(嵌套 layout),
+  // 本页只渲染内容本体 · 各功能区块零删改(搬迁是刀2/3)。
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <TopNav />
-      <main className="mx-auto w-full max-w-6xl px-6 py-8">
+    <>
         <div className="mb-6 flex items-center gap-3">
           <h1 className="font-serif text-2xl font-bold text-foreground">
-            我的账户
+            资产总览
           </h1>
         </div>
 
@@ -192,8 +191,6 @@ export default function AccountPage() {
         {/* 条件单(ADR 0041 刀3)· 全市场全量列表(挂/撤在详情页与持仓卡 · 这里看全部) */}
         <ConditionalOrdersList />
 
-      </main>
-
       <OrderConfirmDialog
         open={closeDialog.open}
         onClose={() => setCloseDialog({ ...closeDialog, open: false })}
@@ -202,7 +199,7 @@ export default function AccountPage() {
         side="sell"
         closeAllQuantity={closeDialog.quantity}
       />
-    </div>
+    </>
   )
 }
 
