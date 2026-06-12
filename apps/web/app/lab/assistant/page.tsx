@@ -30,18 +30,10 @@ import {
   useOpenInterest,
 } from '@/hooks/use-crypto'
 import { useStructureDiagnose } from '@/hooks/use-structure'
-import type { IntentKind, StructureDiagnosis } from '@/lib/api/structure'
-
-// 因子键名 → 中文(因子状态卡标题用)
-const FACTOR_LABEL: Record<string, string> = {
-  account_long_short: '大户账户多空比',
-  position_long_short: '大户持仓多空比',
-  taker_flow: 'taker 主动买卖',
-  open_interest: '未平仓量(OI)',
-  funding_rate: '资金费率',
-  basis: '基差',
-  sentiment: '市场情绪',
-}
+import type { IntentKind, StructureDiagnosis, StructureSnapshot } from '@/lib/api/structure'
+import { FACTOR_LABEL } from '@/lib/structure-graph'
+import { type Tone, factorHeadline, sparklineSpec } from '@/lib/structure-viz'
+import { cn } from '@/lib/utils'
 
 const INTENT_LABEL: Record<IntentKind, string> = {
   long_crowding: '多头拥挤度',
@@ -144,6 +136,41 @@ export default function LabAssistantPage() {
   )
 }
 
+// ── 大数字面板(刀2 · 关键指标竖排 · 全部 snapshot 结构化取数)──────────────
+const BIG_NUMBER_FACTORS = [
+  { key: 'funding_rate', label: '资金费率' },
+  { key: 'account_long_short', label: '大户账户多空比' },
+  { key: 'open_interest', label: 'OI 24h 变化' },
+  { key: 'basis', label: '基差' },
+] as const
+
+const TONE_TEXT: Record<Tone, string> = {
+  bull: 'text-up', bear: 'text-down', neutral: 'text-muted-foreground',
+}
+
+function BigNumberPanel({ snapshot }: { snapshot: StructureSnapshot }) {
+  return (
+    <div className="flex h-full flex-col justify-center gap-3 rounded-lg border border-paper bg-cream p-4 shadow-sm">
+      {BIG_NUMBER_FACTORS.map(({ key, label }) => {
+        const head = factorHeadline(key, snapshot)
+        return (
+          <div key={key}>
+            <div className="text-xs text-muted-foreground">{label}</div>
+            <div
+              className={cn(
+                'font-mono text-2xl font-bold tabular-nums',
+                head ? TONE_TEXT[head.tone] : 'text-muted-foreground/50',
+              )}
+            >
+              {head?.text ?? '—'}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── 四层渲染(照 lab-report 范式)────────────────────────────────────────────
 function DiagnosisResult({ diag }: { diag: StructureDiagnosis }) {
   // sparkline 数据旁路:crypto 现有端点(🔴 不进诊断链 · services/structure 零碰)。
@@ -197,25 +224,38 @@ function DiagnosisResult({ diag }: { diag: StructureDiagnosis }) {
         </div>
       </section>
 
-      {/* ①.5 结构沙盘 · 因子关联图谱(二期刀1 · 边=规则推导 · 节点高亮=LLM 点名)*/}
+      {/* ①.5 结构沙盘 · 图谱 + 大数字面板并排(刀2 重排:lg 左 3/5 图谱 · 右 2/5 数字;md 以下纵排)*/}
       <section>
         <h2 className="mb-3 font-serif text-lg font-bold">结构沙盘</h2>
-        <StructureGraph snapshot={diag.snapshot} findings={diag.factor_findings} />
+        <div className="grid gap-4 lg:grid-cols-5">
+          <div className="lg:col-span-3">
+            <StructureGraph snapshot={diag.snapshot} findings={diag.factor_findings} />
+          </div>
+          <div className="lg:col-span-2">
+            <BigNumberPanel snapshot={diag.snapshot} />
+          </div>
+        </div>
       </section>
 
-      {/* ② 因子状态卡(FactorCard:state/detail/window + sparkline + 背离金框)*/}
+      {/* ② 因子状态卡(刀2:紧凑网格 + 状态色块 + 卡头 mono 数值 + 语义 sparkline)*/}
       {diag.factor_findings.length > 0 && (
         <section>
           <h2 className="mb-3 font-serif text-lg font-bold">分因子状态</h2>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {diag.factor_findings.map((f) => (
-              <FactorCard
-                key={`${f.factor}-${f.state}`}
-                finding={f}
-                label={FACTOR_LABEL[f.factor] ?? f.factor}
-                series={seriesFor(f.factor)}
-              />
-            ))}
+          <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">
+            {diag.factor_findings.map((f) => {
+              const spec = sparklineSpec(f.factor, diag.snapshot)
+              return (
+                <FactorCard
+                  key={`${f.factor}-${f.state}`}
+                  finding={f}
+                  label={FACTOR_LABEL[f.factor] ?? f.factor}
+                  series={seriesFor(f.factor)}
+                  headline={factorHeadline(f.factor, diag.snapshot)}
+                  sparkStroke={spec.stroke}
+                  sparkBaseline={spec.baseline}
+                />
+              )
+            })}
           </div>
         </section>
       )}

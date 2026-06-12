@@ -13,7 +13,7 @@
 
 import type { FactorFinding, StructureSnapshot } from '@/lib/api/structure'
 import { FACTOR_LABEL, deriveGraphEdges } from '@/lib/structure-graph'
-import { isDivergentFinding } from '@/lib/structure-viz'
+import { TONE_HEX, factorHeadline, isDivergentFinding } from '@/lib/structure-viz'
 
 // 设计 token(SVG 内用 hex):朱红/墨绿=全站涨跌 · 帝王金=警示 · ⛔ 缠论淡灰蓝不可挪用
 const C_BULL = '#DC143C'
@@ -25,7 +25,7 @@ const W = 360
 const H = 300
 const CX = W / 2
 const CY = H / 2
-const R = 108 // 节点圆周半径
+const R = 100 // 节点圆周半径(刀2:节点加大 + 标签两行,半径略收防溢出)
 
 // 因子固定顺序(缺的因子不画 · 角度按实际节点数自适应)
 const FACTOR_ORDER = [
@@ -41,6 +41,9 @@ interface NodeSpec {
   color: string
   divergent: boolean
   stateText: string | null
+  /** 刀2:节点第二行数值(snapshot 结构化字段 · 灰中性节点也有信息量) */
+  valueText: string | null
+  valueHex: string
 }
 
 function stanceColor(state: string | undefined): string {
@@ -66,6 +69,7 @@ export function StructureGraph({ snapshot, findings }: StructureGraphProps) {
     // 从正上方起顺时针均布(-90° 起)· 角度随节点数自适应
     const angle = (-90 + (360 / present.length) * i) * (Math.PI / 180)
     const f = byFactor.get(key)
+    const head = factorHeadline(key, snapshot)
     return {
       key,
       label: FACTOR_LABEL[key] ?? key,
@@ -74,6 +78,8 @@ export function StructureGraph({ snapshot, findings }: StructureGraphProps) {
       color: stanceColor(f?.state),
       divergent: f != null && isDivergentFinding(f),
       stateText: f?.state ?? null,
+      valueText: head?.text ?? null,
+      valueHex: head ? TONE_HEX[head.tone] : C_NEUTRAL,
     }
   })
   const pos = new Map(nodes.map((n) => [n.key, n]))
@@ -110,23 +116,25 @@ export function StructureGraph({ snapshot, findings }: StructureGraphProps) {
           )
         })}
 
-        {/* ── 节点 ────────────────────────────────────────────── */}
+        {/* ── 节点(刀2:加大 + 第二行数值 · 灰中性节点也有信息量)──────── */}
         {nodes.map((n) => {
           const labelAbove = n.y <= CY
+          const labelY = labelAbove ? n.y - 24 : n.y + 32
+          const valueY = labelAbove ? n.y - 35 : n.y + 44
           return (
             <g key={n.key}>
               {/* LLM 点名背离/极端 → 金环 */}
               {n.divergent && (
-                <circle cx={n.x} cy={n.y} r={13} fill="none" stroke={C_GOLD} strokeWidth={2} />
+                <circle cx={n.x} cy={n.y} r={16} fill="none" stroke={C_GOLD} strokeWidth={2} />
               )}
-              <circle cx={n.x} cy={n.y} r={9} fill={n.color} opacity={0.92}>
+              <circle cx={n.x} cy={n.y} r={12} fill={n.color} opacity={0.92}>
                 <title>
                   {n.stateText ? `${n.label}:${n.stateText}(LLM 判定)` : `${n.label}:未点名`}
                 </title>
               </circle>
               <text
                 x={n.x}
-                y={labelAbove ? n.y - 19 : n.y + 27}
+                y={labelY}
                 textAnchor="middle"
                 fontSize={10}
                 fill="currentColor"
@@ -134,6 +142,19 @@ export function StructureGraph({ snapshot, findings }: StructureGraphProps) {
               >
                 {n.label}
               </text>
+              {n.valueText && (
+                <text
+                  x={n.x}
+                  y={valueY}
+                  textAnchor="middle"
+                  fontSize={9}
+                  fontFamily="var(--font-mono, monospace)"
+                  fontWeight={700}
+                  fill={n.valueHex}
+                >
+                  {n.valueText}
+                </text>
+              )}
             </g>
           )
         })}

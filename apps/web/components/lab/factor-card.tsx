@@ -12,21 +12,40 @@
 
 import { Sparkline, type SparkPoint } from '@/components/lab/sparkline'
 import type { FactorFinding } from '@/lib/api/structure'
-import { isDivergentFinding } from '@/lib/structure-viz'
+import { type FactorHeadline, type Tone, isDivergentFinding } from '@/lib/structure-viz'
 import { cn } from '@/lib/utils'
+
+// 状态胶囊 / 数值 tone → 色(朱红多 / 墨绿空 / 中性灰 · 全站涨跌语义)
+const TONE_TEXT: Record<Tone, string> = {
+  bull: 'text-up', bear: 'text-down', neutral: 'text-muted-foreground',
+}
+
+function stateTone(state: string): Tone {
+  if (/多/.test(state)) return 'bull'
+  if (/空/.test(state)) return 'bear'
+  return 'neutral'
+}
 
 interface FactorCardProps {
   finding: FactorFinding
   label: string
   series: SparkPoint[] | null
+  /** 关键数值(snapshot 结构化字段 · factorHeadline 算好传入)· null 不显示 */
+  headline?: FactorHeadline | null
+  /** sparkline 语义线色 / 基准线(sparklineSpec 算好传入) */
+  sparkStroke?: string
+  sparkBaseline?: number
 }
 
-export function FactorCard({ finding, label, series }: FactorCardProps) {
+export function FactorCard({
+  finding, label, series, headline = null, sparkStroke, sparkBaseline,
+}: FactorCardProps) {
   const divergent = isDivergentFinding(finding)
+  const tone = stateTone(finding.state)
   return (
     <div
       className={cn(
-        'rounded-lg border bg-cream p-4 shadow-sm',
+        'rounded-lg border bg-cream p-3 shadow-sm',
         divergent ? 'border-gold/60' : 'border-paper',
       )}
     >
@@ -43,8 +62,25 @@ export function FactorCard({ finding, label, series }: FactorCardProps) {
           {finding.window}
         </span>
       </div>
-      <div className="mt-1 font-serif text-base font-bold text-foreground">{finding.state}</div>
-      {series !== null && <Sparkline data={series} />}
+      {/* 状态色块胶囊 + mono 关键数值(snapshot 结构化取数 · ⛔ 不解析 LLM 文字) */}
+      <div className="mt-1.5 flex items-center gap-2">
+        <span
+          className={cn(
+            'rounded px-1.5 py-0.5 text-xs font-medium',
+            tone === 'bull' && 'bg-up/10 text-up',
+            tone === 'bear' && 'bg-down/10 text-down',
+            tone === 'neutral' && 'bg-surface-subtle text-muted-foreground',
+          )}
+        >
+          {finding.state}
+        </span>
+        {headline && (
+          <span className={cn('font-mono text-lg font-bold tabular-nums', TONE_TEXT[headline.tone])}>
+            {headline.text}
+          </span>
+        )}
+      </div>
+      {series !== null && <Sparkline data={series} stroke={sparkStroke} baseline={sparkBaseline} />}
       <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{finding.detail}</p>
     </div>
   )
