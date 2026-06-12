@@ -81,7 +81,8 @@ export function CryptoMainChart({ symbol, period }: CryptoMainChartProps) {
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div>
           <span className="font-serif text-sm font-bold">主图:K 线 + 布林带 + MACD + 缠论</span>
-          <span className="ml-2 text-[11px] text-muted-foreground/50">
+          {/* 移动刀C(B3):指标参数窄屏隐藏(挤压换行噪声)· lg+ 原样 */}
+          <span className="ml-2 hidden text-[11px] text-muted-foreground/50 lg:inline">
             BOLL(20,2)· MACD(12,26,9)· 笔(金)/ 分型 / 中枢
           </span>
         </div>

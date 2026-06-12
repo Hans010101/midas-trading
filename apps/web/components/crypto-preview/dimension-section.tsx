@@ -127,7 +127,8 @@ export function DimensionSection({ futuresSymbol }: DimensionSectionProps) {
   return (
     <div>
       <h3 className="mb-2 font-serif text-base font-bold">合约维度</h3>
-      <div className="grid grid-cols-2 gap-4">
+      {/* 移动刀C:窄屏单列(双列挤压 → X 轴时间标签重叠)· lg+ 恢复 2 列 */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* ① OI · 双指标双 Y 轴 */}
         <ChartCard title="① 合约持仓量(OI)" sub="持仓量(币)实线 / 持仓价值(USD)虚线 · 5min">
           <ChartState isLoading={oi.isPending} isError={oi.isError} isEmpty={oi.isSuccess && oiData.length === 0}>
