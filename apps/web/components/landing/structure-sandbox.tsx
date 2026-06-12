@@ -6,8 +6,7 @@
  */
 
 import { Network } from 'lucide-react'
-
-import { ScreenshotPlaceholder } from '@/components/landing/screenshot-placeholder'
+import Image from 'next/image'
 
 export function StructureSandbox() {
   return (
@@ -47,11 +46,16 @@ export function StructureSandbox() {
             </p>
           </div>
 
-          {/* 右 · 截图占位(刀2 换真图:/lab/assistant 结构沙盘区 · 图谱+大数字面板) */}
-          <ScreenshotPlaceholder
-            aspect="aspect-[16/11]"
-            label="AI 沙盘助手 · 因子关联图谱与结构诊断"
-          />
+          {/* 右 · 沙盘整页实拍(诊断+图谱+因子卡 · 竖构图按原始 899×1166 比例) */}
+          <div className="relative aspect-[899/1166] overflow-hidden rounded-xl border border-paper bg-background shadow-lg">
+            <Image
+              src="/marketing/sandbox.png"
+              alt="AI 沙盘助手:11 因子结构诊断与因子关联图谱"
+              fill
+              className="object-contain"
+              sizes="(max-width: 1024px) 100vw, 50vw"
+            />
+          </div>
         </div>
       </div>
     </section>
