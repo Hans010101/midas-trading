@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest'
 
 import type { StructureFactor, StructureSnapshot } from '@/lib/api/structure'
 import {
+  CALIBER_NOTE,
+  buildFactorCards,
   factorHeadline,
   isDivergentFinding,
   ratioToLongShortPct,
@@ -131,5 +133,38 @@ describe('factorHeadline 三期批1 四分支', () => {
   it('OI 成交额比中性无方向 · 缺因子 null', () => {
     expect(factorHeadline('oi_volume_ratio', snap())).toEqual({ text: '0.85', tone: 'neutral' })
     expect(factorHeadline('oi_volume_ratio', snap({ oi_volume_ratio: null }))).toBeNull()
+  })
+})
+
+describe('buildFactorCards + CALIBER_NOTE(批1 修复刀)', () => {
+  it('snapshot 驱动:有 finding 附判定 · 无 finding 降级(finding=null)· null 因子无卡', () => {
+    const findings = [
+      { factor: 'account_long_short', state: '偏多', detail: 'x', window: '24h' },
+      { factor: 'funding_rate', state: '中性', detail: 'y', window: '7d' },
+    ]
+    const cards = buildFactorCards(snap(), findings)
+    const byKey = new Map(cards.map((c) => [c.key, c]))
+    // 有 finding → 附判定
+    expect(byKey.get('account_long_short')?.finding?.state).toBe('偏多')
+    // snapshot 有值但 LLM 没点名 → 降级卡(finding null · 不伪造)
+    expect(byKey.has('funding_zscore')).toBe(true)
+    expect(byKey.get('funding_zscore')?.finding).toBeNull()
+    expect(byKey.get('funding_zscore')?.window).toBe('24h') // 取 snapshot 因子 window
+    // snapshot null(position/taker 基线为 null)→ 无卡
+    expect(byKey.has('position_long_short')).toBe(false)
+  })
+
+  it('排序照 FACTOR_ORDER(与图谱一致)', () => {
+    const keys = buildFactorCards(snap(), []).map((c) => c.key)
+    expect(keys).toEqual([
+      'account_long_short', 'global_long_short', 'open_interest', 'oi_volume_ratio',
+      'funding_rate', 'funding_predicted', 'funding_zscore', 'basis', 'sentiment',
+    ])
+  })
+
+  it('口径文案与 prompts 红线三对齐:不含"全市场人数比" · 清算/盘口仍在', () => {
+    expect(CALIBER_NOTE).not.toContain('全市场人数比')
+    expect(CALIBER_NOTE).toContain('清算数据')
+    expect(CALIBER_NOTE).toContain('盘口深度')
   })
 })

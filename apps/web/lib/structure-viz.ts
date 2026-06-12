@@ -6,10 +6,41 @@
  */
 
 import type { FactorFinding, StructureSnapshot } from '@/lib/api/structure'
+import { FACTOR_ORDER } from '@/lib/structure-graph'
+
+/**
+ * 数据口径文案(批1 修复刀:与 prompts.py 红线三对齐 —— 全市场人数比已采(刀C),
+ * 只有清算/盘口仍未采;抽常量供 vitest 断言防再漂移)。
+ */
+export const CALIBER_NOTE =
+  '各因子结论均限定其数据窗口(24h / 7d / latest);本系统因子历史最长 60 天,' +
+  '「极值/分位」类表述均为近 N 天内口径,非长期历史基线。清算数据、盘口深度暂未采集。'
 
 /** 背离/极端因子高亮判定:LLM 在 state/detail 里点名「背离」「极端」即高亮(帝王金)。 */
 export function isDivergentFinding(f: Pick<FactorFinding, 'state' | 'detail'>): boolean {
   return /背离|极端/.test(`${f.state} ${f.detail}`)
+}
+
+export interface FactorCardSpec {
+  key: string
+  /** null = LLM 未对该因子输出判定 → 降级卡(数值+图,判定如实留白,绝不伪造) */
+  finding: FactorFinding | null
+  window: string
+}
+
+/**
+ * 因子卡区改 snapshot 驱动(批1 修复刀):按 FACTOR_ORDER 列 snapshot 非空因子,
+ * 有 LLM finding 的附判定、无 finding 的降级(LLM 没点名 ≠ 数据不存在)。
+ */
+export function buildFactorCards(
+  snapshot: StructureSnapshot, findings: FactorFinding[],
+): FactorCardSpec[] {
+  const byFactor = new Map(findings.map((f) => [f.factor, f]))
+  const snap = snapshot as unknown as Record<string, { window?: string } | null>
+  return FACTOR_ORDER.filter((k) => snap[k] != null).map((k) => {
+    const finding = byFactor.get(k) ?? null
+    return { key: k, finding, window: finding?.window ?? snap[k]?.window ?? '' }
+  })
 }
 
 /**

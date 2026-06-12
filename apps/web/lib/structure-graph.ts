@@ -22,6 +22,13 @@ export interface GraphEdge {
   reason: string
 }
 
+// 因子固定顺序(图谱节点 + 因子卡区共用 · 缺的因子不渲染)· 三期批1 扩到 11
+export const FACTOR_ORDER = [
+  'account_long_short', 'position_long_short', 'global_long_short', 'taker_flow',
+  'open_interest', 'oi_volume_ratio', 'funding_rate', 'funding_predicted',
+  'funding_zscore', 'basis', 'sentiment',
+] as const
+
 // 因子键 → 中文名(图谱节点标签 · page 因子卡共用)· 三期批1 扩到 11
 export const FACTOR_LABEL: Record<string, string> = {
   account_long_short: '大户账户多空比',
