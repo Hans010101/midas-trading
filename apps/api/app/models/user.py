@@ -37,6 +37,11 @@ class User(Base):
         DateTime(timezone=True), nullable=True,
     )
     age_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # 用户管理刀1:'user' | 'admin' · VARCHAR 不用 PG enum(currency/margin_mode
+    # 两次 enum→varchar 先例)· 首管由迁移 a4b5c6d7e8f9 按邮箱置位(甲案)
+    role: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'user'"), default="user",
+    )
     # 0007 watchlist:首次 GET /watchlist 触发 demo 预填后翻为 True,
     # 用户主动清空 watchlist 不会再触发(防止「删光 → 又被填回来」UX 怪圈)
     demo_prefilled: Mapped[bool] = mapped_column(

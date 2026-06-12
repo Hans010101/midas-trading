@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.v1.admin import router as admin_router
 from app.api.v1.alert_rules import router as alert_rules_router
 from app.api.v1.analysis import router as analysis_router
 from app.api.v1.auth import router as auth_router
@@ -47,3 +48,5 @@ router.include_router(overview_router)
 router.include_router(backtest_router)
 # 结构分析助手第1刀 · 7 因子结构快照(只读 CH · authed · 非预测不交易)
 router.include_router(structure_router)
+# 用户管理刀1 · 管理员用户列表(AdminDep 403 唯一边界 · 纯只读)
+router.include_router(admin_router)
