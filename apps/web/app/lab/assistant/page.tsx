@@ -16,6 +16,7 @@ import { useState } from 'react'
 import { FactorCard } from '@/components/lab/factor-card'
 import { ForceBar } from '@/components/lab/force-bar'
 import { LabNav } from '@/components/lab/lab-nav'
+import { StructureGraph } from '@/components/lab/structure-graph'
 import type { SparkPoint } from '@/components/lab/sparkline'
 import { SymbolSuggest } from '@/components/lab/symbol-suggest'
 import { TopNav } from '@/components/layout/top-nav'
@@ -194,6 +195,12 @@ function DiagnosisResult({ diag }: { diag: StructureDiagnosis }) {
             <ForceBar ratio={accountRatio} sourceLabel="大户账户多空比 · latest" />
           )}
         </div>
+      </section>
+
+      {/* ①.5 结构沙盘 · 因子关联图谱(二期刀1 · 边=规则推导 · 节点高亮=LLM 点名)*/}
+      <section>
+        <h2 className="mb-3 font-serif text-lg font-bold">结构沙盘</h2>
+        <StructureGraph snapshot={diag.snapshot} findings={diag.factor_findings} />
       </section>
 
       {/* ② 因子状态卡(FactorCard:state/detail/window + sparkline + 背离金框)*/}
