@@ -102,6 +102,11 @@ export function KlineChart({
     const upColor = rootStyle.getPropertyValue('--color-up').trim() || '#DC143C'
     const downColor = rootStyle.getPropertyValue('--color-down').trim() || '#0F6E5F'
 
+    // 移动刀C(B1):窄屏 OHLC 浮层改「触摸十字线才显示」(klinecharts 原生
+    // showRule:'follow_cross'),桌面保持常驻('always' 默认)。init 时一次性判定
+    // (lg 断点 1024 · 转屏不重配,可接受)· 只动展示,指标计算/缠论零碰。
+    const isMobile = window.matchMedia('(max-width: 1023px)').matches
+
     // 视觉 token · 04 文档 + CLAUDE.md 视觉系统
     chart.setStyles({
       candle: {
@@ -114,6 +119,7 @@ export function KlineChart({
           downWickColor: downColor,
           noChangeColor: '#94949C', // ink-faint
         },
+        ...(isMobile ? { tooltip: { showRule: 'follow_cross' as const } } : {}),
       },
       crosshair: {
         horizontal: { line: { color: '#C8102E' } }, // 中国红
@@ -172,13 +178,16 @@ export function KlineChart({
     //   必须显式传 paneOptions.id='candle_pane'(+ isStack=true 不顶替 K 线),
     //   否则 klinecharts 默认会新建一个独立副图 pane → 布林带被画进独立小窗(= 之前的 bug)。
     // overlayOnCandle=false → 独立副图 pane(MACD/RSI),保持原行为。
+    // 移动刀C(B2):窄屏副图(MACD/RSI)高度压到 ~90px(容器 400px 的 ~22%,主图为主);
+    // 桌面不传 height = klinecharts 默认占比,零变化。
+    const isMobile = window.matchMedia('(max-width: 1023px)').matches
     const make = (name: IndicatorName, overlayOnCandle: boolean) => {
       const styles = indicatorStyles?.[name]
       const value = (styles ? { name, styles } : name) as never
       if (overlayOnCandle) {
         chart.createIndicator(value, true, { id: 'candle_pane' })
       } else {
-        chart.createIndicator(value, false)
+        chart.createIndicator(value, false, isMobile ? { height: 90 } : undefined)
       }
     }
     if (indicators.MA) make('MA', true)

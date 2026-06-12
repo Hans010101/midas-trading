@@ -92,7 +92,7 @@ export function TopNav() {
           ) : status === 'unauthenticated' ? (
             <Link
               href="/login"
-              className="rounded-md bg-midas-red px-3 py-1 text-sm text-white transition-colors hover:bg-midas-red/90"
+              className="shrink-0 whitespace-nowrap rounded-md bg-midas-red px-3 py-1 text-sm text-white transition-colors hover:bg-midas-red/90"
             >
               登录
             </Link>
