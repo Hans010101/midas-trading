@@ -33,7 +33,9 @@ export interface FactorHeadline {
   tone: Tone
 }
 
-const RATIO_FACTORS = new Set(['account_long_short', 'position_long_short', 'taker_flow'])
+const RATIO_FACTORS = new Set([
+  'account_long_short', 'position_long_short', 'taker_flow', 'global_long_short',
+])
 
 function ratioTone(v: number): Tone {
   if (v > 1) return 'bull'
@@ -83,6 +85,23 @@ export function factorHeadline(
     const fgi = v.fear_greed
     if (fgi == null || !Number.isFinite(fgi)) return null
     return { text: fgi.toFixed(0), tone: fgi >= 70 ? 'bull' : fgi <= 30 ? 'bear' : 'neutral' }
+  }
+  // 三期批1 +2(funding_predicted 同 funding 格式 · global 已并入 RATIO_FACTORS)
+  if (factor === 'funding_predicted') {
+    const latest = v.latest
+    if (latest == null || !Number.isFinite(latest)) return null
+    return { text: `${(latest * 100).toFixed(4)}%`, tone: signTone(latest) }
+  }
+  if (factor === 'funding_zscore') {
+    const z = v.z
+    if (z == null || !Number.isFinite(z)) return null
+    // |z|>2 才按方向着色(极端才有语义)· 区间内中性
+    return { text: z.toFixed(2), tone: Math.abs(z) > 2 ? signTone(z) : 'neutral' }
+  }
+  if (factor === 'oi_volume_ratio') {
+    const ratio = v.ratio
+    if (ratio == null || !Number.isFinite(ratio)) return null
+    return { text: ratio.toFixed(2), tone: 'neutral' } // 仓位沉淀度无多空方向语义
   }
   return null
 }

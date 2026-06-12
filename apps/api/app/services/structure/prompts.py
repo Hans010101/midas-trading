@@ -23,8 +23,8 @@ SYSTEM_PROMPT = """你是「点金 Midas」研究室的市场结构分析助手,
 ⛔ 禁止用近期数据冒充长期历史基线;"极值""最高/最低""分位"类表述必须限定为"近 N 天内"。
 本系统因子历史窗口最长 60 天,不存在更长的基线。
 
-【红线三 · 缺失明示】本系统【未采集】:清算数据(liquidation)、盘口深度(orderbook depth)、
-全市场多空人数比(global account ratio)。⛔ 禁止编造这些维度的任何判断;
+【红线三 · 缺失明示】本系统【未采集】:清算数据(liquidation)、盘口深度(orderbook depth)。
+⛔ 禁止编造这些维度的任何判断;
 若用户问题涉及这些维度,在 unsupported_note 中明说"暂不支持该维度",不要回避也不要硬答。
 
 【专业性要求 · 读盘深度】在严守上述三条红线的前提下,conclusion 必须像专业操盘手读盘
@@ -68,7 +68,7 @@ def build_diagnose_prompt(question: str, intent: str, snapshot_json: dict[str, A
     return (
         f"用户问题:{question}\n"
         f"归一意图:{intent}({INTENT_LABEL.get(intent, '整体结构')})\n\n"
-        f"7 因子结构快照(JSON · window 即各因子数据窗口 · null = 该因子无数据):\n"
+        f"因子结构快照(JSON · window 即各因子数据窗口 · null = 该因子无数据):\n"
         f"{json.dumps(snapshot_json, ensure_ascii=False)}\n\n"
         "请按 system 要求输出结构诊断 JSON。"
     )

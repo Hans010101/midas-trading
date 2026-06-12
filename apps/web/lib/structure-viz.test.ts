@@ -63,6 +63,11 @@ function snap(over: Partial<StructureSnapshot> = {}): StructureSnapshot {
     funding_rate: factor({ latest: -0.000013, avg_7d: 0.0001, max_7d: 0.001, min_7d: -0.001 }),
     basis: factor({ mark_price: 99, index_price: 100, basis: -1, basis_pct: -0.9517 }),
     sentiment: factor({ fear_greed: 75 }),
+    // 三期批1 +4
+    funding_predicted: factor({ latest: 0.000125 }),
+    funding_zscore: factor({ z: 2.41, mean_60d: 0.0001, std_60d: 0.0002 }),
+    oi_volume_ratio: factor({ ratio: 0.853, oi_usd: 1e9, quote_volume_24h: 1.17e9 }),
+    global_long_short: factor({ latest: 1.6, avg_24h: 1.58 }),
     ...over,
   }
 }
@@ -104,5 +109,27 @@ describe('sparklineSpec(基准线 + 语义线色)', () => {
   it('OI 无基准线 · 缺因子默认帝王金无基准线(一期行为)', () => {
     expect(sparklineSpec('open_interest', snap())).toEqual({ stroke: '#DC143C' })
     expect(sparklineSpec('taker_flow', snap())).toEqual({ baseline: 1, stroke: '#B8860B' })
+  })
+})
+
+describe('factorHeadline 三期批1 四分支', () => {
+  it('预测费率同 funding 百分比格式 · global 同比值格式(并入 RATIO_FACTORS)', () => {
+    expect(factorHeadline('funding_predicted', snap())).toEqual({ text: '0.0125%', tone: 'bull' })
+    expect(factorHeadline('global_long_short', snap())).toEqual({ text: '1.60', tone: 'bull' })
+    expect(sparklineSpec('global_long_short', snap())).toEqual({ baseline: 1, stroke: '#DC143C' })
+  })
+
+  it('z-score 两位小数 · |z|>2 才按方向着色,区间内中性', () => {
+    expect(factorHeadline('funding_zscore', snap())).toEqual({ text: '2.41', tone: 'bull' })
+    expect(
+      factorHeadline('funding_zscore', snap({
+        funding_zscore: factor({ z: -1.2, mean_60d: 0, std_60d: 0.0002 }),
+      })),
+    ).toEqual({ text: '-1.20', tone: 'neutral' })
+  })
+
+  it('OI 成交额比中性无方向 · 缺因子 null', () => {
+    expect(factorHeadline('oi_volume_ratio', snap())).toEqual({ text: '0.85', tone: 'neutral' })
+    expect(factorHeadline('oi_volume_ratio', snap({ oi_volume_ratio: null }))).toBeNull()
   })
 })

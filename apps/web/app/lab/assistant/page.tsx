@@ -137,11 +137,12 @@ export default function LabAssistantPage() {
 }
 
 // ── 大数字面板(刀2 · 关键指标竖排 · 全部 snapshot 结构化取数)──────────────
+// 三期批1 换血:basis 出(信息保留在图谱节点+因子卡)· funding_zscore 进(极端程度一眼指标)
 const BIG_NUMBER_FACTORS = [
   { key: 'funding_rate', label: '资金费率' },
   { key: 'account_long_short', label: '大户账户多空比' },
   { key: 'open_interest', label: 'OI 24h 变化' },
-  { key: 'basis', label: '基差' },
+  { key: 'funding_zscore', label: '费率 Z 分数(60d)' },
 ] as const
 
 const TONE_TEXT: Record<Tone, string> = {
@@ -181,7 +182,7 @@ function DiagnosisResult({ diag }: { diag: StructureDiagnosis }) {
   const funding = useFundingRate(symbol, 21) // 8h×21 = 7d
   const basis = useBasisSeries(symbol, 288)
 
-  // 因子 key → sparkline 序列(sentiment 无现成时序 hook → null 留文字 · 优雅降级)
+  // 因子 key → sparkline 序列(三期批1:global 有时序 · 预测费率/z-score/OI比为单值 → null 文字降级)
   function seriesFor(factor: string): SparkPoint[] | null {
     const lsrItems = lsr.data?.items ?? []
     switch (factor) {
@@ -191,6 +192,11 @@ function DiagnosisResult({ diag }: { diag: StructureDiagnosis }) {
         return lsrItems.map((p) => ({ t: p.ts, v: p.top_position_ratio }))
       case 'taker_flow':
         return lsrItems.map((p) => ({ t: p.ts, v: p.taker_ratio }))
+      case 'global_long_short':
+        // 刀C global 列(④卡同源)· 过滤 0 = 未采哨兵老行
+        return lsrItems
+          .filter((p) => p.global_account_ratio > 0)
+          .map((p) => ({ t: p.ts, v: p.global_account_ratio }))
       case 'open_interest':
         return (oi.data?.items ?? []).map((p) => ({ t: p.ts, v: p.oi_usd }))
       case 'funding_rate':
