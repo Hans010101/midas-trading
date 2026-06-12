@@ -71,7 +71,8 @@ export function CryptoDetail() {
         onPeriodChange={setPeriod}
       />
 
-      <div className="mx-auto flex max-w-[1600px] gap-4 px-4 py-4">
+      {/* 移动刀B:照 spot-detail 范式补响应式(窄屏单列堆叠:图表全宽在上 · AI卡/下单在下) */}
+      <div className="mx-auto flex max-w-[1600px] flex-col gap-4 px-4 py-4 lg:flex-row">
         {/* 左主区 */}
         <div className="flex-1 space-y-4">
           <CryptoMainChart symbol={klineSymbol} period={period} />
@@ -79,7 +80,7 @@ export function CryptoDetail() {
         </div>
 
         {/* 右侧栏 */}
-        <aside className="w-[360px] shrink-0 space-y-4">
+        <aside className="w-full shrink-0 space-y-4 lg:w-[360px]">
           <CryptoAiCard
             klineSymbol={klineSymbol}
             futuresSymbol={futuresSymbol}

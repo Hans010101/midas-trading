@@ -18,7 +18,9 @@ export function SpotOrders() {
       <h3 className="mb-2 font-serif text-base font-bold text-foreground">
         现货订单流水 · {orders.length} 笔
       </h3>
-      <table className="w-full text-sm">
+      {/* 移动刀B:横滚 wrapper(照 perp 表范式) */}
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[720px] text-sm">
         <thead>
           <tr className="border-b border-paper text-xs text-muted-foreground">
             <th className="py-2 text-left">时间</th>
@@ -101,6 +103,7 @@ export function SpotOrders() {
           })}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }

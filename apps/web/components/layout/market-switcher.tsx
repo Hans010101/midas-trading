@@ -75,12 +75,16 @@ export function MarketSwitcher({ className }: { className?: string }) {
   }
 
   return (
-    <nav className={cn('flex items-center gap-1', className)} aria-label="市场切换">
+    // 移动刀B:overflow-x-auto + 按钮 nowrap —— 375px 单行可横滑,杜绝竖排折字(全站首屏破相)
+    <nav
+      className={cn('flex items-center gap-1 overflow-x-auto', className)}
+      aria-label="市场切换"
+    >
       <button
         type="button"
         onClick={() => router.push('/global')}
         className={cn(
-          'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+          'whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
           onGlobal
             ? 'bg-midas-red text-primary-foreground'
             : 'text-muted-foreground hover:bg-midas-red-glow hover:text-foreground',
@@ -94,7 +98,7 @@ export function MarketSwitcher({ className }: { className?: string }) {
           type="button"
           onClick={() => handleSelect(m)}
           className={cn(
-            'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+            'whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
             m === active
               ? 'bg-midas-red text-primary-foreground'
               : 'text-muted-foreground hover:bg-midas-red-glow hover:text-foreground',
@@ -108,7 +112,7 @@ export function MarketSwitcher({ className }: { className?: string }) {
         type="button"
         onClick={() => router.push('/watchlist')}
         className={cn(
-          'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+          'whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
           onWatchlist
             ? 'bg-midas-red text-primary-foreground'
             : 'text-muted-foreground hover:bg-midas-red-glow hover:text-foreground',
@@ -121,7 +125,7 @@ export function MarketSwitcher({ className }: { className?: string }) {
         // 方案乙:研究室默认落 AI 沙盘助手(/lab 回测 URL 不动不破书签)
         onClick={() => router.push('/lab/assistant')}
         className={cn(
-          'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+          'whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
           onLab
             ? 'bg-midas-red text-primary-foreground'
             : 'text-muted-foreground hover:bg-midas-red-glow hover:text-foreground',
