@@ -32,7 +32,13 @@ import {
 import { useStructureDiagnose } from '@/hooks/use-structure'
 import type { IntentKind, StructureDiagnosis, StructureSnapshot } from '@/lib/api/structure'
 import { FACTOR_LABEL } from '@/lib/structure-graph'
-import { type Tone, factorHeadline, sparklineSpec } from '@/lib/structure-viz'
+import {
+  CALIBER_NOTE,
+  type Tone,
+  buildFactorCards,
+  factorHeadline,
+  sparklineSpec,
+} from '@/lib/structure-viz'
 import { cn } from '@/lib/utils'
 
 const INTENT_LABEL: Record<IntentKind, string> = {
@@ -209,6 +215,8 @@ function DiagnosisResult({ diag }: { diag: StructureDiagnosis }) {
   }
 
   const accountRatio = diag.snapshot.account_long_short?.value?.latest
+  // 批1 修复刀:卡区 snapshot 驱动(FACTOR_ORDER 排序 · 与图谱一致)
+  const factorCards = buildFactorCards(diag.snapshot, diag.factor_findings)
 
   return (
     <div className="space-y-8">
@@ -243,20 +251,22 @@ function DiagnosisResult({ diag }: { diag: StructureDiagnosis }) {
         </div>
       </section>
 
-      {/* ② 因子状态卡(刀2:紧凑网格 + 状态色块 + 卡头 mono 数值 + 语义 sparkline)*/}
-      {diag.factor_findings.length > 0 && (
+      {/* ② 因子状态卡(批1 修复刀:snapshot 驱动 —— LLM 没点名的因子也出卡,
+          有 finding 附判定、无 finding 降级为数值+图 · 如实留白不伪造判定)*/}
+      {factorCards.length > 0 && (
         <section>
           <h2 className="mb-3 font-serif text-lg font-bold">分因子状态</h2>
           <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">
-            {diag.factor_findings.map((f) => {
-              const spec = sparklineSpec(f.factor, diag.snapshot)
+            {factorCards.map((c) => {
+              const spec = sparklineSpec(c.key, diag.snapshot)
               return (
                 <FactorCard
-                  key={`${f.factor}-${f.state}`}
-                  finding={f}
-                  label={FACTOR_LABEL[f.factor] ?? f.factor}
-                  series={seriesFor(f.factor)}
-                  headline={factorHeadline(f.factor, diag.snapshot)}
+                  key={c.key}
+                  finding={c.finding}
+                  label={FACTOR_LABEL[c.key] ?? c.key}
+                  window={c.window}
+                  series={seriesFor(c.key)}
+                  headline={factorHeadline(c.key, diag.snapshot)}
                   sparkStroke={spec.stroke}
                   sparkBaseline={spec.baseline}
                 />
@@ -269,11 +279,8 @@ function DiagnosisResult({ diag }: { diag: StructureDiagnosis }) {
       {/* ③ 口径 / 缺失说明(抄脚注 section markup)*/}
       <section className="rounded-lg border border-paper bg-surface-subtle p-4">
         <h2 className="mb-2 font-serif text-sm font-bold">数据口径</h2>
-        <p className="text-xs text-muted-foreground">
-          各因子结论均限定其数据窗口(24h / 7d / latest);本系统因子历史最长 60 天,
-          「极值/分位」类表述均为近 N 天内口径,非长期历史基线。
-          清算数据、盘口深度、全市场人数比暂未采集。
-        </p>
+        {/* 批1 修复刀:口径文案抽常量(与 prompts 红线三对齐 · vitest 断言防再漂移) */}
+        <p className="text-xs text-muted-foreground">{CALIBER_NOTE}</p>
         {diag.unsupported_note && (
           <p className="mt-2 text-xs text-gold">⚠ {diag.unsupported_note}</p>
         )}

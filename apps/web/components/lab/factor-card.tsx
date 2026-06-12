@@ -27,8 +27,11 @@ function stateTone(state: string): Tone {
 }
 
 interface FactorCardProps {
-  finding: FactorFinding
+  /** null = LLM 未对该因子输出判定(批1 修复刀)→ 降级卡:数值+图 · 判定如实留白不伪造 */
+  finding: FactorFinding | null
   label: string
+  /** 数据窗口胶囊(有 finding 用其 window,否则用 snapshot 因子的 window) */
+  window: string
   series: SparkPoint[] | null
   /** 关键数值(snapshot 结构化字段 · factorHeadline 算好传入)· null 不显示 */
   headline?: FactorHeadline | null
@@ -38,10 +41,9 @@ interface FactorCardProps {
 }
 
 export function FactorCard({
-  finding, label, series, headline = null, sparkStroke, sparkBaseline,
+  finding, label, window: windowLabel, series, headline = null, sparkStroke, sparkBaseline,
 }: FactorCardProps) {
-  const divergent = isDivergentFinding(finding)
-  const tone = stateTone(finding.state)
+  const divergent = finding != null && isDivergentFinding(finding)
   return (
     <div
       className={cn(
@@ -59,21 +61,23 @@ export function FactorCard({
           )}
         </div>
         <span className="rounded bg-surface-subtle px-1.5 py-0.5 font-mono text-[10px] text-faint">
-          {finding.window}
+          {windowLabel}
         </span>
       </div>
-      {/* 状态色块胶囊 + mono 关键数值(snapshot 结构化取数 · ⛔ 不解析 LLM 文字) */}
+      {/* 状态色块胶囊(仅 LLM 有判定时)+ mono 关键数值(snapshot 结构化取数) */}
       <div className="mt-1.5 flex items-center gap-2">
-        <span
-          className={cn(
-            'rounded px-1.5 py-0.5 text-xs font-medium',
-            tone === 'bull' && 'bg-up/10 text-up',
-            tone === 'bear' && 'bg-down/10 text-down',
-            tone === 'neutral' && 'bg-surface-subtle text-muted-foreground',
-          )}
-        >
-          {finding.state}
-        </span>
+        {finding && (
+          <span
+            className={cn(
+              'rounded px-1.5 py-0.5 text-xs font-medium',
+              stateTone(finding.state) === 'bull' && 'bg-up/10 text-up',
+              stateTone(finding.state) === 'bear' && 'bg-down/10 text-down',
+              stateTone(finding.state) === 'neutral' && 'bg-surface-subtle text-muted-foreground',
+            )}
+          >
+            {finding.state}
+          </span>
+        )}
         {headline && (
           <span className={cn('font-mono text-lg font-bold tabular-nums', TONE_TEXT[headline.tone])}>
             {headline.text}
@@ -81,7 +85,9 @@ export function FactorCard({
         )}
       </div>
       {series !== null && <Sparkline data={series} stroke={sparkStroke} baseline={sparkBaseline} />}
-      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{finding.detail}</p>
+      {finding && (
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{finding.detail}</p>
+      )}
     </div>
   )
 }
