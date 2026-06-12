@@ -393,11 +393,17 @@ async def select_tickers_by_symbols(
 
 
 async def select_perp_total_quote_volume(client: AsyncClient) -> float:
-    """全 perp 永续合约最新 24H quote_volume 之和 = 合约总成交额(USDT 计价)。
+    """USDT 永续最新 24H quote_volume 之和 = 合约总成交额(USDT 计价)。
 
     CoinGecko /global 的 derivatives_volume 在免费档拿不到(coingecko_source 里
     硬编码 0),所以主页「24H 合约总成交额」一直空。这里用我们已采集的 perp
     ticker 的 quote_volume_24h 求和 —— 全是真实数据,不伪造。
+
+    刀B 口径修正(Hans 定量:USDT 永续 $47.24B/633 币 · USDC 永续 $6.42B/38 币 ·
+    交割 $0.04B/4 币 · 下架残留=0):/fapi/v1/ticker/24hr 返回的是 USDT-M 全域,
+    旧版全量求和把 USDC 永续 + 交割合约混进「永续口径」名不副实。现只算
+    USDT 永续主力:endsWith 'USDT' 排除 USDC 永续;position(symbol,'_')=0 排除
+    交割形态(BTCUSDT_250627 带下划线 · 比 LIKE '%\\_2%' 转义更稳的等价过滤)。
     """
     query = """
         SELECT sum(quote_volume_24h) FROM (
@@ -405,6 +411,8 @@ async def select_perp_total_quote_volume(client: AsyncClient) -> float:
                    ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY ts DESC) AS rn
             FROM crypto_ticker_24h FINAL
             WHERE instrument = 'perp'
+              AND endsWith(symbol, 'USDT')
+              AND position(symbol, '_') = 0
         )
         WHERE rn = 1
     """

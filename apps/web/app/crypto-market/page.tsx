@@ -204,7 +204,7 @@ export default function CryptoMarketPage() {
               label="24H 合约总成交额"
               loading={overviewQ.isPending}
               value={ov && ov.derivatives_volume_24h_usd > 0 ? fmtUsd(ov.derivatives_volume_24h_usd) : '—'}
-              sub="Binance 永续口径"
+              sub="Binance USDT 永续"
             />
             <MetricCard
               label="恐慌贪婪指数"
