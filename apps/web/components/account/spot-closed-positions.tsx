@@ -19,7 +19,9 @@ export function SpotClosedPositions() {
       <h3 className="mb-2 font-serif text-base font-bold text-foreground">
         现货历史持仓 · 复盘({positions.length})
       </h3>
-      <table className="w-full text-sm">
+      {/* 移动刀B:横滚 wrapper(照 perp 表范式) */}
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[560px] text-sm">
         <thead>
           <tr className="border-b border-paper text-xs text-muted-foreground">
             <th className="py-2 text-left">标的</th>
@@ -63,6 +65,7 @@ export function SpotClosedPositions() {
           })}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }

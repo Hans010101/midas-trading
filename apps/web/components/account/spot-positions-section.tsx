@@ -39,8 +39,9 @@ export function SpotPositionsSection() {
   }
 
   return (
-    <div className="mb-6">
-      <table className="w-full text-sm">
+    // 移动刀B:照 perp 表写法补横滚 wrapper(375px 七列硬挤压 → 可横滑)
+    <div className="mb-6 overflow-x-auto">
+      <table className="w-full min-w-[640px] text-sm">
         <thead>
           <tr className="border-b border-paper text-xs text-muted-foreground">
             <th className="py-2 text-left">标的</th>
