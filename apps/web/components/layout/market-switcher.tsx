@@ -20,6 +20,7 @@
 import { usePathname, useRouter } from 'next/navigation'
 
 import { MARKET_LABEL } from '@/lib/format-money'
+import { detailMarketOf, homeMarketOf, resolveActiveMarket } from '@/lib/market-nav'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
 import { cn } from '@/lib/utils'
 import type { Market } from '@midas/shared'
@@ -35,35 +36,18 @@ export function MarketSwitcher({ className }: { className?: string }) {
   const storeMarket = useWorkbenchStore((s) => s.market)
   const setMarket = useWorkbenchStore((s) => s.setMarket)
 
-  // 当前在哪个「市场首页」(列表/总览页)· 0023 阶段③ 起 A股/美股/加密 三市场首页互链
-  const homeMarket: Market | null = pathname?.startsWith('/cn-market')
-    ? 'cn'
-    : pathname?.startsWith('/us-market')
-      ? 'us'
-      : pathname?.startsWith('/crypto-market')
-        ? 'crypto'
-        : pathname?.startsWith('/hk-market')
-          ? 'hk'
-          : null
-  // 全球概览(ADR 0035)· 排最前的入口 + 默认落地页 · 非交易市场,单独高亮
-  // 详情页(*-preview)· TopNav 复用到详情页(2026-06)· 高亮当前市场 + 点 Tab 跳对应市场首页
-  const detailMarket: Market | null = pathname?.startsWith('/cn-preview')
-    ? 'cn'
-    : pathname?.startsWith('/us-preview')
-      ? 'us'
-      : pathname?.startsWith('/crypto-preview')
-        ? 'crypto'
-        : pathname?.startsWith('/hk-preview')
-          ? 'hk'
-          : null
+  // 市场路由判定收敛进 lib/market-nav(纯函数 · vitest 钉死)——
+  // 修复刀:原 active 链 `home ?? detail ?? storeMarket` 让 /account 等中性页
+  // 回退 store 残留值误亮"加密";逐页豁免(global/watchlist/lab)是反模式。
+  // 现反转白名单:store 兜底只在 /workbench 生效,其余非市场路径全不亮。
+  const homeMarket = homeMarketOf(pathname)
+  const detailMarket = detailMarketOf(pathname)
   const onGlobal = pathname?.startsWith('/global') ?? false
   // 自选汇总页(3.6)· 末位 Tab · 非市场,单独高亮
   const onWatchlist = pathname === '/watchlist'
   // 策略研究室(P1-4d)· 非市场 · /lab 与 /lab/report 都算 · 单独高亮
   const onLab = pathname?.startsWith('/lab') ?? false
-  // 在全球/自选/研究室页时不高亮任何交易市场 Tab(否则会回退到 storeMarket 误亮)
-  const active: Market | null =
-    onGlobal || onWatchlist || onLab ? null : (homeMarket ?? detailMarket ?? storeMarket)
+  const active = resolveActiveMarket(pathname, storeMarket)
 
   function handleSelect(m: Market) {
     // 港股(hk)阶段二单元3:行情页(/hk-market 策展池 18 只列表)已上线 →
