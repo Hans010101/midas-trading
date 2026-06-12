@@ -134,7 +134,7 @@ export function PerpActivePositions() {
                       <button
                         type="button"
                         onClick={() => setConfirm(p)}
-                        className="rounded border border-midas-red px-2 py-1 text-xs text-midas-red hover:bg-midas-red-glow"
+                        className="min-h-10 rounded border border-midas-red px-2 py-1 text-xs text-midas-red hover:bg-midas-red-glow lg:min-h-0"
                       >
                         平仓
                       </button>
