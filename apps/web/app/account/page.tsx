@@ -12,7 +12,6 @@
  * 这里是「账户级数据 + 资金管理」。
  */
 
-import { useSession } from 'next-auth/react'
 import { useState } from 'react'
 import {
   CartesianGrid,
@@ -45,7 +44,6 @@ import { cn } from '@/lib/utils'
 import type { Market } from '@midas/shared'
 
 export default function AccountPage() {
-  const { data: session } = useSession()
   const { data: accounts = [], isLoading } = useAccounts()
   const { data: portfolio = [] } = usePortfolio()
   const { data: equityCurves } = useEquityCurves(30)
@@ -72,28 +70,7 @@ export default function AccountPage() {
           </h1>
         </div>
 
-        {/* Section 1: 账户基本信息 */}
-        <section className="mb-10">
-          <h2 className="mb-3 font-serif text-xl font-bold text-foreground">
-            账户基本信息
-          </h2>
-          <div className="rounded-lg border border-paper bg-cream p-5 shadow-sm">
-            <dl className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">邮箱</dt>
-                <dd className="font-mono text-foreground">
-                  {session?.user?.email ?? '—'}
-                </dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">用户 ID</dt>
-                <dd className="font-mono text-xs text-muted-foreground/70">
-                  {session?.user?.id ?? '—'}
-                </dd>
-              </div>
-            </dl>
-          </div>
-        </section>
+        {/* 账户基本信息已搬 /account/profile(重组刀2 · 身份信息归模块④) */}
 
         {/* Section 2: 账户资金设置(从旧 /settings/wallet 迁入)*/}
         <WalletSection />

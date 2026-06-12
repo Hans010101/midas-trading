@@ -1,73 +1,46 @@
 'use client'
 
 /**
- * /settings · 系统设置(段 1 补丁 B 重组 · 段 2 Task 6 填充推送)。
+ * /settings · 设置已迁移提示页(重组刀2)。
  *
- * M0 内容:
- *  - 消息推送配置容器(段 2 填充飞书/TG 配置 UI)
- *  - 关键指标预警配置容器(段 2 填充)
- *  - 偏好 / 安全(M1 占位灰显)
- *
- * 跟 /account 区分:那里是「账户级数据 + 资金管理」,
- * 这里是「系统级配置」(改这些不影响交易数据)。
+ * 四个 section 已搬入用户中心四模块(不留双份防维护漂移):
+ *   通知配置 + 价格预警 → /account/alerts;涨跌色 + Bot 预设 → /account/profile。
+ * 本页留提示 + 链接过渡(bot 回执/旧书签仍指这里);整页 redirect 是重组刀4。
  */
 
+import Link from 'next/link'
+
 import { TopNav } from '@/components/layout/top-nav'
-import { AlertRulesSection } from '@/components/settings/alert-rules-section'
-import { BotOrderPresetSection } from '@/components/settings/bot-order-preset-section'
-import { ColorPrefSection } from '@/components/settings/color-pref-section'
-import { NotificationsConfigSection } from '@/components/settings/notifications-config-section'
+
+const MOVED: Array<{ label: string; href: string; hint: string }> = [
+  { label: '通知与提醒', href: '/account/alerts', hint: 'TG/飞书绑定 · 事件开关 · 免打扰 · 价格预警' },
+  { label: '账号与偏好', href: '/account/profile', hint: '账号信息 · 涨跌色 · Bot 下单预设 · 安全' },
+  { label: '资产总览', href: '/account', hint: '虚拟资金管理 · KPI · 权益曲线' },
+  { label: '持仓与订单', href: '/account/positions', hint: '持仓 · 订单流水 · 条件单' },
+]
 
 export default function SettingsPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <TopNav />
       <main className="mx-auto w-full max-w-4xl px-6 py-8">
-        <h1 className="mb-6 font-serif text-2xl font-bold text-foreground">
-          设置
-        </h1>
-
-        <NotificationsConfigSection />
-
-        {/* 0026 G5 · 告警规则配置(复用 G2b CRUD + 一键推荐)*/}
-        <AlertRulesSection />
-
-        {/* 0026 G5 · Bot 下单默认参数(后台预设)*/}
-        <BotOrderPresetSection />
-
-        {/* 涨跌色偏好(3.5 · 决策⑧)· 实装 */}
-        <ColorPrefSection />
-
-        {/* M1 占位 */}
-        <PlaceholderSection
-          title="安全设置"
-          milestone="M1"
-          description="密码修改 · 2FA · 登录设备管理 · 操作日志"
-        />
-
+        <h1 className="mb-3 font-serif text-2xl font-bold text-foreground">设置已迁移</h1>
+        <p className="mb-6 text-sm text-muted-foreground">
+          设置项已并入「用户中心」四模块(头像菜单可直达):
+        </p>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {MOVED.map((m) => (
+            <Link
+              key={m.href}
+              href={m.href}
+              className="rounded-lg border border-paper bg-cream p-4 shadow-sm transition-colors hover:border-midas-red/50"
+            >
+              <div className="mb-1 font-serif text-base font-bold text-midas-red">{m.label}</div>
+              <div className="text-xs text-muted-foreground">{m.hint}</div>
+            </Link>
+          ))}
+        </div>
       </main>
     </div>
-  )
-}
-
-interface PlaceholderProps {
-  title: string
-  milestone: string
-  description: string
-}
-
-function PlaceholderSection({ title, milestone, description }: PlaceholderProps) {
-  return (
-    <section className="mb-6 rounded-lg border border-dashed border-paper bg-surface-card p-5">
-      <div className="mb-2 flex items-center gap-2">
-        <h2 className="font-serif text-lg font-bold text-muted-foreground/70">
-          {title}
-        </h2>
-        <span className="rounded bg-paper px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-          {milestone} 待实装
-        </span>
-      </div>
-      <p className="text-xs text-muted-foreground/70">{description}</p>
-    </section>
   )
 }
