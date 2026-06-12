@@ -13,7 +13,8 @@ import { auth } from '@/auth'
 import { NextResponse } from 'next/server'
 
 // /workbench 不在保护列表 · 匿名可访问看图
-const PROTECTED = ['/account', '/settings', '/portfolio', '/dashboard']
+// /admin:未登录跳登录(仅 UX · 真正边界 = 后端 AdminDep 403,普通用户进页也只看到无权限提示)
+const PROTECTED = ['/account', '/settings', '/portfolio', '/dashboard', '/admin']
 const AUTH_PAGES = ['/login', '/register']
 
 export default auth((req) => {
