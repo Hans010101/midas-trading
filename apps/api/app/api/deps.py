@@ -96,6 +96,21 @@ async def get_current_user(
     return user
 
 
+async def get_current_admin(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """管理员鉴权(用户管理刀1)· 🔴 admin 端点唯一安全边界,每个端点必挂。
+
+    detail 用通用 Forbidden,不泄露「需要 admin 角色」语义(降低探测面)。
+    """
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden",
+        )
+    return current_user
+
+
 ClickHouseDep = Annotated[ClickHouseClient, Depends(get_clickhouse)]
 OptionalClickHouseDep = Annotated[
     ClickHouseClient | None, Depends(get_clickhouse_optional),
@@ -106,3 +121,4 @@ HkSourceDep = Annotated[AKShareHkSource, Depends(get_hk_source)]
 CryptoSourceDep = Annotated[CcxtBinanceCryptoSource, Depends(get_crypto_source)]
 BinanceFuturesSourceDep = Annotated[BinanceFuturesSource, Depends(get_binance_futures_source)]
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
+AdminDep = Annotated[User, Depends(get_current_admin)]

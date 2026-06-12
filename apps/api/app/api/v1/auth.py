@@ -72,6 +72,7 @@ class LoginOut(BaseModel):
     token_type: str = "bearer"
     user_id: str
     email: str
+    role: str = "user"
 
 
 class VerifyIn(BaseModel):
@@ -91,6 +92,7 @@ class MeOut(BaseModel):
     user_id: str
     email: str
     email_verified: bool
+    role: str = "user"
 
 
 # =====================
@@ -177,6 +179,7 @@ async def login(payload: LoginIn, db: DbDep, request: Request) -> LoginOut:
         access_token=session_token,
         user_id=str(user.id),
         email=user.email,
+        role=user.role,
     )
 
 
@@ -213,6 +216,7 @@ class OAuthGoogleOut(BaseModel):
     token_type: str = "bearer"
     user_id: str
     email: str
+    role: str = "user"
     is_new_user: bool = False
 
 
@@ -298,6 +302,7 @@ async def oauth_google(
         access_token=session_token,
         user_id=str(user.id),
         email=user.email,
+        role=user.role,
         is_new_user=not existed_before,
     )
 
@@ -411,4 +416,5 @@ async def me(current_user: CurrentUserDep) -> MeOut:
         user_id=str(current_user.id),
         email=current_user.email,
         email_verified=current_user.email_verified_at is not None,
+        role=current_user.role,
     )
