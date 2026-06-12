@@ -33,6 +33,11 @@ export interface StructureSnapshot {
   funding_rate: StructureFactor | null
   basis: StructureFactor | null
   sentiment: StructureFactor | null
+  // 三期第一批(零新采集)+4
+  funding_predicted: StructureFactor | null
+  funding_zscore: StructureFactor | null
+  oi_volume_ratio: StructureFactor | null
+  global_long_short: StructureFactor | null
 }
 
 export interface FactorFinding {

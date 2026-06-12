@@ -22,7 +22,7 @@ export interface GraphEdge {
   reason: string
 }
 
-// 因子键 → 中文名(图谱节点标签 · page 因子卡共用)
+// 因子键 → 中文名(图谱节点标签 · page 因子卡共用)· 三期批1 扩到 11
 export const FACTOR_LABEL: Record<string, string> = {
   account_long_short: '大户账户多空比',
   position_long_short: '大户持仓多空比',
@@ -31,6 +31,10 @@ export const FACTOR_LABEL: Record<string, string> = {
   funding_rate: '资金费率',
   basis: '基差',
   sentiment: '市场情绪',
+  funding_predicted: '预测资金费率',
+  funding_zscore: '费率 Z 分数',
+  oi_volume_ratio: 'OI 成交额比',
+  global_long_short: '全市场人数比',
 }
 
 // 阈值(实现定稿):比值偏离均衡 · OI 24h 变化 · FGI 贪婪/恐慌档
@@ -38,6 +42,7 @@ const RATIO_SKEW = 0.15 // |ratio − 1| 超此值视为明显偏离
 const OI_CHANGE_PCT = 3 // |change_pct_24h| 超此值视为明显增/减仓
 const FGI_GREED = 70
 const FGI_FEAR = 30
+const Z_EXTREME = 2 // |z| 超此值视为费率极端(R10 · 三期批1)
 
 /** 从 7 因子快照推导背离/共振边(确定性规则 · 缺因子跳过)。 */
 export function deriveGraphEdges(snapshot: StructureSnapshot): GraphEdge[] {
@@ -140,6 +145,31 @@ export function deriveGraphEdges(snapshot: StructureSnapshot): GraphEdge[] {
       edges.push({
         from: 'sentiment', to: 'funding_rate', type: 'resonance', direction: 'bear',
         reason: '恐慌情绪与负费率共振(过冷迹象)',
+      })
+    }
+  }
+
+  // R9 预测费率 ↔ 当期费率均值(反号 → 背离 · 三期批1)
+  const pred = snapshot.funding_predicted?.value?.latest ?? null
+  if (pred !== null && fAvg !== null && pred * fAvg < 0) {
+    edges.push({
+      from: 'funding_predicted', to: 'funding_rate', type: 'divergence',
+      reason: '预估费率与 7 天均值方向相反,费率结构转折中',
+    })
+  }
+
+  // R10 费率 z-score 极端且与结构同向 → 共振(三期批1)
+  const z = snapshot.funding_zscore?.value?.z ?? null
+  if (z !== null && a !== null) {
+    if (z > Z_EXTREME && a > 1) {
+      edges.push({
+        from: 'funding_zscore', to: 'account_long_short', type: 'resonance', direction: 'bull',
+        reason: '费率 Z 分数极端偏高且结构偏多,多头拥挤确认',
+      })
+    } else if (z < -Z_EXTREME && a < 1) {
+      edges.push({
+        from: 'funding_zscore', to: 'account_long_short', type: 'resonance', direction: 'bear',
+        reason: '费率 Z 分数极端偏低且结构偏空,空头拥挤确认',
       })
     }
   }

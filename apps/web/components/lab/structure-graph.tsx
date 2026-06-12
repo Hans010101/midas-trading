@@ -27,10 +27,11 @@ const CX = W / 2
 const CY = H / 2
 const R = 100 // 节点圆周半径(刀2:节点加大 + 标签两行,半径略收防溢出)
 
-// 因子固定顺序(缺的因子不画 · 角度按实际节点数自适应)
+// 因子固定顺序(缺的因子不画 · 角度按实际节点数自适应)· 三期批1 扩到 11
 const FACTOR_ORDER = [
-  'account_long_short', 'position_long_short', 'taker_flow',
-  'open_interest', 'funding_rate', 'basis', 'sentiment',
+  'account_long_short', 'position_long_short', 'global_long_short', 'taker_flow',
+  'open_interest', 'oi_volume_ratio', 'funding_rate', 'funding_predicted',
+  'funding_zscore', 'basis', 'sentiment',
 ] as const
 
 interface NodeSpec {

@@ -21,6 +21,11 @@ function snap(over: Partial<StructureSnapshot> = {}): StructureSnapshot {
     funding_rate: factor({ latest: 0, avg_7d: 0, max_7d: 0, min_7d: 0 }),
     basis: factor({ mark_price: 100, index_price: 100, basis: 0, basis_pct: 0 }),
     sentiment: factor({ fear_greed: 50 }),
+    // 三期批1 基线:全 null(R9/R10 不触发 · 缺因子跳过)
+    funding_predicted: null,
+    funding_zscore: null,
+    oi_volume_ratio: null,
+    global_long_short: null,
     ...over,
   }
 }
@@ -184,5 +189,57 @@ describe('R8 情绪↔费率共振', () => {
       sentiment: null,
       funding_rate: factor({ latest: -0.0002, avg_7d: 0, max_7d: 0, min_7d: -0.001 }),
     }))).toEqual([])
+  })
+})
+
+describe('R9 预测费率↔当期费率均值 反号背离(三期批1)', () => {
+  it('预估为负 × 7d 均值为正 → 背离;同号不命中', () => {
+    expect(edgeKeys(snap({
+      funding_predicted: factor({ latest: -0.0002 }),
+      funding_rate: factor({ latest: 0.0001, avg_7d: 0.0002, max_7d: 0.001, min_7d: 0 }),
+    }))).toContain('funding_predicted->funding_rate:divergence')
+    // 同号(都正)→ 不出 R9 边
+    expect(edgeKeys(snap({
+      funding_predicted: factor({ latest: 0.0001 }),
+      funding_rate: factor({ latest: 0.0001, avg_7d: 0.0002, max_7d: 0.001, min_7d: 0 }),
+    }))).not.toContain('funding_predicted->funding_rate:divergence')
+  })
+
+  it('缺 funding_predicted → 跳过(基线零边)', () => {
+    expect(edgeKeys(snap({
+      funding_rate: factor({ latest: 0.0001, avg_7d: 0.0002, max_7d: 0.001, min_7d: 0 }),
+    }))).toEqual([])
+  })
+})
+
+describe('R10 费率 z-score 极端 × 结构同向 共振(三期批1)', () => {
+  it('z>2 且账户比偏多 → bull;z<-2 且偏空 → bear', () => {
+    const bull = deriveGraphEdges(snap({
+      funding_zscore: factor({ z: 2.5, mean_60d: 0.0001, std_60d: 0.0002 }),
+      account_long_short: factor({ latest: 1.3, avg_24h: 1.2 }),
+      // 账户比偏多 + 费率 0 → R1 不触发,隔离 R10
+    })).find((e) => e.from === 'funding_zscore')
+    expect(bull?.type).toBe('resonance')
+    expect(bull?.direction).toBe('bull')
+
+    const bear = deriveGraphEdges(snap({
+      funding_zscore: factor({ z: -2.5, mean_60d: 0, std_60d: 0.0002 }),
+      account_long_short: factor({ latest: 0.8, avg_24h: 0.85 }),
+    })).find((e) => e.from === 'funding_zscore')
+    expect(bear?.direction).toBe('bear')
+  })
+
+  it('z 极端但结构反向 / z 不极端 / 缺 zscore → 不出 R10 边', () => {
+    expect(edgeKeys(snap({
+      funding_zscore: factor({ z: 2.5, mean_60d: 0, std_60d: 0.0002 }),
+      account_long_short: factor({ latest: 0.9, avg_24h: 0.9 }),
+    })).filter((k) => k.startsWith('funding_zscore'))).toEqual([])
+    expect(edgeKeys(snap({
+      funding_zscore: factor({ z: 1.5, mean_60d: 0, std_60d: 0.0002 }),
+      account_long_short: factor({ latest: 1.3, avg_24h: 1.2 }),
+    })).filter((k) => k.startsWith('funding_zscore'))).toEqual([])
+    expect(edgeKeys(snap({
+      account_long_short: factor({ latest: 1.3, avg_24h: 1.2 }),
+    })).filter((k) => k.startsWith('funding_zscore'))).toEqual([])
   })
 })
