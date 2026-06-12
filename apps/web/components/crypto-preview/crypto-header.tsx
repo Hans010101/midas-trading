@@ -87,7 +87,7 @@ export function CryptoHeader({
               type="button"
               onClick={() => onPeriodChange(p)}
               className={cn(
-                'rounded px-2 py-1 transition-colors',
+                'min-h-10 min-w-10 rounded px-2 py-1 transition-colors lg:min-h-0 lg:min-w-0',
                 p === period
                   ? 'bg-midas-red-glow text-midas-red'
                   : 'text-muted-foreground hover:text-foreground',

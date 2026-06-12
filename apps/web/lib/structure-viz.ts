@@ -68,71 +68,80 @@ const RATIO_FACTORS = new Set([
   'account_long_short', 'position_long_short', 'taker_flow', 'global_long_short',
 ])
 
-function ratioTone(v: number): Tone {
-  if (v > 1) return 'bull'
-  if (v < 1) return 'bear'
-  return 'neutral'
-}
-
 function signTone(v: number): Tone {
   if (v > 0) return 'bull'
   if (v < 0) return 'bear'
   return 'neutral'
 }
 
+/** LLM finding.state 档位 → tone(偏多类朱红 / 偏空类墨绿 / 其余中性灰)。 */
+export function stateTone(state: string): Tone {
+  if (/多/.test(state)) return 'bull'
+  if (/空/.test(state)) return 'bear'
+  return 'neutral'
+}
+
 /**
  * 因子关键数值(卡头 mono 数字 / 图谱节点第二行 / 大数字面板共用)。
  * 缺因子/缺字段 → null(调用方不渲染 · 优雅降级)。
+ *
+ * tone 档位收敛(移动刀D-B):跟 LLM finding.state 档位 —— 有判定才有方向色,
+ * 无判定/中性档一律灰。旧版「数值 vs 固定基准」(比值>1 即红、费率>0 即红)
+ * 把 1.02 这类弱偏离也染色,与状态胶囊"中性"互相打架 = 视觉噪音。
+ * 唯一特例 funding_zscore:|z|>2 数据极端才按符号着色(极端才有语义 · 不依赖 LLM)。
  */
 export function factorHeadline(
-  factor: string, snapshot: StructureSnapshot,
+  factor: string,
+  snapshot: StructureSnapshot,
+  finding?: Pick<FactorFinding, 'state'> | null,
 ): FactorHeadline | null {
   const v = (snapshot as unknown as Record<string, { value?: Record<string, number> } | null>)[
     factor
   ]?.value
   if (!v) return null
+  const tone: Tone = finding ? stateTone(finding.state) : 'neutral'
 
   if (RATIO_FACTORS.has(factor)) {
     const latest = v.latest
     if (latest == null || !Number.isFinite(latest)) return null
-    return { text: latest.toFixed(2), tone: ratioTone(latest) }
+    return { text: latest.toFixed(2), tone }
   }
   if (factor === 'funding_rate') {
     const latest = v.latest
     if (latest == null || !Number.isFinite(latest)) return null
-    return { text: `${(latest * 100).toFixed(4)}%`, tone: signTone(latest) }
+    return { text: `${(latest * 100).toFixed(4)}%`, tone }
   }
   if (factor === 'open_interest') {
     const chg = v.change_pct_24h
     if (chg == null || !Number.isFinite(chg)) return null
-    return { text: `${chg > 0 ? '+' : ''}${chg.toFixed(2)}%`, tone: signTone(chg) }
+    return { text: `${chg > 0 ? '+' : ''}${chg.toFixed(2)}%`, tone }
   }
   if (factor === 'basis') {
     const pct = v.basis_pct
     if (pct == null || !Number.isFinite(pct)) return null
-    return { text: `${pct.toFixed(3)}%`, tone: signTone(pct) }
+    return { text: `${pct.toFixed(3)}%`, tone }
   }
   if (factor === 'sentiment') {
     const fgi = v.fear_greed
     if (fgi == null || !Number.isFinite(fgi)) return null
-    return { text: fgi.toFixed(0), tone: fgi >= 70 ? 'bull' : fgi <= 30 ? 'bear' : 'neutral' }
+    return { text: fgi.toFixed(0), tone }
   }
   // 三期批1 +2(funding_predicted 同 funding 格式 · global 已并入 RATIO_FACTORS)
   if (factor === 'funding_predicted') {
     const latest = v.latest
     if (latest == null || !Number.isFinite(latest)) return null
-    return { text: `${(latest * 100).toFixed(4)}%`, tone: signTone(latest) }
+    return { text: `${(latest * 100).toFixed(4)}%`, tone }
   }
   if (factor === 'funding_zscore') {
     const z = v.z
     if (z == null || !Number.isFinite(z)) return null
-    // |z|>2 才按方向着色(极端才有语义)· 区间内中性
+    // 特例:|z|>2 才按方向着色(极端才有语义)· 区间内中性,不跟 finding 档
     return { text: z.toFixed(2), tone: Math.abs(z) > 2 ? signTone(z) : 'neutral' }
   }
   if (factor === 'oi_volume_ratio') {
     const ratio = v.ratio
     if (ratio == null || !Number.isFinite(ratio)) return null
-    return { text: ratio.toFixed(2), tone: 'neutral' } // 仓位沉淀度无多空方向语义
+    return { text: ratio.toFixed(2), tone }
   }
   return null
 }
@@ -145,13 +154,16 @@ export const TONE_HEX: Record<Tone, string> = {
 }
 
 /**
- * sparkline 语义配置:基准线(费率/基差 0 轴 · 比值 1.0 轴)+ 线色(末值 vs 语义)。
+ * sparkline 语义配置:基准线(费率/基差 0 轴 · 比值 1.0 轴)+ 线色。
+ * 线色与 factorHeadline 同源(刀D-B:跟 finding.state 档位收敛,无判定中性灰)。
  * 缺因子 → 默认帝王金、无基准线(与一期行为一致)。
  */
 export function sparklineSpec(
-  factor: string, snapshot: StructureSnapshot,
+  factor: string,
+  snapshot: StructureSnapshot,
+  finding?: Pick<FactorFinding, 'state'> | null,
 ): { baseline?: number; stroke: string } {
-  const head = factorHeadline(factor, snapshot)
+  const head = factorHeadline(factor, snapshot, finding)
   const stroke = head ? TONE_HEX[head.tone] : '#B8860B'
   if (RATIO_FACTORS.has(factor)) return { baseline: 1, stroke }
   if (factor === 'funding_rate' || factor === 'basis') return { baseline: 0, stroke }

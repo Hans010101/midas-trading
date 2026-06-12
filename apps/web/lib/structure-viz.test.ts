@@ -10,6 +10,7 @@ import {
   isDivergentFinding,
   ratioToLongShortPct,
   sparklineSpec,
+  stateTone,
 } from './structure-viz'
 
 describe('isDivergentFinding(背离/极端高亮判定)', () => {
@@ -75,23 +76,12 @@ function snap(over: Partial<StructureSnapshot> = {}): StructureSnapshot {
 }
 
 describe('factorHeadline(全部取 snapshot 结构化字段 · 不解析 LLM 文字)', () => {
-  it('比值类 2 位小数 + tone:>1 bull / <1 bear', () => {
-    expect(factorHeadline('account_long_short', snap())).toEqual({ text: '1.64', tone: 'bull' })
-    expect(
-      factorHeadline('account_long_short', snap({
-        account_long_short: factor({ latest: 0.82, avg_24h: 0.9 }),
-      })),
-    ).toEqual({ text: '0.82', tone: 'bear' })
-  })
-
-  it('费率 ×100 → 4 位小数百分比 + 符号 tone', () => {
-    expect(factorHeadline('funding_rate', snap())).toEqual({ text: '-0.0013%', tone: 'bear' })
-  })
-
-  it('OI 用 change_pct_24h 带符号 · 基差 3 位小数 · FGI 整数(≥70 bull / ≤30 bear)', () => {
-    expect(factorHeadline('open_interest', snap())).toEqual({ text: '+5.23%', tone: 'bull' })
-    expect(factorHeadline('basis', snap())).toEqual({ text: '-0.952%', tone: 'bear' })
-    expect(factorHeadline('sentiment', snap())).toEqual({ text: '75', tone: 'bull' })
+  it('数值格式:比值 2 位 · 费率 ×100 4 位% · OI 带符号 · 基差 3 位 · FGI 整数', () => {
+    expect(factorHeadline('account_long_short', snap())?.text).toBe('1.64')
+    expect(factorHeadline('funding_rate', snap())?.text).toBe('-0.0013%')
+    expect(factorHeadline('open_interest', snap())?.text).toBe('+5.23%')
+    expect(factorHeadline('basis', snap())?.text).toBe('-0.952%')
+    expect(factorHeadline('sentiment', snap())?.text).toBe('75')
   })
 
   it('缺因子 / 缺字段 → null(优雅降级)', () => {
@@ -101,37 +91,70 @@ describe('factorHeadline(全部取 snapshot 结构化字段 · 不解析 LLM 文
   })
 })
 
-describe('sparklineSpec(基准线 + 语义线色)', () => {
-  it('比值类 baseline=1 · 费率/基差 baseline=0 · 线色随 tone', () => {
-    expect(sparklineSpec('account_long_short', snap())).toEqual({ baseline: 1, stroke: '#DC143C' })
-    expect(sparklineSpec('funding_rate', snap())).toEqual({ baseline: 0, stroke: '#0F6E5F' })
-    expect(sparklineSpec('basis', snap())).toEqual({ baseline: 0, stroke: '#0F6E5F' })
+// ── 移动刀D-B · tone 档位收敛:跟 finding.state,不再「数值 vs 固定基准」────────
+describe('tone 档位收敛(刀D-B:有判定才有方向色 · 无判定中性灰)', () => {
+  it('stateTone 档位映射:含多 bull · 含空 bear · 其余 neutral', () => {
+    expect(stateTone('偏多')).toBe('bull')
+    expect(stateTone('极端偏多')).toBe('bull')
+    expect(stateTone('略偏空')).toBe('bear')
+    expect(stateTone('中性')).toBe('neutral')
+    expect(stateTone('与价格背离')).toBe('neutral')
+  })
+
+  it('★ 无 finding → 一律 neutral(1.64 比值 / 负费率 / FGI 75 都不再自行染色)', () => {
+    expect(factorHeadline('account_long_short', snap())?.tone).toBe('neutral')
+    expect(factorHeadline('funding_rate', snap())?.tone).toBe('neutral')
+    expect(factorHeadline('open_interest', snap())?.tone).toBe('neutral')
+    expect(factorHeadline('basis', snap())?.tone).toBe('neutral')
+    expect(factorHeadline('sentiment', snap())?.tone).toBe('neutral')
+    expect(factorHeadline('funding_predicted', snap())?.tone).toBe('neutral')
+    expect(factorHeadline('global_long_short', snap())?.tone).toBe('neutral')
+    expect(factorHeadline('oi_volume_ratio', snap())?.tone).toBe('neutral')
+  })
+
+  it('★ 有 finding → tone 跟档位:偏多 bull / 偏空 bear / 中性 neutral', () => {
+    expect(factorHeadline('account_long_short', snap(), { state: '偏多' })?.tone).toBe('bull')
+    expect(factorHeadline('funding_rate', snap(), { state: '偏空' })?.tone).toBe('bear')
+    // LLM 判中性 → 即使数值偏离基准(1.64)也灰(与状态胶囊同源不打架)
+    expect(factorHeadline('account_long_short', snap(), { state: '中性' })?.tone).toBe('neutral')
+  })
+
+  it('★ 特例 funding_zscore:|z|>2 数据极端才按符号着色,不跟 finding 档', () => {
+    expect(factorHeadline('funding_zscore', snap())).toEqual({ text: '2.41', tone: 'bull' })
+    const mild = snap({ funding_zscore: factor({ z: -1.2, mean_60d: 0, std_60d: 0.0002 }) })
+    expect(factorHeadline('funding_zscore', mild)?.tone).toBe('neutral')
+    // 区间内即使 LLM 给了偏空档,z 卡仍中性(极端才有语义)
+    expect(factorHeadline('funding_zscore', mild, { state: '偏空' })?.tone).toBe('neutral')
+  })
+})
+
+describe('sparklineSpec(基准线 + 线色与 headline 同源)', () => {
+  it('比值类 baseline=1 · 费率/基差 baseline=0 · 无 finding 线色中性灰', () => {
+    expect(sparklineSpec('account_long_short', snap())).toEqual({ baseline: 1, stroke: '#9A938A' })
+    expect(sparklineSpec('funding_rate', snap())).toEqual({ baseline: 0, stroke: '#9A938A' })
+    expect(sparklineSpec('basis', snap())).toEqual({ baseline: 0, stroke: '#9A938A' })
+  })
+
+  it('有 finding → 线色跟档位(偏多朱红 / 偏空墨绿)', () => {
+    expect(sparklineSpec('account_long_short', snap(), { state: '偏多' }).stroke).toBe('#DC143C')
+    expect(sparklineSpec('funding_rate', snap(), { state: '偏空' }).stroke).toBe('#0F6E5F')
   })
 
   it('OI 无基准线 · 缺因子默认帝王金无基准线(一期行为)', () => {
-    expect(sparklineSpec('open_interest', snap())).toEqual({ stroke: '#DC143C' })
+    expect(sparklineSpec('open_interest', snap())).toEqual({ stroke: '#9A938A' })
     expect(sparklineSpec('taker_flow', snap())).toEqual({ baseline: 1, stroke: '#B8860B' })
   })
 })
 
-describe('factorHeadline 三期批1 四分支', () => {
+describe('factorHeadline 三期批1 四分支(数值格式不随刀D-B 变)', () => {
   it('预测费率同 funding 百分比格式 · global 同比值格式(并入 RATIO_FACTORS)', () => {
-    expect(factorHeadline('funding_predicted', snap())).toEqual({ text: '0.0125%', tone: 'bull' })
-    expect(factorHeadline('global_long_short', snap())).toEqual({ text: '1.60', tone: 'bull' })
-    expect(sparklineSpec('global_long_short', snap())).toEqual({ baseline: 1, stroke: '#DC143C' })
+    expect(factorHeadline('funding_predicted', snap())?.text).toBe('0.0125%')
+    expect(factorHeadline('global_long_short', snap())?.text).toBe('1.60')
+    expect(sparklineSpec('global_long_short', snap()).baseline).toBe(1)
   })
 
-  it('z-score 两位小数 · |z|>2 才按方向着色,区间内中性', () => {
-    expect(factorHeadline('funding_zscore', snap())).toEqual({ text: '2.41', tone: 'bull' })
-    expect(
-      factorHeadline('funding_zscore', snap({
-        funding_zscore: factor({ z: -1.2, mean_60d: 0, std_60d: 0.0002 }),
-      })),
-    ).toEqual({ text: '-1.20', tone: 'neutral' })
-  })
-
-  it('OI 成交额比中性无方向 · 缺因子 null', () => {
-    expect(factorHeadline('oi_volume_ratio', snap())).toEqual({ text: '0.85', tone: 'neutral' })
+  it('OI 成交额比两位小数 · 缺因子 null', () => {
+    expect(factorHeadline('oi_volume_ratio', snap())?.text).toBe('0.85')
     expect(factorHeadline('oi_volume_ratio', snap({ oi_volume_ratio: null }))).toBeNull()
   })
 })

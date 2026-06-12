@@ -52,6 +52,54 @@ const FGI_FEAR = 30
 const Z_EXTREME = 2 // |z| 超此值视为费率极端(R10 · 三期批1)
 
 /** 从 7 因子快照推导背离/共振边(确定性规则 · 缺因子跳过)。 */
+// ── 图谱节点/标签几何(移动刀D · 纯函数 vitest 钉死"标签不重叠")────────────
+//
+// 刀2 的「上/下两行标签」布局在 11 节点(32.7° 角密度)下,9 对相邻同侧节点
+// 水平间距 23-56px < 标签宽 ~70px → 贴叠互盖(Hans 真机截图根因,数学验证)。
+// 改为径向外推 + 象限锚点(饼图经典标签法):标签沿圆周外圈展开,
+// 左侧 end / 右侧 start / 顶底 middle,互不重叠且 viewBox 不裁。
+
+export const GRAPH_GEOM = {
+  W: 460,
+  H: 310,
+  CX: 230,
+  CY: 155,
+  R: 100,
+  LABEL_R: 124, // R + 24 · 标签锚点半径
+} as const
+
+export interface GraphNodePos {
+  x: number
+  y: number
+  labelX: number
+  labelY: number
+  anchor: 'start' | 'middle' | 'end'
+}
+
+/** 第 i / n 个节点的角度(从正上方起顺时针均布)。 */
+export function nodeAngleRad(i: number, n: number): number {
+  return ((-90 + (360 / n) * i) * Math.PI) / 180
+}
+
+/**
+ * 节点 + 径向外推标签定位(锚点按象限:|cos|>0.25 判左右,否则顶/底 middle)。
+ * 阈值 0.25:11 节点(32.7° 网格)的底部两侧节点 cos=±0.2818,若判 middle
+ * 两标签水平间隙只差 0.1px(单测抓出)→ 必须落入左右档沿径向展开。
+ */
+export function layoutGraphNode(i: number, n: number): GraphNodePos {
+  const a = nodeAngleRad(i, n)
+  const cos = Math.cos(a)
+  const sin = Math.sin(a)
+  const anchor: GraphNodePos['anchor'] = cos > 0.25 ? 'start' : cos < -0.25 ? 'end' : 'middle'
+  return {
+    x: GRAPH_GEOM.CX + GRAPH_GEOM.R * cos,
+    y: GRAPH_GEOM.CY + GRAPH_GEOM.R * sin,
+    labelX: GRAPH_GEOM.CX + GRAPH_GEOM.LABEL_R * cos,
+    labelY: GRAPH_GEOM.CY + GRAPH_GEOM.LABEL_R * sin,
+    anchor,
+  }
+}
+
 export function deriveGraphEdges(snapshot: StructureSnapshot): GraphEdge[] {
   const a = snapshot.account_long_short?.value?.latest ?? null
   const p = snapshot.position_long_short?.value?.latest ?? null

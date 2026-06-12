@@ -108,7 +108,7 @@ export function ConditionalOrdersList({ symbol, market }: ConditionalOrdersListP
                         disabled={cancel.isPending}
                         aria-label="撤销条件单"
                         title="撤销(无资金冻结 · 撤错可重挂)"
-                        className="text-muted-foreground/60 transition-colors hover:text-midas-red disabled:opacity-40"
+                        className="min-h-10 min-w-10 text-muted-foreground/60 transition-colors hover:text-midas-red disabled:opacity-40 lg:min-h-0 lg:min-w-0"
                       >
                         ✕
                       </button>

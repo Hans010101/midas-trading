@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { StructureFactor, StructureSnapshot } from '@/lib/api/structure'
-import { deriveGraphEdges } from './structure-graph'
+import { GRAPH_GEOM, deriveGraphEdges, layoutGraphNode } from './structure-graph'
 
 function factor(value: Record<string, number>): StructureFactor {
   return { value, window: '24h', asof: '2026-06-12T00:00:00Z', text: null }
@@ -241,5 +241,51 @@ describe('R10 费率 z-score 极端 × 结构同向 共振(三期批1)', () => {
     expect(edgeKeys(snap({
       account_long_short: factor({ latest: 1.3, avg_24h: 1.2 }),
     })).filter((k) => k.startsWith('funding_zscore'))).toEqual([])
+  })
+})
+
+describe('图谱标签几何(移动刀D · 数学钉死不重叠/不出界)', () => {
+  // 标签包围盒:名称行最长 7 字 ×10px(宽 70)+ 数值行,两行高 ~22px;
+  // anchor start=向右展开 / end=向左 / middle=居中。
+  function labelBox(i: number, n: number) {
+    const p = layoutGraphNode(i, n)
+    const W = 70
+    const x0 = p.anchor === 'start' ? p.labelX : p.anchor === 'end' ? p.labelX - W : p.labelX - W / 2
+    return { x0, x1: x0 + W, y0: p.labelY - 11, y1: p.labelY + 11 }
+  }
+
+  it('★ 11 节点任意两标签包围盒互不相交(刀2 布局 9 对重叠 → 0 对)', () => {
+    const n = 11
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const a = labelBox(i, n)
+        const b = labelBox(j, n)
+        const overlap = a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1
+        expect(overlap, `节点 ${i} 与 ${j} 标签重叠`).toBe(false)
+      }
+    }
+  })
+
+  it('11 节点全部标签在 viewBox 内(不被裁切 = 不再"缺失")', () => {
+    for (let i = 0; i < 11; i++) {
+      const b = labelBox(i, 11)
+      expect(b.x0).toBeGreaterThanOrEqual(0)
+      expect(b.x1).toBeLessThanOrEqual(GRAPH_GEOM.W)
+      expect(b.y0).toBeGreaterThanOrEqual(0)
+      expect(b.y1).toBeLessThanOrEqual(GRAPH_GEOM.H)
+    }
+  })
+
+  it('7 节点(老因子数)同样无重叠 · 锚点象限正确', () => {
+    for (let i = 0; i < 7; i++) {
+      for (let j = i + 1; j < 7; j++) {
+        const a = labelBox(i, 7)
+        const b = labelBox(j, 7)
+        expect(a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1).toBe(false)
+      }
+    }
+    expect(layoutGraphNode(0, 11).anchor).toBe('middle') // 正上
+    const right = layoutGraphNode(3, 11) // ~8° 右侧
+    expect(right.anchor).toBe('start')
   })
 })
