@@ -12,18 +12,13 @@
 
 import { Sparkline, type SparkPoint } from '@/components/lab/sparkline'
 import type { FactorFinding } from '@/lib/api/structure'
-import { type FactorHeadline, type Tone, isDivergentFinding } from '@/lib/structure-viz'
+import { type FactorHeadline, type Tone, isDivergentFinding, stateTone } from '@/lib/structure-viz'
 import { cn } from '@/lib/utils'
 
 // 状态胶囊 / 数值 tone → 色(朱红多 / 墨绿空 / 中性灰 · 全站涨跌语义)
+// stateTone 移至 lib/structure-viz(刀D-B:headline/sparkline 档位收敛与胶囊同源)
 const TONE_TEXT: Record<Tone, string> = {
   bull: 'text-up', bear: 'text-down', neutral: 'text-muted-foreground',
-}
-
-function stateTone(state: string): Tone {
-  if (/多/.test(state)) return 'bull'
-  if (/空/.test(state)) return 'bear'
-  return 'neutral'
 }
 
 interface FactorCardProps {

@@ -12,7 +12,13 @@
  */
 
 import type { FactorFinding, StructureSnapshot } from '@/lib/api/structure'
-import { FACTOR_LABEL, FACTOR_ORDER, deriveGraphEdges } from '@/lib/structure-graph'
+import {
+  FACTOR_LABEL,
+  FACTOR_ORDER,
+  GRAPH_GEOM,
+  deriveGraphEdges,
+  layoutGraphNode,
+} from '@/lib/structure-graph'
 import { TONE_HEX, factorHeadline, isDivergentFinding } from '@/lib/structure-viz'
 
 // 设计 token(SVG 内用 hex):朱红/墨绿=全站涨跌 · 帝王金=警示 · ⛔ 缠论淡灰蓝不可挪用
@@ -21,17 +27,18 @@ const C_BEAR = '#0F6E5F'
 const C_GOLD = '#B8860B'
 const C_NEUTRAL = '#9A938A'
 
-const W = 360
-const H = 300
-const CX = W / 2
-const CY = H / 2
-const R = 100 // 节点圆周半径(刀2:节点加大 + 标签两行,半径略收防溢出)
+// 几何统一走 lib/structure-graph GRAPH_GEOM(移动刀D:标签径向外推,vitest 数学钉死不重叠)
+const { W, H, CX, CY } = GRAPH_GEOM
 
 interface NodeSpec {
   key: string
   label: string
   x: number
   y: number
+  /** 移动刀D:标签锚点(圆周外圈径向外推 + 象限 textAnchor,11 节点不贴叠) */
+  labelX: number
+  labelY: number
+  anchor: 'start' | 'middle' | 'end'
   color: string
   divergent: boolean
   stateText: string | null
@@ -60,15 +67,18 @@ export function StructureGraph({ snapshot, findings }: StructureGraphProps) {
 
   const byFactor = new Map(findings.map((f) => [f.factor, f]))
   const nodes: NodeSpec[] = present.map((key, i) => {
-    // 从正上方起顺时针均布(-90° 起)· 角度随节点数自适应
-    const angle = (-90 + (360 / present.length) * i) * (Math.PI / 180)
+    // 几何(节点 + 径向外推标签)走 lib 纯函数 · 角度随节点数自适应
+    const p = layoutGraphNode(i, present.length)
     const f = byFactor.get(key)
-    const head = factorHeadline(key, snapshot)
+    const head = factorHeadline(key, snapshot, f)
     return {
       key,
       label: FACTOR_LABEL[key] ?? key,
-      x: CX + R * Math.cos(angle),
-      y: CY + R * Math.sin(angle),
+      x: p.x,
+      y: p.y,
+      labelX: p.labelX,
+      labelY: p.labelY,
+      anchor: p.anchor,
       color: stanceColor(f?.state),
       divergent: f != null && isDivergentFinding(f),
       stateText: f?.state ?? null,
@@ -110,48 +120,44 @@ export function StructureGraph({ snapshot, findings }: StructureGraphProps) {
           )
         })}
 
-        {/* ── 节点(刀2:加大 + 第二行数值 · 灰中性节点也有信息量)──────── */}
-        {nodes.map((n) => {
-          const labelAbove = n.y <= CY
-          const labelY = labelAbove ? n.y - 24 : n.y + 32
-          const valueY = labelAbove ? n.y - 35 : n.y + 44
-          return (
-            <g key={n.key}>
-              {/* LLM 点名背离/极端 → 金环 */}
-              {n.divergent && (
-                <circle cx={n.x} cy={n.y} r={16} fill="none" stroke={C_GOLD} strokeWidth={2} />
-              )}
-              <circle cx={n.x} cy={n.y} r={12} fill={n.color} opacity={0.92}>
-                <title>
-                  {n.stateText ? `${n.label}:${n.stateText}(LLM 判定)` : `${n.label}:未点名`}
-                </title>
-              </circle>
+        {/* ── 节点 + 径向外推标签(移动刀D:11 节点沿圆周外圈展开 · 象限锚点不贴叠)── */}
+        {nodes.map((n) => (
+          <g key={n.key}>
+            {/* LLM 点名背离/极端 → 金环 */}
+            {n.divergent && (
+              <circle cx={n.x} cy={n.y} r={16} fill="none" stroke={C_GOLD} strokeWidth={2} />
+            )}
+            <circle cx={n.x} cy={n.y} r={12} fill={n.color} opacity={0.92}>
+              <title>
+                {n.stateText ? `${n.label}:${n.stateText}(LLM 判定)` : `${n.label}:未点名`}
+              </title>
+            </circle>
+            {/* 名称行 + 数值行,以径向锚点为中线上下错开(几何与单测同源 GRAPH_GEOM) */}
+            <text
+              x={n.labelX}
+              y={n.labelY - 2}
+              textAnchor={n.anchor}
+              fontSize={10}
+              fill="currentColor"
+              className="text-muted-foreground"
+            >
+              {n.label}
+            </text>
+            {n.valueText && (
               <text
-                x={n.x}
-                y={labelY}
-                textAnchor="middle"
-                fontSize={10}
-                fill="currentColor"
-                className="text-muted-foreground"
+                x={n.labelX}
+                y={n.labelY + 9}
+                textAnchor={n.anchor}
+                fontSize={9}
+                fontFamily="var(--font-mono, monospace)"
+                fontWeight={700}
+                fill={n.valueHex}
               >
-                {n.label}
+                {n.valueText}
               </text>
-              {n.valueText && (
-                <text
-                  x={n.x}
-                  y={valueY}
-                  textAnchor="middle"
-                  fontSize={9}
-                  fontFamily="var(--font-mono, monospace)"
-                  fontWeight={700}
-                  fill={n.valueHex}
-                >
-                  {n.valueText}
-                </text>
-              )}
-            </g>
-          )
-        })}
+            )}
+          </g>
+        ))}
 
         {/* ── 中心:symbol + 边统计 ───────────────────────────── */}
         <text x={CX} y={CY - 4} textAnchor="middle" fontSize={15} fontWeight={700} fill="currentColor">

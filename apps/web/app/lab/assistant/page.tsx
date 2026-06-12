@@ -30,7 +30,12 @@ import {
   useOpenInterest,
 } from '@/hooks/use-crypto'
 import { useStructureDiagnose } from '@/hooks/use-structure'
-import type { IntentKind, StructureDiagnosis, StructureSnapshot } from '@/lib/api/structure'
+import type {
+  FactorFinding,
+  IntentKind,
+  StructureDiagnosis,
+  StructureSnapshot,
+} from '@/lib/api/structure'
 import { FACTOR_LABEL } from '@/lib/structure-graph'
 import {
   CALIBER_NOTE,
@@ -155,11 +160,15 @@ const TONE_TEXT: Record<Tone, string> = {
   bull: 'text-up', bear: 'text-down', neutral: 'text-muted-foreground',
 }
 
-function BigNumberPanel({ snapshot }: { snapshot: StructureSnapshot }) {
+function BigNumberPanel({
+  snapshot, findings,
+}: { snapshot: StructureSnapshot; findings: FactorFinding[] }) {
+  // 刀D-B:数值色跟 finding.state 档位(与因子卡/图谱节点同源收敛)
+  const byFactor = new Map(findings.map((f) => [f.factor, f]))
   return (
     <div className="flex h-full flex-col justify-center gap-3 rounded-lg border border-paper bg-cream p-4 shadow-sm">
       {BIG_NUMBER_FACTORS.map(({ key, label }) => {
-        const head = factorHeadline(key, snapshot)
+        const head = factorHeadline(key, snapshot, byFactor.get(key))
         return (
           <div key={key}>
             <div className="text-xs text-muted-foreground">{label}</div>
@@ -246,7 +255,7 @@ function DiagnosisResult({ diag }: { diag: StructureDiagnosis }) {
             <StructureGraph snapshot={diag.snapshot} findings={diag.factor_findings} />
           </div>
           <div className="lg:col-span-2">
-            <BigNumberPanel snapshot={diag.snapshot} />
+            <BigNumberPanel snapshot={diag.snapshot} findings={diag.factor_findings} />
           </div>
         </div>
       </section>
@@ -258,7 +267,8 @@ function DiagnosisResult({ diag }: { diag: StructureDiagnosis }) {
           <h2 className="mb-3 font-serif text-lg font-bold">分因子状态</h2>
           <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">
             {factorCards.map((c) => {
-              const spec = sparklineSpec(c.key, diag.snapshot)
+              // 刀D-B:数值色/线色跟 finding.state 档位(无判定中性灰 · 与胶囊同源)
+              const spec = sparklineSpec(c.key, diag.snapshot, c.finding)
               return (
                 <FactorCard
                   key={c.key}
@@ -266,7 +276,7 @@ function DiagnosisResult({ diag }: { diag: StructureDiagnosis }) {
                   label={FACTOR_LABEL[c.key] ?? c.key}
                   window={c.window}
                   series={seriesFor(c.key)}
-                  headline={factorHeadline(c.key, diag.snapshot)}
+                  headline={factorHeadline(c.key, diag.snapshot, c.finding)}
                   sparkStroke={spec.stroke}
                   sparkBaseline={spec.baseline}
                 />
