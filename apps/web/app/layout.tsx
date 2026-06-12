@@ -43,9 +43,30 @@ const jetbrainsMono = localFont({
   ],
 })
 
+// 官网刀1:description 重写(加密打头 · 平等措辞 · 补港股 + 沙盘/回测关键词)
+// + openGraph / twitter 卡(分享到 TG / X 出预览图)
 export const metadata: Metadata = {
+  metadataBase: new URL('https://midastrade.asia'),
   title: '点金 Midas · AI 原生跨市场分析终端',
-  description: '面向 A 股 / 美股 / 加密的 AI 原生分析终端,仅虚拟资金交易',
+  description:
+    '覆盖加密、美股、A 股、港股四大市场的 AI 原生分析终端:11 因子结构沙盘、策略回测研究室、AI 决策卡,全程虚拟资金,不构成投资建议。',
+  openGraph: {
+    title: '点金 Midas · AI 原生跨市场分析终端',
+    description:
+      '加密 · 美股 · A 股 · 港股四市场一屏俯瞰,AI 沙盘看懂结构,研究室回测验证想法,虚拟资金零风险实战。',
+    url: '/',
+    siteName: '点金 Midas',
+    images: [{ url: '/marketing/global.png', width: 1528, height: 951 }],
+    locale: 'zh_CN',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: '点金 Midas · AI 原生跨市场分析终端',
+    description:
+      '加密 · 美股 · A 股 · 港股四市场 AI 分析终端,全程虚拟资金。',
+    images: ['/marketing/global.png'],
+  },
 }
 
 export default function RootLayout({

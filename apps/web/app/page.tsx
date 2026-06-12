@@ -1,18 +1,21 @@
 /**
- * 首页静态官网 · M1 第三波 任务 E。
+ * 首页静态官网 · 官网刀1 旅程式重排(看清市场 → 看懂结构 → 验证想法 → 虚拟实战)。
  *
- * 设计基调:Manus 参考版的皮 + 观潮的骨架 · 9 板块从上到下:
- *   1. TopNav · 顶部导航(logo + 印章 + 锚点 + 进入终端 CTA)
- *   2. Hero · 主视觉(水墨山形 + 朱红 K 线 + 帝王金脉络)
- *   3. Showcase · 产品实拍(工作台真实截图)
- *   4. Markets · 四市场(A 股 / 美股 / 港股 / 加密)
- *   5. Features · 4 张核心功能卡
- *   6. AiChan · AI + 缠论差异化展示(左右分栏 + 强制 disclaimer)
- *   7. Pricing · 定价占位(M1 限时免费 · 不写价格)
- *   8. CTA · 底部行动呼吁
- *   9. Footer · 完整页脚
+ * 11 板块从上到下:
+ *   1. TopNav        · 锚点:市场 / 沙盘 / 研究室 / 会员
+ *   2. Hero          · 主标保留「四市通览·点石成金」· 副标四市场(加密打头 · 平等叙事)
+ *   3. Showcase      · 看清市场(全球页实拍)
+ *   4. Markets       · 四市场卡:加密 → 美股 → A股 → 港股(★规格一致 · 不给加密加戏)
+ *   5. StructureSandbox · 看懂结构(AI 沙盘助手 · components/landing/)
+ *   6. ResearchLab   · 验证想法(策略研究室 · components/landing/)
+ *   7. VirtualPractice · 虚拟实战(决策卡→一键下单→条件单 · components/landing/)
+ *   8. ChanAndMore   · 缠论标注 + 其余能力收纳网格
+ *   9. Membership    · 会员体系「进阶解锁」接口区(components/landing/)
+ *  10. BottomCTA     · 底部行动呼吁
+ *  11. Footer        · 页脚(法务占位「即将上线」)
  *
- * 渲染策略:Static(SSG)· 不依赖运行时数据 · 加载快。
+ * 口径:加密排首位 ≠ 加密当主角 —— 四市场平等;⛔ 专业术语不进门面文案。
+ * 渲染策略:Static(SSG)· 不依赖运行时数据 · 新区块全部截图位/静态内容。
  */
 
 import {
@@ -20,19 +23,22 @@ import {
   BarChart3,
   BellRing,
   Bitcoin,
-  Bot,
   CandlestickChart,
+  FlaskConical,
   Globe,
   Landmark,
+  Network,
   ScrollText,
-  Sparkles,
   Target,
-  Trophy,
   Wallet,
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 
+import { Membership } from '@/components/landing/membership'
+import { ResearchLab } from '@/components/landing/research-lab'
+import { StructureSandbox } from '@/components/landing/structure-sandbox'
+import { VirtualPractice } from '@/components/landing/virtual-practice'
 import { cn } from '@/lib/utils'
 
 export const dynamic = 'force-static'
@@ -54,9 +60,11 @@ export default function HomePage() {
       <Hero />
       <Showcase />
       <Markets />
-      <Features />
-      <AiChan />
-      <Pricing />
+      <StructureSandbox />
+      <ResearchLab />
+      <VirtualPractice />
+      <ChanAndMore />
+      <Membership />
       <BottomCTA />
       <Footer />
     </main>
@@ -88,16 +96,16 @@ function TopNav() {
 
         <nav className="hidden items-center gap-8 text-sm md:flex">
           <a href="#showcase" className="text-muted-foreground transition-colors hover:text-foreground">
-            工作台
+            市场
           </a>
-          <a href="#features" className="text-muted-foreground transition-colors hover:text-foreground">
-            功能
+          <a href="#sandbox" className="text-muted-foreground transition-colors hover:text-foreground">
+            沙盘
           </a>
-          <a href="#ai-chan" className="text-muted-foreground transition-colors hover:text-foreground">
-            AI + 缠论
+          <a href="#lab" className="text-muted-foreground transition-colors hover:text-foreground">
+            研究室
           </a>
-          <a href="#pricing" className="text-muted-foreground transition-colors hover:text-foreground">
-            定价
+          <a href="#membership" className="text-muted-foreground transition-colors hover:text-foreground">
+            会员
           </a>
         </nav>
 
@@ -167,7 +175,7 @@ function Hero() {
             <span className="text-midas-red">点石成金</span>
           </h1>
           <p className="mt-5 max-w-xl text-base leading-relaxed text-foreground/80 lg:text-lg">
-            覆盖 A 股、美股、港股与加密货币四大市场,以虚拟资金零风险磨练交易直觉,让 AI 辅助你的每一次决策。
+            覆盖加密货币、美股、A 股与港股四大市场——AI 沙盘看懂多空结构,研究室回测验证想法,虚拟资金零风险磨练交易直觉。
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link
@@ -178,15 +186,15 @@ function Hero() {
               <ArrowRight className="h-4 w-4" />
             </Link>
             <a
-              href="#features"
+              href="#sandbox"
               className="inline-flex items-center gap-2 rounded-md border border-midas-red bg-background/80 px-6 py-3 text-base font-medium text-midas-red backdrop-blur transition-colors hover:bg-midas-red-glow/40"
             >
               查看功能
             </a>
           </div>
-          <div className="mt-8 flex items-center gap-5 text-xs text-foreground/70">
-            <Stat icon={<Trophy className="h-4 w-4 text-gold" />} label="缠论自动标注" />
-            <Stat icon={<Bot className="h-4 w-4 text-midas-red" />} label="AI 决策卡" />
+          <div className="mt-8 flex flex-wrap items-center gap-5 text-xs text-foreground/70">
+            <Stat icon={<Network className="h-4 w-4 text-gold" />} label="11 因子结构沙盘" />
+            <Stat icon={<FlaskConical className="h-4 w-4 text-midas-red" />} label="回测研究室" />
             <Stat icon={<Wallet className="h-4 w-4 text-gold" />} label="虚拟资金 0 风险" />
           </div>
         </div>
@@ -219,7 +227,7 @@ function Showcase() {
           打开即是专业终端
         </h2>
         <p className="mt-3 text-sm text-muted-foreground">
-          全球四市场一屏俯瞰 · A 股 · 美股 · 港股 · 加密 · 实时指数纵览
+          全球四市场一屏俯瞰 · 加密 · 美股 · A 股 · 港股 · 实时指数纵览
         </p>
         <div className="relative mt-8">
           <div className="overflow-hidden rounded-xl border border-paper bg-background shadow-2xl">
@@ -256,10 +264,10 @@ function Markets() {
       </div>
       <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
         <MarketCard
-          icon={<BarChart3 className="h-6 w-6 text-midas-red" />}
-          name="A 股"
-          desc="沪深全市场 · 复权口径透明"
-          examples="600519 · 000001 · 300750"
+          icon={<Bitcoin className="h-6 w-6 text-midas-red" />}
+          name="加密"
+          desc="Binance 行情源 · 主流币种全覆盖"
+          examples="BTC/USDT · ETH/USDT · SOL/USDT"
         />
         <MarketCard
           icon={<Globe className="h-6 w-6 text-midas-red" />}
@@ -268,10 +276,10 @@ function Markets() {
           examples="NVDA · AAPL · TSLA"
         />
         <MarketCard
-          icon={<Bitcoin className="h-6 w-6 text-midas-red" />}
-          name="加密"
-          desc="24/7 不停盘 · Binance 永续合约"
-          examples="BTC/USDT · ETH/USDT · SOL/USDT"
+          icon={<BarChart3 className="h-6 w-6 text-midas-red" />}
+          name="A 股"
+          desc="沪深全市场 · 复权口径透明"
+          examples="600519 · 000001 · 300750"
         />
         <MarketCard
           icon={<Landmark className="h-6 w-6 text-midas-red" />}
@@ -309,101 +317,15 @@ function MarketCard({ icon, name, desc, examples }: MarketCardProps) {
 
 
 // ============================================================
-// 5 · Features(核心功能)
+// 8 · ChanAndMore(缠论标注 + 其余能力收纳)
 // ============================================================
 
 
-function Features() {
-  return (
-    <section
-      id="features"
-      className="border-y border-paper/60 bg-surface-card py-16"
-    >
-      <div className="mx-auto max-w-6xl px-6">
-        <div className="text-center">
-          <h2 className="font-serif text-3xl font-bold lg:text-4xl">核心功能</h2>
-          <p className="mt-3 text-sm text-muted-foreground">
-            为认真对待投资的你而设计
-          </p>
-        </div>
-        <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-5">
-          <FeatureCard
-            icon={<CandlestickChart className="h-6 w-6 text-midas-red" />}
-            title="K 线工作台"
-            desc="MA / MACD / RSI / BOLL 指标 + 多周期(1m → 1w) + 四市场标的搜索"
-          />
-          <FeatureCard
-            icon={<Wallet className="h-6 w-6 text-midas-red" />}
-            title="虚拟交易"
-            desc="四市场独立钱包 · CNY / USD / HKD / USDT 原币结算 · 永远不接真实交易"
-          />
-          <FeatureCard
-            icon={<BellRing className="h-6 w-6 text-midas-red" />}
-            title="智能推送"
-            desc="飞书 / Telegram / 邮件 · 价格异动 + 成交提醒 + 自定义阈值"
-          />
-          <FeatureCard
-            icon={<Sparkles className="h-6 w-6 text-midas-red" />}
-            title="AI 决策卡"
-            desc="LangGraph + DeepSeek 多维研判 · 自动生成结构化分析与关键位"
-          />
-          <FeatureCard
-            icon={<Target className="h-6 w-6 text-midas-red" />}
-            title="策略信号"
-            desc="多策略形态扫描 · 关键价位与信号成色 · 四市场主图实时标注 · 仅供参考,不构成投资建议"
-          />
-        </div>
-      </div>
-    </section>
-  )
-}
-
-
-interface FeatureCardProps {
-  icon: React.ReactNode
-  title: string
-  desc: string
-}
-
-function FeatureCard({ icon, title, desc }: FeatureCardProps) {
-  return (
-    <div className="rounded-xl border border-paper bg-background p-6 transition-all hover:border-midas-red hover:shadow-md">
-      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-midas-red-glow/40">
-        {icon}
-      </div>
-      <h3 className="font-serif text-lg font-bold">{title}</h3>
-      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{desc}</p>
-    </div>
-  )
-}
-
-
-// ============================================================
-// 6 · AiChan(AI + 缠论差异化)· 重点板块
-// ============================================================
-
-
-function AiChan() {
+function ChanAndMore() {
   return (
     <section id="ai-chan" className="mx-auto max-w-6xl px-6 py-20">
-      <div className="text-center">
-        <p className="mb-2 text-xs uppercase tracking-[0.3em] text-gold">
-          差异化能力
-        </p>
-        <h2 className="font-serif text-3xl font-bold lg:text-4xl">
-          不只是看图,更懂走势
-        </h2>
-        <p className="mt-3 text-sm text-muted-foreground">
-          czsc 缠论自动标注 + DeepSeek AI 多维研判 · 数据 + 模型双驱动
-        </p>
-      </div>
-
-      {/*
-        A2 修:左右两张图严格等高对齐 ·
-        每个 figure 用固定 aspect-[4/3] + object-cover · 不同源比例统一显示尺寸。
-      */}
-      <div className="mt-10 grid items-stretch gap-6 lg:grid-cols-2">
-        {/* 左侧 · 缠论自动标注 */}
+      <div className="grid items-start gap-10 lg:grid-cols-2">
+        {/* 左 · 缠论自动标注(chan.png 留用 · 自 AiChan 区下沉) */}
         <div className="flex flex-col">
           <div className="mb-3 flex items-center gap-2">
             <ScrollText className="h-5 w-5 text-gold" />
@@ -423,99 +345,56 @@ function AiChan() {
           </div>
         </div>
 
-        {/*
-          右侧 · AI 决策卡 · v3 调整:拆成 2 列子图 ·
-          上半(评分/标签/置信度)+ 下半(关键位/分析/买卖点)各自独立 ·
-          各自完整清晰 · 不再硬塞长截图。
-        */}
+        {/* 右 · 其余能力收纳网格(原 Features 区瘦身:决策卡/沙盘/回测已各有独立区) */}
         <div className="flex flex-col">
           <div className="mb-3 flex items-center gap-2">
-            <Bot className="h-5 w-5 text-midas-red" />
-            <h3 className="font-serif text-xl font-bold">AI 决策卡</h3>
+            <Target className="h-5 w-5 text-midas-red" />
+            <h3 className="font-serif text-xl font-bold">还有这些,开箱即用</h3>
           </div>
-          <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
-            LangGraph workflow 把 K 线 + 缠论结构 + 4 项指标喂给 DeepSeek · 输出结构化评分(强多/弱多/中性/弱空/强空)+ 关键支撑阻力位 + 中文解读,秒级生成、随市更新。看好信号可一键模拟下单,全程虚拟、零风险验证你的判断。
-          </p>
-          <div className="grid flex-1 grid-cols-2 gap-3">
-            {/* 上半 · 综合评分 + 技术面研判 + 一键下单 */}
-            <figure className="flex flex-col">
-              <div className="relative aspect-[5/6] overflow-hidden rounded-xl border border-paper bg-background shadow-lg">
-                <Image
-                  src="/marketing/ai-card-top.png"
-                  alt="AI 决策卡:综合评分 + 技术面研判 + 一键下单(开多)"
-                  fill
-                  className="object-contain"
-                  sizes="(max-width: 1024px) 50vw, 25vw"
-                />
-              </div>
-              <figcaption className="mt-2 text-center text-[11px] text-muted-foreground/70">
-                评分 · 研判 · 一键下单
-              </figcaption>
-            </figure>
-
-            {/* 下半 · 一键模拟下单面板(全程虚拟)*/}
-            <figure className="flex flex-col">
-              <div className="relative aspect-[5/6] overflow-hidden rounded-xl border border-paper bg-background shadow-lg">
-                <Image
-                  src="/marketing/ai-card-bottom.png"
-                  alt="AI 一键模拟下单面板:杠杆 + 保证金 + 确认(全程虚拟)"
-                  fill
-                  className="object-contain"
-                  sizes="(max-width: 1024px) 50vw, 25vw"
-                />
-              </div>
-              <figcaption className="mt-2 text-center text-[11px] text-muted-foreground/70">
-                虚拟下单 · 杠杆 · 一键确认
-              </figcaption>
-            </figure>
+          <div className="grid flex-1 gap-4 sm:grid-cols-2">
+            <FeatureCard
+              icon={<CandlestickChart className="h-6 w-6 text-midas-red" />}
+              title="K 线工作台"
+              desc="MA / MACD / RSI / BOLL 指标 + 多周期(1m → 1w)+ 四市场标的搜索"
+            />
+            <FeatureCard
+              icon={<Wallet className="h-6 w-6 text-midas-red" />}
+              title="虚拟交易"
+              desc="四市场独立钱包 · USDT / USD / CNY / HKD 原币结算 · 永远不接真实交易"
+            />
+            <FeatureCard
+              icon={<BellRing className="h-6 w-6 text-midas-red" />}
+              title="智能推送"
+              desc="飞书 / Telegram / 邮件 · 价格异动 + 成交提醒 + 自定义阈值"
+            />
+            <FeatureCard
+              icon={<Target className="h-6 w-6 text-midas-red" />}
+              title="策略信号"
+              desc="多策略形态扫描 · 关键价位与信号成色 · 四市场主图实时标注 · 仅供参考,不构成投资建议"
+            />
           </div>
         </div>
-      </div>
-
-      {/* 强制 disclaimer · 跟 0011 / 0012 ADR 红线一致 */}
-      <div className="mx-auto mt-8 max-w-3xl rounded-lg border border-paper bg-surface-card px-5 py-3 text-center">
-        <p className="font-mono text-xs text-muted-foreground/80">
-          ⚠ 分析仅供参考,不构成投资建议。所有交易均为虚拟资金模拟。
-        </p>
       </div>
     </section>
   )
 }
 
 
-// ============================================================
-// 7 · Pricing(M1 占位 · 不写死价格)
-// ============================================================
+interface FeatureCardProps {
+  icon: React.ReactNode
+  title: string
+  desc: string
+}
 
-
-function Pricing() {
+function FeatureCard({ icon, title, desc }: FeatureCardProps) {
   return (
-    <section
-      id="pricing"
-      className="border-y border-paper/60 bg-surface-card py-16"
-    >
-      <div className="mx-auto max-w-3xl px-6 text-center">
-        <h2 className="font-serif text-3xl font-bold lg:text-4xl">定价</h2>
-        <div className="mt-8 rounded-2xl border-2 border-gold/40 bg-background p-8 shadow-md">
-          <div className="mb-3 inline-block rounded-full border border-gold bg-gold/10 px-4 py-1.5 font-mono text-xs text-gold">
-            限时免费 · 内测中
-          </div>
-          <h3 className="mt-2 font-serif text-2xl font-bold">
-            点金 Midas 正在内测
-          </h3>
-          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-            当前所有功能免费开放。会员方案规划中,敬请期待。
-          </p>
-          <Link
-            href="/global"
-            className="mt-6 inline-flex items-center gap-2 rounded-md bg-midas-red px-6 py-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-midas-red-deep"
-          >
-            立即体验
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
+    <div className="rounded-xl border border-paper bg-surface-card p-5 transition-all hover:border-midas-red hover:shadow-md">
+      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-midas-red-glow/40">
+        {icon}
       </div>
-    </section>
+      <h4 className="font-serif text-base font-bold">{title}</h4>
+      <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{desc}</p>
+    </div>
   )
 }
 
@@ -578,21 +457,23 @@ function Footer() {
             title="产品"
             links={[
               { label: '市场', href: '/global' },
-              { label: '功能', href: '#features' },
-              { label: 'AI + 缠论', href: '#ai-chan' },
-              { label: '定价', href: '#pricing' },
+              { label: 'AI 沙盘助手', href: '#sandbox' },
+              { label: '策略研究室', href: '#lab' },
+              { label: '会员', href: '#membership' },
             ]}
           />
-          <FooterCol
-            title="法务"
-            links={[
-              // M2 填实际内容 · 先放占位锚点
-              { label: '服务条款', href: '#' },
-              { label: '隐私政策', href: '#' },
-              { label: '风险提示', href: '#' },
-              { label: '联系我们', href: '#' },
-            ]}
-          />
+          {/* 法务页未建(M2)· 官网刀1:死链改不可点占位,明示「即将上线」 */}
+          <div>
+            <h4 className="mb-3 font-serif text-sm font-bold text-foreground">法务</h4>
+            <ul className="space-y-2 text-sm">
+              {['服务条款', '隐私政策', '风险提示', '联系我们'].map((label) => (
+                <li key={label} className="flex items-center gap-1.5 text-muted-foreground/50">
+                  {label}
+                  <span className="rounded bg-surface-subtle px-1 py-0.5 text-[10px]">即将上线</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
         <div className="mt-8 flex flex-col items-center justify-between gap-2 border-t border-paper pt-5 text-xs text-muted-foreground md:flex-row">
           <p>© 2026 点金 Midas. All rights reserved.</p>
