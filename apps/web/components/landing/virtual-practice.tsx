@@ -8,8 +8,6 @@
 import { Bot } from 'lucide-react'
 import Image from 'next/image'
 
-import { ScreenshotPlaceholder } from '@/components/landing/screenshot-placeholder'
-
 export function VirtualPractice() {
   return (
     <section id="practice" className="border-y border-paper/60 bg-surface-card py-20">
@@ -60,12 +58,17 @@ export function VirtualPractice() {
             </figcaption>
           </figure>
 
-          {/* ③ 条件单(截图占位 · 刀2 换真图:挂止盈止损弹层) */}
+          {/* ③ 条件单(止盈止损弹层实拍 400×401 方图 · 同框 5/6 + contain 与两卡对齐) */}
           <figure className="flex flex-col">
-            <ScreenshotPlaceholder
-              aspect="aspect-[5/6]"
-              label="条件单 · 止盈止损自动执行(虚拟)"
-            />
+            <div className="relative aspect-[5/6] overflow-hidden rounded-xl border border-paper bg-background shadow-lg">
+              <Image
+                src="/marketing/conditional.png"
+                alt="止盈止损条件单设置"
+                fill
+                className="object-contain"
+                sizes="(max-width: 768px) 100vw, 33vw"
+              />
+            </div>
             <figcaption className="mt-2 text-center text-xs text-muted-foreground/70">
               ③ 条件单守仓 · 触发自动执行
             </figcaption>
