@@ -55,29 +55,27 @@ export function TopNav() {
                   {initial}
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
+              {/* 右上角弹出 → 全菜单右对齐 + 收窄(Hans 真机反馈 · 刀2 补充) */}
+              <DropdownMenuContent align="end" className="w-40">
                 <DropdownMenuLabel
-                  className="truncate text-xs font-normal text-muted-foreground"
+                  className="truncate text-right text-xs font-normal text-muted-foreground"
                   title={email}
                 >
                   {email}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {/* 用户中心四模块直达(重组刀1)+ 自选入口 */}
-                <DropdownMenuItem asChild>
+                {/* 用户中心四模块直达(重组刀1)· 自选已删(顶部导航已有入口,菜单内重复) */}
+                <DropdownMenuItem asChild className="justify-end">
                   <Link href="/account">资产总览</Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild>
+                <DropdownMenuItem asChild className="justify-end">
                   <Link href="/account/positions">持仓与订单</Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild>
+                <DropdownMenuItem asChild className="justify-end">
                   <Link href="/account/alerts">通知与提醒</Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild>
+                <DropdownMenuItem asChild className="justify-end">
                   <Link href="/account/profile">账号与偏好</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/watchlist">自选</Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -85,7 +83,7 @@ export function TopNav() {
                     // signOut 触发 NextAuth 清 cookie + auth.ts events.signOut(回调后端 revoke DB session)
                     void signOut({ callbackUrl: '/' })
                   }}
-                  className="text-midas-red focus:text-midas-red"
+                  className="justify-end text-midas-red focus:text-midas-red"
                 >
                   退出登录
                 </DropdownMenuItem>
