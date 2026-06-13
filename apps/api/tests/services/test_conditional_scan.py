@@ -313,3 +313,32 @@ async def test_crypto_limit_defensive_expire(
     assert row.status == ConditionalStatus.EXPIRED
     assert row.note is not None
     assert "暂不支持" in row.note
+
+
+@pytest.mark.asyncio
+async def test_perp_limit_with_open_fields_still_defensive_expire(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """★ 二期刀1 半成品安全:perp 限价单【带杠杆/保证金/模式】(刀1 端点新放开的产物)
+    被触发器扫到,仍走现有 EXPIRED 防御 · 不调任何成交入口(触发→开仓 route_open_perp 留刀2)。
+    本刀【不碰触发器】,这条钉住"挂得进但触不发"的安全边界。
+    """
+    user = await make_user(db_session)
+    row = ConditionalOrder(
+        user_id=user.id, symbol="BTCUSDT", market="crypto",
+        order_kind=ConditionalKind.LIMIT, side=OrderSide.BUY,
+        position_side=PositionSide.LONG, trigger_price=Decimal("100000"),
+        quantity=None, leverage=10, margin=Decimal("500"), margin_mode="isolated",
+        status=ConditionalStatus.ACTIVE,
+    )
+    db_session.add(row)
+    await db_session.flush()
+    monkeypatch.setattr(trig_mod, "place_market_order", _never_factory())
+    monkeypatch.setattr(trig_mod, "route_close_perp", _never_factory())
+    stats, perp_ids = await process_active_conditionals(db_session, **_injects())
+    assert stats["expired"] == 1
+    assert perp_ids == []  # 零成交
+    await db_session.refresh(row)
+    assert row.status == ConditionalStatus.EXPIRED
+    assert row.note is not None
+    assert "暂不支持" in row.note

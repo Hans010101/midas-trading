@@ -12,6 +12,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.conditional_order import ConditionalKind, ConditionalStatus
+from app.models.perp import MarginMode
 from app.models.virtual import OrderSide, PositionSide
 from app.schemas.market import Market
 
@@ -35,6 +36,14 @@ class ConditionalOrderCreate(BaseModel):
     trigger_price: Decimal = Field(gt=0)
     quantity: Decimal | None = Field(default=None, gt=0)
 
+    # ── 二期刀1:perp 限价开仓参数(仅 market=crypto & kind=LIMIT 用 · 端点强制必填)──
+    # spot LIMIT / SL/TP 不传(留 None);range 在此先卡,"必填" 在端点按市场+种类判。
+    leverage: int | None = Field(default=None, ge=1, le=125)
+    margin: Decimal | None = Field(default=None, gt=0)
+    margin_mode: MarginMode | None = None
+    # 限价单挂单过期(Hans:默认 None=长期有效 · 过期扫描逻辑留后续刀)
+    expires_at: datetime | None = None
+
 
 class ConditionalOrderResponse(BaseModel):
     """单张条件单(列表项与详情同型 · 字段轻,无需精简版)。"""
@@ -49,6 +58,11 @@ class ConditionalOrderResponse(BaseModel):
     position_side: PositionSide
     trigger_price: Decimal
     quantity: Decimal | None
+    # 二期刀1:perp 限价字段回显(spot/SLTP 为 None)
+    leverage: int | None
+    margin: Decimal | None
+    margin_mode: MarginMode | None
+    expires_at: datetime | None
     status: ConditionalStatus
     triggered_order_id: int | None
     note: str | None

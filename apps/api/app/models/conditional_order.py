@@ -77,6 +77,15 @@ class ConditionalOrder(Base):
     # LIMIT 必填(应用层校验)· SL/TP NULL = 平全仓
     quantity: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))
 
+    # ── 二期刀1:perp 限价开仓字段(仅 market=crypto & kind=LIMIT 用 · 其余 NULL)──
+    # ⛔ 刀1 只落字段 + 端点放开挂单;触发→开仓(走 route_open_perp)留刀2,
+    #    本刀触发器对 perp LIMIT 仍走现有 EXPIRED 防御(半成品不真触发)。
+    leverage: Mapped[int | None] = mapped_column(Integer)  # 1..125(perp 口径)
+    margin: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))  # >0
+    margin_mode: Mapped[str | None] = mapped_column(String(16))  # cross | isolated
+    # 限价单挂单过期(Hans:默认 NULL=长期有效 · 过期扫描逻辑留后续)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     status: Mapped[ConditionalStatus] = mapped_column(
         Enum(ConditionalStatus, name="conditional_status"), nullable=False,
         # 照 VirtualOrder 范式:Enum 按 .name 存 → server_default 用成员名
