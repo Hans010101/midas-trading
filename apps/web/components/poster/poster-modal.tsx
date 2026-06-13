@@ -144,37 +144,52 @@ export function PosterModal({ open, onClose, inviter, code, qrUrl }: PosterModal
         </div>
       </div>
 
-      {/* 底部控制条(刀C 交互调整:去风格词 tab · 换个样式循环 + 保存/复制) */}
+      {/* 底部控制条:三按钮并排一行(Hans 反馈 · 保存=主按钮红底突出)。
+          ★ 375 放下三个:图标 + 窄屏短标签(保存/换样式/复制),sm 起显全
+          (保存到相册/换个样式/复制邀请链接);各 flex-1 等分 + px 收紧 + nowrap。 */}
       <div className="shrink-0 bg-background px-4 pb-[max(env(safe-area-inset-bottom),16px)] pt-3" onClick={(e) => e.stopPropagation()}>
-        {/* 换个样式:全宽 · 循环切下一版 · 极轻 N/6 进度(克制 · 让用户知总数) */}
-        <button
-          type="button"
-          onClick={cycleNext}
-          className="mb-2.5 flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-paper text-sm font-medium text-foreground transition-colors hover:border-midas-red hover:text-midas-red"
-        >
-          <Shuffle className="h-4 w-4" />
-          换个样式
-          <span className="font-mono text-xs text-muted-foreground/60">
-            {cycleIdx + 1}/{CYCLE.length}
-          </span>
-        </button>
-        <div className="flex gap-3">
+        <div className="flex gap-2">
+          {/* 保存 = 主按钮(红底 · 默认最突出) */}
           <button
             type="button"
             onClick={onSave}
             disabled={busy}
-            className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-md bg-midas-red text-sm font-medium text-white transition-colors hover:bg-midas-red/90 disabled:opacity-60"
+            className="flex min-h-11 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-midas-red px-2 text-sm font-medium text-white transition-colors hover:bg-midas-red/90 disabled:opacity-60"
           >
-            <Download className="h-4 w-4" />
-            {busy ? '生成中…' : '保存到相册'}
+            <Download className="h-4 w-4 shrink-0" />
+            {busy ? '生成中…' : (
+              <>
+                <span className="sm:hidden">保存</span>
+                <span className="hidden sm:inline">保存到相册</span>
+              </>
+            )}
           </button>
+          {/* 换个样式 = 次级(循环 · N/6 克制) */}
+          <button
+            type="button"
+            onClick={cycleNext}
+            className="flex min-h-11 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-paper px-2 text-sm font-medium text-foreground transition-colors hover:border-midas-red hover:text-midas-red"
+          >
+            <Shuffle className="h-4 w-4 shrink-0" />
+            <span className="sm:hidden">换样式</span>
+            <span className="hidden sm:inline">换个样式</span>
+            <span className="font-mono text-xs text-muted-foreground/60">
+              {cycleIdx + 1}/{CYCLE.length}
+            </span>
+          </button>
+          {/* 复制 = 次级 */}
           <button
             type="button"
             onClick={onCopyLink}
-            className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-md border border-paper text-sm text-foreground transition-colors hover:border-midas-red"
+            className="flex min-h-11 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-paper px-2 text-sm text-foreground transition-colors hover:border-midas-red"
           >
-            {copied ? <Check className="h-4 w-4 text-midas-red" /> : <Copy className="h-4 w-4" />}
-            {copied ? '已复制' : '复制邀请链接'}
+            {copied ? <Check className="h-4 w-4 shrink-0 text-midas-red" /> : <Copy className="h-4 w-4 shrink-0" />}
+            {copied ? '已复制' : (
+              <>
+                <span className="sm:hidden">复制</span>
+                <span className="hidden sm:inline">复制邀请链接</span>
+              </>
+            )}
           </button>
         </div>
       </div>
