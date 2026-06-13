@@ -21,6 +21,10 @@ import type { SparkPoint } from '@/components/lab/sparkline'
 import { SymbolSuggest } from '@/components/lab/symbol-suggest'
 import { TopNav } from '@/components/layout/top-nav'
 import { Button } from '@/components/ui/button'
+import { QuotaHint } from '@/components/quota/quota-hint'
+import { StructureApiError } from '@/lib/api/structure'
+import { useInvalidateQuota, useQuota } from '@/hooks/use-quota'
+import { isExhausted, parseQuotaDetail, quotaErrorMessage, quotaItemFor } from '@/lib/quota-view'
 import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/ui/state'
 import {
@@ -54,6 +58,15 @@ const INTENT_LABEL: Record<IntentKind, string> = {
   overall: '整体结构',
 }
 
+// 429(额度耗尽)→ 结构化 detail 友好文案;其余错误原样(会员刀2)
+function diagnoseErrorText(err: Error): string {
+  if (err instanceof StructureApiError && err.status === 429) {
+    const d = parseQuotaDetail(err.rawDetail)
+    if (d) return quotaErrorMessage(d)
+  }
+  return err.message
+}
+
 // 快捷问题(点击即提问 · 用当前 symbol)
 const QUICK_QUESTIONS = [
   '多头是不是太拥挤',
@@ -66,6 +79,11 @@ const QUICK_QUESTIONS = [
 export default function LabAssistantPage() {
   const { status: authStatus } = useSession()
   const diagnose = useStructureDiagnose()
+  // 会员刀2:额度展示(剩 N 次 / 耗尽置灰)· 诊断结果返回后刷新计数
+  const quota = useQuota()
+  const invalidateQuota = useInvalidateQuota()
+  const diagnoseQuota = quotaItemFor(quota.data, 'diagnose')
+  const exhausted = diagnoseQuota !== null && isExhausted(diagnoseQuota)
 
   const [symbol, setSymbol] = useState('BTCUSDT')
   const [question, setQuestion] = useState('')
@@ -74,7 +92,11 @@ export default function LabAssistantPage() {
     const trimmed = q.trim()
     if (!trimmed || symbol.trim() === '') return
     setQuestion(trimmed)
-    diagnose.mutate({ symbol: symbol.trim().toUpperCase(), question: trimmed })
+    diagnose.mutate(
+      { symbol: symbol.trim().toUpperCase(), question: trimmed },
+      // 成败都刷额度(成功=缓存 miss 可能扣 1;429=used 已达上限,同步显示)
+      { onSettled: invalidateQuota },
+    )
   }
 
   return (
@@ -105,10 +127,17 @@ export default function LabAssistantPage() {
                 />
                 <Button
                   onClick={() => ask(question)}
-                  disabled={diagnose.isPending || question.trim() === '' || symbol.trim() === ''}
+                  disabled={
+                    diagnose.isPending || exhausted
+                    || question.trim() === '' || symbol.trim() === ''
+                  }
                 >
                   {diagnose.isPending ? '分析中…' : '结构诊断'}
                 </Button>
+              </div>
+              {/* 额度提示(剩 N 次 / 耗尽引导官网会员区)· 如实展示 */}
+              <div className="mt-2">
+                <QuotaHint item={diagnoseQuota} />
               </div>
               {/* 快捷问题 */}
               <div className="mt-3 flex flex-wrap gap-2">
@@ -117,7 +146,7 @@ export default function LabAssistantPage() {
                     key={q}
                     type="button"
                     onClick={() => ask(q)}
-                    disabled={diagnose.isPending}
+                    disabled={diagnose.isPending || exhausted}
                     className="rounded-full border border-paper px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-midas-red hover:text-midas-red disabled:opacity-50"
                   >
                     {q}
@@ -125,7 +154,9 @@ export default function LabAssistantPage() {
                 ))}
               </div>
               {diagnose.isError && (
-                <p className="mt-3 text-sm text-midas-red">{diagnose.error.message}</p>
+                <p className="mt-3 text-sm text-midas-red">
+                  {diagnoseErrorText(diagnose.error)}
+                </p>
               )}
               <p className="mt-3 text-xs text-faint">
                 覆盖 USDT 永续 · 7 因子(多空比 / taker / OI / 资金费率 / 基差 / 情绪)·

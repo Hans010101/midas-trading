@@ -15,6 +15,10 @@ import { useState, type ReactNode } from 'react'
 import { LabNav } from '@/components/lab/lab-nav'
 import { TopNav } from '@/components/layout/top-nav'
 import { Button } from '@/components/ui/button'
+import { QuotaHint } from '@/components/quota/quota-hint'
+import { useInvalidateQuota, useQuota } from '@/hooks/use-quota'
+import { BacktestApiError } from '@/lib/api/backtest'
+import { isExhausted, parseQuotaDetail, quotaErrorMessage, quotaItemFor } from '@/lib/quota-view'
 import { Input } from '@/components/ui/input'
 import { EmptyState, LoadingNote } from '@/components/ui/state'
 import { useBacktestList, useCreateBacktest } from '@/hooks/use-backtest'
@@ -42,6 +46,11 @@ export default function LabPage() {
   const { status: authStatus } = useSession()
   const list = useBacktestList()
   const create = useCreateBacktest()
+  // 会员刀2:额度展示(剩 M 次 / 耗尽置灰)· 发起后刷新计数
+  const quota = useQuota()
+  const invalidateQuota = useInvalidateQuota()
+  const backtestQuota = quotaItemFor(quota.data, 'backtest')
+  const exhausted = backtestQuota !== null && isExhausted(backtestQuota)
 
   const [symbol, setSymbol] = useState('BTCUSDT')
   const [start, setStart] = useState('2025-01-17')
@@ -68,8 +77,20 @@ export default function LabPage() {
         sma_fast: smaFast,
         sma_slow: smaSlow,
       },
-      { onSuccess: (data) => router.push(`/lab/report?id=${data.id}`) },
+      {
+        onSuccess: (data) => router.push(`/lab/report?id=${data.id}`),
+        onSettled: invalidateQuota,
+      },
     )
+  }
+
+  // 429(额度耗尽)→ 结构化 detail 友好文案;其余错误原样(会员刀2)
+  function createErrorText(err: Error): string {
+    if (err instanceof BacktestApiError && err.status === 429) {
+      const d = parseQuotaDetail(err.rawDetail)
+      if (d) return quotaErrorMessage(d)
+    }
+    return err.message
   }
 
   return (
@@ -151,12 +172,17 @@ export default function LabPage() {
                   </Field>
                 </div>
               </div>
-              <div className="mt-4 flex items-center gap-3">
-                <Button onClick={submit} disabled={create.isPending || symbol.trim() === ''}>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Button
+                  onClick={submit}
+                  disabled={create.isPending || exhausted || symbol.trim() === ''}
+                >
                   {create.isPending ? '发起中…' : '发起回测(虚拟)'}
                 </Button>
+                {/* 额度提示(剩 M 次 / 耗尽引导官网会员区)· 如实展示 */}
+                <QuotaHint item={backtestQuota} />
                 {create.isError && (
-                  <span className="text-sm text-midas-red">{create.error.message}</span>
+                  <span className="text-sm text-midas-red">{createErrorText(create.error)}</span>
                 )}
               </div>
               <p className="mt-3 text-xs text-faint">

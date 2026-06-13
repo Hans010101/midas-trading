@@ -11,6 +11,7 @@
 
 import { useSession } from 'next-auth/react'
 
+import { QuotaCard } from '@/components/account/quota-card'
 import { BotOrderPresetSection } from '@/components/settings/bot-order-preset-section'
 import { ColorPrefSection } from '@/components/settings/color-pref-section'
 
@@ -43,6 +44,9 @@ export default function ProfilePage() {
           </dl>
         </div>
       </section>
+
+      {/* ①.5 我的额度(会员刀2:方案 + 沙盘/回测用量 + 重置口径) */}
+      <QuotaCard />
 
       {/* ② 涨跌色偏好 + ③ Bot 下单预设(/settings 搬入) */}
       <ColorPrefSection />

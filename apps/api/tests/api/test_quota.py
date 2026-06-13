@@ -243,6 +243,7 @@ async def test_quota_me_shape_and_counts(client: AsyncClient, db_session: AsyncS
     assert by_feature["diagnose"] == {"feature": "diagnose", "limit": 20, "used": 3}
     assert by_feature["backtest"] == {"feature": "backtest", "limit": 10, "used": 0}
     assert "reset_at" in body
+    assert body["plan_expires_at"] is None  # free 无到期
 
     r2 = await client.get("/api/v1/quota/me")
     assert r2.status_code == 401  # authed-only

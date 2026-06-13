@@ -13,6 +13,7 @@ export interface AdminUserItem {
   id: string
   email: string
   role: string
+  plan: string
   created_at: string
   email_verified: boolean
   register_method: RegisterMethod
