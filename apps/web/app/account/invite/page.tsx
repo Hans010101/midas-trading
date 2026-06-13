@@ -1,15 +1,17 @@
 'use client'
 
 /**
- * 邀请有礼(用户中心模块⑤ · Phase 1.5 刀B)。
+ * 邀请有礼(用户中心模块⑤ · Phase 1.5 刀B + 刀C 海报)。
  *
- * 我的邀请码 + 邀请链接(★ 复制链接为主操作)+ 奖励说明 + 统计(GET /invite/me)。
- * 海报入口本刀占位(刀C 接 canvas)。
+ * 我的邀请码 + 邀请链接(★ 复制链接为主操作)+ 奖励说明 + 统计(GET /invite/me)
+ * + 生成邀请海报(刀C · 6 版动态模板弹层)。
  */
 
-import { Check, Copy, Gift } from 'lucide-react'
+import { Check, Copy, Gift, ImageDown } from 'lucide-react'
+import { useSession } from 'next-auth/react'
 import { useState } from 'react'
 
+import { PosterModal } from '@/components/poster/poster-modal'
 import { useInvite } from '@/hooks/use-invite'
 
 function CopyButton({ text, label, primary = false }: {
@@ -46,6 +48,10 @@ function CopyButton({ text, label, primary = false }: {
 export default function InvitePage() {
   const invite = useInvite()
   const data = invite.data
+  const { data: session } = useSession()
+  const [posterOpen, setPosterOpen] = useState(false)
+  // inviter = 邮箱前缀(海报落款 · 无邮箱兜底「我」)
+  const inviter = (session?.user?.email ?? '').split('@')[0] || '我'
 
   return (
     <div>
@@ -94,15 +100,26 @@ export default function InvitePage() {
             <StatCard label="累计获赠" value={data.earned_days} unit="天" />
           </div>
 
-          {/* 海报入口(刀C 占位) */}
+          {/* 海报入口(刀C · 6 版动态模板) */}
           <button
             type="button"
-            disabled
-            className="min-h-10 rounded-md border border-dashed border-paper px-4 text-sm text-muted-foreground/50"
+            onClick={() => setPosterOpen(true)}
+            className="flex min-h-11 items-center gap-2 rounded-md bg-midas-red px-5 text-sm font-medium text-white transition-colors hover:bg-midas-red/90"
           >
-            生成邀请海报 · 即将上线
+            <ImageDown className="h-4 w-4" />
+            生成邀请海报
           </button>
         </div>
+      )}
+
+      {data !== undefined && (
+        <PosterModal
+          open={posterOpen}
+          onClose={() => setPosterOpen(false)}
+          inviter={inviter}
+          code={data.code}
+          qrUrl={data.invite_url}
+        />
       )}
     </div>
   )
