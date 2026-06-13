@@ -67,20 +67,163 @@ async def test_limit_create_ok(client: AsyncClient, db_session: AsyncSession) ->
     assert body["order_kind"] == "limit"
     assert Decimal(body["trigger_price"]) == Decimal("90")
     assert body["triggered_order_id"] is None  # 本刀不会触发成交(刀2 分界)
+    # spot 限价不受二期 perp 字段影响 · 全 None
+    assert body["leverage"] is None
+    assert body["margin"] is None
+    assert body["margin_mode"] is None
+    assert body["expires_at"] is None
+
+
+# ── perp 限价单(二期刀1 放开挂单 · perp=开仓单 · 触发→开仓留刀2)──────────────
+
+# perp 限价开仓基础 payload:杠杆/保证金/仓位模式必填(route_open_perp 口径)· quantity 可空
+_PERP_LIMIT_BASE = {
+    "symbol": "BTCUSDT", "market": "crypto", "order_kind": "limit",
+    "trigger_price": "100000", "leverage": 10, "margin": "500", "margin_mode": "isolated",
+}
 
 
 @pytest.mark.asyncio
-async def test_crypto_limit_rejected_400(client: AsyncClient, db_session: AsyncSession) -> None:
-    """刀2 缺口补:perp 限价单范围外(ADR 0041 只含 perp SL/TP)→ 400。"""
+async def test_perp_limit_create_ok_long(client: AsyncClient, db_session: AsyncSession) -> None:
+    """二期刀1:perp 限价开多(BUY+LONG)放开挂单 · 杠杆/保证金/模式落库。"""
     user = await make_user(db_session)
     r = await client.post(
         "/api/v1/virtual/conditional-orders",
-        json={"symbol": "BTCUSDT", "market": "crypto", "order_kind": "limit",
-              "side": "buy", "trigger_price": "100000", "quantity": "1"},
+        json={**_PERP_LIMIT_BASE, "side": "buy"},  # position_side 默认 long
+        headers=await _auth(user, db_session),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "active"
+    assert body["position_side"] == "long"
+    assert body["leverage"] == 10
+    assert Decimal(body["margin"]) == Decimal("500")
+    assert body["margin_mode"] == "isolated"
+    assert body["expires_at"] is None  # Hans:默认长期有效
+    assert body["triggered_order_id"] is None  # 本刀挂单不触发(刀2 才接开仓)
+
+
+@pytest.mark.asyncio
+async def test_perp_limit_create_ok_short(client: AsyncClient, db_session: AsyncSession) -> None:
+    """★ 空头限价:开空(SELL+SHORT)放开挂单。"""
+    user = await make_user(db_session)
+    r = await client.post(
+        "/api/v1/virtual/conditional-orders",
+        json={**_PERP_LIMIT_BASE, "side": "sell", "position_side": "short"},
+        headers=await _auth(user, db_session),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["position_side"] == "short"
+    assert body["side"] == "sell"
+
+
+@pytest.mark.asyncio
+async def test_perp_limit_missing_leverage_400(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    user = await make_user(db_session)
+    payload = {**_PERP_LIMIT_BASE, "side": "buy"}
+    del payload["leverage"]
+    r = await client.post(
+        "/api/v1/virtual/conditional-orders", json=payload,
         headers=await _auth(user, db_session),
     )
     assert r.status_code == 400
-    assert "perp 限价单暂不支持" in r.json()["detail"]
+    assert "杠杆" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_perp_limit_missing_margin_400(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    user = await make_user(db_session)
+    payload = {**_PERP_LIMIT_BASE, "side": "buy"}
+    del payload["margin"]
+    r = await client.post(
+        "/api/v1/virtual/conditional-orders", json=payload,
+        headers=await _auth(user, db_session),
+    )
+    assert r.status_code == 400
+    assert "保证金" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_perp_limit_missing_mode_400(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    user = await make_user(db_session)
+    payload = {**_PERP_LIMIT_BASE, "side": "buy"}
+    del payload["margin_mode"]
+    r = await client.post(
+        "/api/v1/virtual/conditional-orders", json=payload,
+        headers=await _auth(user, db_session),
+    )
+    assert r.status_code == 400
+    assert "仓位模式" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_perp_limit_leverage_out_of_range_422(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    """leverage 范围(1..125)在 schema 卡 → 422(pydantic 校验,perp 口径)。"""
+    user = await make_user(db_session)
+    r = await client.post(
+        "/api/v1/virtual/conditional-orders",
+        json={**_PERP_LIMIT_BASE, "side": "buy", "leverage": 200},
+        headers=await _auth(user, db_session),
+    )
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_perp_limit_wrong_direction_400(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    """开仓方向自洽:LONG 仓须 BUY · BUY+SHORT 这类矛盾组合 → 400。"""
+    user = await make_user(db_session)
+    r = await client.post(
+        "/api/v1/virtual/conditional-orders",
+        json={**_PERP_LIMIT_BASE, "side": "buy", "position_side": "short"},
+        headers=await _auth(user, db_session),
+    )
+    assert r.status_code == 400
+    assert "方向" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_spot_limit_rejects_perp_fields_400(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    """现货限价单不接受 perp 开仓参数(保持数据干净)。"""
+    user = await make_user(db_session)
+    r = await client.post(
+        "/api/v1/virtual/conditional-orders",
+        json={"symbol": "NVDA", "market": "us", "order_kind": "limit",
+              "side": "buy", "trigger_price": "90", "quantity": "5", "leverage": 10},
+        headers=await _auth(user, db_session),
+    )
+    assert r.status_code == 400
+    assert "现货" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_sltp_rejects_perp_fields_400(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    """止损/止盈是平仓单,不接受 perp 开仓参数。"""
+    user = await make_user(db_session)
+    account = await make_virtual_account(db_session, user_id=user.id, market="us")
+    await _spot_position(db_session, account.id)
+    r = await client.post(
+        "/api/v1/virtual/conditional-orders",
+        json={"symbol": "NVDA", "market": "us", "order_kind": "stop_loss",
+              "side": "sell", "trigger_price": "80", "margin": "100"},
+        headers=await _auth(user, db_session),
+    )
+    assert r.status_code == 400
+    assert "止损/止盈" in r.json()["detail"]
 
 
 @pytest.mark.asyncio

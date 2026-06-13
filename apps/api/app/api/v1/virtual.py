@@ -503,6 +503,17 @@ def _serialize_order(order: VirtualOrder) -> OrderResponse:
 
 # SL/TP 的平仓方向:LONG 仓只能 SELL 平 · SHORT 仓只能 BUY 平(与触发矩阵自洽,防脏数据)
 _CLOSING_SIDE = {PositionSide.LONG: OrderSide.SELL, PositionSide.SHORT: OrderSide.BUY}
+# perp 限价开仓方向:开多=BUY+LONG · 开空=SELL+SHORT(二期刀1 · 防 BUY+SHORT 这类矛盾脏数据)
+_OPENING_SIDE = {PositionSide.LONG: OrderSide.BUY, PositionSide.SHORT: OrderSide.SELL}
+
+
+def _has_perp_open_fields(payload: ConditionalOrderCreate) -> bool:
+    """是否携带 perp 开仓参数(leverage/margin/margin_mode)· 二期刀1 仅 perp 限价单可带。"""
+    return (
+        payload.leverage is not None
+        or payload.margin is not None
+        or payload.margin_mode is not None
+    )
 
 
 async def _has_active_position(
@@ -549,19 +560,46 @@ async def create_conditional_order(
         symbol = symbol.upper().replace("/", "")  # perp 语义 · Binance 风格(与持仓表一致)
 
     if payload.order_kind == ConditionalKind.LIMIT:
-        # 刀2 缺口补:perp 限价单范围外(ADR 0041 只含 perp 止损止盈 · 触发器另有防御跳过)
         if payload.market == "crypto":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="perp 限价单暂不支持(v1)",
-            )
-        if payload.quantity is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="限价单必须填写数量",
-            )
+            # 二期刀1:perp 限价单放开挂单。perp=开仓单 → 需杠杆/保证金/仓位模式
+            # (route_open_perp 口径,用 margin×leverage 定仓 · quantity 可空)。
+            # ⛔ 本刀【不接触发→开仓】:触发器对 perp LIMIT 仍走现有 EXPIRED 防御(半成品安全);
+            #    真正触发开仓(route_open_perp)留刀2。挂单能挂进 ACTIVE,被扫到即 EXPIRED。
+            if (
+                payload.leverage is None
+                or payload.margin is None
+                or payload.margin_mode is None
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="perp 限价单须填写杠杆 / 保证金 / 仓位模式",
+                )
+            expected_open = _OPENING_SIDE[payload.position_side]
+            if payload.side != expected_open:
+                msg = (
+                    f"perp 限价开仓:{payload.position_side.value} 仓须用 "
+                    f"{expected_open.value} 方向"
+                )
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+        else:
+            # spot 限价:quantity 必填;不接受 perp 开仓参数(保持数据干净)
+            if payload.quantity is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="限价单必须填写数量",
+                )
+            if _has_perp_open_fields(payload):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="现货限价单不接受杠杆 / 保证金 / 仓位模式",
+                )
     else:
         # SL/TP(未决②定型 (a):持仓后独立挂)—— side 必须是该仓向的平仓方向 + 须有活仓
+        if _has_perp_open_fields(payload):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="止损/止盈单不接受杠杆 / 保证金 / 仓位模式",
+            )
         expected = _CLOSING_SIDE[payload.position_side]
         if payload.side != expected:
             raise HTTPException(
@@ -596,6 +634,11 @@ async def create_conditional_order(
         position_side=payload.position_side,
         trigger_price=payload.trigger_price,
         quantity=payload.quantity,
+        # 二期刀1:perp 限价开仓字段(spot/SLTP 落 None)· margin_mode 存纯字符串
+        leverage=payload.leverage,
+        margin=payload.margin,
+        margin_mode=payload.margin_mode.value if payload.margin_mode else None,
+        expires_at=payload.expires_at,
         status=ConditionalStatus.ACTIVE,
     )
     db.add(row)
