@@ -21,6 +21,9 @@ os.environ["DATABASE_URL"] = (
     "postgresql+asyncpg://midas:midas_dev@localhost:5432/midas_test"
 )
 os.environ.setdefault("SECRET_KEY", "test-secret-key-do-not-use-in-production")
+# 会员刀1:额度测试真连 Redis。本地 compose redis 映射 6380(6379 被另一项目占),
+# 用 DB 15 隔离测试键;CI 在 test.yml 显式设 REDIS_URL=6379/0(service 容器),setdefault 不覆盖。
+os.environ.setdefault("REDIS_URL", "redis://localhost:6380/15")
 os.environ.setdefault("CLICKHOUSE_USER", "midas")
 os.environ.setdefault("CLICKHOUSE_PASSWORD", "midas_dev")
 
@@ -106,3 +109,21 @@ async def client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
         yield c
 
     app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _reset_redis_singleton() -> AsyncIterator[None]:
+    """会员刀1:Redis 客户端是模块级单例,会绑死首个 event loop;
+    pytest-asyncio 每测试新 loop → 复用旧连接抛 "attached to a different loop"。
+    每测试前后重置单例,让连接在当前 loop 惰性重建(close 兜底防 FD 泄漏)。
+    """
+    import contextlib
+
+    import app.core.redis_client as _rc
+
+    _rc._redis_client = None  # noqa: SLF001
+    yield
+    if _rc._redis_client is not None:  # noqa: SLF001
+        with contextlib.suppress(Exception):  # teardown 尽力而为
+            await _rc._redis_client.aclose()  # noqa: SLF001
+        _rc._redis_client = None  # noqa: SLF001

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from decimal import Decimal
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,8 +44,13 @@ async def log_usage(
     total_tokens: int,
     node: str,
     status: str,
+    user_id: str | UUID | None = None,
 ) -> None:
-    """写一行 ai_usage_log · 失败仅 log。"""
+    """写一行 ai_usage_log · 失败仅 log。
+
+    user_id(会员刀1):authed 调用方(structure diagnose)传入做按用户审计;
+    匿名面(decision-card)与存量行为 NULL。
+    """
     try:
         cost = estimate_cost_cny(prompt_tokens, completion_tokens)
         session: AsyncSession
@@ -61,6 +67,7 @@ async def log_usage(
                     cost_cny=cost,
                     node=node,
                     status=status,
+                    user_id=UUID(str(user_id)) if user_id is not None else None,
                 ),
             )
             await session.commit()

@@ -15,6 +15,7 @@ from app.api.v1.market import router as market_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.overview import router as overview_router
 from app.api.v1.perp import router as perp_router
+from app.api.v1.quota import router as quota_router
 from app.api.v1.structure import router as structure_router
 from app.api.v1.telegram import router as telegram_router
 from app.api.v1.us import router as us_router
@@ -50,3 +51,5 @@ router.include_router(backtest_router)
 router.include_router(structure_router)
 # 用户管理刀1 · 管理员用户列表(AdminDep 403 唯一边界 · 纯只读)
 router.include_router(admin_router)
+# 会员 Phase 1 刀1 · AI 额度自报(authed · 前端展示共用)
+router.include_router(quota_router)

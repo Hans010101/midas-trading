@@ -78,7 +78,8 @@ async def list_users(
         await db.execute(
             select(User, sess_agg.c.last_active, sess_agg.c.session_count)
             .outerjoin(sess_agg, sess_agg.c.user_id == User.id)
-            .order_by(User.created_at.desc())
+            # created_at 平局 → id tie-break(分页稳定 · 铁律 · 同 conditional/backtest)
+            .order_by(User.created_at.desc(), User.id.desc())
             .limit(page_size)
             .offset((page - 1) * page_size),
         )
