@@ -21,6 +21,7 @@ import {
   fmtU,
   num,
 } from '@/components/account/perp-shared'
+import { ConditionalOrderDialog } from '@/components/trading/conditional-order-dialog'
 import { usePerpPositions, usePlacePerpOrder } from '@/hooks/use-perp'
 import { useAccount } from '@/hooks/use-virtual'
 import { PerpApiError, type PerpPosition } from '@/lib/api/perp'
@@ -33,6 +34,8 @@ export function PerpActivePositions() {
   const posQ = usePerpPositions()
   const placeOrder = usePlacePerpOrder()
   const [confirm, setConfirm] = useState<PerpPosition | null>(null)
+  // 二期刀4:持仓行内联挂止盈止损(复用现有 ConditionalOrderDialog · 含做空 · 后端零碰)
+  const [sltp, setSltp] = useState<PerpPosition | null>(null)
 
   const active = useMemo(
     () => (posQ.data ?? []).filter((p) => p.closed_at === null),
@@ -131,13 +134,22 @@ export function PerpActivePositions() {
                           : `收 ${num(p.funding_paid) < 0 ? fmtU(String(-num(p.funding_paid))) : '0'}`}
                     </td>
                     <td className="py-2 text-right">
-                      <button
-                        type="button"
-                        onClick={() => setConfirm(p)}
-                        className="min-h-10 rounded border border-midas-red px-2 py-1 text-xs text-midas-red hover:bg-midas-red-glow lg:min-h-0"
-                      >
-                        平仓
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setSltp(p)}
+                          className="min-h-10 rounded border border-gold/60 px-2 py-1 text-xs text-gold hover:bg-gold/10 lg:min-h-0"
+                        >
+                          止盈止损
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirm(p)}
+                          className="min-h-10 rounded border border-midas-red px-2 py-1 text-xs text-midas-red hover:bg-midas-red-glow lg:min-h-0"
+                        >
+                          平仓
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
@@ -153,6 +165,19 @@ export function PerpActivePositions() {
           pending={placeOrder.isPending}
           onCancel={() => setConfirm(null)}
           onConfirm={() => void doClose(confirm)}
+        />
+      )}
+
+      {/* 持仓行内联挂 SL/TP · 共享条件单弹层(触发走后端 route_close_perp 平仓 · 含做空) */}
+      {sltp && (
+        <ConditionalOrderDialog
+          open
+          onClose={() => setSltp(null)}
+          symbol={sltp.symbol}
+          market="crypto"
+          mode="sltp"
+          positionSide={sltp.side}
+          heldQuantity={sltp.quantity}
         />
       )}
     </div>
