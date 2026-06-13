@@ -9,9 +9,10 @@
 
 import { useState } from 'react'
 
+import { ConditionalOrderDialog } from '@/components/trading/conditional-order-dialog'
 import { OrderConfirmDialog } from '@/components/workbench/order-confirm-dialog'
 import { usePortfolio, usePositions } from '@/hooks/use-virtual'
-import type { AccountSummary } from '@/lib/api/virtual'
+import type { AccountSummary, PositionSide } from '@/lib/api/virtual'
 import { currencyOf, formatMoney, MARKET_LABEL } from '@/lib/format-money'
 import { cn } from '@/lib/utils'
 import type { Market } from '@midas/shared'
@@ -25,6 +26,14 @@ export function SpotPositionsSection() {
     market: Market
     quantity: string
   }>({ open: false, symbol: '', market: 'us', quantity: '0' })
+  // 二期刀4:持仓行内联挂止盈止损(复用现有 ConditionalOrderDialog · 后端零碰)
+  const [sltp, setSltp] = useState<{
+    open: boolean
+    symbol: string
+    market: Market
+    positionSide: PositionSide
+    quantity: string
+  }>({ open: false, symbol: '', market: 'us', positionSide: 'long', quantity: '0' })
 
   const summaryByMarket = new Map<string, AccountSummary>(
     portfolio.map((s) => [s.market, s]),
@@ -86,18 +95,32 @@ export function SpotPositionsSection() {
                     : '—'}
                 </td>
                 <td className="py-2 text-right">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setCloseDialog({
-                        open: true, symbol: p.symbol,
-                        market: p.market, quantity: p.quantity,
-                      })
-                    }
-                    className="min-h-10 rounded border border-midas-red px-2 py-1 text-xs text-midas-red hover:bg-midas-red-glow lg:min-h-0"
-                  >
-                    平仓
-                  </button>
+                  <div className="flex items-center justify-end gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSltp({
+                          open: true, symbol: p.symbol, market: p.market,
+                          positionSide: p.position_side, quantity: p.quantity,
+                        })
+                      }
+                      className="min-h-10 rounded border border-gold/60 px-2 py-1 text-xs text-gold hover:bg-gold/10 lg:min-h-0"
+                    >
+                      止盈止损
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCloseDialog({
+                          open: true, symbol: p.symbol,
+                          market: p.market, quantity: p.quantity,
+                        })
+                      }
+                      className="min-h-10 rounded border border-midas-red px-2 py-1 text-xs text-midas-red hover:bg-midas-red-glow lg:min-h-0"
+                    >
+                      平仓
+                    </button>
+                  </div>
                 </td>
               </tr>
             )
@@ -113,6 +136,19 @@ export function SpotPositionsSection() {
         side="sell"
         closeAllQuantity={closeDialog.quantity}
       />
+
+      {/* 持仓行内联挂 SL/TP · 共享条件单弹层(触发走后端 place_market_order 平仓) */}
+      {sltp.open && (
+        <ConditionalOrderDialog
+          open
+          onClose={() => setSltp({ ...sltp, open: false })}
+          symbol={sltp.symbol}
+          market={sltp.market}
+          mode="sltp"
+          positionSide={sltp.positionSide}
+          heldQuantity={sltp.quantity}
+        />
+      )}
     </div>
   )
 }
