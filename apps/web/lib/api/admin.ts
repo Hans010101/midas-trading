@@ -78,6 +78,12 @@ export interface AdminRedeemedItem {
   redeemed_at: string
 }
 
+export interface AdminActionItem {
+  action: string
+  detail: Record<string, unknown>
+  created_at: string
+}
+
 export interface AdminUserDetail {
   id: string
   email: string
@@ -93,6 +99,28 @@ export interface AdminUserDetail {
   invited_count: number
   rewarded_count: number
   redeemed: AdminRedeemedItem[]
+  admin_actions: AdminActionItem[]
+}
+
+export interface GrantResult {
+  plan: string
+  expires_at: string | null
+  days_added: number
+}
+
+/** 管理员授予/延长 Pro(刀3b-1 · 写操作)。 */
+export async function grantPro(
+  token: string,
+  userId: string,
+  body: { period?: string; days?: number; note?: string | null },
+): Promise<GrantResult> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/users/${userId}/grant`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as GrantResult
 }
 
 export async function fetchAdminUserDetail(

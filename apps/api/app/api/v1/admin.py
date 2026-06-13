@@ -16,17 +16,18 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import AdminDep
 from app.core.database import get_db
+from app.models.admin_action_log import AdminActionLog
 from app.models.redeem_code import RedeemCode
 from app.models.session import Session
 from app.models.subscription import Subscription
 from app.models.user import User
-from app.services.growth import invite_stats
+from app.services.growth import extend_subscription, invite_stats
 from app.services.membership import PLAN_QUOTAS, get_quota_used, resolve_plan
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -146,6 +147,12 @@ class RedeemedItem(BaseModel):
     redeemed_at: datetime
 
 
+class AdminActionItem(BaseModel):
+    action: str
+    detail: dict[str, object]
+    created_at: datetime
+
+
 class AdminUserDetail(BaseModel):
     id: str
     email: str
@@ -162,6 +169,7 @@ class AdminUserDetail(BaseModel):
     invited_count: int
     rewarded_count: int
     redeemed: list[RedeemedItem]  # 兑换记录
+    admin_actions: list[AdminActionItem]  # 刀3b:该用户被调权益/操作历史
 
 
 @router.get("/users/{user_id}", response_model=AdminUserDetail)
@@ -203,6 +211,15 @@ async def get_user_detail(user_id: str, _admin: AdminDep, db: DbDep) -> AdminUse
         )
     ).all()
 
+    # 该用户的管理员操作历史(target=uid · 单查询 · 刀3b)
+    action_rows = (
+        await db.execute(
+            select(AdminActionLog.action, AdminActionLog.detail, AdminActionLog.created_at)
+            .where(AdminActionLog.target_user_id == uid)
+            .order_by(AdminActionLog.created_at.desc()),
+        )
+    ).all()
+
     return AdminUserDetail(
         id=str(user.id),
         email=user.email,
@@ -222,4 +239,65 @@ async def get_user_detail(user_id: str, _admin: AdminDep, db: DbDep) -> AdminUse
             for c, p, ra in redeemed_rows
             if ra is not None
         ],
+        admin_actions=[
+            AdminActionItem(action=a, detail=d, created_at=ca)
+            for a, d, ca in action_rows
+        ],
     )
+
+
+# ── 管理员手动调权益(刀3b-1 · 写操作)─────────────────────────────────────
+# 🔴 只写 subscription + admin_action_log;不碰 engine/login;operator 取自鉴权。
+
+_GRANT_MAX_DAYS = 3650  # 单次授予上限 10 年(防误操作打错巨值)
+_PERIOD_TO_DAYS = {"month": 30, "quarter": 90, "year": 365}
+
+
+class GrantIn(BaseModel):
+    # 二选一:period(月/季/年)或 days(直接天数)· 都给以 days 优先
+    period: str | None = None
+    days: int | None = Field(default=None, ge=1, le=_GRANT_MAX_DAYS)
+    note: str | None = Field(default=None, max_length=200)
+
+
+class GrantOut(BaseModel):
+    plan: str
+    expires_at: datetime | None
+    days_added: int
+
+
+@router.post("/users/{user_id}/grant", response_model=GrantOut)
+async def grant_pro(user_id: str, payload: GrantIn, admin: AdminDep, db: DbDep) -> GrantOut:
+    """管理员授予/延长 Pro(source='admin' · 不封顶)+ 审计 · 同事务。
+
+    operator = 当前 admin(AdminDep · ★ 不信前端传入);目标不存在 404;天数非法 422。
+    """
+    try:
+        uid = UUID(user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在") from e
+
+    # 解析天数:days 优先,否则 period 映射
+    days = payload.days
+    if days is None and payload.period is not None:
+        days = _PERIOD_TO_DAYS.get(payload.period)
+    if days is None or days <= 0 or days > _GRANT_MAX_DAYS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="天数非法(需 period=month|quarter|year 或 1..3650 的 days)",
+        )
+
+    target = await db.scalar(select(User).where(User.id == uid))
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+
+    # 授予权益与写审计在同一事务(任一失败整体回滚)。
+    new_exp = await extend_subscription(db, uid, days, "admin")  # 不传 cap_days = 不封顶
+    db.add(AdminActionLog(
+        operator_id=admin.id,  # ★ 取自鉴权,绝不信前端
+        target_user_id=uid,
+        action="grant_pro",
+        detail={"days": days, "period": payload.period, "note": payload.note},
+    ))
+    await db.commit()
+    return GrantOut(plan="pro", expires_at=new_exp, days_added=days)
