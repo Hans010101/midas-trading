@@ -17,7 +17,6 @@ from typing import Annotated, cast
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUserDep
@@ -34,6 +33,11 @@ from app.services.auth import (
     verify_password,
 )
 from app.services.email import send_verification_email
+from app.services.growth import (
+    attribute_invite,
+    grant_trial_if_eligible,
+    redeem_invite_if_pending,
+)
 
 # 复用同一个 scheme · auto_error=False 让未携带时也能进路由(我们自己处理)
 _oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
@@ -54,6 +58,8 @@ class RegisterIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     age_confirmed: bool
+    # Phase 1.5 刀A:邀请码归因(?ref= 透传)· 可选 · 无效码静默
+    ref: str | None = Field(default=None, max_length=12)
 
 
 class RegisterOut(BaseModel):
@@ -82,6 +88,9 @@ class VerifyIn(BaseModel):
 class VerifyOut(BaseModel):
     verified: bool
     email: str
+    # Phase 1.5 刀A:前端感知(toast「试用已开通 / 邀请奖励已到账」)
+    trial_granted: bool = False
+    invite_rewarded: bool = False
 
 
 class ResendIn(BaseModel):
@@ -130,6 +139,9 @@ async def register(payload: RegisterIn, db: DbDep) -> RegisterOut:
     db.add(user)
     await db.flush()
     await db.refresh(user)
+
+    # Phase 1.5 刀A:邀请归因(pending · 兑现等邮箱验证)· 整段静默不阻注册
+    await attribute_invite(db, user.id, payload.ref)
 
     token = await create_verification_token(db, user_id=user.id)
     verify_url = f"{_public_base_url()}/verify-email?token={token}"
@@ -209,6 +221,8 @@ class OAuthGoogleIn(BaseModel):
     secret 头部认证 · 拿到 session token 后存 NextAuth cookie。
     """
     id_token: str = Field(min_length=10)  # Google ID Token JWT
+    # Phase 1.5 刀A:邀请码归因(cookie 透传 · 仅 create 分支生效)
+    ref: str | None = Field(default=None, max_length=12)
 
 
 class OAuthGoogleOut(BaseModel):
@@ -218,6 +232,9 @@ class OAuthGoogleOut(BaseModel):
     email: str
     role: str = "user"
     is_new_user: bool = False
+    # Phase 1.5 刀A:前端感知
+    trial_granted: bool = False
+    invite_rewarded: bool = False
 
 
 @router.post("/oauth/google", response_model=OAuthGoogleOut)
@@ -270,15 +287,18 @@ async def oauth_google(
 
     # find_or_create + 发 session · DB 错误单独 catch · 暴露明细(常见:google_sub 列缺失)
     try:
-        existed_before = (
-            await db.execute(
-                select(User).where(User.google_sub == google_sub),
-            )
-        ).scalar_one_or_none() is not None
-
-        user = await find_or_create_oauth_user(
+        # Phase 1.5 刀A:created 以 find_or_create 内部标志为准(★ 按 sub 查的
+        # existed_before 会把 email-linking 老用户误判为新 → 误送试用 + is_new 假阳)
+        user, created = await find_or_create_oauth_user(
             db, google_sub=google_sub, email=email,
         )
+        trial_granted = False
+        invite_rewarded = False
+        if created:
+            # Google 新建即 verified → 归因 + 试用 + 即时兑现(同 verify 路径顺序)
+            await attribute_invite(db, user.id, payload.ref)
+            trial_granted = await grant_trial_if_eligible(db, user.id)
+            invite_rewarded = await redeem_invite_if_pending(db, user.id)
 
         ua = request.headers.get("user-agent")
         ip = request.client.host if request.client else None
@@ -296,14 +316,16 @@ async def oauth_google(
 
     logger.info(
         "[oauth.google] 登录成功 · user_id=%s email=%s is_new=%s",
-        user.id, user.email, not existed_before,
+        user.id, user.email, created,
     )
     return OAuthGoogleOut(
         access_token=session_token,
         user_id=str(user.id),
         email=user.email,
         role=user.role,
-        is_new_user=not existed_before,
+        is_new_user=created,  # 修复:linking 老用户原被误报 true(同 created 根因)
+        trial_granted=trial_granted,
+        invite_rewarded=invite_rewarded,
     )
 
 
@@ -389,8 +411,14 @@ async def verify_email(payload: VerifyIn, db: DbDep) -> VerifyOut:
             detail="用户不存在",
         )
     user.email_verified_at = datetime.now(tz=UTC)
+    # Phase 1.5 刀A:★ trial 必须先于兑现(invite 先开行会让 trial 误判已有订阅)
+    trial_granted = await grant_trial_if_eligible(db, user.id)
+    invite_rewarded = await redeem_invite_if_pending(db, user.id)
     await db.commit()
-    return VerifyOut(verified=True, email=user.email)
+    return VerifyOut(
+        verified=True, email=user.email,
+        trial_granted=trial_granted, invite_rewarded=invite_rewarded,
+    )
 
 
 @router.post("/resend-verification", status_code=status.HTTP_202_ACCEPTED)
