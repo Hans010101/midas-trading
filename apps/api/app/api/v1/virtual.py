@@ -154,7 +154,7 @@ async def get_account(
     if account is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="该市场虚拟资金未激活",
+            detail="该市场资金未激活",
         )
     return AccountResponse.model_validate(account)
 
@@ -615,7 +615,7 @@ async def create_conditional_order(
         if account is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="该市场虚拟资金未设置 · 请先去个人设置页填写",
+                detail="该市场资金未设置 · 请先去个人设置页填写",
             )
         if not await _has_active_position(
             db, account.id, payload.market, symbol, payload.position_side,

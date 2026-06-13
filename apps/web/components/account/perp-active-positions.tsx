@@ -52,7 +52,7 @@ export function PerpActivePositions() {
       if (o.status === 'filled') {
         const pnl =
           o.realized_pnl != null ? ` · 已实现 ${fmtU(o.realized_pnl)} USDT` : ''
-        toast.success(`平仓 ${p.symbol} 已成交(虚拟)${pnl}`, {
+        toast.success(`平仓 ${p.symbol} 已成交${pnl}`, {
           className: 'midas-toast-success', duration: 4000,
         })
       } else {

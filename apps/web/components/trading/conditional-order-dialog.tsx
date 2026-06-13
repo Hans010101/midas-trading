@@ -136,7 +136,7 @@ export function ConditionalOrderDialog({
           // SL/TP 留空 = 平全仓(不传 quantity);spot LIMIT 必填
           : quantity.trim() !== '' ? { quantity: quantity.trim() } : {}),
       })
-      toast.success(`已挂${actionLabel} ${symbol} @ ${triggerPrice}(虚拟)· 到价即触发`, {
+      toast.success(`已挂${actionLabel} ${symbol} @ ${triggerPrice} · 到价即触发`, {
         className: 'midas-toast-success', duration: 4000,
       })
       onClose()
@@ -146,8 +146,8 @@ export function ConditionalOrderDialog({
   }
 
   const title = isPerpLimit
-    ? '挂限价单(永续 · 虚拟)'
-    : mode === 'limit' ? '挂限价单(虚拟)' : '设止损 / 止盈(虚拟)'
+    ? '挂限价单(永续)'
+    : mode === 'limit' ? '挂限价单' : '设止损 / 止盈'
 
   return (
     <div
@@ -182,7 +182,7 @@ export function ConditionalOrderDialog({
                     : 'border border-midas-red/50 text-midas-red hover:bg-midas-red-glow/40',
                 )}
               >
-                {d === 'long' ? '开多(虚拟)' : '开空(虚拟)'}
+                {d === 'long' ? '开多' : '开空'}
               </button>
             ))}
           </div>
@@ -297,7 +297,7 @@ export function ConditionalOrderDialog({
                 className="w-full accent-midas-red"
               />
             </div>
-            <label className="mb-1 block text-xs text-muted-foreground">保证金(虚拟 USDT)</label>
+            <label className="mb-1 block text-xs text-muted-foreground">保证金(USDT)</label>
             <input
               type="number"
               value={margin}
@@ -343,7 +343,7 @@ export function ConditionalOrderDialog({
         )}
 
         <p className="mb-4 text-[11px] leading-relaxed text-muted-foreground/70">
-          全程虚拟资金 · 系统每分钟扫描,到价即触发 · 以触发时市价成交(含滑点/费率)·
+          系统每分钟扫描,到价即触发 · 以触发时市价成交(含滑点/费率)·
           余额/持仓在触发时校验,不足则挂单失效。
         </p>
 

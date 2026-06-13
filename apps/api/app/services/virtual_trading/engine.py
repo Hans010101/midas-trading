@@ -73,7 +73,7 @@ async def place_market_order(
     if account is None:
         return await _record_rejected(
             db, req, account_id=None,
-            reason="该市场虚拟资金未设置 · 请先去个人设置页填写",
+            reason="该市场资金未设置 · 请先去个人设置页填写",
         )
 
     # 2. 当前市场价

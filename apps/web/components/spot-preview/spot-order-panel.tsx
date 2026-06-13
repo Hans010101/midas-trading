@@ -119,7 +119,7 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
         <div className="rounded-md border border-dashed border-paper bg-cream p-4 text-center">
           <p className="mb-1 text-sm font-medium text-foreground">该标的暂不可下单</p>
           <p className="text-xs leading-relaxed text-muted-foreground/80">
-            仅港股主板 HKD(~2406 只)支持虚拟下单 · 该标的不在下单池(行情仍可正常查看)。
+            仅港股主板 HKD(~2406 只)支持下单 · 该标的不在下单池(行情仍可正常查看)。
           </p>
         </div>
       </PanelShell>
@@ -273,12 +273,12 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
       ) : market === 'hk' ? (
         <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground/70">
           港股 T+0:当日可买卖 · 无涨跌停 · 按手交易(每手 {boardLot ?? '—'} 股)·
-          虚拟费率含印花税 0.1% + 佣金 0.1% · 按最新价成交。
+          费率含印花税 0.1% + 佣金 0.1% · 按最新价成交。
         </p>
       ) : (
         <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground/70">
           {tab === 'short'
-            ? '卖空 = 虚拟负持仓记账 · 无杠杆 1:1 锁定等额现金担保 · 无强平/资金费。'
+            ? '卖空 = 负持仓记账 · 无杠杆 1:1 锁定等额现金担保 · 无强平/资金费。'
             : '美股做多 · 现货买卖 · 按最新价成交。'}
         </p>
       )}

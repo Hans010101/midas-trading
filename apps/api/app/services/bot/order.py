@@ -458,7 +458,7 @@ async def _exec_perp(
         return OrderResult(filled=True, title="✅ 已成交", detail=detail, body=body)
     return OrderResult(
         filled=False, title="⚠️ 已拒绝",
-        detail=order.reject_reason or "下单被拒(虚拟)",
+        detail=order.reject_reason or "下单被拒",
     )
 
 
@@ -513,7 +513,7 @@ async def _exec_spot(
         return OrderResult(filled=True, title="✅ 已成交", detail=detail, body=body)
     return OrderResult(
         filled=False, title="⚠️ 已拒绝",
-        detail=order.reject_reason or "下单被拒(虚拟)",
+        detail=order.reject_reason or "下单被拒",
     )
 
 

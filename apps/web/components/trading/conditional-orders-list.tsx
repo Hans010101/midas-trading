@@ -130,7 +130,7 @@ export function ConditionalOrdersList({ symbol, market }: ConditionalOrdersListP
         </div>
       )}
       <p className="mt-2 text-[10px] text-muted-foreground/60">
-        全程虚拟资金 · 每分钟扫描 · 到价以市价成交{singleSymbol && ' · 全部市场见「我的账户」'}
+        每分钟扫描 · 到价以市价成交{singleSymbol && ' · 全部市场见「我的账户」'}
       </p>
     </div>
   )

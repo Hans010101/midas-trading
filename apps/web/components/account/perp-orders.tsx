@@ -130,7 +130,7 @@ export function PerpOrders() {
             </table>
           </div>
           <p className="mt-2 text-[10px] text-muted-foreground/60">
-            资金费率为正:多头付、空头收 · 每币按各自结算周期(8h/4h…)在整点结算 · 只扣虚拟现金
+            资金费率为正:多头付、空头收 · 每币按各自结算周期(8h/4h…)在整点结算 · 只扣现金
           </p>
         </>
       )}
