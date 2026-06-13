@@ -7,16 +7,19 @@
  * 「管理员操作」区占位(刀3b 接调权益/封禁)。🔴 本页零写操作。
  */
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 
+import { GrantProSection } from '@/components/admin/grant-pro-section'
 import { TopNav } from '@/components/layout/top-nav'
 import { AdminApiError, type AdminUserDetail, fetchAdminUserDetail } from '@/lib/api/admin'
 import { createdAtText } from '@/lib/admin-view'
 import { periodLabel } from '@/lib/redeem-view'
+
+const ACTION_LABEL: Record<string, string> = { grant_pro: '授予 Pro' }
 
 const PLAN_LABEL: Record<string, string> = { free: '免费版', pro: '进阶版 Pro' }
 const SOURCE_LABEL: Record<string, string> = {
@@ -46,6 +49,7 @@ export default function AdminUserDetailPage() {
   const { data: session } = useSession()
   const token = session?.accessToken ?? ''
   const id = params.id
+  const qc = useQueryClient()
 
   const query = useQuery({
     queryKey: ['admin-user-detail', id],
@@ -149,16 +153,37 @@ export default function AdminUserDetailPage() {
               )}
             </Card>
 
-            {/* 管理员操作占位(刀3b 接调权益/封禁)*/}
-            <section className="rounded-lg border border-dashed border-paper bg-surface-card p-5">
-              <div className="mb-1 flex items-center gap-2">
-                <h2 className="font-serif text-base font-bold text-muted-foreground/70">管理员操作</h2>
-                <span className="rounded bg-paper px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                  即将上线
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground/70">调整权益 / 封禁(刀3b)</p>
-            </section>
+            {/* 管理员操作 · 调整权益(刀3b-1)· 封禁留 3b-2 */}
+            <GrantProSection
+              userId={d.id}
+              email={d.email}
+              token={token}
+              onGranted={() => void qc.invalidateQueries({ queryKey: ['admin-user-detail', id] })}
+            />
+
+            {/* 操作历史(刀3b:该用户被调权益记录)*/}
+            {d.admin_actions.length > 0 && (
+              <Card title={`操作历史(${d.admin_actions.length})`}>
+                <ul className="space-y-1.5 text-sm">
+                  {d.admin_actions.map((a, i) => (
+                    <li key={i} className="flex justify-between gap-4">
+                      <span className="text-foreground">
+                        {ACTION_LABEL[a.action] ?? a.action}
+                        {typeof a.detail.days === 'number' && (
+                          <span className="ml-1.5 text-muted-foreground">+{a.detail.days} 天</span>
+                        )}
+                        {typeof a.detail.note === 'string' && a.detail.note && (
+                          <span className="ml-1.5 text-xs text-muted-foreground/70">· {a.detail.note}</span>
+                        )}
+                      </span>
+                      <span className="shrink-0 font-mono text-xs text-muted-foreground/70">
+                        {new Date(a.created_at).toLocaleString('zh-CN')}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
           </div>
         )}
       </main>
