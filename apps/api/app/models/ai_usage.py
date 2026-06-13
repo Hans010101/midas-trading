@@ -8,8 +8,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from uuid import UUID
 
-from sqlalchemy import DateTime, Integer, Numeric, String, func, text
+from sqlalchemy import DateTime, Integer, Numeric, String, Uuid, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -21,6 +22,9 @@ class AIUsageLog(Base):
     __tablename__ = "ai_usage_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # 会员刀1 · 按用户审计归属 · nullable(存量行 + 匿名 decision-card 为 NULL)
+    user_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
 
     # 调用上下文
     market: Mapped[str] = mapped_column(String(16), nullable=False)

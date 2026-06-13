@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import CurrentUserDep
 from app.core.database import get_db
 from app.models.backtest_run import BacktestRun
+from app.models.user import User
 from app.schemas.backtest import (
     BacktestCreateRequest,
     BacktestCreateResponse,
@@ -29,6 +30,7 @@ from app.schemas.backtest import (
 )
 from app.services.backtest.persistence import create_pending_run
 from app.services.backtest.types import BacktestParams
+from app.services.membership import consume_quota, require_quota
 
 router = APIRouter(prefix="/backtest", tags=["backtest"])
 
@@ -62,7 +64,10 @@ def enqueue_run_backtest(params: dict[str, object], user_id: str, backtest_run_i
 
 @router.post("", response_model=BacktestCreateResponse, summary="发起一次回测(归属本人 · 异步)")
 async def create_backtest_run(
-    payload: BacktestCreateRequest, current_user: CurrentUserDep, db: DbDep,
+    payload: BacktestCreateRequest,
+    # 会员刀1:额度闸(429 · 只查不扣)· 扣减在 pending 行创建成功 commit 后
+    current_user: Annotated[User, Depends(require_quota("backtest"))],
+    db: DbDep,
 ) -> BacktestCreateResponse:
     """建 pending 行(归属本人)→ commit 拿 id → enqueue worker(传 id · worker 复用不再自建)。
 
@@ -83,6 +88,8 @@ async def create_backtest_run(
     # 先 commit 让 pending 行落地,再 enqueue(对齐 worker 的 commit→send 顺序,避免链路抢在 commit
     #   前读不到行)· enqueue 失败则该 pending 由 beat scan_stale_pending 兜底扫成 error。
     await db.commit()
+    # 创建成功才扣(create_pending_run/commit 抛错则不扣 · 调研 P3 拍板)
+    await consume_quota(current_user.id, "backtest")
     enqueue_run_backtest(asdict(params), str(current_user.id), run.id)
     return BacktestCreateResponse(id=run.id, status=run.status)
 
@@ -97,7 +104,8 @@ async def list_backtest_runs(
     stmt = (
         select(BacktestRun)
         .where(BacktestRun.user_id == current_user.id)
-        .order_by(BacktestRun.created_at.desc())
+        # created_at 平局(同事务 now() 恒定)→ 显式 id tie-break(铁律 · 同 conditional 修法)
+        .order_by(BacktestRun.created_at.desc(), BacktestRun.id.desc())
         .limit(limit)
     )
     rows = (await db.execute(stmt)).scalars().all()

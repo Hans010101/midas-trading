@@ -117,7 +117,9 @@ async def test_diagnose_authed_200_shape(
 ) -> None:
     app.dependency_overrides[get_clickhouse] = lambda: SimpleNamespace(_client=object())
 
-    async def fake_diag(client: Any, symbol: str, question: str) -> StructureDiagnosis:  # noqa: ARG001
+    async def fake_diag(
+        client: Any, symbol: str, question: str, **_kw: Any,  # noqa: ARG001 — 会员刀1 加 user_id/on_llm_run
+    ) -> StructureDiagnosis:
         return _canned_diagnosis()
 
     monkeypatch.setattr("app.api.v1.structure.get_structure_diagnosis", fake_diag)
@@ -148,7 +150,7 @@ async def test_diagnose_no_factor_data_422(
 
     app.dependency_overrides[get_clickhouse] = lambda: SimpleNamespace(_client=object())
 
-    async def no_data(client: Any, symbol: str, question: str) -> StructureDiagnosis:  # noqa: ARG001
+    async def no_data(client: Any, symbol: str, question: str, **_kw: Any) -> StructureDiagnosis:  # noqa: ARG001
         raise NoFactorDataError("XYZUSDT")
 
     monkeypatch.setattr("app.api.v1.structure.get_structure_diagnosis", no_data)
@@ -174,7 +176,7 @@ async def test_diagnose_llm_parse_failure_502(
     """LLM 输出解析失败 → 502(明确失败 · 不产假诊断)。"""
     app.dependency_overrides[get_clickhouse] = lambda: SimpleNamespace(_client=object())
 
-    async def boom(client: Any, symbol: str, question: str) -> StructureDiagnosis:  # noqa: ARG001
+    async def boom(client: Any, symbol: str, question: str, **_kw: Any) -> StructureDiagnosis:  # noqa: ARG001
         msg = "structure diagnose: LLM 输出解析失败(模拟)"
         raise ValueError(msg)
 

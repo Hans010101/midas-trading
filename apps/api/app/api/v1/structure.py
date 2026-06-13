@@ -11,10 +11,12 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Path, status
 
 from app.api.deps import ClickHouseDep, CurrentUserDep
+from app.models.user import User
 from app.schemas.structure import DiagnoseRequest, StructureDiagnosis, StructureSnapshot
+from app.services.membership import make_quota_consumer, require_quota
 from app.services.structure.snapshot import get_structure_snapshot
 from app.services.structure.workflow import NoFactorDataError, get_structure_diagnosis
 
@@ -53,11 +55,20 @@ async def get_snapshot(
 async def post_diagnose(
     payload: DiagnoseRequest,
     ch: ClickHouseDep,
-    current_user: CurrentUserDep,  # noqa: ARG001 — authed-only 门禁(LLM 成本面)
+    # 会员刀1:额度闸(429)替换裸 CurrentUserDep —— 依赖内部已含鉴权,返回 User。
+    # 🔴 QuotaDep 只查不扣;扣减回调由 get_structure_diagnosis 在缓存 miss、
+    #    LLM 真跑成功后调用(命中缓存不扣 · LLM 失败不扣)。
+    current_user: Annotated[User, Depends(require_quota("diagnose"))],
 ) -> StructureDiagnosis:
     raw_client = ch._client  # noqa: SLF001 — 房规:读层收裸 AsyncClient(同上)
     try:
-        return await get_structure_diagnosis(raw_client, payload.symbol, payload.question)
+        return await get_structure_diagnosis(
+            raw_client,
+            payload.symbol,
+            payload.question,
+            user_id=str(current_user.id),
+            on_llm_run=make_quota_consumer(current_user.id, "diagnose"),
+        )
     except NoFactorDataError as e:
         # 友好闸:无效 symbol / 非 USDT 永续 → 422(用户输入面 · 未进 LLM 零成本)
         raise HTTPException(

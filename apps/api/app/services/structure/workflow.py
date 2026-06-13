@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 from langgraph.graph import END, StateGraph
@@ -81,6 +82,7 @@ class DiagnoseState(TypedDict, total=False):
     client: Any                      # AsyncClient(CH · 只读)
     symbol: str
     question: str
+    user_id: str | None              # 会员刀1 · ai_usage_log 审计归属(不参与诊断)
     # IntentParse 产出
     intent: IntentKind
     # Snapshot 产出
@@ -151,6 +153,7 @@ async def _node_diagnose(state: DiagnoseState) -> dict[str, Any]:
             total_tokens=resp.total_tokens,
             node="structure_diagnose",
             status="success",
+            user_id=state.get("user_id"),
         )
 
     try:
@@ -234,13 +237,14 @@ _compiled = _build_workflow()
 
 
 async def run_structure_diagnosis(
-    client: AsyncClient, symbol: str, question: str,
+    client: AsyncClient, symbol: str, question: str, user_id: str | None = None,
 ) -> StructureDiagnosis:
     """跑完整诊断 workflow(无缓存 · 缓存在 get_structure_diagnosis)。"""
     state: DiagnoseState = {
         "client": client,
         "symbol": normalize_symbol(symbol),
         "question": question,
+        "user_id": user_id,
     }
     final_state = await _compiled.ainvoke(state)
     return cast("StructureDiagnosis", final_state["diagnosis"])
@@ -251,11 +255,18 @@ def _cache_key(symbol: str, intent: IntentKind) -> str:
 
 
 async def get_structure_diagnosis(
-    client: AsyncClient, symbol: str, question: str,
+    client: AsyncClient,
+    symbol: str,
+    question: str,
+    *,
+    user_id: str | None = None,
+    on_llm_run: Callable[[], Awaitable[None]] | None = None,
 ) -> StructureDiagnosis:
     """缓存优先(key 含归一意图 · 同 symbol+意图+6h 桶共享)· Redis 异常降级直跑。
 
     ★ 取舍:同意图不同措辞共享同一份诊断(意图枚举化是缓存命中率的来源 · 任务拍板)。
+    会员刀1:on_llm_run 只在缓存 miss、LLM 真跑成功后调用(额度扣减的灵魂位置 ——
+    命中缓存不扣 · LLM 失败不扣);回调异常不阻塞诊断返回。
     """
     sym = normalize_symbol(symbol)
     intent = parse_intent(question)
@@ -268,7 +279,12 @@ async def get_structure_diagnosis(
     except Exception as e:  # noqa: BLE001 — 缓存读失败不阻塞主链路
         logger.warning("[structure.diagnose.cache] get failed key=%s err=%s", key, e)
 
-    diagnosis = await run_structure_diagnosis(client, sym, question)
+    diagnosis = await run_structure_diagnosis(client, sym, question, user_id=user_id)
+    if on_llm_run is not None:
+        try:
+            await on_llm_run()
+        except Exception as e:  # noqa: BLE001 — 扣减失败不阻塞结果(用户已拿到诊断)
+            logger.warning("[structure.diagnose.quota] on_llm_run failed err=%s", e)
 
     try:
         redis = await get_redis()
