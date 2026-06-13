@@ -61,6 +61,8 @@ if (typeof document !== 'undefined' && !document.getElementById('midas-poster-cs
   .m-tracked-sm { letter-spacing: .26em; }
   @keyframes m-pulse { 0%,100% { opacity:.35 } 50% { opacity:1 } }
   @keyframes m-dash  { to { stroke-dashoffset: -32 } }
+  /* 海报「换个样式」切换淡入(刀C 交互调整) */
+  @keyframes poster-fade { from { opacity: .25 } to { opacity: 1 } }
   `
   document.head.appendChild(s)
 }
