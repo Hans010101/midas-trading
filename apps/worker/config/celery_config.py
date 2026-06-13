@@ -205,6 +205,14 @@ beat_schedule = {
         "schedule": crontab(minute="*"),
         "options": {"expires": 50},
     },
+    "crypto-orderbook-depth-scan": {
+        "task": "tasks.crypto.orderbook_depth_scan",
+        # 沙盘三期第二批 · 刀1 · 盘口深度 top-10 档 · 逐币 ~527 个轻量 GET · 每 5 分钟错峰(2,7,…)
+        # (沙盘快照 1h 缓存 · 5min 新鲜度足够,不必 1min)· 7d TTL 稳态 ~190MB(磁盘纪律)。
+        # expires 240:本轮没及时领走就丢(下一个 5min 再拉),不堆任务。
+        "schedule": crontab(minute="2-59/5"),
+        "options": {"expires": 240},
+    },
     "crypto-long-short-scan": {
         "task": "tasks.crypto.long_short_scan",
         # ADR-0018 配套③:全量(~527)后单轮 3 上游×全量较重 · 10min → 15min 降频。

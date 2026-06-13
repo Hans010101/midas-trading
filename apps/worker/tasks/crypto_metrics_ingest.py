@@ -29,7 +29,9 @@ import clickhouse_connect
 from celery import shared_task
 
 from app.core.config import settings
+from app.schemas.crypto import DEPTH_LEVELS, OrderbookDepth
 from app.services.clickhouse_crypto import (
+    insert_depth,
     insert_funding_rates,
     insert_long_short,
     insert_market_overview,
@@ -178,6 +180,47 @@ async def _premium_index_scan_async() -> dict[str, Any]:
         n = await insert_premium_index(ch, items)
         logger.info("[crypto.premium_index_scan] written=%d · non8h=%d", n, len(interval_map))
         return {"written": n, "non_8h_symbols": len(interval_map)}
+    finally:
+        await source.close()
+        await ch.close()
+
+
+# ============================================================================
+# 1.5 · orderbook depth scan · 5min(沙盘三期第二批 · 刀1 · 逐币 top-10 档)
+# ============================================================================
+
+
+@shared_task(name="tasks.crypto.orderbook_depth_scan")
+def orderbook_depth_scan() -> dict[str, Any]:
+    return asyncio.run(_orderbook_depth_scan_async())
+
+
+async def _orderbook_depth_scan_async() -> dict[str, Any]:
+    """全量 USDT 永续逐币拉盘口 top-10 档 → 批量落 crypto_orderbook_depth(沙盘三期第二批 · 刀1)。
+
+    逐币 GET /fapi/v1/depth(类 OI/long-short 的逐币采集)· 末尾一次批量写(免 527 次 insert)。
+    单币失败跳过不阻断整轮 · 5min 一次(沙盘快照 1h 缓存 · 5min 新鲜度足够)。
+    🔴 红线:只 GET 盘口快照 · 采集层合法写 CH(与 6 个 ingest 同范式)· 不碰决策/沙盘只读层。
+    """
+    source = BinanceFuturesSource()
+    ch = await _get_ch_client()
+    ok = 0
+    fail = 0
+    try:
+        symbols = await _all_usdt_perp_symbols(ch)
+        depths: list[OrderbookDepth] = []
+        for symbol in symbols:
+            try:
+                depths.append(await source.fetch_depth(symbol, limit=DEPTH_LEVELS))
+                ok += 1
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[crypto.depth] %s 失败:%s", symbol, exc)
+                fail += 1
+        written = await insert_depth(ch, depths)
+        logger.info(
+            "[crypto.orderbook_depth_scan] written=%d ok=%d fail=%d", written, ok, fail,
+        )
+        return {"written": written, "ok": ok, "fail": fail}
     finally:
         await source.close()
         await ch.close()

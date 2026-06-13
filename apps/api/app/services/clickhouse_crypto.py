@@ -19,14 +19,16 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from app.schemas.crypto import (
+    DEPTH_LEVELS,
     FearGreedPoint,
     FundingRate,
     LongShortRatio,
     MarketOverview,
     OpenInterest,
+    OrderbookDepth,
     PremiumIndex,
     Ticker24h,
 )
@@ -565,6 +567,38 @@ async def insert_premium_index(
     ]
     await client.insert(
         "crypto_premium_index", data, column_names=list(_PREMIUM_INDEX_COLUMNS),
+    )
+    return len(items)
+
+
+# 盘口深度列(沙盘三期第二批 · flatten 10 档)· 与 ch_schema/init.sql 表列同序同名
+_ORDERBOOK_DEPTH_COLUMNS: tuple[str, ...] = (
+    "symbol", "ts",
+    *(f"bid{i}_price" for i in range(1, DEPTH_LEVELS + 1)),
+    *(f"bid{i}_qty" for i in range(1, DEPTH_LEVELS + 1)),
+    *(f"ask{i}_price" for i in range(1, DEPTH_LEVELS + 1)),
+    *(f"ask{i}_qty" for i in range(1, DEPTH_LEVELS + 1)),
+)
+
+
+async def insert_depth(client: AsyncClient, items: list[OrderbookDepth]) -> int:
+    """批量写盘口深度 · ReplacingMergeTree 按 (symbol, ts) 去重 · flatten 10 档成列。
+
+    每条 flatten 顺序:symbol, ts, bid1..10_price, bid1..10_qty, ask1..10_price, ask1..10_qty
+    (与 _ORDERBOOK_DEPTH_COLUMNS 一致 · ClickHouse 按 column_names 名映射)。
+    """
+    if not items:
+        return 0
+    data = []
+    for it in items:
+        row: list[Any] = [it.symbol, _aware_utc(it.ts)]
+        row.extend(price for price, _ in it.bids)
+        row.extend(qty for _, qty in it.bids)
+        row.extend(price for price, _ in it.asks)
+        row.extend(qty for _, qty in it.asks)
+        data.append(row)
+    await client.insert(
+        "crypto_orderbook_depth", data, column_names=list(_ORDERBOOK_DEPTH_COLUMNS),
     )
     return len(items)
 

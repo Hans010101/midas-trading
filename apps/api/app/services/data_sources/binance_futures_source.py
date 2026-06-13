@@ -27,9 +27,11 @@ from typing import TYPE_CHECKING, Any, Literal
 import httpx
 
 from app.schemas.crypto import (
+    DEPTH_LEVELS,
     FundingRate,
     LongShortRatio,
     OpenInterest,
+    OrderbookDepth,
     PremiumIndex,
     Ticker24h,
 )
@@ -377,6 +379,26 @@ class BinanceFuturesSource(BaseDataSource):
         return await self._retry(op="fetch_premium_index", symbol="*", coro_factory=_do)
 
     # ========================================================================
+    # 5.7 · Orderbook Depth · 盘口深度 top-N 档(沙盘三期第二批 · 刀1)
+    # ========================================================================
+
+    async def fetch_depth(self, symbol: str, limit: int = DEPTH_LEVELS) -> OrderbookDepth:
+        """盘口深度快照 · /fapi/v1/depth?symbol=&limit= · 取 top-limit 档。
+
+        逐币 GET(类 OI/long-short 的逐币采集)· 🔴 只 GET 无 sign 无 trade(守数据源红线)。
+        返回定长 DEPTH_LEVELS 档(不足补 (0,0))· ts 取上游撮合时间 T(ms)缺则 now。
+        """
+        async def _do() -> OrderbookDepth:
+            data = await self._get_json(
+                "/fapi/v1/depth",
+                params={"symbol": symbol, "limit": limit},
+                symbol_for_error=symbol,
+            )
+            return _parse_depth(symbol, data)
+
+        return await self._retry(op="fetch_depth", symbol=symbol, coro_factory=_do)
+
+    # ========================================================================
     # 5.6 · Funding Info · 各币资金费结算周期(非 8h 币)· M2-C.2.2
     # ========================================================================
 
@@ -478,6 +500,43 @@ def _parse_funding_row(row: dict[str, Any], *, symbol: str) -> FundingRate:
             f"funding 行解析失败: {row} {exc}",
             market="crypto", symbol=symbol, upstream="binance-futures",
         ) from exc
+
+
+def _depth_levels(raw: Any) -> tuple[tuple[float, float], ...]:
+    """[[price,qty],…] → 定长 DEPTH_LEVELS 档 (float,float) · 不足补 (0,0) · 截断多余。
+
+    Binance fapi/v1/depth 的 bids/asks 是字符串二元组数组(price,qty)·
+    bids 已价降序 / asks 已价升序(上游保证)。脏档(缺字段/非数)降级为 (0,0) 不抛。
+    """
+    out: list[tuple[float, float]] = []
+    if isinstance(raw, list):
+        for lvl in raw[:DEPTH_LEVELS]:
+            try:
+                out.append((float(lvl[0]), float(lvl[1])))
+            except (TypeError, ValueError, IndexError):
+                out.append((0.0, 0.0))
+    while len(out) < DEPTH_LEVELS:
+        out.append((0.0, 0.0))
+    return tuple(out)
+
+
+def _parse_depth(symbol: str, row: dict[str, Any]) -> OrderbookDepth:
+    """fapi/v1/depth 响应 → OrderbookDepth · 定长 DEPTH_LEVELS 档(不足补 0)。
+
+    上游:{lastUpdateId, E(event ms), T(txn ms), bids:[[price,qty],…], asks:[…]}。
+    ts 取撮合时间 T(缺则事件时间 E,再缺则 now · 都是 UTC)。
+    """
+    ts_ms = row.get("T") or row.get("E")
+    ts = (
+        datetime.fromtimestamp(int(ts_ms) / 1000, tz=UTC)
+        if ts_ms
+        else datetime.now(UTC)
+    )
+    return OrderbookDepth(
+        symbol=symbol, ts=ts,
+        bids=_depth_levels(row.get("bids", [])),
+        asks=_depth_levels(row.get("asks", [])),
+    )
 
 
 def _parse_premium_index_row(row: dict[str, Any]) -> PremiumIndex | None:
