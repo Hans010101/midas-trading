@@ -64,3 +64,46 @@ export async function fetchAdminUsers(
   if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
   return (await r.json()) as AdminUserListOut
 }
+
+// ── 用户详情(刀3a · 纯只读聚合)──
+export interface AdminQuotaUsage {
+  feature: string
+  used: number | null // Redis 故障 → null(显 "—")
+  limit: number
+}
+
+export interface AdminRedeemedItem {
+  code: string
+  period: string
+  redeemed_at: string
+}
+
+export interface AdminUserDetail {
+  id: string
+  email: string
+  role: string
+  created_at: string
+  email_verified: boolean
+  plan: string
+  plan_status: string | null
+  plan_expires_at: string | null
+  plan_source: string | null
+  quota: AdminQuotaUsage[]
+  invite_code: string | null
+  invited_count: number
+  rewarded_count: number
+  redeemed: AdminRedeemedItem[]
+}
+
+export async function fetchAdminUserDetail(
+  token: string,
+  userId: string,
+  signal?: AbortSignal,
+): Promise<AdminUserDetail> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/users/${userId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as AdminUserDetail
+}
