@@ -76,7 +76,7 @@ export function StrategyChecklist({ futuresSymbol, klineSymbol, period }: Props)
       tone: 'green',
       label: '资金费为正 + OI 增 → 顺势开多',
       status: fundingRate == null || oiChg == null ? 'unknown' : fundingRate > 0 && oiChg > 0 ? 'hit' : 'idle',
-      hitText: '🟢 多头情绪占优 · 可考虑顺势开多(虚拟)',
+      hitText: '🟢 多头情绪占优 · 可考虑顺势开多',
       detail:
         fundingRate != null && oiChg != null
           ? `资金费 ${(fundingRate * 100).toFixed(4)}% · OI 24H ${oiChg >= 0 ? '+' : ''}${oiChg.toFixed(2)}%`
@@ -95,7 +95,7 @@ export function StrategyChecklist({ futuresSymbol, klineSymbol, period }: Props)
       tone: 'amber',
       label: '缠论一卖 + 基差走弱 → 减仓',
       status: !chanReady || basisPct == null ? 'unknown' : hasS1 && basisPct < 0 ? 'hit' : 'idle',
-      hitText: '🟡 缠论一卖 + 基差转弱 · 可考虑虚拟减仓',
+      hitText: '🟡 缠论一卖 + 基差转弱 · 可考虑减仓',
       detail:
         chanReady && basisPct != null
           ? `缠论一卖 ${hasS1 ? '出现' : '无'} · 基差率 ${basisPct.toFixed(3)}%`
@@ -106,7 +106,7 @@ export function StrategyChecklist({ futuresSymbol, klineSymbol, period }: Props)
       tone: 'red',
       label: '强平距现价 < 5% → 降杠杆',
       status: liqDist == null ? 'unknown' : liqDist < 5 ? 'hit' : 'idle',
-      hitText: '🔴 强平距离过近 · 建议降杠杆 / 加保证金(虚拟)',
+      hitText: '🔴 强平距离过近 · 建议降杠杆 / 加保证金',
       detail:
         liqDist != null
           ? `强平距离 ${liqDist.toFixed(1)}%`

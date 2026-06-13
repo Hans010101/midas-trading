@@ -177,7 +177,7 @@ export default function LabPage() {
                   onClick={submit}
                   disabled={create.isPending || exhausted || symbol.trim() === ''}
                 >
-                  {create.isPending ? '发起中…' : '发起回测(虚拟)'}
+                  {create.isPending ? '发起中…' : '发起回测'}
                 </Button>
                 {/* 额度提示(剩 M 次 / 耗尽引导官网会员区)· 如实展示 */}
                 <QuotaHint item={backtestQuota} />

@@ -274,7 +274,7 @@ async def test_sell_insufficient_position_rejected(db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_unactivated_market_rejected(db_session: AsyncSession):
-    """用户没激活该市场子账户 → 下单 reject "该市场虚拟资金未设置"。"""
+    """用户没激活该市场子账户 → 下单 reject "该市场资金未设置"。"""
     user = await make_user(db_session)
     await db_session.commit()
 

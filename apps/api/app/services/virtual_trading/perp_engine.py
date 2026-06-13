@@ -105,14 +105,14 @@ async def open_perp_position(
         return await _record_rejected(
             db, account_id=None, symbol=req.symbol, action=open_action,
             quantity=req.quantity or _ZERO, leverage=req.leverage,
-            reason="加密虚拟资金未设置 · 请先去设置页填写 USDT",
+            reason="加密资金未设置 · 请先去设置页填写 USDT",
         )
 
     if not (MIN_LEVERAGE <= req.leverage <= MAX_LEVERAGE):
         return await _record_rejected(
             db, account_id=account.id, symbol=req.symbol, action=open_action,
             quantity=req.quantity or _ZERO, leverage=req.leverage,
-            reason=f"杠杆需在 {MIN_LEVERAGE}–{MAX_LEVERAGE}x(虚拟教学上限)",
+            reason=f"杠杆需在 {MIN_LEVERAGE}–{MAX_LEVERAGE}x(教学上限)",
         )
 
     mark = await get_mark_price(req.symbol)
@@ -189,7 +189,7 @@ async def close_perp_position(
         return await _record_rejected(
             db, account_id=None, symbol=req.symbol, action=PerpAction.CLOSE_LONG,
             quantity=req.quantity or _ZERO, leverage=None,
-            reason="加密虚拟资金未设置",
+            reason="加密资金未设置",
         )
 
     pos = await _active_position(db, account.id, req.symbol)

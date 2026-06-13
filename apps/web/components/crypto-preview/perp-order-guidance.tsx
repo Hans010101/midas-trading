@@ -138,7 +138,7 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
           order.realized_pnl != null
             ? ` · 已实现 ${fmtU(Number(order.realized_pnl))} USDT`
             : ''
-        toast.success(`${label} 已成交(虚拟)${pnl}`, {
+        toast.success(`${label} 已成交${pnl}`, {
           className: 'midas-toast-success', duration: 4000,
         })
       } else {
@@ -179,7 +179,7 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
               : 'border border-midas-red/50 text-midas-red hover:bg-midas-red-glow/40',
           )}
         >
-          开多(虚拟)
+          开多
         </button>
         <button
           type="button"
@@ -191,7 +191,7 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
               : 'border border-midas-red/50 text-midas-red hover:bg-midas-red-glow/40',
           )}
         >
-          开空(虚拟)
+          开空
         </button>
       </div>
 
@@ -257,7 +257,7 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
 
       {/* 保证金 */}
       <div className="mb-3">
-        <div className="mb-1 text-xs text-muted-foreground">保证金(虚拟 USDT)</div>
+        <div className="mb-1 text-xs text-muted-foreground">保证金(USDT)</div>
         <input
           type="number"
           value={margin}
@@ -294,14 +294,14 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
           href="/login"
           className="block rounded-md border border-midas-red py-2 text-center text-sm text-midas-red hover:bg-midas-red-glow/40"
         >
-          登录后开始虚拟合约交易
+          登录后开始合约交易
         </Link>
       ) : account == null ? (
         <Link
           href="/account"
           className="block rounded-md border border-gold bg-gold/10 py-2 text-center text-sm text-gold"
         >
-          去「我的账户」设置加密虚拟 USDT
+          去「我的账户」设置加密 USDT
         </Link>
       ) : (
         <button
@@ -313,7 +313,7 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
             canOpen ? 'bg-midas-red hover:bg-midas-red-deep' : 'cursor-not-allowed bg-midas-red/30',
           )}
         >
-          确认{sideZh(side)}(虚拟)
+          确认{sideZh(side)}
         </button>
       )}
       {authed && account != null && estimate != null && !canOpen && !placeOrder.isPending && (
@@ -330,7 +330,7 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
           onClick={() => setPerpLimitOpen(true)}
           className="mt-2 w-full rounded-md border border-gold/60 py-2 text-sm text-gold transition-colors hover:bg-gold/10"
         >
-          挂限价单(到价自动开多 / 开空 · 虚拟)
+          挂限价单(到价自动开多 / 开空)
         </button>
       )}
 
@@ -428,7 +428,7 @@ function ActivePositionCard({
         />
       </div>
       {pos.margin_mode === 'isolated' && dist != null && dist < 5 && (
-        <p className="mt-1.5 text-[10px] text-down">⚠️ 强平距离仅 {dist.toFixed(1)}% · 建议降杠杆 / 加保证金(虚拟)</p>
+        <p className="mt-1.5 text-[10px] text-down">⚠️ 强平距离仅 {dist.toFixed(1)}% · 建议降杠杆 / 加保证金</p>
       )}
     </div>
   )
@@ -468,7 +468,7 @@ function PerpConfirmModal({
   onConfirm: () => void
 }) {
   const isClose = intent === 'close'
-  const title = isClose ? '确认平仓(虚拟)' : `确认${side === 'long' ? '开多' : '开空'}(虚拟)`
+  const title = isClose ? '确认平仓' : `确认${side === 'long' ? '开多' : '开空'}`
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4"
