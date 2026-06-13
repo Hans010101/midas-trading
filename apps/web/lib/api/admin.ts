@@ -13,6 +13,7 @@ export interface AdminUserItem {
   id: string
   email: string
   role: string
+  banned: boolean
   plan: string
   created_at: string
   email_verified: boolean
@@ -90,6 +91,7 @@ export interface AdminUserDetail {
   role: string
   created_at: string
   email_verified: boolean
+  banned: boolean
   plan: string
   plan_status: string | null
   plan_expires_at: string | null
@@ -121,6 +123,23 @@ export async function grantPro(
   })
   if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
   return (await r.json()) as GrantResult
+}
+
+/** 管理员封禁/解封(刀3b-2 · 写操作 · 方案A 禁止登录)。 */
+export async function setBan(
+  token: string,
+  userId: string,
+  ban: boolean,
+  note?: string | null,
+): Promise<{ user_id: string; banned: boolean }> {
+  const action = ban ? 'ban' : 'unban'
+  const r = await fetch(`${API_BASE}/api/v1/admin/users/${userId}/${action}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ note: note ?? null }),
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as { user_id: string; banned: boolean }
 }
 
 export async function fetchAdminUserDetail(

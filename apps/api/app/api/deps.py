@@ -93,6 +93,13 @@ async def get_current_user(
             detail="session 无效或已过期 · 请重新登录",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    # 刀3b-2:封禁全站立即失效点 —— banned 用户即使持有效 session,任何受保护请求即被拒。
+    # 放此处 = 唯一干净的"现有 session 立即失效"位(所有端点经 CurrentUserDep)。
+    if user.banned_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="账号已被停用",
+        )
     return user
 
 

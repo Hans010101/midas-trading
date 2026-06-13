@@ -94,6 +94,11 @@ export default function AdminUsersPage() {
                             admin
                           </span>
                         )}
+                        {u.banned && (
+                          <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                            已停用
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
                         {createdAtText(u.created_at)}

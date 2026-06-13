@@ -94,10 +94,10 @@ export function Seal({
   // hooks 必须无条件调用(rules-of-hooks)· 兜底占位用其生成滤镜 id
   const id = useId().replace(/:/g, '')
   if (src) {
+    // 海报在 1080×1920 真实坐标空间渲染 + html-to-image 导出,需原生 <img>
+    // (next/image 优化层与 foreignObject/canvas 序列化不兼容)。
     return (
-      // eslint-disable-next-line @next/next/no-img-element -- 海报在 1080×1920
-      // 真实坐标空间渲染 + html-to-image 导出,需原生 <img>(next/image 优化层
-      // 与 foreignObject/canvas 序列化不兼容)
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={src}
         alt="点金 Midas 印章"

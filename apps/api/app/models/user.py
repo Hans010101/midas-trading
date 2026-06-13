@@ -44,6 +44,9 @@ class User(Base):
     )
     # Phase 1.5 刀A:邀请码(8 位 Crockford base32)· lazy 生成于首次 GET /invite/me
     invite_code: Mapped[str | None] = mapped_column(String(12), unique=True, nullable=True)
+    # 用户管理刀3b-2:封禁(方案A 禁止登录)· banned_at 非空=已停用(留"何时封"可追溯)·
+    # login + get_current_user 均查此字段 → 现有 session 立即失效
+    banned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # 0007 watchlist:首次 GET /watchlist 触发 demo 预填后翻为 True,
     # 用户主动清空 watchlist 不会再触发(防止「删光 → 又被填回来」UX 怪圈)
     demo_prefilled: Mapped[bool] = mapped_column(

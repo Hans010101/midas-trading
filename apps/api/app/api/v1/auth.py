@@ -181,6 +181,11 @@ async def login(payload: LoginIn, db: DbDep, request: Request) -> LoginOut:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="邮箱未验证 · 请查收注册邮件或调用 /resend-verification",
         )
+    if user.banned_at is not None:  # 刀3b-2:封禁拒登(邮箱路)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="账号已被停用",
+        )
     ua = request.headers.get("user-agent")
     ip = request.client.host if request.client else None
     session_token = await issue_session(
@@ -292,6 +297,14 @@ async def oauth_google(
         user, created = await find_or_create_oauth_user(
             db, google_sub=google_sub, email=email,
         )
+        # 刀3b-2:封禁拒登(OAuth 路 · 已封禁的老 Google 用户重登被拒)。
+        # created 用户刚建不可能 banned;HTTPException 在下方 except HTTPException 透传不被吞成 500。
+        if user.banned_at is not None:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="账号已被停用",
+            )
         trial_granted = False
         invite_rewarded = False
         if created:
@@ -306,6 +319,8 @@ async def oauth_google(
             db, user_id=user.id, user_agent=ua, ip_address=ip,
         )
         await db.commit()
+    except HTTPException:
+        raise  # 刀3b-2:封禁 403 等业务异常原样透传,不被下方吞成 500
     except Exception as e:  # noqa: BLE001
         await db.rollback()
         logger.exception("[oauth.google] DB 写入失败(find_or_create / issue_session)")
