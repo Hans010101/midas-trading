@@ -2,7 +2,8 @@
 
 ═══════════════════════════════════════════════════════════════════════════
 🔴🔴 最高红线(本文件 review 重点):
-  触发成交【只能】调现有唯一入口 —— spot → place_market_order · perp SL/TP → route_close_perp。
+  触发成交【只能】调现有唯一入口 —— spot → place_market_order · perp 限价开仓 → route_open_perp ·
+  perp SL/TP → route_close_perp。开仓(route_open_perp)与平仓(route_close_perp)对称,
   本文件【零】撮合/滑点/手续费/持仓变更逻辑(全部在被调入口内,继承不重写);
   engine.py / perp_dispatcher 一行不改,只 import 调用。
   成交那一刻走唯一入口 = 全程虚拟 + 成交通知自动继承
@@ -31,6 +32,7 @@ from app.models.conditional_order import (
     ConditionalOrder,
     ConditionalStatus,
 )
+from app.models.perp import MarginMode, PerpSide
 from app.models.virtual import (
     OrderSide,
     OrderStatus,
@@ -43,7 +45,10 @@ from app.services.virtual_trading.engine import (
     PriceFetcher,
     place_market_order,
 )
-from app.services.virtual_trading.perp_dispatcher import route_close_perp
+from app.services.virtual_trading.perp_dispatcher import (
+    route_close_perp,
+    route_open_perp,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -136,16 +141,6 @@ async def process_active_conditionals(
             stats["skipped_closed_market"] += 1
             continue
 
-        # 刀1 存量缺口防御:perp 限价单范围外(ADR 只含 perp SL/TP)→ 终态化,不再每轮扫到
-        if row.market == "crypto" and row.order_kind == ConditionalKind.LIMIT:
-            locked = await _lock_active(session, row.id)
-            if locked is not None:
-                locked.status = ConditionalStatus.EXPIRED
-                locked.note = "perp 限价单暂不支持(v1)"
-                await session.flush()
-                stats["expired"] += 1
-            continue
-
         # 判价(无价跳过 · 照强平「不误杀」原则)
         if row.market == "crypto":
             price = await get_perp_mark(row.symbol)
@@ -170,18 +165,45 @@ async def process_active_conditionals(
         # ── 成交(🔴 只调唯一入口 · 本文件不含任何撮合逻辑)────────────────────
         order: VirtualOrder | VirtualPerpOrder
         if locked.market == "crypto":
-            # perp SL/TP → route_close_perp(quantity=NULL 平全仓 · 按活仓 mode 自动分流)
             async def _mark(symbol: str) -> Decimal | None:
                 return await get_perp_mark(symbol)
 
-            order = await route_close_perp(
-                session,
-                user_id=locked.user_id,
-                symbol=locked.symbol,
-                quantity=locked.quantity,
-                close_all=locked.quantity is None,
-                get_mark_price=_mark,
-            )
+            if locked.order_kind == ConditionalKind.LIMIT:
+                # perp 限价单 → 开仓唯一入口 route_open_perp(与平仓 route_close_perp 对称)·
+                # 命中即开仓:position_side LONG 开多 / SHORT 开空;
+                # leverage/margin/margin_mode 由刀1 端点保证非空(perp LIMIT 必填)。
+                if (
+                    locked.leverage is None
+                    or locked.margin is None
+                    or locked.margin_mode is None
+                ):
+                    # 防御:理论不达(端点强制必填)· legacy/脏数据兜底 + mypy 窄化
+                    locked.status = ConditionalStatus.EXPIRED
+                    locked.note = "perp 限价单缺开仓参数(leverage/margin/mode)"
+                    await session.flush()
+                    stats["expired"] += 1
+                    continue
+                order = await route_open_perp(
+                    session,
+                    user_id=locked.user_id,
+                    symbol=locked.symbol,
+                    side=PerpSide[locked.position_side.name],  # LONG 开多 / SHORT 开空
+                    leverage=locked.leverage,
+                    margin=locked.margin,
+                    quantity=locked.quantity,
+                    preferred_mode=MarginMode(locked.margin_mode),
+                    get_mark_price=_mark,
+                )
+            else:
+                # perp SL/TP → route_close_perp(quantity=NULL 平全仓 · 按活仓 mode 自动分流)
+                order = await route_close_perp(
+                    session,
+                    user_id=locked.user_id,
+                    symbol=locked.symbol,
+                    quantity=locked.quantity,
+                    close_all=locked.quantity is None,
+                    get_mark_price=_mark,
+                )
         else:
             qty = locked.quantity
             if qty is None:  # spot SL/TP 平全仓:读当时活仓量

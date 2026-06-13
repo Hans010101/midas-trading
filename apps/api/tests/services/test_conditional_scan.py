@@ -20,6 +20,7 @@ from app.models.conditional_order import (
     ConditionalOrder,
     ConditionalStatus,
 )
+from app.models.perp import MarginMode, PerpSide
 from app.models.virtual import OrderSide, OrderStatus, PositionSide, VirtualPosition
 from app.services.virtual_trading.conditional_trigger import (
     process_active_conditionals,
@@ -33,11 +34,16 @@ def _cond(
     side: OrderSide = OrderSide.BUY,
     pside: PositionSide = PositionSide.LONG,
     trigger: str = "100", qty: str | None = "5",
+    leverage: int | None = None, margin: str | None = None,
+    margin_mode: str | None = None,  # 二期刀2:perp 限价开仓字段(spot/SLTP 留 None)
 ) -> ConditionalOrder:
     return ConditionalOrder(
         user_id=user_id, symbol=symbol, market=market, order_kind=kind,
         side=side, position_side=pside, trigger_price=Decimal(trigger),
         quantity=Decimal(qty) if qty is not None else None,
+        leverage=leverage,
+        margin=Decimal(margin) if margin is not None else None,
+        margin_mode=margin_mode,
         status=ConditionalStatus.ACTIVE,
     )
 
@@ -85,6 +91,9 @@ async def test_spot_limit_hit_calls_place_market_order(
         return _filled(21)
 
     monkeypatch.setattr(trig_mod, "place_market_order", spy_place)
+    # 恰好三入口:spot 只调 place_market_order,不碰两个 perp 入口
+    monkeypatch.setattr(trig_mod, "route_close_perp", _never_factory())
+    monkeypatch.setattr(trig_mod, "route_open_perp", _never_factory())
     stats, perp_ids = await process_active_conditionals(db_session, **_injects())
 
     assert stats["triggered"] == 1
@@ -259,6 +268,9 @@ async def test_perp_tp_calls_route_close_and_collects_emit(
         return _filled(41)
 
     monkeypatch.setattr(trig_mod, "route_close_perp", spy_route)
+    # 恰好三入口:perp SL/TP 只调 route_close_perp(平仓),绝不开仓 / 不碰 spot 入口
+    monkeypatch.setattr(trig_mod, "place_market_order", _never_factory())
+    monkeypatch.setattr(trig_mod, "route_open_perp", _never_factory())
     stats, perp_ids = await process_active_conditionals(db_session, **_injects())
     assert stats["triggered"] == 1
     assert perp_ids == [41]  # commit 后由壳 emit_perp_order
@@ -296,49 +308,136 @@ async def test_perp_rejected_expires_with_note(
     assert "无可平的合约持仓" in row.note
 
 
-@pytest.mark.asyncio
-async def test_crypto_limit_defensive_expire(
-    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """刀1 存量缺口:crypto+LIMIT → 防御终态化 EXPIRED + note · 不调任何成交入口。"""
-    user = await make_user(db_session)
-    row = _cond(user.id, market="crypto", symbol="BTCUSDT", trigger="100000", qty="1")
-    db_session.add(row)
-    await db_session.flush()
-    monkeypatch.setattr(trig_mod, "place_market_order", _never_factory())
-    monkeypatch.setattr(trig_mod, "route_close_perp", _never_factory())
-    stats, _ = await process_active_conditionals(db_session, **_injects())
-    assert stats["expired"] == 1
-    await db_session.refresh(row)
-    assert row.status == ConditionalStatus.EXPIRED
-    assert row.note is not None
-    assert "暂不支持" in row.note
+# ── perp 限价触发开仓(二期刀2 · ★唯一改触发器红线 · 替换刀1 的 EXPIRED 防御)──────
+
+
+def _spy_open(captured: dict[str, Any], order_id: int = 51) -> Any:
+    """route_open_perp 间谍:捕获入参 + 返回成交单(证只调开仓唯一入口、不自己撮合)。"""
+    async def spy(_db: Any, **kwargs: Any) -> SimpleNamespace:
+        captured.update(kwargs)
+        return _filled(order_id)
+    return spy
 
 
 @pytest.mark.asyncio
-async def test_perp_limit_with_open_fields_still_defensive_expire(
+async def test_perp_limit_open_long_calls_route_open_perp(
     db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """★ 二期刀1 半成品安全:perp 限价单【带杠杆/保证金/模式】(刀1 端点新放开的产物)
-    被触发器扫到,仍走现有 EXPIRED 防御 · 不调任何成交入口(触发→开仓 route_open_perp 留刀2)。
-    本刀【不碰触发器】,这条钉住"挂得进但触不发"的安全边界。
-    """
+    """★红线+功能:perp 限价【开多】(BUY+LONG · 低吸 P≤T)命中=调 route_open_perp 开仓入口
+    (side=LONG · leverage/margin/mode 由刀1 字段映射)→ TRIGGERED + emit 收集;
+    place_market_order / route_close_perp 绝不被调(恰好三入口)。"""
     user = await make_user(db_session)
-    row = ConditionalOrder(
-        user_id=user.id, symbol="BTCUSDT", market="crypto",
-        order_kind=ConditionalKind.LIMIT, side=OrderSide.BUY,
-        position_side=PositionSide.LONG, trigger_price=Decimal("100000"),
-        quantity=None, leverage=10, margin=Decimal("500"), margin_mode="isolated",
-        status=ConditionalStatus.ACTIVE,
+    # mark 120000 ≤ trigger 125000 → 低吸开多触发
+    row = _cond(
+        user.id, market="crypto", symbol="BTCUSDT", kind=ConditionalKind.LIMIT,
+        side=OrderSide.BUY, pside=PositionSide.LONG, trigger="125000", qty=None,
+        leverage=10, margin="500", margin_mode="isolated",
     )
     db_session.add(row)
     await db_session.flush()
+
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(trig_mod, "route_open_perp", _spy_open(captured, 51))
+    monkeypatch.setattr(trig_mod, "place_market_order", _never_factory())  # 不走 spot
+    monkeypatch.setattr(trig_mod, "route_close_perp", _never_factory())  # 开仓不平仓
+
+    stats, perp_ids = await process_active_conditionals(db_session, **_injects())
+    assert stats["triggered"] == 1
+    assert perp_ids == [51]  # commit 后由壳 emit_perp_order(开仓/平仓同口径)
+    # 字段映射:position_side LONG → 开多 side=PerpSide.LONG · 刀1 落的开仓参数逐项进入口
+    assert captured["side"] == PerpSide.LONG
+    assert captured["leverage"] == 10
+    assert captured["margin"] == Decimal("500")
+    assert captured["preferred_mode"] == MarginMode.ISOLATED
+    assert captured["symbol"] == "BTCUSDT"
+    await db_session.refresh(row)
+    assert row.status == ConditionalStatus.TRIGGERED
+    assert row.triggered_order_id == 51
+
+
+@pytest.mark.asyncio
+async def test_perp_limit_open_short_calls_route_open_perp(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """★ 空头限价核心:perp 限价【开空】(SELL+SHORT · 高抛 P≥T)命中=调 route_open_perp
+    开仓入口(side=SHORT)→ TRIGGERED。"""
+    user = await make_user(db_session)
+    # mark 120000 ≥ trigger 115000 → 高抛开空触发
+    row = _cond(
+        user.id, market="crypto", symbol="BTCUSDT", kind=ConditionalKind.LIMIT,
+        side=OrderSide.SELL, pside=PositionSide.SHORT, trigger="115000", qty=None,
+        leverage=5, margin="300", margin_mode="cross",
+    )
+    db_session.add(row)
+    await db_session.flush()
+
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(trig_mod, "route_open_perp", _spy_open(captured, 52))
+    monkeypatch.setattr(trig_mod, "place_market_order", _never_factory())
+    monkeypatch.setattr(trig_mod, "route_close_perp", _never_factory())
+
+    stats, perp_ids = await process_active_conditionals(db_session, **_injects())
+    assert stats["triggered"] == 1
+    assert perp_ids == [52]
+    assert captured["side"] == PerpSide.SHORT  # ★ 开空方向
+    assert captured["leverage"] == 5
+    assert captured["preferred_mode"] == MarginMode.CROSS
+    await db_session.refresh(row)
+    assert row.status == ConditionalStatus.TRIGGERED
+
+
+@pytest.mark.asyncio
+async def test_perp_limit_idempotent_open_once(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """★ 幂等:同一限价单连扫两轮,只开仓一次(首轮 TRIGGERED 后非 ACTIVE,次轮不再扫到)。"""
+    user = await make_user(db_session)
+    row = _cond(
+        user.id, market="crypto", symbol="BTCUSDT", kind=ConditionalKind.LIMIT,
+        side=OrderSide.BUY, pside=PositionSide.LONG, trigger="125000", qty=None,
+        leverage=10, margin="500", margin_mode="isolated",
+    )
+    db_session.add(row)
+    await db_session.flush()
+
+    calls: list[int] = []
+
+    async def spy(_db: Any, **_k: Any) -> SimpleNamespace:
+        calls.append(1)
+        return _filled(53)
+
+    monkeypatch.setattr(trig_mod, "route_open_perp", spy)
+    monkeypatch.setattr(trig_mod, "place_market_order", _never_factory())
+    monkeypatch.setattr(trig_mod, "route_close_perp", _never_factory())
+
+    await process_active_conditionals(db_session, **_injects())  # 首轮:开仓
+    await process_active_conditionals(db_session, **_injects())  # 次轮:已 TRIGGERED 不再扫
+    assert len(calls) == 1  # 只开一次
+    await db_session.refresh(row)
+    assert row.status == ConditionalStatus.TRIGGERED
+
+
+@pytest.mark.asyncio
+async def test_perp_limit_missing_fields_expires(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """防御:perp 限价单缺开仓参数(理论不达 · 端点强制必填)→ EXPIRED + note,不调任何入口。
+    保留一条"防御终态化"测试(原因从'暂不支持'改为'缺开仓参数')。"""
+    user = await make_user(db_session)
+    row = _cond(
+        user.id, market="crypto", symbol="BTCUSDT", kind=ConditionalKind.LIMIT,
+        side=OrderSide.BUY, pside=PositionSide.LONG, trigger="125000", qty=None,
+        leverage=None, margin=None, margin_mode=None,  # 脏数据:缺开仓字段
+    )
+    db_session.add(row)
+    await db_session.flush()
+    monkeypatch.setattr(trig_mod, "route_open_perp", _never_factory())
     monkeypatch.setattr(trig_mod, "place_market_order", _never_factory())
     monkeypatch.setattr(trig_mod, "route_close_perp", _never_factory())
     stats, perp_ids = await process_active_conditionals(db_session, **_injects())
     assert stats["expired"] == 1
-    assert perp_ids == []  # 零成交
+    assert perp_ids == []
     await db_session.refresh(row)
     assert row.status == ConditionalStatus.EXPIRED
     assert row.note is not None
-    assert "暂不支持" in row.note
+    assert "缺开仓参数" in row.note
