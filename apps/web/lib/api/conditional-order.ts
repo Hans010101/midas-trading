@@ -16,16 +16,25 @@ import type { Market } from '@midas/shared'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
+/** perp 保证金模式(与后端 MarginMode 同口径) */
+export type MarginMode = 'cross' | 'isolated'
+
 export interface ConditionalOrderCreate {
   symbol: string
   market: Market
   order_kind: ConditionalKind
   side: OrderSide
-  /** 不传 = long(后端默认)· 仅空头仓的 SL/TP 传 short */
+  /** 不传 = long(后端默认)· 空头仓 SL/TP 与 perp 限价开空传 short */
   position_side?: PositionSide
   trigger_price: string
-  /** LIMIT 必填;SL/TP 省略 = 触发时平全仓 */
+  /** spot LIMIT 必填;SL/TP 省略 = 平全仓;perp 限价省略 = margin×leverage 定仓 */
   quantity?: string
+  // ── 二期刀1/3:perp 限价开仓字段(仅 market=crypto & kind=limit 传 · 端点强制必填)──
+  leverage?: number
+  margin?: string
+  margin_mode?: MarginMode
+  /** 限价单挂单过期(默认不传 = 长期有效) */
+  expires_at?: string
 }
 
 export interface ConditionalOrder {
@@ -37,6 +46,11 @@ export interface ConditionalOrder {
   position_side: PositionSide
   trigger_price: string
   quantity: string | null
+  // 二期刀1/3:perp 限价开仓字段回显(spot/SLTP 为 null)
+  leverage: number | null
+  margin: string | null
+  margin_mode: MarginMode | null
+  expires_at: string | null
   status: ConditionalStatus
   triggered_order_id: number | null
   note: string | null

@@ -94,6 +94,8 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
   const [confirm, setConfirm] = useState<PerpIntent | null>(null)
   // 持仓挂 SL/TP(ADR 0041 刀3 · 共享 ConditionalOrderDialog · 触发走 route_close_perp)
   const [sltpOpen, setSltpOpen] = useState(false)
+  // perp 限价开仓(二期刀3 · 共享 ConditionalOrderDialog perp-limit · 触发走 route_open_perp)
+  const [perpLimitOpen, setPerpLimitOpen] = useState(false)
 
   // 加仓(开同向)沿用持仓杠杆;反向 / 新开可调
   const sameSideAsPos = activePos != null && activePos.side === side
@@ -320,6 +322,18 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
         </p>
       )}
 
+      {/* 限价单入口(到价自动开多/开空 · 触发走后端 route_open_perp)·
+          限价是未来触发,不受当前余额约束,authed + 账户即常驻 */}
+      {authed && account != null && (
+        <button
+          type="button"
+          onClick={() => setPerpLimitOpen(true)}
+          className="mt-2 w-full rounded-md border border-gold/60 py-2 text-sm text-gold transition-colors hover:bg-gold/10"
+        >
+          挂限价单(到价自动开多 / 开空 · 虚拟)
+        </button>
+      )}
+
       {confirm && estimate != null && (
         <PerpConfirmModal
           intent={confirm}
@@ -345,6 +359,18 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
           mode="sltp"
           positionSide={activePos.side}
           heldQuantity={activePos.quantity}
+          klineSymbol={klineSymbol}
+        />
+      )}
+
+      {/* perp 限价开仓 · 共享条件单弹层 perp-limit(触发时后端 route_open_perp 开多/开空) */}
+      {perpLimitOpen && (
+        <ConditionalOrderDialog
+          open
+          onClose={() => setPerpLimitOpen(false)}
+          symbol={futuresSymbol}
+          market="crypto"
+          mode="perp-limit"
           klineSymbol={klineSymbol}
         />
       )}

@@ -10,6 +10,11 @@ import type { OrderSide, PositionSide } from '@/lib/api/virtual'
 export type ConditionalKind = 'limit' | 'stop_loss' | 'take_profit'
 export type ConditionalStatus = 'active' | 'triggered' | 'cancelled' | 'expired'
 
+// perp 限价开仓杠杆范围 · 与后端 schema(ge=1 le=125)同口径。
+// 注:故意与 perp 市价表单的 PERP_MAX_LEVERAGE(=20)解耦 —— 限价单走后端完整 1-125。
+export const PERP_LIMIT_MIN_LEVERAGE = 1
+export const PERP_LIMIT_MAX_LEVERAGE = 125
+
 /** 类型中文(LIMIT 按 side 细分:限价买入 / 限价卖出)。 */
 export function kindLabel(kind: ConditionalKind, side: OrderSide): string {
   if (kind === 'limit') return side === 'buy' ? '限价买入' : '限价卖出'
@@ -44,6 +49,32 @@ export function wouldTriggerNow(
   }
   // take_profit
   return closingLong ? price >= triggerPrice : price <= triggerPrice
+}
+
+/**
+ * perp 限价开仓表单校验(二期刀3 · 纯函数 · 与后端端点同口径)。
+ * 杠杆 1-125(后端 schema 口径)· margin>0 · margin_mode∈{cross,isolated} · 触发价>0。
+ * 返回 null = 通过;否则返回首个错误中文(可提交即 null)。
+ */
+export function validatePerpLimit(input: {
+  triggerPrice: number
+  leverage: number
+  margin: number
+  marginMode: string
+}): string | null {
+  if (!(input.triggerPrice > 0)) return '请填写触发价'
+  if (
+    !Number.isInteger(input.leverage)
+    || input.leverage < PERP_LIMIT_MIN_LEVERAGE
+    || input.leverage > PERP_LIMIT_MAX_LEVERAGE
+  ) {
+    return `杠杆需在 ${PERP_LIMIT_MIN_LEVERAGE}-${PERP_LIMIT_MAX_LEVERAGE}x`
+  }
+  if (!(input.margin > 0)) return '请填写保证金'
+  if (input.marginMode !== 'cross' && input.marginMode !== 'isolated') {
+    return '请选择保证金模式'
+  }
+  return null
 }
 
 /** 触发价相对现价的偏离百分比(绝对值)· 现价无效返回 null。 */
