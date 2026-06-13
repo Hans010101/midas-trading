@@ -162,3 +162,5 @@ async def test_last_active_and_session_count(client: AsyncClient, db_session: As
     # 验证字段齐全(email_verified 工厂默认 True)
     assert by_email[active.email]["email_verified"] is True
     assert by_email[active.email]["role"] == "user"
+    # 会员刀2:plan 列(无订阅行 → free · outerjoin 批量解析)
+    assert by_email[active.email]["plan"] == "free"

@@ -22,7 +22,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import AdminDep
 from app.core.database import get_db
 from app.models.session import Session
+from app.models.subscription import Subscription
 from app.models.user import User
+from app.services.membership import PLAN_QUOTAS
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -33,6 +35,7 @@ class AdminUserItem(BaseModel):
     id: str
     email: str
     role: str
+    plan: str  # 会员刀2:free / pro(subscription outerjoin 批量解析 · 防 N+1)
     created_at: datetime
     email_verified: bool
     register_method: str  # google | password | both
@@ -62,6 +65,9 @@ async def list_users(
 ) -> AdminUserListOut:
     """用户列表(分页 · created_at desc)· session 聚合一条 outerjoin 防 N+1。"""
     now = datetime.now(UTC)
+    # 订阅行 outerjoin(每用户至多一行 unique)· Python 侧三态判定 → 零 N+1
+    # (口径与 services.membership.resolve_plan 一致:非 active / 过期 / 未知 → free)
+    sub = Subscription.__table__.alias("sub")
     # 未过期 session 按 user 聚合(7 天滚动 TTL → last_active 天然 7d 口径)
     sess_agg = (
         select(
@@ -76,8 +82,16 @@ async def list_users(
 
     rows = (
         await db.execute(
-            select(User, sess_agg.c.last_active, sess_agg.c.session_count)
+            select(
+                User,
+                sess_agg.c.last_active,
+                sess_agg.c.session_count,
+                sub.c.plan,
+                sub.c.status,
+                sub.c.expires_at,
+            )
             .outerjoin(sess_agg, sess_agg.c.user_id == User.id)
+            .outerjoin(sub, sub.c.user_id == User.id)
             # created_at 平局 → id tie-break(分页稳定 · 铁律 · 同 conditional/backtest)
             .order_by(User.created_at.desc(), User.id.desc())
             .limit(page_size)
@@ -86,19 +100,27 @@ async def list_users(
     ).all()
     total = (await db.execute(select(func.count()).select_from(User))).scalar_one()
 
+    def _plan_of(plan: str | None, sub_status: str | None, expires_at: datetime | None) -> str:
+        if plan is None or sub_status != "active":
+            return "free"
+        if expires_at is not None and expires_at <= now:
+            return "free"
+        return plan if plan in PLAN_QUOTAS else "free"
+
     return AdminUserListOut(
         items=[
             AdminUserItem(
                 id=str(u.id),
                 email=u.email,
                 role=u.role,
+                plan=_plan_of(plan, sub_status, expires_at),
                 created_at=u.created_at,
                 email_verified=u.email_verified_at is not None,
                 register_method=_register_method(u.google_sub, u.password_hash),
                 last_active_7d=last_active,
                 active_sessions=session_count or 0,
             )
-            for u, last_active, session_count in rows
+            for u, last_active, session_count, plan, sub_status, expires_at in rows
         ],
         total=total,
         page=page,

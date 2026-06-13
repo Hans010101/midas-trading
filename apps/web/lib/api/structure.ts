@@ -64,18 +64,23 @@ export class StructureApiError extends Error {
   constructor(
     public readonly status: number,
     public readonly detail: string,
+    /** 会员刀2:429 的 detail 是结构化 dict(六字段)· 原样保留给前端解析 */
+    public readonly rawDetail: unknown = null,
   ) {
     super(`StructureApi ${status}: ${detail}`)
     this.name = 'StructureApiError'
   }
 }
 
-async function readDetail(resp: Response): Promise<string> {
+async function readDetail(resp: Response): Promise<{ text: string; raw: unknown }> {
   try {
     const body = (await resp.json()) as { detail?: unknown }
-    return typeof body.detail === 'string' ? body.detail : `HTTP ${resp.status}`
+    return {
+      text: typeof body.detail === 'string' ? body.detail : `HTTP ${resp.status}`,
+      raw: body.detail ?? null,
+    }
   } catch {
-    return `HTTP ${resp.status}`
+    return { text: `HTTP ${resp.status}`, raw: null }
   }
 }
 
@@ -93,6 +98,9 @@ export async function postDiagnose(
     headers: authHeaders(token),
     body: JSON.stringify(body),
   })
-  if (!r.ok) throw new StructureApiError(r.status, await readDetail(r))
+  if (!r.ok) {
+    const d = await readDetail(r)
+    throw new StructureApiError(r.status, d.text, d.raw)
+  }
   return (await r.json()) as StructureDiagnosis
 }

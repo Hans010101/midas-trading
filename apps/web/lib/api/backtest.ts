@@ -108,18 +108,23 @@ export class BacktestApiError extends Error {
   constructor(
     public readonly status: number,
     public readonly detail: string,
+    /** 会员刀2:429 结构化 detail 原样保留 */
+    public readonly rawDetail: unknown = null,
   ) {
     super(`BacktestApi ${status}: ${detail}`)
     this.name = 'BacktestApiError'
   }
 }
 
-async function readDetail(resp: Response): Promise<string> {
+async function readDetail(resp: Response): Promise<{ text: string; raw: unknown }> {
   try {
     const body = (await resp.json()) as { detail?: unknown }
-    return typeof body.detail === 'string' ? body.detail : `HTTP ${resp.status}`
+    return {
+      text: typeof body.detail === 'string' ? body.detail : `HTTP ${resp.status}`,
+      raw: body.detail ?? null,
+    }
   } catch {
-    return `HTTP ${resp.status}`
+    return { text: `HTTP ${resp.status}`, raw: null }
   }
 }
 
@@ -137,7 +142,10 @@ export async function createBacktest(
     headers: authHeaders(token),
     body: JSON.stringify(body),
   })
-  if (!r.ok) throw new BacktestApiError(r.status, await readDetail(r))
+  if (!r.ok) {
+    const d = await readDetail(r)
+    throw new BacktestApiError(r.status, d.text, d.raw)
+  }
   return (await r.json()) as BacktestCreateResponse
 }
 
@@ -151,7 +159,10 @@ export async function listBacktests(
     headers: authHeaders(token),
     signal,
   })
-  if (!r.ok) throw new BacktestApiError(r.status, await readDetail(r))
+  if (!r.ok) {
+    const d = await readDetail(r)
+    throw new BacktestApiError(r.status, d.text, d.raw)
+  }
   return (await r.json()) as BacktestRunListItem[]
 }
 
@@ -165,6 +176,9 @@ export async function getBacktest(
     headers: authHeaders(token),
     signal,
   })
-  if (!r.ok) throw new BacktestApiError(r.status, await readDetail(r))
+  if (!r.ok) {
+    const d = await readDetail(r)
+    throw new BacktestApiError(r.status, d.text, d.raw)
+  }
   return (await r.json()) as BacktestRunResponse
 }
