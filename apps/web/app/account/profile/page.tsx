@@ -12,6 +12,7 @@
 import { useSession } from 'next-auth/react'
 
 import { QuotaCard } from '@/components/account/quota-card'
+import { RedeemCard } from '@/components/account/redeem-card'
 import { BotOrderPresetSection } from '@/components/settings/bot-order-preset-section'
 import { ColorPrefSection } from '@/components/settings/color-pref-section'
 
@@ -47,6 +48,9 @@ export default function ProfilePage() {
 
       {/* ①.5 我的额度(会员刀2:方案 + 沙盘/回测用量 + 重置口径) */}
       <QuotaCard />
+
+      {/* ①.6 兑换码(兑换码刀2:输入码开/续 Pro · 成功即时刷新额度卡) */}
+      <RedeemCard />
 
       {/* ② 涨跌色偏好 + ③ Bot 下单预设(/settings 搬入) */}
       <ColorPrefSection />

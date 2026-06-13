@@ -13,6 +13,7 @@ import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { useState } from 'react'
 
+import { AdminNav } from '@/components/admin/admin-nav'
 import { TopNav } from '@/components/layout/top-nav'
 import { AdminApiError, fetchAdminUsers } from '@/lib/api/admin'
 import { createdAtText, lastActiveText, registerMethodLabel } from '@/lib/admin-view'
@@ -45,6 +46,7 @@ export default function AdminUsersPage() {
             </span>
           )}
         </div>
+        <AdminNav />
 
         {/* 后端 403(普通用户手输 URL)→ 无权限降级 · 不渲染空表 */}
         {forbidden ? (
