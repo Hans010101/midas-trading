@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import localFont from 'next/font/local'
 
+import { RewardToastWatcher } from '@/components/growth/reward-toast-watcher'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { QueryProvider } from '@/lib/providers/query-provider'
@@ -98,6 +99,8 @@ export default function RootLayout({
             </QueryProvider>
           </ThemeProvider>
         </SessionProvider>
+        {/* Phase 1.5 刀B:OAuth 到账 toast(读一次性 midas_reward cookie) */}
+        <RewardToastWatcher />
         <Toaster position="top-center" closeButton />
       </body>
     </html>

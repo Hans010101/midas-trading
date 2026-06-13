@@ -20,6 +20,8 @@ import NextAuth, { type DefaultSession, type User } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
 import Google from 'next-auth/providers/google'
 
+import { REWARD_COOKIE, buildRewardCookieValue } from '@/lib/reward-toast'
+
 const API_BASE = process.env.API_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 // 仅扩展 Session / User · JWT 字段用内联 cast,避免 'next-auth/jwt' 模块增强
@@ -123,11 +125,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return false
         }
         console.info('[auth.google] 拿到 id_token · POST 后端换 session · API_BASE=%s', API_BASE)
+        // Phase 1.5 刀B:OAuth ref 归因唯一路径 —— register 页落地写的 midas_ref
+        // cookie 在此读出(signIn callback 是 server-side route handler · cookies()
+        // 可用),进 /oauth/google body。仅 create 分支后端才兑现(刀A)。
+        const { cookies } = await import('next/headers')
+        const ref = (await cookies()).get('midas_ref')?.value ?? null
         try {
           const r = await fetch(`${API_BASE}/api/v1/auth/oauth/google`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id_token: idToken }),
+            body: JSON.stringify({ id_token: idToken, ref }),
           })
           if (!r.ok) {
             // 把后端返回的 detail 打出来 · 定位是验签 / DB / 网络 哪一环
@@ -144,6 +151,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             user_id: string
             email: string
             role: string
+            trial_granted?: boolean
+            invite_rewarded?: boolean
           }
           // 把后端 session token + user_id 塞进 account 临时字段 ·
           // jwt() callback 会读这些字段写到 NextAuth JWT。
@@ -153,6 +162,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           bag.midas_user_id = data.user_id
           bag.midas_email = data.email
           bag.midas_role = data.role
+          // Phase 1.5 刀B:OAuth 到账感知 —— 写一次性 cookie,落地 watcher
+          // 读后 toast + 删(仅 create 分支后端才回 true · ref cookie 顺便清)
+          const store = await cookies()
+          const rewardVal = buildRewardCookieValue(
+            data.trial_granted ?? false,
+            data.invite_rewarded ?? false,
+          )
+          if (rewardVal !== null) {
+            store.set(REWARD_COOKIE, rewardVal, { path: '/', maxAge: 300 })
+          }
+          store.delete('midas_ref')
         } catch (e) {
           console.warn('[auth.google] backend call failed:', e)
           return false
