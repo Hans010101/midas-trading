@@ -618,7 +618,9 @@ async def list_conditional_orders(
     stmt = (
         select(ConditionalOrder)
         .where(ConditionalOrder.user_id == current_user.id)
-        .order_by(desc(ConditionalOrder.created_at))
+        # created_at 平局(同事务 now() 恒定)时顺序未定义 → 显式 id tie-break
+        # (项目铁律:涉及「最新」语义的 ORDER BY 必须显式,不依赖偶然 · 0010 先例)
+        .order_by(desc(ConditionalOrder.created_at), desc(ConditionalOrder.id))
         .limit(limit)
     )
     if status_filter is not None:
