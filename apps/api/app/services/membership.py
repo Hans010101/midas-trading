@@ -42,6 +42,10 @@ PLAN_QUOTAS: dict[str, dict[str, int]] = {
     "pro": {"diagnose": 100, "backtest": 50},
 }
 
+# 会员周期 → 天数(单一事实源 · 兑换码 / 未来 USDT 支付 / 续费共用,防各处散落漂移)。
+# month/quarter/year 与支付周期同口径(Phase2a 支付直接复用本表)。
+PERIOD_DAYS: dict[str, int] = {"month": 30, "quarter": 90, "year": 365}
+
 # 额度按产品受众自然日切(UTC+8)· 不用 trading_day(额度是商业概念非行情概念)
 _QUOTA_TZ = timezone(timedelta(hours=8))
 _QUOTA_KEY_TTL_S = 48 * 3600
