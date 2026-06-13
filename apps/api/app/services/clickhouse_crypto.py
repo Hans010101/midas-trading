@@ -603,6 +603,30 @@ async def insert_depth(client: AsyncClient, items: list[OrderbookDepth]) -> int:
     return len(items)
 
 
+async def select_latest_depth(
+    client: AsyncClient, symbol: str,
+) -> OrderbookDepth | None:
+    """单 symbol 最新一条盘口深度 · ReplacingMergeTree FINAL 取最新 ts(刀2 读层 · 只读)。
+
+    未采到该 symbol → None(如实留白 · 刀3 沙盘据此标「暂无盘口」,不伪造)。
+    flatten 列还原 10 档:r[0]=symbol r[1]=ts · bid price r[2..11]/qty r[12..21] ·
+    ask price r[22..31]/qty r[32..41](与 _ORDERBOOK_DEPTH_COLUMNS 同序)。
+    """
+    cols = ", ".join(_ORDERBOOK_DEPTH_COLUMNS)
+    query = (
+        f"SELECT {cols} FROM crypto_orderbook_depth FINAL "  # noqa: S608 — 列名常量内拼,无注入面
+        "WHERE symbol = %(s)s ORDER BY ts DESC LIMIT 1"
+    )
+    result = await client.query(query, parameters={"s": symbol})
+    rows = list(result.result_rows)
+    if not rows:
+        return None
+    r = rows[0]
+    bids = tuple((float(r[2 + i]), float(r[12 + i])) for i in range(DEPTH_LEVELS))
+    asks = tuple((float(r[22 + i]), float(r[32 + i])) for i in range(DEPTH_LEVELS))
+    return OrderbookDepth(symbol=str(r[0]), ts=_attach_utc(r[1]), bids=bids, asks=asks)
+
+
 async def select_premium_index_marks(
     client: AsyncClient, symbols: list[str],
 ) -> dict[str, Decimal]:

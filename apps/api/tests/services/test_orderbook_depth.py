@@ -21,7 +21,7 @@ import httpx
 import pytest
 
 from app.schemas.crypto import DEPTH_LEVELS, OrderbookDepth
-from app.services.clickhouse_crypto import insert_depth
+from app.services.clickhouse_crypto import insert_depth, select_latest_depth
 from app.services.data_sources.binance_futures_source import BinanceFuturesSource
 
 # ============================================================================
@@ -173,3 +173,34 @@ async def test_depth_round_trip(ch_raw) -> None:  # noqa: ANN001
 @pytest.mark.asyncio
 async def test_insert_depth_empty_noop(ch_raw) -> None:  # noqa: ANN001
     assert await insert_depth(ch_raw, []) == 0
+
+
+@pytest.mark.asyncio
+async def test_select_latest_depth_takes_newest_ts(ch_raw) -> None:  # noqa: ANN001
+    """刀2 读层:同 symbol 多条不同 ts → select_latest_depth 取最新一条(ORDER BY ts DESC)。"""
+    sym = f"__TEST{uuid.uuid4().hex[:6].upper()}USDT"
+    old = OrderbookDepth(
+        symbol=sym, ts=datetime(2026, 6, 14, 0, 0, 0, tzinfo=UTC),
+        bids=tuple((100.0, 1.0) for _ in range(DEPTH_LEVELS)),
+        asks=tuple((101.0, 1.0) for _ in range(DEPTH_LEVELS)),
+    )
+    new = OrderbookDepth(
+        symbol=sym, ts=datetime(2026, 6, 14, 0, 5, 0, tzinfo=UTC),  # 5min 后的新快照
+        bids=tuple((200.0, 2.0) for _ in range(DEPTH_LEVELS)),
+        asks=tuple((202.0, 2.0) for _ in range(DEPTH_LEVELS)),
+    )
+    await insert_depth(ch_raw, [old, new])
+
+    latest = await select_latest_depth(ch_raw, sym)
+    assert latest is not None
+    assert latest.ts == new.ts  # 取最新 ts(秒级 UTC 往返)
+    assert latest.bids[0] == (200.0, 2.0)  # 还原新快照的盘口
+    assert latest.asks[0] == (202.0, 2.0)
+    assert len(latest.bids) == DEPTH_LEVELS
+    assert len(latest.asks) == DEPTH_LEVELS
+
+
+@pytest.mark.asyncio
+async def test_select_latest_depth_missing_symbol_none(ch_raw) -> None:  # noqa: ANN001
+    """未采到该 symbol → None(如实留白,不伪造)。"""
+    assert await select_latest_depth(ch_raw, "__NOPE_DEPTH_USDT__") is None
