@@ -1,17 +1,19 @@
 'use client'
 
 /**
- * 共享条件单弹层(ADR 0041 刀3)· 限价挂单 + 持仓挂止损/止盈 共用一个组件。
+ * 共享条件单弹层(ADR 0041 刀3 + 二期刀3)· 限价挂单 + 持仓挂止损/止盈 共用一个组件。
  *
  * ★ F1 教训:spot 下单 UI 多组件多页面 —— SL/TP 入口必须用【同一个 dialog】插多处
  *   (spot-order-panel / workbench current-position-card / perp ActivePositionCard),
  *   杜绝「同功能不同页面不同组件」漏页面翻车。
  *
- * mode='limit':spot 限价挂单(side 由入口传入;crypto 不出 LIMIT —— 后端 400)。
- * mode='sltp' :持仓挂止损/止盈(side 自动推平仓方向 LONG→SELL / SHORT→BUY;
- *               数量留空 = 触发时平全仓)。
+ * mode='limit'     :spot 限价挂单(side 由入口传入)。
+ * mode='sltp'      :持仓挂止损/止盈(side 自动推平仓方向 LONG→SELL / SHORT→BUY;
+ *                    数量留空 = 触发时平全仓)。
+ * mode='perp-limit':perp 限价开仓(二期刀3)· 方向开多/开空 + 杠杆 + 保证金 + 仓位模式;
+ *                    quantity 不填(margin×leverage 定仓,与后端 route_open_perp 口径一致)。
  *
- * 价源:与后端触发器同源(spot 1d 末根 close;crypto perp 1d 末根 close)· 仅提示用。
+ * 价源:与后端触发器同源(spot 1d 末根 close;crypto perp 标记价优先)· 仅提示用。
  * 🔴 红线:全程虚拟资金 · 前端只挂单,成交由后端 60s 扫描走唯一虚拟撮合入口。
  */
 
@@ -21,18 +23,23 @@ import { toast } from 'sonner'
 import { useFuturesInfo } from '@/hooks/use-crypto'
 import { useKline } from '@/hooks/use-kline'
 import { usePlaceConditionalOrder } from '@/hooks/use-conditional-orders'
-import { ConditionalApiError } from '@/lib/api/conditional-order'
+import { ConditionalApiError, type MarginMode } from '@/lib/api/conditional-order'
 import type { OrderSide, PositionSide } from '@/lib/api/virtual'
 import {
   type ConditionalKind,
+  PERP_LIMIT_MAX_LEVERAGE,
+  PERP_LIMIT_MIN_LEVERAGE,
   deviationPct,
   kindLabel,
   presetDirection,
   presetTriggerPrice,
+  validatePerpLimit,
   wouldTriggerNow,
 } from '@/lib/conditional'
 import { cn } from '@/lib/utils'
 import type { Market } from '@midas/shared'
+
+type DialogMode = 'limit' | 'sltp' | 'perp-limit'
 
 interface ConditionalOrderDialogProps {
   open: boolean
@@ -40,8 +47,8 @@ interface ConditionalOrderDialogProps {
   symbol: string
   name?: string | null
   market: Market
-  /** limit=限价挂单(spot 面板入口)· sltp=持仓挂止损/止盈(持仓入口) */
-  mode: 'limit' | 'sltp'
+  /** limit=spot 限价 · sltp=持仓止损止盈 · perp-limit=perp 限价开仓(刀3) */
+  mode: DialogMode
   /** limit 模式必传:买卖方向 */
   side?: OrderSide
   /** sltp 模式必传:持仓方向(平仓方向自动推导) */
@@ -58,15 +65,20 @@ export function ConditionalOrderDialog({
   open, onClose, symbol, name, market, mode,
   side, positionSide, heldQuantity, defaultQuantity, klineSymbol,
 }: ConditionalOrderDialogProps) {
+  const isPerpLimit = mode === 'perp-limit'
   const [kind, setKind] = useState<'stop_loss' | 'take_profit'>('stop_loss')
   const [triggerPrice, setTriggerPrice] = useState('')
   const [quantity, setQuantity] = useState(defaultQuantity ?? '')
+  // perp 限价开仓表单(仅 perp-limit 模式用)
+  const [direction, setDirection] = useState<PositionSide>('long')
+  const [leverage, setLeverage] = useState(10)
+  const [margin, setMargin] = useState('1000')
+  const [marginMode, setMarginMode] = useState<MarginMode>('isolated')
   const place = usePlaceConditionalOrder()
 
   // 现价(提示 + 快捷档位基准):
-  //   crypto(perp)→ 标记价优先(premium_index 1min 新鲜 · 与触发器 route_close_perp 同源,刀A1)
+  //   crypto(perp)→ 标记价优先(premium_index 1min 新鲜 · 与触发器 route_close/open_perp 同源)
   //   股票(cn/us/hk)→ 1d 末根 close 不变(各市场有 kline 采集任务,新鲜)
-  //   kline 末根对 crypto 仅兜底(缓存零新鲜度 · 旧快照事故 H/USDT $0.09,A2 治本)
   const { data: kline } = useKline({
     symbol: klineSymbol ?? symbol,
     market,
@@ -81,16 +93,28 @@ export function ConditionalOrderDialog({
 
   if (!open) return null
 
-  const effKind: ConditionalKind = mode === 'limit' ? 'limit' : kind
-  const effPositionSide: PositionSide = positionSide ?? 'long'
-  // SL/TP 平仓方向自动推导(后端端点同口径校验:LONG→SELL / SHORT→BUY)
-  const effSide: OrderSide = mode === 'limit' ? (side ?? 'buy') : effPositionSide === 'long' ? 'sell' : 'buy'
-  const actionLabel = kindLabel(effKind, effSide)
+  // perp 限价:方向决定 side(开多 BUY / 开空 SELL)+ position_side;后端 _OPENING_SIDE 同口径
+  const effKind: ConditionalKind = mode === 'sltp' ? kind : 'limit'
+  const effPositionSide: PositionSide = isPerpLimit ? direction : (positionSide ?? 'long')
+  const effSide: OrderSide = isPerpLimit
+    ? (direction === 'long' ? 'buy' : 'sell')
+    : mode === 'limit'
+      ? (side ?? 'buy')
+      : effPositionSide === 'long' ? 'sell' : 'buy'
+  const actionLabel = isPerpLimit
+    ? (direction === 'long' ? '限价开多' : '限价开空')
+    : kindLabel(effKind, effSide)
 
   const triggerNum = Number(triggerPrice) || 0
   const qtyNum = Number(quantity) || 0
+  const marginNum = Number(margin) || 0
+  const perpLimitError = isPerpLimit
+    ? validatePerpLimit({ triggerPrice: triggerNum, leverage, margin: marginNum, marginMode })
+    : null
   const quantityValid = mode === 'limit' ? qtyNum > 0 : quantity.trim() === '' || qtyNum > 0
-  const canSubmit = !place.isPending && triggerNum > 0 && quantityValid
+  const canSubmit = isPerpLimit
+    ? !place.isPending && perpLimitError == null
+    : !place.isPending && triggerNum > 0 && quantityValid
 
   const deviation = triggerNum > 0 ? deviationPct(triggerNum, currentPrice) : null
   const instantTrigger =
@@ -106,8 +130,11 @@ export function ConditionalOrderDialog({
         side: effSide,
         ...(effPositionSide === 'short' ? { position_side: 'short' as const } : {}),
         trigger_price: triggerPrice.trim(),
-        // SL/TP 留空 = 平全仓(不传 quantity);LIMIT 必填
-        ...(quantity.trim() !== '' ? { quantity: quantity.trim() } : {}),
+        ...(isPerpLimit
+          // perp 限价开仓:杠杆/保证金/模式必填 · quantity 不传(margin×leverage 定仓)
+          ? { leverage, margin: margin.trim(), margin_mode: marginMode }
+          // SL/TP 留空 = 平全仓(不传 quantity);spot LIMIT 必填
+          : quantity.trim() !== '' ? { quantity: quantity.trim() } : {}),
       })
       toast.success(`已挂${actionLabel} ${symbol} @ ${triggerPrice}(虚拟)· 到价即触发`, {
         className: 'midas-toast-success', duration: 4000,
@@ -117,6 +144,10 @@ export function ConditionalOrderDialog({
       toast.error(e instanceof ConditionalApiError ? e.detail : '挂单失败')
     }
   }
+
+  const title = isPerpLimit
+    ? '挂限价单(永续 · 虚拟)'
+    : mode === 'limit' ? '挂限价单(虚拟)' : '设止损 / 止盈(虚拟)'
 
   return (
     <div
@@ -129,13 +160,33 @@ export function ConditionalOrderDialog({
     >
       {/* 虚拟标识:对齐现有面板口径(帝王金框 + 文案)· 不新造徽章 */}
       <div className="w-full max-w-md rounded-lg border border-gold/60 bg-cream p-6 shadow-xl">
-        <h3 className="mb-1 text-center font-serif text-xl font-bold text-foreground">
-          {mode === 'limit' ? '挂限价单(虚拟)' : '设止损 / 止盈(虚拟)'}
-        </h3>
+        <h3 className="mb-1 text-center font-serif text-xl font-bold text-foreground">{title}</h3>
         <p className="mb-4 text-center font-mono text-xs text-muted-foreground">
           {symbol}
           {name && <span className="ml-1">· {name}</span>}
         </p>
+
+        {/* perp 限价:开多 / 开空 方向 */}
+        {isPerpLimit && (
+          <div className="mb-3 grid grid-cols-2 gap-2">
+            {(['long', 'short'] as const).map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDirection(d)}
+                aria-pressed={direction === d}
+                className={cn(
+                  'rounded-md py-2 text-sm font-medium transition-colors',
+                  direction === d
+                    ? 'bg-midas-red text-white'
+                    : 'border border-midas-red/50 text-midas-red hover:bg-midas-red-glow/40',
+                )}
+              >
+                {d === 'long' ? '开多(虚拟)' : '开空(虚拟)'}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* sltp:止损 / 止盈 二选一 */}
         {mode === 'sltp' && (
@@ -207,23 +258,77 @@ export function ConditionalOrderDialog({
           </div>
         )}
 
-        {/* 数量 */}
-        <label className="mb-1 block text-xs text-muted-foreground">
-          数量
-          {mode === 'sltp' && heldQuantity && (
-            <span className="ml-2 font-mono text-muted-foreground/70">
-              留空 = 平全仓(当前 {Number(heldQuantity)})
-            </span>
-          )}
-        </label>
-        <input
-          type="number"
-          value={quantity}
-          onChange={(e) => setQuantity(e.target.value)}
-          min={0}
-          placeholder={mode === 'sltp' ? '留空 = 触发时平全仓' : '必填'}
-          className="mb-3 h-9 w-full rounded border border-paper bg-background px-3 text-right font-mono text-sm"
-        />
+        {/* perp 限价:保证金模式 + 杠杆 + 保证金(开仓参数 · margin×leverage 定仓) */}
+        {isPerpLimit ? (
+          <>
+            <div className="mb-3">
+              <div className="mb-1 text-xs text-muted-foreground">保证金模式</div>
+              <div className="grid grid-cols-2 gap-2">
+                {(['isolated', 'cross'] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setMarginMode(m)}
+                    aria-pressed={marginMode === m}
+                    className={cn(
+                      'rounded-md py-1.5 text-xs transition-colors',
+                      marginMode === m
+                        ? 'border border-gold bg-gold/[0.08] font-medium text-gold'
+                        : 'border border-paper text-muted-foreground/70 hover:border-gold/40',
+                    )}
+                  >
+                    {m === 'isolated' ? '逐仓 isolated' : '全仓 cross'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="mb-3">
+              <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+                <span>杠杆</span>
+                <span className="font-mono font-bold text-foreground">{leverage}x</span>
+              </div>
+              <input
+                type="range"
+                min={PERP_LIMIT_MIN_LEVERAGE}
+                max={PERP_LIMIT_MAX_LEVERAGE}
+                step={1}
+                value={leverage}
+                onChange={(e) => setLeverage(Number(e.target.value))}
+                className="w-full accent-midas-red"
+              />
+            </div>
+            <label className="mb-1 block text-xs text-muted-foreground">保证金(虚拟 USDT)</label>
+            <input
+              type="number"
+              value={margin}
+              min={0}
+              step={50}
+              onChange={(e) => setMargin(e.target.value)}
+              placeholder="必填 · 触发时按 margin×杠杆 开仓"
+              className="mb-3 h-9 w-full rounded border border-paper bg-background px-3 text-right font-mono text-sm"
+            />
+          </>
+        ) : (
+          <>
+            {/* 数量(limit / sltp) */}
+            <label className="mb-1 block text-xs text-muted-foreground">
+              数量
+              {mode === 'sltp' && heldQuantity && (
+                <span className="ml-2 font-mono text-muted-foreground/70">
+                  留空 = 平全仓(当前 {Number(heldQuantity)})
+                </span>
+              )}
+            </label>
+            <input
+              type="number"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              min={0}
+              placeholder={mode === 'sltp' ? '留空 = 触发时平全仓' : '必填'}
+              className="mb-3 h-9 w-full rounded border border-paper bg-background px-3 text-right font-mono text-sm"
+            />
+          </>
+        )}
 
         {/* 提示区 */}
         {instantTrigger && (
@@ -254,6 +359,7 @@ export function ConditionalOrderDialog({
             type="button"
             onClick={() => void handleSubmit()}
             disabled={!canSubmit}
+            title={perpLimitError ?? undefined}
             className={cn(
               'rounded-md px-4 py-2 text-sm font-medium text-white transition-colors',
               canSubmit ? 'bg-midas-red hover:bg-midas-red-deep' : 'cursor-not-allowed bg-midas-red/30',

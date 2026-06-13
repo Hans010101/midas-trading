@@ -86,12 +86,21 @@ export function ConditionalOrdersList({ symbol, market }: ConditionalOrdersListP
                           : 'border border-midas-red text-midas-red',
                       )}
                     >
-                      {kindLabel(o.order_kind, o.side)}
+                      {/* perp 限价是开仓单 → 显开多/开空(spot 限价仍买入/卖出) */}
+                      {o.market === 'crypto' && o.order_kind === 'limit'
+                        ? `限价${o.position_side === 'long' ? '开多' : '开空'}`
+                        : kindLabel(o.order_kind, o.side)}
                     </span>
+                    {o.market === 'crypto' && o.order_kind === 'limit' && o.leverage != null && (
+                      <span className="ml-1 font-mono text-[9px] text-gold">{o.leverage}x</span>
+                    )}
                   </td>
                   <td className="py-1.5 text-right font-mono">{Number(o.trigger_price)}</td>
                   <td className="py-1.5 text-right font-mono">
-                    {o.quantity != null ? Number(o.quantity) : '全仓'}
+                    {/* perp 限价用 margin×杠杆 定仓(无 quantity)→ 显保证金;spot/SLTP 显数量/全仓 */}
+                    {o.market === 'crypto' && o.order_kind === 'limit'
+                      ? o.margin != null ? `保证金 ${Number(o.margin)}` : '—'
+                      : o.quantity != null ? Number(o.quantity) : '全仓'}
                   </td>
                   <td className="py-1.5 text-[10px]">
                     <StatusCell

@@ -6,10 +6,12 @@ import { describe, expect, it } from 'vitest'
 
 import {
   type ConditionalKind,
+  PERP_LIMIT_MAX_LEVERAGE,
   deviationPct,
   kindLabel,
   presetDirection,
   presetTriggerPrice,
+  validatePerpLimit,
   wouldTriggerNow,
 } from './conditional'
 import type { OrderSide, PositionSide } from '@/lib/api/virtual'
@@ -40,6 +42,39 @@ describe('wouldTriggerNow(与后端触发矩阵同口径)', () => {
     expect(wouldTriggerNow('take_profit', 'sell', 'long', T, 99)).toBe(false)
     expect(wouldTriggerNow('take_profit', 'buy', 'short', T, 99)).toBe(true)
     expect(wouldTriggerNow('take_profit', 'buy', 'short', T, 101)).toBe(false)
+  })
+})
+
+describe('validatePerpLimit(perp 限价表单校验 · 与后端端点同口径)', () => {
+  const ok = { triggerPrice: 100000, leverage: 10, margin: 500, marginMode: 'isolated' }
+
+  it('全合法 → null(可提交)', () => {
+    expect(validatePerpLimit(ok)).toBeNull()
+    expect(validatePerpLimit({ ...ok, marginMode: 'cross' })).toBeNull()
+  })
+
+  it('触发价缺失 / ≤0 → 报错', () => {
+    expect(validatePerpLimit({ ...ok, triggerPrice: 0 })).toContain('触发价')
+    expect(validatePerpLimit({ ...ok, triggerPrice: -1 })).toContain('触发价')
+  })
+
+  it('杠杆超范围 / 非整数 → 报错(1-125 · 后端 schema 口径)', () => {
+    expect(validatePerpLimit({ ...ok, leverage: 0 })).toContain('杠杆')
+    expect(validatePerpLimit({ ...ok, leverage: PERP_LIMIT_MAX_LEVERAGE + 1 })).toContain('杠杆')
+    expect(validatePerpLimit({ ...ok, leverage: 200 })).toContain('杠杆')
+    expect(validatePerpLimit({ ...ok, leverage: 1.5 })).toContain('杠杆')
+    expect(validatePerpLimit({ ...ok, leverage: PERP_LIMIT_MAX_LEVERAGE })).toBeNull() // 125 边界含
+    expect(validatePerpLimit({ ...ok, leverage: 1 })).toBeNull()
+  })
+
+  it('保证金缺失 / ≤0 → 报错', () => {
+    expect(validatePerpLimit({ ...ok, margin: 0 })).toContain('保证金')
+    expect(validatePerpLimit({ ...ok, margin: -100 })).toContain('保证金')
+  })
+
+  it('保证金模式非法 → 报错', () => {
+    expect(validatePerpLimit({ ...ok, marginMode: '' })).toContain('保证金模式')
+    expect(validatePerpLimit({ ...ok, marginMode: 'weird' })).toContain('保证金模式')
   })
 })
 
