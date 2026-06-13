@@ -13,6 +13,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 
+import { BanSection } from '@/components/admin/ban-section'
 import { GrantProSection } from '@/components/admin/grant-pro-section'
 import { TopNav } from '@/components/layout/top-nav'
 import { AdminApiError, type AdminUserDetail, fetchAdminUserDetail } from '@/lib/api/admin'
@@ -87,7 +88,14 @@ export default function AdminUserDetailPage() {
           </p>
         ) : (
           <div className="space-y-5">
-            <h1 className="font-mono text-lg font-bold text-foreground">{d.email}</h1>
+            <h1 className="flex items-center gap-2 font-mono text-lg font-bold text-foreground">
+              {d.email}
+              {d.banned && (
+                <span className="rounded bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground">
+                  已停用
+                </span>
+              )}
+            </h1>
 
             <Card title="基础">
               <dl>
@@ -159,6 +167,15 @@ export default function AdminUserDetailPage() {
               email={d.email}
               token={token}
               onGranted={() => void qc.invalidateQueries({ queryKey: ['admin-user-detail', id] })}
+            />
+
+            {/* 封禁/解封(刀3b-2)*/}
+            <BanSection
+              userId={d.id}
+              email={d.email}
+              banned={d.banned}
+              token={token}
+              onChanged={() => void qc.invalidateQueries({ queryKey: ['admin-user-detail', id] })}
             />
 
             {/* 操作历史(刀3b:该用户被调权益记录)*/}

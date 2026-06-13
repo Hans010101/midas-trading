@@ -39,6 +39,7 @@ class AdminUserItem(BaseModel):
     id: str
     email: str
     role: str
+    banned: bool  # 刀3b-2:已停用
     plan: str  # 会员刀2:free / pro(subscription outerjoin 批量解析 · 防 N+1)
     created_at: datetime
     email_verified: bool
@@ -117,6 +118,7 @@ async def list_users(
                 id=str(u.id),
                 email=u.email,
                 role=u.role,
+                banned=u.banned_at is not None,
                 plan=_plan_of(plan, sub_status, expires_at),
                 created_at=u.created_at,
                 email_verified=u.email_verified_at is not None,
@@ -159,6 +161,7 @@ class AdminUserDetail(BaseModel):
     role: str
     created_at: datetime
     email_verified: bool
+    banned: bool  # 刀3b-2:已停用
     # 会员
     plan: str
     plan_status: str | None
@@ -226,6 +229,7 @@ async def get_user_detail(user_id: str, _admin: AdminDep, db: DbDep) -> AdminUse
         role=user.role,
         created_at=user.created_at,
         email_verified=user.email_verified_at is not None,
+        banned=user.banned_at is not None,
         plan=plan,
         plan_status=sub.status if sub else None,
         plan_expires_at=sub.expires_at if sub else None,
@@ -301,3 +305,55 @@ async def grant_pro(user_id: str, payload: GrantIn, admin: AdminDep, db: DbDep) 
     ))
     await db.commit()
     return GrantOut(plan="pro", expires_at=new_exp, days_added=days)
+
+
+# ── 封禁 / 解封(刀3b-2 · 写操作 · 方案A 禁止登录)──────────────────────────
+# 🔴 本刀唯一动登录链:user.banned_at + login/get_current_user 加检查(deps/auth.py)。
+# 不能自封;operator 取鉴权;封禁+审计同事务。
+
+
+class BanIn(BaseModel):
+    note: str | None = Field(default=None, max_length=200)
+
+
+class BanOut(BaseModel):
+    user_id: str
+    banned: bool
+
+
+async def _set_ban(
+    user_id: str, admin: User, db: AsyncSession, *, ban: bool, note: str | None,
+) -> BanOut:
+    try:
+        uid = UUID(user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在") from e
+    # ★ 不能自封(防把自己锁死)
+    if ban and uid == admin.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="不能停用自己",
+        )
+    target = await db.scalar(select(User).where(User.id == uid))
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+
+    target.banned_at = datetime.now(UTC) if ban else None
+    db.add(AdminActionLog(
+        operator_id=admin.id,  # ★ 取自鉴权,绝不信前端
+        target_user_id=uid,
+        action="ban" if ban else "unban",
+        detail={"note": note},
+    ))
+    await db.commit()
+    return BanOut(user_id=str(uid), banned=ban)
+
+
+@router.post("/users/{user_id}/ban", response_model=BanOut)
+async def ban_user(user_id: str, payload: BanIn, admin: AdminDep, db: DbDep) -> BanOut:
+    return await _set_ban(user_id, admin, db, ban=True, note=payload.note)
+
+
+@router.post("/users/{user_id}/unban", response_model=BanOut)
+async def unban_user(user_id: str, payload: BanIn, admin: AdminDep, db: DbDep) -> BanOut:
+    return await _set_ban(user_id, admin, db, ban=False, note=payload.note)
