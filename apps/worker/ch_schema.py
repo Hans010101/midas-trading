@@ -42,6 +42,32 @@ TTL ingested_at + INTERVAL 7 DAY
 SETTINGS index_granularity = 8192
 """
 
+# crypto_orderbook_depth · 盘口深度 top-10 档(沙盘三期第二批 · 刀1)· 与 init.sql 一致
+# flatten 10 档成列(bid/ask × price/qty)· ReplacingMergeTree 按 (symbol, ts) 去重 · 7d TTL(磁盘纪律)
+_CREATE_ORDERBOOK_DEPTH = """
+CREATE TABLE IF NOT EXISTS crypto_orderbook_depth (
+    symbol String,
+    ts DateTime,
+    bid1_price Float64, bid2_price Float64, bid3_price Float64, bid4_price Float64,
+    bid5_price Float64, bid6_price Float64, bid7_price Float64, bid8_price Float64,
+    bid9_price Float64, bid10_price Float64,
+    bid1_qty Float64, bid2_qty Float64, bid3_qty Float64, bid4_qty Float64,
+    bid5_qty Float64, bid6_qty Float64, bid7_qty Float64, bid8_qty Float64,
+    bid9_qty Float64, bid10_qty Float64,
+    ask1_price Float64, ask2_price Float64, ask3_price Float64, ask4_price Float64,
+    ask5_price Float64, ask6_price Float64, ask7_price Float64, ask8_price Float64,
+    ask9_price Float64, ask10_price Float64,
+    ask1_qty Float64, ask2_qty Float64, ask3_qty Float64, ask4_qty Float64,
+    ask5_qty Float64, ask6_qty Float64, ask7_qty Float64, ask8_qty Float64,
+    ask9_qty Float64, ask10_qty Float64,
+    ingested_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(ts)
+ORDER BY (symbol, ts)
+TTL ingested_at + INTERVAL 7 DAY
+SETTINGS index_granularity = 8192
+"""
+
 # market_index_snapshot · 大盘指数快照(0023 阶段③ · 3.1)· cn/us 共表 · 与 init.sql 一致
 _CREATE_MARKET_INDEX_SNAPSHOT = """
 CREATE TABLE IF NOT EXISTS market_index_snapshot (
@@ -225,6 +251,7 @@ _ALTER_LS_GLOBAL_RATIO = (
 # 未来新增 CH 表 → 往这个 list 里加一条幂等 DDL 即可
 _DDL_STATEMENTS: tuple[str, ...] = (
     _CREATE_PREMIUM_INDEX,
+    _CREATE_ORDERBOOK_DEPTH,
     _CREATE_MARKET_INDEX_SNAPSHOT,
     _ALTER_OVERVIEW_CATEGORY,
     _ALTER_OVERVIEW_UNIT,

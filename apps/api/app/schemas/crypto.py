@@ -205,6 +205,27 @@ class PremiumIndex(BaseModel):
     )
 
 
+# 盘口深度档位数(沙盘三期第二批 · flatten 成 bid1..10 / ask1..10 列)
+DEPTH_LEVELS = 10
+
+
+class OrderbookDepth(BaseModel):
+    """盘口深度快照 · Binance fapi/v1/depth top-N 档(沙盘三期第二批 · 刀1 采集)。
+
+    symbol Binance 风格 `BTCUSDT`(跟 funding/OI/premium 一致)。
+    bids 买盘价降序 · asks 卖盘价升序 · 各定长 DEPTH_LEVELS 档(不足由解析层补 (0,0))·
+    每档 (price, qty)。落库 flatten 成 bid1_price..bid10_qty / ask… 列(crypto_orderbook_depth)。
+    🔴 红线:只读盘口快照 · 采集层只 GET · 绝不接真实交易。
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    symbol: str = Field(min_length=1, description="Binance Futures symbol · 'BTCUSDT'")
+    ts: AwareDatetime = Field(description="盘口快照时间 · UTC")
+    bids: tuple[tuple[float, float], ...] = Field(description="买盘 top-N · (price, qty) 价降序")
+    asks: tuple[tuple[float, float], ...] = Field(description="卖盘 top-N · (price, qty) 价升序")
+
+
 # ============================================================================
 # 4.6 · 基差时序(详情页 ⑥ 基差图)· M2-C.2.4
 # ============================================================================
