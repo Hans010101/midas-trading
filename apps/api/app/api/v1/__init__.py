@@ -11,6 +11,7 @@ from app.api.v1.cn import router as cn_router
 from app.api.v1.crypto import router as crypto_router
 from app.api.v1.feishu import router as feishu_router
 from app.api.v1.hk import router as hk_router
+from app.api.v1.invite import router as invite_router
 from app.api.v1.market import router as market_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.overview import router as overview_router
@@ -53,3 +54,5 @@ router.include_router(structure_router)
 router.include_router(admin_router)
 # 会员 Phase 1 刀1 · AI 额度自报(authed · 前端展示共用)
 router.include_router(quota_router)
+# Phase 1.5 刀A · 邀请有礼(lazy 码 + 统计)
+router.include_router(invite_router)

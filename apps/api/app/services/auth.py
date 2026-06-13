@@ -151,8 +151,12 @@ async def find_or_create_oauth_user(
     *,
     google_sub: str,
     email: str,
-) -> User:
+) -> tuple[User, bool]:
     """Google OAuth 登录入口 · 0006 ADR M1 第三波。
+
+    返回 (user, created)(Phase 1.5 刀A):created 只在分支 3「真·新建」为 True ——
+    ★ 端点层按 google_sub 查的 existed_before 会把分支 2(email linking 老用户)
+    误判为新用户(G 调研陷阱):试用发放/邀请归因/is_new_user 全部以本标志为准。
 
     匹配优先级:
       1. google_sub 命中 → 直接返回(老用户多次登录)
@@ -162,7 +166,7 @@ async def find_or_create_oauth_user(
     # 1. google_sub 命中
     user = await find_user_by_google_sub(db, google_sub)
     if user is not None:
-        return user
+        return user, False
 
     email_norm = email.lower()
 
@@ -175,7 +179,7 @@ async def find_or_create_oauth_user(
             if existing.email_verified_at is None:
                 existing.email_verified_at = datetime.now(tz=UTC)
             await db.flush()
-        return existing
+        return existing, False
 
     # 3. 新建用户
     now = datetime.now(tz=UTC)
@@ -189,7 +193,7 @@ async def find_or_create_oauth_user(
     db.add(user)
     await db.flush()
     logger.info("[oauth.google] created user_id=%s email=%s", user.id, email_norm)
-    return user
+    return user, True
 
 
 # =====================
