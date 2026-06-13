@@ -13,18 +13,21 @@
 
 from datetime import UTC, datetime
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import AdminDep
 from app.core.database import get_db
+from app.models.redeem_code import RedeemCode
 from app.models.session import Session
 from app.models.subscription import Subscription
 from app.models.user import User
-from app.services.membership import PLAN_QUOTAS
+from app.services.growth import invite_stats
+from app.services.membership import PLAN_QUOTAS, get_quota_used, resolve_plan
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -125,4 +128,98 @@ async def list_users(
         total=total,
         page=page,
         page_size=page_size,
+    )
+
+
+# ── 用户详情(刀3a · 纯只读聚合)─────────────────────────────────────────────
+
+
+class QuotaUsage(BaseModel):
+    feature: str
+    used: int | None  # Redis 故障 → None(前端显 "—")
+    limit: int
+
+
+class RedeemedItem(BaseModel):
+    code: str
+    period: str
+    redeemed_at: datetime
+
+
+class AdminUserDetail(BaseModel):
+    id: str
+    email: str
+    role: str
+    created_at: datetime
+    email_verified: bool
+    # 会员
+    plan: str
+    plan_status: str | None
+    plan_expires_at: datetime | None
+    plan_source: str | None
+    quota: list[QuotaUsage]  # 今日额度用量
+    invite_code: str | None  # 邀请
+    invited_count: int
+    rewarded_count: int
+    redeemed: list[RedeemedItem]  # 兑换记录
+
+
+@router.get("/users/{user_id}", response_model=AdminUserDetail)
+async def get_user_detail(user_id: str, _admin: AdminDep, db: DbDep) -> AdminUserDetail:
+    """单用户详情聚合 · 纯只读(不改任何状态 · 写操作留刀3b)。
+
+    防 N+1:每块独立单查询(user / subscription / invitation 聚合 / redeem_code),
+    无循环查;额度走 Redis(故障 None 不报错)。
+    """
+    try:
+        uid = UUID(user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在") from e
+
+    user = await db.scalar(select(User).where(User.id == uid))
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+
+    plan = await resolve_plan(db, uid)
+    sub = await db.scalar(select(Subscription).where(Subscription.user_id == uid))
+
+    # 额度(今日 · Redis 故障 → used=None)
+    quota: list[QuotaUsage] = []
+    for feature in ("diagnose", "backtest"):
+        try:
+            used: int | None = await get_quota_used(uid, feature)
+        except Exception:  # noqa: BLE001 — Redis 故障不阻塞详情
+            used = None
+        quota.append(QuotaUsage(feature=feature, used=used, limit=PLAN_QUOTAS[plan][feature]))
+
+    invited, rewarded = await invite_stats(db, uid)
+
+    # 该用户兑换过的码(redeemed_by=uid · 单查询)
+    redeemed_rows = (
+        await db.execute(
+            select(RedeemCode.code, RedeemCode.period, RedeemCode.redeemed_at)
+            .where(RedeemCode.redeemed_by == uid)
+            .order_by(RedeemCode.redeemed_at.desc()),
+        )
+    ).all()
+
+    return AdminUserDetail(
+        id=str(user.id),
+        email=user.email,
+        role=user.role,
+        created_at=user.created_at,
+        email_verified=user.email_verified_at is not None,
+        plan=plan,
+        plan_status=sub.status if sub else None,
+        plan_expires_at=sub.expires_at if sub else None,
+        plan_source=sub.source if sub else None,
+        quota=quota,
+        invite_code=user.invite_code,
+        invited_count=invited,
+        rewarded_count=rewarded,
+        redeemed=[
+            RedeemedItem(code=c, period=p, redeemed_at=ra)
+            for c, p, ra in redeemed_rows
+            if ra is not None
+        ],
     )

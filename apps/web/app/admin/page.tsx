@@ -82,7 +82,13 @@ export default function AdminUsersPage() {
                   {(query.data?.items ?? []).map((u) => (
                     <tr key={u.id} className="border-b border-paper/60 last:border-0">
                       <td className="px-4 py-2.5">
-                        <span className="font-mono text-xs">{u.email}</span>
+                        {/* 刀3a:邮箱可点 → 用户详情(纯只读聚合) */}
+                        <Link
+                          href={`/admin/users/${u.id}`}
+                          className="font-mono text-xs text-foreground transition-colors hover:text-midas-red hover:underline"
+                        >
+                          {u.email}
+                        </Link>
                         {u.role === 'admin' && (
                           <span className="ml-1.5 rounded bg-gold/15 px-1.5 py-0.5 text-[10px] text-gold">
                             admin
