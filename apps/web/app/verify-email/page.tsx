@@ -5,15 +5,17 @@ export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 
 import { AuthShell } from '@/components/auth/auth-shell'
 import { Button } from '@/components/ui/button'
+import { rewardToastMessage } from '@/lib/reward-toast'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 type State =
   | { status: 'loading' }
-  | { status: 'success'; email: string }
+  | { status: 'success'; email: string; reward: string | null }
   | { status: 'error'; detail: string }
 
 function VerifyEmailInner() {
@@ -44,8 +46,18 @@ function VerifyEmailInner() {
           })
           return
         }
-        const data = (await r.json()) as { email: string }
-        setState({ status: 'success', email: data.email })
+        const data = (await r.json()) as {
+          email: string
+          trial_granted?: boolean
+          invite_rewarded?: boolean
+        }
+        // Phase 1.5 刀B:试用/邀请到账感知(VerifyOut flag 直接可得)
+        const reward = rewardToastMessage(
+          data.trial_granted ?? false,
+          data.invite_rewarded ?? false,
+        )
+        if (reward !== null) toast.success(reward)
+        setState({ status: 'success', email: data.email, reward })
       } catch (e) {
         setState({ status: 'error', detail: `网络错误:${(e as Error).message}` })
       }
@@ -66,11 +78,19 @@ function VerifyEmailInner() {
         title="邮箱验证成功"
         subtitle={`${state.email} 已确认。现在可以登录。`}
       >
-        <Link href="/login">
-          <Button className="w-full" size="lg">
-            前往登录
-          </Button>
-        </Link>
+        <div className="space-y-3">
+          {/* 试用/邀请到账感知(刀B · 常驻横幅 · 比 toast 更稳) */}
+          {state.reward !== null && (
+            <p className="rounded-md border border-gold/40 bg-gold/10 px-3 py-2 text-sm text-gold">
+              🎉 {state.reward}
+            </p>
+          )}
+          <Link href="/login">
+            <Button className="w-full" size="lg">
+              前往登录
+            </Button>
+          </Link>
+        </div>
       </AuthShell>
     )
   }
