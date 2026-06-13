@@ -17,6 +17,7 @@ from app.api.v1.notifications import router as notifications_router
 from app.api.v1.overview import router as overview_router
 from app.api.v1.perp import router as perp_router
 from app.api.v1.quota import router as quota_router
+from app.api.v1.redeem import router as redeem_router
 from app.api.v1.structure import router as structure_router
 from app.api.v1.telegram import router as telegram_router
 from app.api.v1.us import router as us_router
@@ -56,3 +57,5 @@ router.include_router(admin_router)
 router.include_router(quota_router)
 # Phase 1.5 刀A · 邀请有礼(lazy 码 + 统计)
 router.include_router(invite_router)
+# 兑换码模块刀1 · 管理员生成/列表 + 用户兑换(开 pro 权益 · source='redeem')
+router.include_router(redeem_router)
