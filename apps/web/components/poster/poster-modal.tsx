@@ -8,7 +8,7 @@
  * (exportRef → 1080×1920 · 与预览比例无关)。移动端裂变场景:窄屏可用、拇指可达。
  */
 
-import { Check, Copy, Download, X } from 'lucide-react'
+import { Check, Copy, Download, Shuffle, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -21,7 +21,6 @@ import { PosterMinimal } from '@/components/poster/poster-minimal'
 import { PosterTrend } from '@/components/poster/poster-trend'
 import {
   POSTER_H,
-  POSTER_VARIANTS,
   POSTER_W,
   type PosterProps,
   type PosterVariant,
@@ -44,8 +43,12 @@ interface PosterModalProps {
   qrUrl: string
 }
 
+// 「换个样式」循环顺序(Hans 拍 · 固定)· 默认渲染首个 invite。
+// 与展示名解耦:用户不再看见风格词 tab,只按此序循环浏览。
+const CYCLE: PosterVariant[] = ['invite', 'data', 'trend', 'ink', 'minimal', 'dark']
+
 export function PosterModal({ open, onClose, inviter, code, qrUrl }: PosterModalProps) {
-  const [variant, setVariant] = useState<PosterVariant>('data') // 默认数据美学(主版)
+  const [variant, setVariant] = useState<PosterVariant>('invite') // 默认邀请函(循环首位)
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
   const [scale, setScale] = useState(0.3)
@@ -83,6 +86,8 @@ export function PosterModal({ open, onClose, inviter, code, qrUrl }: PosterModal
   if (!open) return null
 
   const props: PosterProps = { inviter, code, qrUrl }
+  const cycleIdx = CYCLE.indexOf(variant)
+  const cycleNext = () => setVariant(CYCLE[(cycleIdx + 1) % CYCLE.length])
 
   async function onSave() {
     if (!exportRef.current || busy) return
@@ -130,30 +135,29 @@ export function PosterModal({ open, onClose, inviter, code, qrUrl }: PosterModal
           style={{ width: POSTER_W * scale, height: POSTER_H * scale, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,.5)' }}
         >
           <div style={{ width: POSTER_W, height: POSTER_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
-            {/* exportRef → 未缩放 1080×1920 根(导出与预览比例无关) */}
-            <div ref={exportRef}>{RENDER[variant](props)}</div>
+            {/* exportRef → 未缩放 1080×1920 根(导出与预览比例无关)·
+                key={variant} 切换时 remount → poster-fade 轻淡入(感知「换了一张」) */}
+            <div key={variant} ref={exportRef} style={{ animation: 'poster-fade .28s ease' }}>
+              {RENDER[variant](props)}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* 底部控制条:风格切换 + 两操作(拇指可达) */}
+      {/* 底部控制条(刀C 交互调整:去风格词 tab · 换个样式循环 + 保存/复制) */}
       <div className="shrink-0 bg-background px-4 pb-[max(env(safe-area-inset-bottom),16px)] pt-3" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
-          {POSTER_VARIANTS.map((v) => (
-            <button
-              key={v.key}
-              type="button"
-              onClick={() => setVariant(v.key)}
-              className={
-                v.key === variant
-                  ? 'min-h-10 shrink-0 whitespace-nowrap rounded-full bg-midas-red px-4 text-sm font-medium text-white'
-                  : 'min-h-10 shrink-0 whitespace-nowrap rounded-full border border-paper px-4 text-sm text-muted-foreground transition-colors hover:text-foreground'
-              }
-            >
-              {v.label}
-            </button>
-          ))}
-        </div>
+        {/* 换个样式:全宽 · 循环切下一版 · 极轻 N/6 进度(克制 · 让用户知总数) */}
+        <button
+          type="button"
+          onClick={cycleNext}
+          className="mb-2.5 flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-paper text-sm font-medium text-foreground transition-colors hover:border-midas-red hover:text-midas-red"
+        >
+          <Shuffle className="h-4 w-4" />
+          换个样式
+          <span className="font-mono text-xs text-muted-foreground/60">
+            {cycleIdx + 1}/{CYCLE.length}
+          </span>
+        </button>
         <div className="flex gap-3">
           <button
             type="button"
