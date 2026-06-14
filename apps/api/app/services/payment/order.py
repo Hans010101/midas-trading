@@ -56,6 +56,19 @@ async def create_payment_order(
     return order, payment_amount
 
 
+async def get_order_status(
+    db: AsyncSession, user_id: UUID, external_id: str,
+) -> PaymentOrder | None:
+    """查本人订单(前端到账轮询用)· 限本人(user_id 过滤,不泄露他人订单)· 无则 None。"""
+    order: PaymentOrder | None = await db.scalar(
+        select(PaymentOrder).where(
+            PaymentOrder.external_id == external_id,
+            PaymentOrder.user_id == user_id,
+        ),
+    )
+    return order
+
+
 async def process_bcon_callback(
     db: AsyncSession, *, status: str | None, txid: str | None,
     external_id: str | None, addr: str | None = None,

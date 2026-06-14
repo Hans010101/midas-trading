@@ -18,7 +18,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.services.payment.order as order_mod
 from app.models.subscription import Subscription
-from app.services.payment.order import create_payment_order, process_bcon_callback
+from app.services.payment.order import (
+    create_payment_order,
+    get_order_status,
+    process_bcon_callback,
+)
 from tests.factories import make_user
 
 
@@ -200,6 +204,29 @@ async def test_callback_addr_mismatch_rejected(
     assert label.startswith("rejected")
     await db_session.refresh(order)
     assert order.status == "pending"
+
+
+# ── 订单状态查询(刀2 · 前端轮询 · 限本人)─────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_order_status_owner_only(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """本人查得到订单状态 · 他人查不到(None · 端点转 404,不泄露他人订单)。"""
+    owner = await make_user(db_session)
+    other = await make_user(db_session)
+    monkeypatch.setattr(order_mod, "create_address", _fake_create("0xR", "4.9"))
+    order, _ = await create_payment_order(db_session, owner.id, "month")
+
+    mine = await get_order_status(db_session, owner.id, order.external_id)
+    assert mine is not None
+    assert mine.status == "pending"
+    assert mine.period == "month"
+    # 他人查同一 external_id → None(不泄露)
+    assert await get_order_status(db_session, other.id, order.external_id) is None
+    # 不存在的订单 → None
+    assert await get_order_status(db_session, owner.id, "__NOPE__") is None
 
 
 # ── ★ 红线:支付域 import 树不含 engine/virtual_trading(AST 扫描)──────────────
