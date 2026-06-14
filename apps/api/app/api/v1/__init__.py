@@ -15,6 +15,7 @@ from app.api.v1.invite import router as invite_router
 from app.api.v1.market import router as market_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.overview import router as overview_router
+from app.api.v1.payment import router as payment_router
 from app.api.v1.perp import router as perp_router
 from app.api.v1.quota import router as quota_router
 from app.api.v1.redeem import router as redeem_router
@@ -59,3 +60,6 @@ router.include_router(quota_router)
 router.include_router(invite_router)
 # 兑换码模块刀1 · 管理员生成/列表 + 用户兑换(开 pro 权益 · source='redeem')
 router.include_router(redeem_router)
+# Phase 2a 刀1 · 会员订阅支付(Bcon USDT/BSC · 建单 + 回调核验开 pro · source='paid')
+# 🔴 红线:支付域不碰 engine(收订阅费非交易)· 凭证只从 env 读
+router.include_router(payment_router)

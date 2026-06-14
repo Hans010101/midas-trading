@@ -68,5 +68,11 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 1024               # 单次响应硬上限
     llm_timeout_seconds: float = 30.0
 
+    # 支付 · Bcon(会员订阅收款 · USDT/BSC · Phase 2a)
+    # ⚠ 敏感:bcon_api_key 只从 env 读 · 绝不进 git/前端/DB/日志 · 空 = 支付未启用。
+    bcon_api_key: str = ""
+    bcon_api_base: str = "https://external-api.bcon.global"
+    bcon_timeout_seconds: float = 15.0
+
 
 settings = Settings()
