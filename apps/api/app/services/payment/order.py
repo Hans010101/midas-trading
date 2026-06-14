@@ -26,7 +26,7 @@ from app.services.payment.bcon_client import BconError, create_address, get_tran
 
 logger = logging.getLogger(__name__)
 
-# 各周期 USDT 计价(Hans 拍)· 直接 USD 计价免汇率锁
+# 各周期 USDT【直接计价】(Hans 拍)· 与 USD 无关 · 不换算不取整 · 显示=转账=到账同一数
 PRICE_USDT: dict[str, str] = {"month": "4.9", "quarter": "9.9", "year": "19.9"}
 _PLAN = "pro"
 

@@ -24,24 +24,26 @@ def _headers() -> dict[str, str]:
 
 
 async def create_address(
-    external_id: str, origin_amount: str, *, chain: str = "binance",
+    external_id: str, amount_usdt: str, *, chain: str = "binance",
 ) -> tuple[str, str]:
-    """创建收款地址 · POST /api/v2/address(USDT · origin USD)。
+    """创建收款地址 · POST /api/v2/address(USDT 直接计价 · 禁汇率换算)。
 
-    返回 (address, payment_amount):address=收款地址 · payment_amount=用户应付精确额。
+    ★ 传 payment_amount=<USDT 额>(优先于 origin_amount · 禁自动换算 · 直接用指定值)→
+      用户付的就是这个精确 USDT 额(显示=转账=到账同一个数,无零头)。
+    返回 (address, amount_usdt):应付额用我方 USDT 额(权威值,不取 Bcon echo · 防零头)。
     """
     body = {
         "payment_currency": "USDT",
-        "origin_amount": origin_amount,
-        "origin_currency": "USD",
+        "payment_amount": amount_usdt,
         "external_id": external_id,
         "chain": chain,
     }
     data = await _request("POST", f"{settings.bcon_api_base}/api/v2/address", json=body)
     d = data.get("data") if isinstance(data, dict) else None
-    if not isinstance(d, dict) or not d.get("address") or not d.get("payment_amount"):
-        raise BconError("Bcon create_address 响应缺 address/payment_amount")
-    return str(d["address"]), str(d["payment_amount"])
+    if not isinstance(d, dict) or not d.get("address"):
+        raise BconError("Bcon create_address 响应缺 address")
+    # 应付额返我方精确 USDT 额(payment_amount 禁换算 · Bcon 应原样回显,但以我方为准防零头)
+    return str(d["address"]), amount_usdt
 
 
 async def get_transaction(txid: str) -> dict[str, Any]:

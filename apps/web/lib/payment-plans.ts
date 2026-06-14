@@ -24,7 +24,7 @@ export const PLAN_TIERS: readonly PlanTier[] = [
 
 const MONTHLY_PRICE = Number(PLAN_TIERS[0].priceUsdt)
 
-/** 月均价折算(展示"约 $X/月")· 2 位小数。 */
+/** 月均价折算(展示"月均 X USDT")· 2 位小数。 */
 export function monthlyEquivalent(tier: Pick<PlanTier, 'priceUsdt' | 'months'>): string {
   return (Number(tier.priceUsdt) / tier.months).toFixed(2)
 }
