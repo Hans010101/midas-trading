@@ -28,25 +28,29 @@ async def create_address(
 ) -> tuple[str, str]:
     """创建收款地址 · POST /api/v2/address(USDT 直接计价 · 禁汇率换算)。
 
-    ★ 方案 A(修 302):origin_amount/origin_currency 仍必填(基础订单参数 · 删了 → Bcon 302);
-      payment_amount 是【覆盖】参数(优先于 origin · 禁自动换算 · 直接用指定值)→
-      三者都传:origin 满足必填、payment_amount 覆盖换算 → 用户付精确 USDT 额(无零头)。
-    返回 (address, amount_usdt):应付额用我方 USDT 额(权威值,不取 Bcon echo · 防零头)。
+    body 三参数(方案 A · 修 302):origin_amount/origin_currency 必填基础参数 +
+    payment_amount 覆盖换算(传我方名义额 4.9/9.9/19.9 给 Bcon)。
+
+    ★★ 返回【Bcon 返回的 payment_amount】(非我方额):
+      Bcon 固定 BNB 地址收款,靠【唯一金额尾数】区分订单(无 memo/独立地址)——
+      Bcon 给每单自动分配唯一尾数(4.9→4.93/4.91…),用户必须付【这个精确额】才能被匹配回调。
+      之前返我方 4.9(Bcon 在等 4.93)→ 金额对不上 → 永不匹配 → 真实付款全失败。
+    返回 (address, payment_amount):payment_amount = Bcon 精确收款额(用户应付/匹配额)。
     """
     body = {
         "payment_currency": "USDT",
-        "origin_amount": amount_usdt,    # 必填基础参数(改价前已验 200)· 被 payment_amount 覆盖
+        "origin_amount": amount_usdt,    # 必填基础参数(改价前已验 200)
         "origin_currency": "USD",        # 必填
-        "payment_amount": amount_usdt,   # ★ 覆盖换算 → 实付精确 USDT 额,无零头
+        "payment_amount": amount_usdt,   # 名义额 → Bcon 据此分配唯一尾数收款额
         "external_id": external_id,
         "chain": chain,
     }
     data = await _request("POST", f"{settings.bcon_api_base}/api/v2/address", json=body)
     d = data.get("data") if isinstance(data, dict) else None
-    if not isinstance(d, dict) or not d.get("address"):
-        raise BconError("Bcon create_address 响应缺 address")
-    # 应付额返我方精确 USDT 额(payment_amount 禁换算 · Bcon 应原样回显,但以我方为准防零头)
-    return str(d["address"]), amount_usdt
+    if not isinstance(d, dict) or not d.get("address") or not d.get("payment_amount"):
+        raise BconError("Bcon create_address 响应缺 address/payment_amount")
+    # ★ 返 Bcon 的 payment_amount(唯一尾数收款额)· 用户必须付这个精确值才能被匹配
+    return str(d["address"]), str(d["payment_amount"])
 
 
 async def get_transaction(txid: str) -> dict[str, Any]:
