@@ -196,6 +196,26 @@ def _quote_buttons(market: str, symbol: str) -> tuple[tuple[Button, ...], ...]:
     )
 
 
+def _quote_action_buttons(market: str, symbol: str) -> tuple[tuple[Button, ...], ...]:
+    """行情卡【就地操作】键盘(P0-2 · 降链路:卡片直接分叉到 K线 / 下单 / 刷新,不必回菜单)。
+
+    action `<op>:<market>:<symbol>`(op∈qk/qo/qr · symbol 原样含 crypto 斜杠 · callback_data
+    ≤64 字节)· 由 router._parse_sym_action 解析:qk 看K线 / qo 直达下单 / qr 刷新行情 ·
+    外加「网页K线」外链 + 返回菜单。symbol 即 query_symbol 回显形态,刷新可精确复现。
+    """
+    return (
+        (
+            Button("📈 K线", f"qk:{market}:{symbol}"),
+            Button("🛒 下单", f"qo:{market}:{symbol}"),
+        ),
+        (
+            Button("🔄 刷新", f"qr:{market}:{symbol}"),
+            Button("🌐 网页K线", url=web_chart_url(market, symbol)),
+        ),
+        (Button("⬅️ 返回菜单", "menu:main"),),
+    )
+
+
 def _market_picker_buttons(intent: str) -> tuple[tuple[Button, ...], ...]:
     return (
         (
@@ -298,6 +318,17 @@ def build_market_picker(intent: str) -> ReplyModel:
     )
 
 
+def build_quote_ask() -> ReplyModel:
+    """裸 /price 引导(P0-3 · 降链路)· 不强制先选市场,直接发代码即可(市场自动判断)。
+
+    示例 crypto 用 `BTC/USDT`(带斜杠才被 _guess_market 判为加密;裸 BTC 会判成美股查不到)。
+    """
+    text = "直接发代码即可,例如 `BTC/USDT` / `NVDA` / `600519` / `00700`(市场自动识别)"
+    return ReplyModel(
+        text=text, title="查行情", disclaimer=None, buttons=_back_buttons(),
+    )
+
+
 def build_ask_symbol(intent: str, market: str) -> ReplyModel:
     examples = {"cn": "600519", "us": "NVDA", "crypto": "BTC/USDT", "hk": "00700"}
     what = "查行情" if intent == "quote" else "看K线"
@@ -329,7 +360,7 @@ def build_quote(quote: SymbolQuote) -> ReplyModel:
         text="\n".join(lines),
         title="行情",
         disclaimer=None,
-        buttons=_quote_buttons(quote.market, quote.symbol),
+        buttons=_quote_action_buttons(quote.market, quote.symbol),
     )
 
 

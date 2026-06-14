@@ -369,3 +369,136 @@ async def test_handle_inbound_neutral_returns_replymodel(db_session: AsyncSessio
     bot = render_for_telegram(reply)  # 渲染成 TG 成稿
     assert "迷你终端" in bot.text
     assert bot.keyboard is not None
+
+
+# ── P0 交互优化:疑似代码判定 / 市场猜测 / 卡片就地操作 ────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # 疑似代码(单 token · 仅字母/数字/斜杠 · 不以 / 开头)
+        ("btc", True),
+        ("BTC", True),
+        ("BTC/USDT", True),
+        ("600519", True),
+        ("00700", True),
+        ("NVDA", True),
+        ("eth/usdt", True),
+        # 非代码:空 / 命令 / 含空格 / 句子 / 超长 / 中文
+        ("", False),
+        ("   ", False),
+        ("/menu", False),
+        ("/price", False),
+        ("hello world", False),
+        ("how are you", False),
+        ("买入 茅台", False),
+        ("茅台", False),  # 中文不在允许字符集
+        ("A" * 16, False),  # 超过 15 字符上限
+    ],
+)
+def test_looks_like_symbol(text: str, expected: bool):  # noqa: FBT001
+    """无会话自由文本疑似代码判定(P0-1)· 纯函数逐用例。"""
+    assert router._looks_like_symbol(text) is expected
+
+
+@pytest.mark.parametrize(
+    ("symbol", "expected"),
+    [
+        ("BTC/USDT", "crypto"),  # 含斜杠 → 加密
+        ("btc/usdt", "crypto"),  # 大小写无关
+        ("600519", "cn"),        # 6 位纯数字 → A股
+        ("00700", "hk"),         # 5 位纯数字 → 港股(P0-1 新增分支)
+        ("09988", "hk"),
+        ("NVDA", "us"),          # 其余 → 美股
+        ("AAPL", "us"),
+        ("1234", "us"),          # 4 位数字非 cn/hk → 落 us(不误判)
+        ("1234567", "us"),       # 7 位数字 → us
+    ],
+)
+def test_guess_market(symbol: str, expected: str):
+    """市场猜测(P0-1 · 含新 hk 5 位分支)· 纯函数逐用例。"""
+    assert router._guess_market(symbol) == expected
+
+
+@pytest.mark.asyncio
+async def test_free_text_symbol_quotes_without_session(db_session: AsyncSession):
+    """🆕 P0-1:无会话直接打代码 → 秒出行情卡(不再被推回菜单/提示)。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 720)
+    redis = _FakeRedis()
+    ch = _FakeCH([_bar(100.0), _bar(120.0)])
+    reply = await router.handle_command(db_session, redis, ch, 720, "NVDA")  # type: ignore[arg-type]
+    assert "NVDA" in reply.text
+    # 行情卡挂【就地操作】按钮(K线/下单/刷新 · qk/qo/qr),不是 build_hint
+    flat = json.dumps(reply.keyboard, ensure_ascii=False)
+    assert "qk:us:NVDA" in flat
+    assert "qo:us:NVDA" in flat
+    assert "qr:us:NVDA" in flat
+
+
+@pytest.mark.asyncio
+async def test_free_text_sentence_falls_to_hint(db_session: AsyncSession):
+    """无会话的【句子】(多 token)→ 仍落提示,不当代码查。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 721)
+    reply = await router.handle_command(
+        db_session, _FakeRedis(), _FakeCH([_bar(100.0)]), 721, "how are you",  # type: ignore[arg-type]
+    )
+    assert "/menu" in reply.text or "功能菜单" in reply.text
+
+
+@pytest.mark.asyncio
+async def test_card_qr_refresh_requotes(db_session: AsyncSession):
+    """🆕 P0-2:点行情卡「🔄 刷新」(qr)→ 重新出行情(精确复现原查询)。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 722)
+    ch = _FakeCH([_bar(100.0), _bar(120.0)])
+    reply = await router.handle_callback(db_session, _FakeRedis(), ch, 722, "qr:us:NVDA")  # type: ignore[arg-type]
+    assert "NVDA" in reply.text
+
+
+@pytest.mark.asyncio
+async def test_card_qo_jumps_to_direction_reusing_confirm_chain(db_session: AsyncSession):
+    """🆕 P0-2:点行情卡「🛒 下单」(qo)→ 直达方向页 + 写 order_direction 会话(复用现有
+    二次确认链路 · 此刻【不成交】)。"""
+    user = await make_user(db_session)
+    acct = await make_virtual_account(db_session, user_id=user.id, market="us")
+    await _bind(db_session, user.id, 723)
+    redis = _FakeRedis()
+    ch = _FakeCH([_bar(100.0)])
+    reply = await router.handle_callback(db_session, redis, ch, 723, "qo:us:NVDA")  # type: ignore[arg-type]
+    assert "选择操作" in reply.text
+    # 会话进入方向选择态(只存「下什么」· 不存身份)
+    assert json.loads(redis._d["tg_session:723"]) == {
+        "step": "order_direction", "market": "us", "symbol": "NVDA",
+    }
+    # qo 仅建会话,绝不成交
+    assert not await _positions(db_session, acct.id)
+
+
+@pytest.mark.asyncio
+async def test_card_qk_returns_kline(db_session: AsyncSession):
+    """🆕 P0-2:点行情卡「📈 K线」(qk)→ 返回 K 线回复。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 724)
+    reply = await router.handle_callback(
+        db_session, _FakeRedis(), _FakeCH(), 724, "qk:crypto:BTC/USDT",  # type: ignore[arg-type]
+    )
+    assert "BTC/USDT" in reply.text
+    assert "K线" in reply.text
+
+
+@pytest.mark.asyncio
+async def test_bare_price_asks_then_bare_code_quotes(db_session: AsyncSession):
+    """🆕 P0-3:裸 /price → 引导直接发代码(设 awaiting=quote)· 下一条裸代码直接查。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 725)
+    redis = _FakeRedis()
+    ch = _FakeCH([_bar(100.0), _bar(120.0)])
+    ask = await router.handle_command(db_session, redis, ch, 725, "/price")  # type: ignore[arg-type]
+    assert "直接发代码" in ask.text
+    assert json.loads(redis._d["tg_session:725"]) == {"awaiting": "quote"}
+    # 下一条裸代码 → 行情(走 awaiting 分支 · 市场自动判断)
+    quote = await router.handle_command(db_session, redis, ch, 725, "600519")  # type: ignore[arg-type]
+    assert "600519" in quote.text

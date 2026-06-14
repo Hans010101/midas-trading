@@ -48,18 +48,59 @@ if TYPE_CHECKING:
     from app.services.clickhouse_client import ClickHouseClient
 
 _CN_CODE_LEN = 6
+_HK_CODE_LEN = 5  # 港股代码 5 位(00700 / 09988)
 _ASK_PARTS = 3  # ask:<intent>:<market>
+_SYM_ACTION_PARTS = 3  # <op>:<market>:<symbol>(行情卡就地操作 qk/qo/qr)
+_MAX_SYMBOL_LEN = 15  # 疑似代码的最大长度(防把长句当代码)
 _VALID_MARKETS = {"cn", "us", "crypto", "hk"}
+_SYM_OPS = {"qk", "qo", "qr"}  # 行情卡就地操作:看K线 / 下单 / 刷新
+# 疑似代码允许的字符:字母 + 数字 + 斜杠(crypto BTC/USDT)· 不含空格 / 冒号 / 中文
+_SYMBOL_CHARS = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/",
+)
 
 
 def _guess_market(symbol: str) -> str:
-    """从代码形态猜市场:含斜杠→crypto,6 位纯数字→cn,其余→us。"""
+    """从代码形态猜市场:含斜杠→crypto,6 位纯数字→cn,5 位纯数字→hk,其余→us。"""
     s = symbol.strip().upper()
     if "/" in s:
         return "crypto"
     if s.isdigit() and len(s) == _CN_CODE_LEN:
         return "cn"
+    if s.isdigit() and len(s) == _HK_CODE_LEN:
+        return "hk"
     return "us"
+
+
+def _looks_like_symbol(text: str) -> bool:
+    """无会话自由文本是否疑似【一个标的代码】(单 token · 纯函数 · 可单测)。
+
+    判定(全满足):strip 后非空、无空格、长度 ≤15、仅字母/数字/斜杠、不以 "/" 开头
+    (命令 /menu·/price 已被上方分支拦掉,这里再防一道)。多 token / 含空格 / 像句子
+    (含中文标点等非允许字符)→ False,落 build_hint(把人推回菜单)。
+    """
+    s = text.strip()
+    if not s or len(s) > _MAX_SYMBOL_LEN:
+        return False
+    if s.startswith("/") or " " in s:
+        return False
+    return set(s) <= _SYMBOL_CHARS
+
+
+def _parse_sym_action(d: str) -> tuple[str, str, str] | None:
+    """解析行情卡就地操作回调 `<op>:<market>:<symbol>`(P0-2 · qk/qo/qr)。
+
+    split(":", 2):op / market / symbol —— symbol 自身可含斜杠(crypto BTC/USDT)但不含
+    冒号,故三段切分安全(crypto 去斜杠后亦无特殊字符)。op∈qk/qo/qr、market∈_VALID_MARKETS、
+    symbol 非空才有效,否则 None(交给后续分支 / 兜底)。
+    """
+    parts = d.split(":", 2)
+    if len(parts) != _SYM_ACTION_PARTS:
+        return None
+    op, market, symbol = parts
+    if op not in _SYM_OPS or market not in _VALID_MARKETS or not symbol:
+        return None
+    return op, market, symbol
 
 
 async def _do_quote(ch: ClickHouseClient, market: str, symbol: str) -> ReplyModel:
@@ -114,7 +155,10 @@ async def _handle_text(
     if body.startswith("/price"):
         parts = body.split(maxsplit=1)
         if len(parts) < 2:  # noqa: PLR2004
-            return replies.build_market_picker("quote")
+            # P0-3:裸 /price 不再强制点市场 · 设 awaiting=quote → 下一条裸代码经
+            # 上方 awaiting 分支直接查(市场由 _guess_market 自动判断)。
+            await set_session(redis, channel, uid, {"awaiting": "quote"})
+            return replies.build_quote_ask()
         symbol = parts[1].strip()
         await clear_session(redis, channel, uid)
         return await _do_quote(ch, _guess_market(symbol), symbol)
@@ -157,7 +201,13 @@ async def _handle_text(
     if sess and sess.get("step") == "order_direction":
         return replies.build_order_direction_hint()
 
-    # 其它文本 → 提示
+    # P0-1:无会话自由文本【疑似代码】→ 秒查行情(降链路:不必先 /price 或点菜单)·
+    # 自动猜市场(斜杠 crypto / 6位 cn / 5位 hk / 其余 us)· 清残留会话再查。
+    if _looks_like_symbol(body):
+        await clear_session(redis, channel, uid)
+        return await _do_quote(ch, _guess_market(body), body.strip())
+
+    # 其它文本(多 token / 句子)→ 提示
     return replies.build_hint()
 
 
@@ -240,6 +290,11 @@ async def _handle_button(
         view = await quiet_mod.load_quiet_hours(db, user_id)
         return replies.build_quiet_hours(view)
 
+    # ── 行情卡就地操作(P0-2 · qk 看K线 / qo 直达下单 / qr 刷新 · 降链路)──────
+    sym_action = _parse_sym_action(d)
+    if sym_action is not None:
+        return await _handle_sym_action(redis, ch, channel, uid, sym_action)
+
     # ── 下单流程(G4 · 虚拟 · 必经二次确认)──────────────────────────
     if d == "menu:order":
         await clear_session(redis, channel, uid)
@@ -264,6 +319,37 @@ async def _handle_button(
 
     # 未知回调兜底
     return replies.build_main_menu()
+
+
+async def _handle_sym_action(
+    redis: Redis,
+    ch: ClickHouseClient,
+    channel: str,
+    uid: str,
+    parsed: tuple[str, str, str],
+) -> ReplyModel:
+    """行情卡【就地操作】回调:qk 看K线 / qr 刷新行情 / qo 直达下单(P0-2 · 降链路)。
+
+    🔴 红线:qo 复用【现有】order_symbol→order_direction→confirm→ordok 链路(零新撮合)·
+    身份不在此解析(下单确认时由 _handle_confirm 从 channel_uid 重新解析 · 会话只存「下什么」)。
+    symbol 原样来自行情卡 action(= 上次 query_symbol 回显形态;crypto 带斜杠)· qr 据此精确复现
+    原查询;qk 的 build_kline_link 内部对 crypto 去斜杠;qo 的 normalize_symbol 对 crypto 幂等。
+    """
+    op, market, symbol = parsed
+    if op == "qk":
+        return replies.build_kline_link(market, symbol)
+    if op == "qr":
+        return await _do_quote(ch, market, symbol)
+    # qo:卡片直达下单 —— 复用 order_symbol 之后的规范化 + 报价校验 + 进方向页(零新撮合)
+    canonical = order_mod.normalize_symbol(market, symbol)
+    price = await order_mod.quote_price(ch, market, canonical) if canonical else None
+    if not canonical or price is None:
+        return replies.build_order_symbol_invalid(market, symbol)
+    await set_session(
+        redis, channel, uid,
+        {"step": "order_direction", "market": market, "symbol": canonical},
+    )
+    return replies.build_order_directions(market, canonical, float(price))
 
 
 async def _handle_direction(
