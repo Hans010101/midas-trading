@@ -1,6 +1,7 @@
 #!/bin/bash
 # 点金 Midas · ClickHouse 全量备份 → 阿里云 OSS 香港
-# 2026-05-29 · 与 scripts/backup_postgres.sh 同构(OSS 上传 / 保留 7 天 / 凭证 / 日志格式一致)
+# 2026-05-29 · 与 scripts/backup_postgres.sh 同构(OSS 上传 / 凭证 / 日志格式一致)
+# 保留口径:RETAIN_DAYS 仅管【本地暂存】清理;OSS 端保留由桶生命周期规则负责(ClickHouse 7 天 · 见 0042)。
 #
 # 备份内容:default 库下所有 *MergeTree 表(动态枚举 · 新增表自动纳入,不写死白名单)·
 #           整库约 151 MiB · 单机一次性导出(已摸底,无需分表流式)。
@@ -158,28 +159,6 @@ echo "[backup-ch] uploaded → oss://${OSS_BUCKET}/${OSS_KEY}"
 find "$BACKUP_DIR" -name "midas-ch-*.tar.gz" -mtime "+${RETAIN_DAYS}" -delete
 echo "[backup-ch] local cleanup · 保留近 ${RETAIN_DAYS} 天"
 
-# === 清 OSS 上 RETAIN_DAYS 天前的旧备份(照 PG 版 · 文件名匹配 midas-ch-)===
-# OSS 用 lifecycle rule 更稳(走平台规则 · 不依赖脚本)· 这里只做 fallback。
-# 整段包进 `|| true`:清理是 best-effort,不能因 ls/grep 无匹配(grep 退出 1)或网络抖动
-# 在 set -e + pipefail 下把一个【已成功上传】的备份判成失败。
-CUTOFF_DATE="$(date -u -d "-${RETAIN_DAYS} days" +%Y%m%d 2>/dev/null || date -u -v "-${RETAIN_DAYS}d" +%Y%m%d)"
-{
-  ossutil ls "oss://${OSS_BUCKET}/${OSS_PREFIX}/" \
-    --endpoint="$OSS_ENDPOINT" \
-    --access-key-id="$OSS_ACCESS_KEY_ID" \
-    --access-key-secret="$OSS_ACCESS_KEY_SECRET" \
-    -s | awk '{print $NF}' | grep -E "midas-ch-[0-9]{8}T" \
-    | while read -r key; do
-      file_date="$(echo "$key" | sed -E 's/.*midas-ch-([0-9]{8})T.*/\1/')"
-      if [ -n "$file_date" ] && [ "$file_date" -lt "$CUTOFF_DATE" ]; then
-        echo "[backup-ch] OSS expire · rm $key"
-        ossutil rm "$key" \
-          --endpoint="$OSS_ENDPOINT" \
-          --access-key-id="$OSS_ACCESS_KEY_ID" \
-          --access-key-secret="$OSS_ACCESS_KEY_SECRET" \
-          -f -b
-      fi
-    done
-} || true
+# OSS 端保留由桶生命周期规则负责(clickhouse/ 7d、postgres/ 30d);脚本不再删 OSS。
 
 echo "[backup-ch] $(date -u +%FT%TZ) done"

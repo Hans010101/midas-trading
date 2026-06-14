@@ -1,6 +1,7 @@
 #!/bin/bash
 # 点金 Midas · Postgres 每日备份 → 阿里云 OSS 香港
-# 0006 / 部署 ADR · 2026-05-21 产品负责人指令:每日 pg_dump → OSS 香港 → 保留 7 天
+# 0006 / 部署 ADR · 2026-05-21 产品负责人指令:每日 pg_dump → 上传 OSS 香港。
+# 保留口径:RETAIN_DAYS 仅管【本地暂存】清理;OSS 端保留由桶生命周期规则负责(Postgres 30 天 · 见 0042)。
 #
 # 用法:
 #   - 手动:./scripts/backup_postgres.sh
@@ -73,25 +74,6 @@ echo "[backup] uploaded → oss://${OSS_BUCKET}/${OSS_KEY}"
 find "$BACKUP_DIR" -name "midas-pg-*.sql.gz" -mtime "+${RETAIN_DAYS}" -delete
 echo "[backup] local cleanup · 保留近 ${RETAIN_DAYS} 天"
 
-# === 清 OSS 上 RETAIN_DAYS 天前的旧备份 ===
-# OSS 用 lifecycle rule 更稳(走平台规则 · 不依赖脚本) ·
-# 这里只做 fallback:列出 < retain 天的文件之外的删除
-CUTOFF_DATE=$(date -u -d "-${RETAIN_DAYS} days" +%Y%m%d 2>/dev/null || date -u -v "-${RETAIN_DAYS}d" +%Y%m%d)
-ossutil ls "oss://${OSS_BUCKET}/${OSS_PREFIX}/" \
-  --endpoint="$OSS_ENDPOINT" \
-  --access-key-id="$OSS_ACCESS_KEY_ID" \
-  --access-key-secret="$OSS_ACCESS_KEY_SECRET" \
-  -s | awk '{print $NF}' | grep -E "midas-pg-[0-9]{8}T" \
-  | while read -r key; do
-    file_date=$(echo "$key" | sed -E 's/.*midas-pg-([0-9]{8})T.*/\1/')
-    if [ -n "$file_date" ] && [ "$file_date" -lt "$CUTOFF_DATE" ]; then
-      echo "[backup] OSS expire · rm $key"
-      ossutil rm "$key" \
-        --endpoint="$OSS_ENDPOINT" \
-        --access-key-id="$OSS_ACCESS_KEY_ID" \
-        --access-key-secret="$OSS_ACCESS_KEY_SECRET" \
-        -f -b
-    fi
-  done
+# OSS 端保留由桶生命周期规则负责(clickhouse/ 7d、postgres/ 30d);脚本不再删 OSS。
 
 echo "[backup] $(date -u +%FT%TZ) done"
