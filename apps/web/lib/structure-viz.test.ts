@@ -71,6 +71,8 @@ function snap(over: Partial<StructureSnapshot> = {}): StructureSnapshot {
     funding_zscore: factor({ z: 2.41, mean_60d: 0.0001, std_60d: 0.0002 }),
     oi_volume_ratio: factor({ ratio: 0.853, oi_usd: 1e9, quote_volume_24h: 1.17e9 }),
     global_long_short: factor({ latest: 1.6, avg_24h: 1.58 }),
+    // 三期批2 +1:盘口深度
+    depth: factor({ spread_pct: 0.0005, imbalance: 1.2 }),
     ...over,
   }
 }
@@ -157,6 +159,16 @@ describe('factorHeadline 三期批1 四分支(数值格式不随刀D-B 变)', ()
     expect(factorHeadline('oi_volume_ratio', snap())?.text).toBe('0.85')
     expect(factorHeadline('oi_volume_ratio', snap({ oi_volume_ratio: null }))).toBeNull()
   })
+
+  it('二批刀3:盘口深度 失衡+价差 · 任一缺只显有效项 · 全缺 null', () => {
+    // spread_pct 0.0005 → 价差 0.050% · imbalance 1.2 → 失衡 1.20
+    expect(factorHeadline('depth', snap())?.text).toBe('失衡 1.20 · 价差 0.050%')
+    // 只有 imbalance(spread 缺)→ 只显失衡
+    expect(factorHeadline('depth', snap({ depth: factor({ imbalance: 2.5 }) }))?.text).toBe('失衡 2.50')
+    // 全缺 → null(脏数据留白)
+    expect(factorHeadline('depth', snap({ depth: factor({}) }))).toBeNull()
+    expect(factorHeadline('depth', snap({ depth: null }))).toBeNull()
+  })
 })
 
 describe('buildFactorCards + CALIBER_NOTE(批1 修复刀)', () => {
@@ -181,13 +193,14 @@ describe('buildFactorCards + CALIBER_NOTE(批1 修复刀)', () => {
     const keys = buildFactorCards(snap(), []).map((c) => c.key)
     expect(keys).toEqual([
       'account_long_short', 'global_long_short', 'open_interest', 'oi_volume_ratio',
-      'funding_rate', 'funding_predicted', 'funding_zscore', 'basis', 'sentiment',
+      'funding_rate', 'funding_predicted', 'funding_zscore', 'basis', 'sentiment', 'depth',
     ])
   })
 
-  it('口径文案与 prompts 红线三对齐:不含"全市场人数比" · 清算/盘口仍在', () => {
+  it('口径文案与 prompts 红线三对齐:不含"全市场人数比/盘口深度" · 清算仍在', () => {
     expect(CALIBER_NOTE).not.toContain('全市场人数比')
     expect(CALIBER_NOTE).toContain('清算数据')
-    expect(CALIBER_NOTE).toContain('盘口深度')
+    // ★ 盘口深度二批已采,移出未采集口径(与 prompts 红线三同步)
+    expect(CALIBER_NOTE).not.toContain('盘口深度')
   })
 })

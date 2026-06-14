@@ -38,6 +38,8 @@ export interface StructureSnapshot {
   funding_zscore: StructureFactor | null
   oi_volume_ratio: StructureFactor | null
   global_long_short: StructureFactor | null
+  // 三期第二批 +1:盘口深度(spread_pct / imbalance · window=latest)
+  depth: StructureFactor | null
 }
 
 export interface FactorFinding {

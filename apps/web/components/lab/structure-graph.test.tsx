@@ -1,7 +1,7 @@
 /**
  * 图谱组件渲染单测(移动刀D)· 堵「几何纯函数 → 组件」接缝:
- * lib 单测证了坐标不重叠,这里证组件真把 11 个因子标签全渲染进 SVG
- * (Hans 真机截图的"标签缺失"观感 = 重叠互盖,验收口径 = 11 节点全部有名称标签)。
+ * lib 单测证了坐标不重叠,这里证组件真把 12 个因子标签全渲染进 SVG
+ * (Hans 真机截图的"标签缺失"观感 = 重叠互盖,验收口径 = 12 节点全部有名称标签)。
  */
 
 import { renderToString } from 'react-dom/server'
@@ -16,7 +16,7 @@ function factor(value: Record<string, number>): StructureFactor {
   return { value, window: '24h', asof: '2026-06-12T00:00:00Z', text: null }
 }
 
-/** 11 因子全非空快照(最坏角密度 = Hans 截图场景)。 */
+/** 12 因子全非空快照(最坏角密度 = Hans 截图场景)。 */
 function fullSnap(): StructureSnapshot {
   return {
     symbol: 'BTCUSDT',
@@ -32,11 +32,12 @@ function fullSnap(): StructureSnapshot {
     funding_zscore: factor({ z: 2.41, mean_60d: 0.0001, std_60d: 0.0002 }),
     oi_volume_ratio: factor({ ratio: 0.85, oi_usd: 1e9, quote_volume_24h: 1.17e9 }),
     global_long_short: factor({ latest: 1.6, avg_24h: 1.58 }),
+    depth: factor({ spread_pct: 0.0005, imbalance: 1.2 }),
   }
 }
 
-describe('StructureGraph 组件渲染(11 节点最坏密度)', () => {
-  it('★ 11 个因子名称标签全部渲染进 SVG(一个不缺)· viewBox 用 GRAPH_GEOM', () => {
+describe('StructureGraph 组件渲染(12 节点最坏密度)', () => {
+  it('★ 12 个因子名称标签全部渲染进 SVG(一个不缺)· viewBox 用 GRAPH_GEOM', () => {
     const html = renderToString(<StructureGraph snapshot={fullSnap()} findings={[]} />)
     for (const key of FACTOR_ORDER) {
       expect(html, `缺标签:${FACTOR_LABEL[key]}`).toContain(FACTOR_LABEL[key])

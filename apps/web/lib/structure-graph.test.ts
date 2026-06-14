@@ -26,6 +26,7 @@ function snap(over: Partial<StructureSnapshot> = {}): StructureSnapshot {
     funding_zscore: null,
     oi_volume_ratio: null,
     global_long_short: null,
+    depth: null,
     ...over,
   }
 }

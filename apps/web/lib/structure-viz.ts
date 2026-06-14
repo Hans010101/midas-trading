@@ -14,7 +14,7 @@ import { FACTOR_ORDER } from '@/lib/structure-graph'
  */
 export const CALIBER_NOTE =
   '各因子结论均限定其数据窗口(24h / 7d / latest);本系统因子历史最长 60 天,' +
-  '「极值/分位」类表述均为近 N 天内口径,非长期历史基线。清算数据、盘口深度暂未采集。'
+  '「极值/分位」类表述均为近 N 天内口径,非长期历史基线。清算数据暂未采集。'
 
 /** 背离/极端因子高亮判定:LLM 在 state/detail 里点名「背离」「极端」即高亮(帝王金)。 */
 export function isDivergentFinding(f: Pick<FactorFinding, 'state' | 'detail'>): boolean {
@@ -142,6 +142,16 @@ export function factorHeadline(
     const ratio = v.ratio
     if (ratio == null || !Number.isFinite(ratio)) return null
     return { text: ratio.toFixed(2), tone }
+  }
+  // 二批刀3:盘口深度 · 失衡(Σ买/Σ卖)+ 价差率 · 任一缺则只显有效项,全缺留白
+  if (factor === 'depth') {
+    const imb = v.imbalance
+    const sp = v.spread_pct
+    const parts: string[] = []
+    if (imb != null && Number.isFinite(imb)) parts.push(`失衡 ${imb.toFixed(2)}`)
+    if (sp != null && Number.isFinite(sp)) parts.push(`价差 ${(sp * 100).toFixed(3)}%`)
+    if (parts.length === 0) return null
+    return { text: parts.join(' · '), tone }
   }
   return null
 }

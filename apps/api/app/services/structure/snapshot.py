@@ -28,12 +28,14 @@ from app.services.ai.cache import compute_trading_day
 from app.services.clickhouse_crypto import (
     select_fear_greed_series,
     select_funding_rates,
+    select_latest_depth,
     select_latest_overview,
     select_latest_premium_index,
     select_long_short,
     select_open_interest,
     select_tickers_by_symbols,
 )
+from app.services.structure.depth_factors import imbalance, spread_pct
 
 if TYPE_CHECKING:
     from clickhouse_connect.driver.asyncclient import AsyncClient
@@ -115,6 +117,8 @@ async def build_structure_snapshot(client: AsyncClient, symbol: str) -> Structur
         "ticker_24h",
         select_tickers_by_symbols(client, instrument="perp", symbols=[ccxt_sym]),
     )
+    # 二批刀3:盘口深度(旁路只读取数 · 不进诊断链/不碰 engine)
+    depth_row = await _safe("depth", select_latest_depth(client, sym))
 
     # ── ①② 大户账户/持仓多空比 + ③ taker + ⑧ 全市场人数比(同一张 LSR 表)─────
     account = position = taker = global_ls = None
@@ -265,6 +269,19 @@ async def build_structure_snapshot(client: AsyncClient, symbol: str) -> Structur
             asof = max(asof, overview.ts) if fgi_rows else overview.ts
         sentiment = StructureFactor(value=value, window="latest", asof=asof, text=text)
 
+    # ── ⑫ 盘口深度(spread 价差率 + imbalance 失衡 · 二批刀3 · 纯函数算 · 任一有效才出格)──
+    depth = None
+    if depth_row is not None:
+        sp = spread_pct(depth_row)
+        imb = imbalance(depth_row)
+        dv: dict[str, float] = {}
+        if sp is not None:
+            dv["spread_pct"] = _round(sp, 6)
+        if imb is not None:
+            dv["imbalance"] = _round(imb, 3)
+        if dv:  # 脏数据全 None → 留白不出格(如实)
+            depth = StructureFactor(value=dv, window="latest", asof=depth_row.ts)
+
     return StructureSnapshot(
         symbol=sym,
         generated_at=datetime.now(UTC),
@@ -279,6 +296,7 @@ async def build_structure_snapshot(client: AsyncClient, symbol: str) -> Structur
         funding_zscore=funding_zscore,
         oi_volume_ratio=oi_volume_ratio,
         global_long_short=global_ls,
+        depth=depth,
     )
 
 

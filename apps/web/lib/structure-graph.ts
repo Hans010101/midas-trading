@@ -26,7 +26,7 @@ export interface GraphEdge {
 export const FACTOR_ORDER = [
   'account_long_short', 'position_long_short', 'global_long_short', 'taker_flow',
   'open_interest', 'oi_volume_ratio', 'funding_rate', 'funding_predicted',
-  'funding_zscore', 'basis', 'sentiment',
+  'funding_zscore', 'basis', 'sentiment', 'depth',
 ] as const
 
 // 因子键 → 中文名(图谱节点标签 · page 因子卡共用)· 三期批1 扩到 11
@@ -42,6 +42,7 @@ export const FACTOR_LABEL: Record<string, string> = {
   funding_zscore: '费率 Z 分数',
   oi_volume_ratio: 'OI 成交额比',
   global_long_short: '全市场人数比',
+  depth: '盘口深度',
 }
 
 // 阈值(实现定稿):比值偏离均衡 · OI 24h 变化 · FGI 贪婪/恐慌档
