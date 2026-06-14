@@ -120,11 +120,17 @@ def test_prompt_red_lines_locked() -> None:
     assert "数据窗口" in SYSTEM_PROMPT
     assert "近 N 天内" in SYSTEM_PROMPT
     assert "60 天" in SYSTEM_PROMPT
-    # 红线③ 缺失明示
+    # 红线③ 缺失明示(清算仍未采 · 盘口深度二批已采:移出未采集 + 加因子口径)
     assert "清算数据" in SYSTEM_PROMPT
-    assert "盘口深度" in SYSTEM_PROMPT
     assert "未采集" in SYSTEM_PROMPT
     assert "暂不支持该维度" in SYSTEM_PROMPT
+    # ★ 盘口深度已从「未采集」名单移除(旧 未采集-列表措辞消失,逐字核只动盘口不碰清算)
+    assert "盘口深度(orderbook depth)" not in SYSTEM_PROMPT
+    # ★ 盘口深度现为已采因子:spread/imbalance 口径 + 诚实提示(瞬时切片/易操纵)进 prompt
+    assert "spread" in SYSTEM_PROMPT
+    assert "imbalance" in SYSTEM_PROMPT
+    assert "瞬时切片" in SYSTEM_PROMPT
+    assert "操纵" in SYSTEM_PROMPT
 
 
 # ── prompt 专业化指令锁字(v1.1 · 防被改回罗列式)────────────────────────────

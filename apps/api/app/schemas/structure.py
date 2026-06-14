@@ -28,10 +28,11 @@ class StructureFactor(BaseModel):
 
 
 class StructureSnapshot(BaseModel):
-    """11 因子结构快照 · 单 symbol(USDT 永续 · Binance 风格无斜杠)。
+    """12 因子结构快照 · 单 symbol(USDT 永续 · Binance 风格无斜杠)。
 
     任一因子查无数据 → 该项 None(527 symbol 覆盖不均是常态,不阻塞整体)。
     三期第一批(零新采集)+4:预测费率 / 费率 z-score / OI 成交额比 / 全市场人数比。
+    三期第二批 +1:盘口深度(depth · spread/imbalance · 新采集 crypto_orderbook_depth)。
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -50,6 +51,7 @@ class StructureSnapshot(BaseModel):
     funding_zscore: StructureFactor | None = None       # 费率 z-score(60d 均值/标准差 · σ=0→None)
     oi_volume_ratio: StructureFactor | None = None      # OI/24h 成交额比(仓位沉淀 vs 换手)
     global_long_short: StructureFactor | None = None    # 全市场人数比(刀C global 列 · 0 哨兵滤除)
+    depth: StructureFactor | None = None                # 盘口深度 spread/imbalance(latest)
 
 
 # ═══ 第2刀 · LLM 结构诊断 ═══════════════════════════════════════════════════

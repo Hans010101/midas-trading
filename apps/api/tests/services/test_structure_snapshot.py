@@ -11,11 +11,13 @@ import pytest
 
 import app.services.structure.snapshot as snap_mod
 from app.schemas.crypto import (
+    DEPTH_LEVELS,
     FearGreedPoint,
     FundingRate,
     LongShortRatio,
     MarketOverview,
     OpenInterest,
+    OrderbookDepth,
     PremiumIndex,
 )
 from app.services.structure.snapshot import build_structure_snapshot, normalize_symbol
@@ -160,3 +162,41 @@ async def test_snapshot_factor_exception_degrades_to_none(
     snap = await build_structure_snapshot(object(), "BTCUSDT")
     assert snap.open_interest is None
     assert snap.account_long_short is not None  # 其余不受影响
+
+
+# ── 二批刀3 · 第 12 因子盘口深度(spread/imbalance)──────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_snapshot_depth_factor_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    """有盘口数据 → depth 因子出格(spread/imbalance 由纯函数算 · window=latest)。"""
+    _patch_all(monkeypatch)
+    depth = OrderbookDepth(
+        symbol="BTCUSDT", ts=_TS,
+        bids=tuple((100.0, 3.0) for _ in range(DEPTH_LEVELS)),  # Σbid=30
+        asks=tuple((102.0, 1.0) for _ in range(DEPTH_LEVELS)),  # Σask=10 → imbalance=3
+    )
+
+    async def fake_depth(client: Any, symbol: str) -> OrderbookDepth:  # noqa: ARG001
+        return depth
+
+    monkeypatch.setattr(snap_mod, "select_latest_depth", fake_depth)
+    snap = await build_structure_snapshot(object(), "BTCUSDT")
+    assert snap.depth is not None
+    assert snap.depth.window == "latest"
+    assert snap.depth.value["imbalance"] == 3.0          # Σbid/Σask=30/10
+    assert abs(snap.depth.value["spread_pct"] - (2.0 / 101.0)) < 1e-5  # (102-100)/101
+
+
+@pytest.mark.asyncio
+async def test_snapshot_depth_missing_leaves_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    """无盘口数据(select 返 None)→ depth 留白 None(如实不伪造)。"""
+    _patch_all(monkeypatch)
+
+    async def no_depth(client: Any, symbol: str) -> None:  # noqa: ARG001
+        return None
+
+    monkeypatch.setattr(snap_mod, "select_latest_depth", no_depth)
+    snap = await build_structure_snapshot(object(), "BTCUSDT")
+    assert snap.depth is None
+    assert snap.account_long_short is not None  # 其余因子不受影响
