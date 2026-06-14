@@ -16,6 +16,7 @@ export const ACCOUNT_NAV_ITEMS: readonly AccountNavItem[] = [
   { href: '/account/alerts', label: '通知与提醒' },
   { href: '/account/profile', label: '账号与偏好' },
   { href: '/account/invite', label: '邀请有礼' }, // Phase 1.5 刀B
+  { href: '/account/membership', label: '会员' }, // Phase 2a 刀2
 ] as const
 
 export function isActiveNavItem(pathname: string | null, item: AccountNavItem): boolean {

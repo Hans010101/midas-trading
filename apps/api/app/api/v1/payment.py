@@ -17,9 +17,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUserDep
 from app.core.database import get_db
-from app.schemas.payment import CreateOrderIn, CreateOrderOut
+from app.schemas.payment import CreateOrderIn, CreateOrderOut, OrderStatusOut
 from app.services.payment.bcon_client import BconError
-from app.services.payment.order import create_payment_order, process_bcon_callback
+from app.services.payment.order import (
+    create_payment_order,
+    get_order_status,
+    process_bcon_callback,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +54,19 @@ async def create_order(
         payment_amount=payment_amount,
         external_id=order.external_id,
         period=order.period,
+    )
+
+
+@router.get("/payment/order/{external_id}/status", response_model=OrderStatusOut)
+async def order_status(
+    external_id: str, current_user: CurrentUserDep, db: DbDep,
+) -> OrderStatusOut:
+    """查本人订单状态(前端到账轮询)· 限本人 · 不存在/非本人 → 404。"""
+    order = await get_order_status(db, current_user.id, external_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    return OrderStatusOut(
+        external_id=order.external_id, status=order.status, period=order.period,
     )
 
 

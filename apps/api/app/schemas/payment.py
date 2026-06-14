@@ -29,3 +29,13 @@ class CreateOrderOut(BaseModel):
     payment_amount: str     # 用户应付精确额(Bcon 返回)
     external_id: str        # 我方订单号(不可猜)
     period: str
+
+
+class OrderStatusOut(BaseModel):
+    """订单状态(前端到账轮询用)· pending → paid/expired。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    external_id: str
+    status: str             # pending|paid|expired
+    period: str
