@@ -77,11 +77,11 @@ export function MembershipSection() {
                 )}
               </div>
               <div className="mt-3">
-                <span className="font-mono text-2xl font-bold text-foreground">${t.priceUsdt}</span>
+                <span className="font-mono text-2xl font-bold text-foreground">{t.priceUsdt}</span>
                 <span className="ml-1 text-xs text-muted-foreground">USDT</span>
               </div>
               <p className="mt-1 text-[11px] text-muted-foreground/70">
-                约 ${monthlyEquivalent(t)}/月
+                月均 {monthlyEquivalent(t)} USDT
                 {save > 0 && <span className="ml-1 text-midas-red">· 省 {save}%</span>}
               </p>
               <button

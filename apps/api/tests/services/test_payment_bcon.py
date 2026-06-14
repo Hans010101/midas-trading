@@ -27,7 +27,7 @@ from tests.factories import make_user
 
 
 def _fake_create(addr: str, amount: str):  # noqa: ANN202
-    async def _f(external_id: str, origin_amount: str, *, chain: str = "binance") -> tuple[str, str]:  # noqa: ARG001
+    async def _f(external_id: str, amount_usdt: str, *, chain: str = "binance") -> tuple[str, str]:  # noqa: ARG001
         return addr, amount
     return _f
 
@@ -40,6 +40,41 @@ def _fake_tx(sum_value: str):  # noqa: ANN202
 
 async def _sub(db: AsyncSession, user_id: Any) -> Subscription | None:
     return await db.scalar(select(Subscription).where(Subscription.user_id == user_id))
+
+
+# ── ★ create_address 直传 payment_amount(USDT 直接计价 · 禁汇率换算)─────────────
+
+
+@pytest.mark.asyncio
+async def test_create_address_sends_payment_amount_usdt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """body 传 payment_amount=<USDT额> + payment_currency=USDT · 无 origin_amount/currency
+    (禁换算);返回应付额=我方 USDT 额(不取 Bcon echo · 显示=转账=到账同一数)。"""
+    import app.services.payment.bcon_client as bc
+
+    captured: dict[str, Any] = {}
+
+    async def fake_request(method: str, url: str, *, json: dict[str, Any] | None = None) -> Any:
+        captured["method"] = method
+        captured["url"] = url
+        captured["body"] = json
+        return {"data": {"address": "0xRECV", "payment_amount": "5.0"}}  # Bcon 即便回 5.0 也不取
+
+    monkeypatch.setattr(bc, "_request", fake_request)
+    addr, amount = await bc.create_address("ext123", "4.9", chain="binance")
+
+    assert addr == "0xRECV"
+    assert amount == "4.9"  # ★ 我方 USDT 额(非 Bcon echo 的 5.0)
+    body = captured["body"]
+    assert body is not None
+    assert body["payment_amount"] == "4.9"      # ★ 直传 USDT 额
+    assert body["payment_currency"] == "USDT"
+    assert "origin_amount" not in body          # ★ 禁汇率换算
+    assert "origin_currency" not in body
+    assert body["external_id"] == "ext123"
+    assert body["chain"] == "binance"
+    assert captured["method"] == "POST"
 
 
 # ── 建单 ──────────────────────────────────────────────────────────────────────
