@@ -42,15 +42,15 @@ async def _sub(db: AsyncSession, user_id: Any) -> Subscription | None:
     return await db.scalar(select(Subscription).where(Subscription.user_id == user_id))
 
 
-# ── ★ create_address 直传 payment_amount(USDT 直接计价 · 禁汇率换算)─────────────
+# ── ★ create_address 方案 A:origin(必填)+ payment_amount(覆盖换算)三参数都传 ──────
 
 
 @pytest.mark.asyncio
-async def test_create_address_sends_payment_amount_usdt(
+async def test_create_address_sends_origin_and_payment_amount(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """body 传 payment_amount=<USDT额> + payment_currency=USDT · 无 origin_amount/currency
-    (禁换算);返回应付额=我方 USDT 额(不取 Bcon echo · 显示=转账=到账同一数)。"""
+    """修 302:body 同时传 origin_amount/origin_currency(必填,删了 → Bcon 302)+
+    payment_amount(覆盖换算 → 实付精确 USDT 额);返回我方额(不取 Bcon echo · 显示=转账=到账同一数)。"""
     import app.services.payment.bcon_client as bc
 
     captured: dict[str, Any] = {}
@@ -68,10 +68,12 @@ async def test_create_address_sends_payment_amount_usdt(
     assert amount == "4.9"  # ★ 我方 USDT 额(非 Bcon echo 的 5.0)
     body = captured["body"]
     assert body is not None
-    assert body["payment_amount"] == "4.9"      # ★ 直传 USDT 额
+    # ★ origin 必填基础参数都在(删了会 302)
+    assert body["origin_amount"] == "4.9"
+    assert body["origin_currency"] == "USD"
+    # ★ payment_amount 覆盖换算 → 实付精确 USDT(无零头)
+    assert body["payment_amount"] == "4.9"
     assert body["payment_currency"] == "USDT"
-    assert "origin_amount" not in body          # ★ 禁汇率换算
-    assert "origin_currency" not in body
     assert body["external_id"] == "ext123"
     assert body["chain"] == "binance"
     assert captured["method"] == "POST"

@@ -28,13 +28,16 @@ async def create_address(
 ) -> tuple[str, str]:
     """创建收款地址 · POST /api/v2/address(USDT 直接计价 · 禁汇率换算)。
 
-    ★ 传 payment_amount=<USDT 额>(优先于 origin_amount · 禁自动换算 · 直接用指定值)→
-      用户付的就是这个精确 USDT 额(显示=转账=到账同一个数,无零头)。
+    ★ 方案 A(修 302):origin_amount/origin_currency 仍必填(基础订单参数 · 删了 → Bcon 302);
+      payment_amount 是【覆盖】参数(优先于 origin · 禁自动换算 · 直接用指定值)→
+      三者都传:origin 满足必填、payment_amount 覆盖换算 → 用户付精确 USDT 额(无零头)。
     返回 (address, amount_usdt):应付额用我方 USDT 额(权威值,不取 Bcon echo · 防零头)。
     """
     body = {
         "payment_currency": "USDT",
-        "payment_amount": amount_usdt,
+        "origin_amount": amount_usdt,    # 必填基础参数(改价前已验 200)· 被 payment_amount 覆盖
+        "origin_currency": "USD",        # 必填
+        "payment_amount": amount_usdt,   # ★ 覆盖换算 → 实付精确 USDT 额,无零头
         "external_id": external_id,
         "chain": chain,
     }
