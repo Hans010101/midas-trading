@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "点金 Midas 后端 API 服务"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.115.0",
+    # 上限 <0.137:fastapi 0.137.0(2026-06 发布)改了路由内省暴露(app.routes / route.dependant),
+    # 破坏 test_quota / test_admin_user_detail 两个路由内省守护测试(详见 docs/decisions/0043)·
+    # 未锁版本时 CI 每次 pip install 拉到 0.137.0 → 全仓 CI 红(旧代码亦然)。锁回已验证全绿的 0.136.x ·
+    # 升级 0.137 需先适配这两个测试,另开任务。
+    "fastapi>=0.115.0,<0.137",
     "uvicorn[standard]>=0.32.0",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.0",
