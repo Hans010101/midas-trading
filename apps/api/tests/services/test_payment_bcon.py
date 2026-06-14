@@ -49,8 +49,8 @@ async def _sub(db: AsyncSession, user_id: Any) -> Subscription | None:
 async def test_create_address_sends_origin_and_payment_amount(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """修 302:body 同时传 origin_amount/origin_currency(必填,删了 → Bcon 302)+
-    payment_amount(覆盖换算 → 实付精确 USDT 额);返回我方额(不取 Bcon echo · 显示=转账=到账同一数)。"""
+    """body 传 origin(必填,删了 → Bcon 302)+ payment_amount(名义额);
+    ★ 返回【Bcon 的 payment_amount】(唯一尾数收款额 · 用户付这个才被匹配),非我方传入额。"""
     import app.services.payment.bcon_client as bc
 
     captured: dict[str, Any] = {}
@@ -59,13 +59,14 @@ async def test_create_address_sends_origin_and_payment_amount(
         captured["method"] = method
         captured["url"] = url
         captured["body"] = json
-        return {"data": {"address": "0xRECV", "payment_amount": "5.0"}}  # Bcon 即便回 5.0 也不取
+        # Bcon 给唯一尾数收款额(4.9 → 4.93)· 用于固定地址区分订单
+        return {"data": {"address": "0xRECV", "payment_amount": "4.93"}}
 
     monkeypatch.setattr(bc, "_request", fake_request)
     addr, amount = await bc.create_address("ext123", "4.9", chain="binance")
 
     assert addr == "0xRECV"
-    assert amount == "4.9"  # ★ 我方 USDT 额(非 Bcon echo 的 5.0)
+    assert amount == "4.93"  # ★ Bcon 返回的精确收款额(非传入的名义 4.9)
     body = captured["body"]
     assert body is not None
     # ★ origin 必填基础参数都在(删了会 302)
@@ -87,12 +88,13 @@ async def test_create_order_pending(
     db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     user = await make_user(db_session)
-    monkeypatch.setattr(order_mod, "create_address", _fake_create("0xRECV", "4.9"))
+    # Bcon 返回唯一尾数收款额 4.93(名义价 month=4.9)· ★ 必须用 Bcon 额,非名义额
+    monkeypatch.setattr(order_mod, "create_address", _fake_create("0xRECV", "4.93"))
     order, payment_amount = await create_payment_order(db_session, user.id, "month")
     assert order.status == "pending"
     assert order.pay_address == "0xRECV"
-    assert payment_amount == "4.9"
-    assert order.amount_usdt == Decimal("4.9")
+    assert payment_amount == "4.93"               # ★ 返 Bcon 额(非名义 4.9)
+    assert order.amount_usdt == Decimal("4.93")   # ★ 存 Bcon 额 = 匹配/核验额(非名义 4.9)
     assert order.plan == "pro"
     assert len(order.external_id) >= 16  # 不可猜(secrets.token_urlsafe(24))
     assert await _sub(db_session, user.id) is None  # 未付不开权益
@@ -115,11 +117,13 @@ async def test_create_order_bad_period(
 async def test_callback_confirmed_grants_pro(
     db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """status=2 + 查单足额 → pending→paid + 开 pro(extend 'paid')。"""
+    """status=2 + 查单实付 ≥ Bcon 收款额(非名义额)→ pending→paid + 开 pro(extend 'paid')。"""
     user = await make_user(db_session)
-    monkeypatch.setattr(order_mod, "create_address", _fake_create("0xR", "9.9"))
+    # Bcon 收款额 9.93(名义 quarter=9.9)· 订单存 9.93,核验按 9.93
+    monkeypatch.setattr(order_mod, "create_address", _fake_create("0xR", "9.93"))
     order, _ = await create_payment_order(db_session, user.id, "quarter")
-    monkeypatch.setattr(order_mod, "get_transaction", _fake_tx("9.9"))
+    assert order.amount_usdt == Decimal("9.93")  # 核验基准 = Bcon 额
+    monkeypatch.setattr(order_mod, "get_transaction", _fake_tx("9.93"))
 
     label = await process_bcon_callback(
         db_session, status="2", txid="0xTX", external_id=order.external_id, addr="0xR",

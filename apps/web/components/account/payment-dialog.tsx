@@ -100,9 +100,13 @@ export function PaymentDialog({
         {/* 3 · 收款信息 + 到账轮询 */}
         {order && !paid && (
           <>
-            <p className="mb-3 text-center text-sm">
+            <p className="mb-1 text-center text-sm">
               <span className="font-mono text-lg font-bold text-foreground">{order.payment_amount}</span>
               <span className="ml-1 text-muted-foreground">USDT</span>
+            </p>
+            {/* ★ Bcon 靠唯一金额尾数匹配订单 · 必须付这个精确额才能被识别开通 */}
+            <p className="mb-3 text-center text-[11px] text-midas-red">
+              请付上方【精确金额】(含尾数用于订单识别,多付少付都无法自动开通)
             </p>
 
             <div className="mb-3 flex justify-center rounded-lg bg-white p-3">

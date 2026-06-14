@@ -34,24 +34,28 @@ _PLAN = "pro"
 async def create_payment_order(
     db: AsyncSession, user_id: UUID, period: str, *, chain: str = "binance",
 ) -> tuple[PaymentOrder, str]:
-    """建 pending 订单 → Bcon 建收款地址 → 回填 pay_address。返回 (order, payment_amount)。
+    """建 pending 订单 → Bcon 建收款地址 → 回填 pay_address + ★ Bcon 精确收款额。
 
+    ★ amount_usdt 存【Bcon 返回的 payment_amount】(唯一尾数收款额,如 4.93)= 用户应付/匹配/核验额;
+      名义价(4.9/9.9/19.9)是 PRICE_USDT[period],仅展示用(可由 period 反查,不单独存)。
     period 非法 → ValueError(端点转 400);Bcon 失败 → BconError(端点转 502 · get_db 回滚无残留)。
     """
     if period not in PRICE_USDT:
         msg = f"未知周期: {period}"
         raise ValueError(msg)
-    amount = PRICE_USDT[period]
+    nominal = PRICE_USDT[period]  # 名义价 → 传 Bcon,Bcon 据此分配唯一尾数收款额
     external_id = secrets.token_urlsafe(24)  # 不可猜 · 给 Bcon + 回调匹配键
     order = PaymentOrder(
         external_id=external_id, user_id=user_id, plan=_PLAN, period=period,
-        amount_usdt=Decimal(amount), chain=chain, status="pending",
+        amount_usdt=Decimal(nominal), chain=chain, status="pending",  # 先存名义,拿到 Bcon 额后覆写
     )
     db.add(order)
     await db.flush()
     # 调 Bcon 建收款地址 · 失败抛 BconError → 端点 502 → get_db 回滚 · 无 pending 残留
-    address, payment_amount = await create_address(external_id, amount, chain=chain)
+    address, payment_amount = await create_address(external_id, nominal, chain=chain)
     order.pay_address = address
+    # ★ 用 Bcon 返回的精确收款额(唯一尾数)作为应付/匹配/核验额 —— 用户付这个才被匹配
+    order.amount_usdt = Decimal(payment_amount)
     await db.commit()
     return order, payment_amount
 
