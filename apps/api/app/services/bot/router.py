@@ -30,10 +30,12 @@ from app.services.bot import ratelimit, replies
 from app.services.bot.identity import resolve_user_id
 from app.services.bot.query import (
     detect_symbol_markets,
+    get_spot_lite,
     query_alert_rules,
     query_positions,
     query_symbol,
     query_watchlist,
+    search_by_name,
 )
 from app.services.bot.renderers.telegram import render_for_telegram
 from app.services.bot.replies import InboundMessage, ReplyModel
@@ -54,7 +56,7 @@ _ASK_PARTS = 3  # ask:<intent>:<market>
 _SYM_ACTION_PARTS = 3  # <op>:<market>:<symbol>(行情卡就地操作 qk/qo/qr)
 _MAX_SYMBOL_LEN = 15  # 疑似代码的最大长度(防把长句当代码)
 _VALID_MARKETS = {"cn", "us", "crypto", "hk"}
-_SYM_OPS = {"qk", "qo", "qr"}  # 行情卡就地操作:看K线 / 下单 / 刷新
+_SYM_OPS = {"qk", "qo", "qr", "qv"}  # 行情卡就地操作:看K线 / 下单 / 刷新 / 查看(候选点击)
 # 疑似代码允许的字符:字母 + 数字 + 斜杠(crypto BTC/USDT)· 不含空格 / 冒号 / 中文
 _SYMBOL_CHARS = frozenset(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/",
@@ -88,6 +90,18 @@ def _looks_like_symbol(text: str) -> bool:
     return set(s) <= _SYMBOL_CHARS
 
 
+def _looks_like_name(text: str) -> bool:
+    """是否像【名称类】搜索词(中文名等)· 纯函数 · 可单测。
+
+    判据:strip 后非空、不以 / 开头(非命令)、含至少一个非 ASCII 字符(中文等)。
+    纯数字 / 字母代码已被上游分支处理;英文句子(全 ASCII)落 build_hint,不当名称搜。
+    """
+    s = text.strip()
+    if not s or s.startswith("/"):
+        return False
+    return not s.isascii()
+
+
 def _parse_sym_action(d: str) -> tuple[str, str, str] | None:
     """解析行情卡就地操作回调 `<op>:<market>:<symbol>`(P0-2 · qk/qo/qr)。
 
@@ -104,11 +118,20 @@ def _parse_sym_action(d: str) -> tuple[str, str, str] | None:
     return op, market, symbol
 
 
-async def _do_quote(ch: ClickHouseClient, market: str, symbol: str) -> ReplyModel:
+async def _quote_or_lite(ch: ClickHouseClient, market: str, symbol: str) -> ReplyModel:
+    """统一出卡:有 kline → 完整行情卡;cn/hk 无 kline 但 spot 有 → 轻量卡;否则未找到。
+
+    crypto/us 永不进 lite 分支(它们走自己的 kline 路径)→ 与原 _do_quote 行为完全一致(零回归)。
+    cn/hk 长尾(spot 有 / kline 未采)从「未找到」升级为轻量信息卡(诚实标注无深度数据)。
+    """
     quote = await query_symbol(ch, market, symbol)
-    if quote is None:
-        return replies.build_symbol_not_found(market, symbol)
-    return replies.build_quote(quote)
+    if quote is not None:
+        return replies.build_quote(quote)
+    if market in ("cn", "hk"):
+        lite = await get_spot_lite(ch, market, symbol)
+        if lite is not None:
+            return replies.build_lite_quote_card(lite)
+    return replies.build_symbol_not_found(market, symbol)
 
 
 # ── 通道中立核心 ──────────────────────────────────────────────────────
@@ -155,11 +178,11 @@ async def _quote_code_replies(ch: ClickHouseClient, body: str) -> list[ReplyMode
     """
     s = body.strip()
     if s.isdigit():
-        return [await _do_quote(ch, _guess_market(s), s)]
+        return [await _quote_or_lite(ch, _guess_market(s), s)]
     hits = await detect_symbol_markets(ch, s)
     if not hits:
         return [replies.build_code_not_found(s)]
-    return [await _do_quote(ch, market, sym) for market, sym in hits]
+    return [await _quote_or_lite(ch, market, sym) for market, sym in hits]
 
 
 async def _handle_text(
@@ -209,7 +232,7 @@ async def _handle_text(
             return [replies.build_ask_symbol(intent, market)]
         if intent == "kline":
             return [replies.build_kline_link(market, symbol)]
-        return [await _do_quote(ch, market, symbol)]
+        return [await _quote_or_lite(ch, market, symbol)]
 
     # 下单流程:之前点了「下单 → 选市场」,正在等代码 → 规范化 + 校验 → 方向选择
     if sess and sess.get("step") == "order_symbol":
@@ -241,6 +264,17 @@ async def _handle_text(
     if _looks_like_symbol(body):
         await clear_session(redis, channel, uid)
         return await _quote_code_replies(ch, body)
+
+    # 中文/名称搜索(全新分支 · 不改 detect)· cn+hk spot 快照按 symbol/name 搜:
+    # 0 命中→提示 · 1 命中→直接出卡(有K线完整 / 无K线轻量) · N 命中→候选列表(单条+按钮)。
+    if _looks_like_name(body):
+        await clear_session(redis, channel, uid)
+        hits = await search_by_name(ch, body)
+        if not hits:
+            return [replies.build_name_not_found(body)]
+        if len(hits) == 1:
+            return [await _quote_or_lite(ch, hits[0].market, hits[0].symbol)]
+        return [replies.build_candidate_list(hits)]
 
     # 其它文本(多 token / 句子)→ 提示
     return [replies.build_hint()]
@@ -373,8 +407,9 @@ async def _handle_sym_action(
     op, market, symbol = parsed
     if op == "qk":
         return replies.build_kline_link(market, symbol)
-    if op == "qr":
-        return await _do_quote(ch, market, symbol)
+    if op in ("qr", "qv"):
+        # qr 刷新 / qv 候选点击查看 —— 同走统一出卡(有K线完整 / cn-hk 无K线轻量)
+        return await _quote_or_lite(ch, market, symbol)
     # qo:卡片直达下单 —— 复用 order_symbol 之后的规范化 + 报价校验 + 进方向页(零新撮合)
     canonical = order_mod.normalize_symbol(market, symbol)
     price = await order_mod.quote_price(ch, market, canonical) if canonical else None

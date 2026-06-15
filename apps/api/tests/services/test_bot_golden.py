@@ -9,13 +9,17 @@ GOLDEN = 重构前 telegram_ui.render_* 的【字节级标准答案】(由 _dump
 """
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
 from app.services.bot import replies
 from app.services.bot.order import OrderPreview
 from app.services.bot.query import (
     AlertRuleRow,
+    NameHit,
     PositionRow,
+    SpotLite,
     SymbolQuote,
     WatchlistRow,
 )
@@ -113,6 +117,32 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                             '· 加密永续请带斜杠,如 `ZZZ/USDT`\n'
                             '· 或检查代码是否正确(只查已采集标的)',
                     'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
+                                                       'callback_data': 'menu:main'}]]}},
+ 'name_not_found': {'text': '*点金 Midas*\n'
+                            '\n'
+                            '未找到「查无此名」相关标的。\n'
+                            '· 换个关键词试试,或直接发代码(如 600519 / 00700)',
+                    'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
+                                                       'callback_data': 'menu:main'}]]}},
+ 'lite_quote_card': {'text': '*点金 Midas · 行情(简)*\n'
+                             '\n'
+                             '📋 腾讯控股 · 港股 · 00700\n'
+                             '最新价 HK$380.0\n'
+                             '涨跌幅 🔴 +1.23%\n'
+                             '成交额 HK$98.70亿\n'
+                             '更新 06-15 12:30\n'
+                             '\n'
+                             'ℹ️ 暂无 K线/深度分析数据,可在网页端查看完整信息',
+                     'keyboard': {'inline_keyboard': [[{'text': '🌐 网页查看',
+                                                        'url': 'http://localhost:3000/workbench?symbol=00700'}],
+                                                      [{'text': '⬅️ 返回菜单',
+                                                        'callback_data': 'menu:main'}]]}},
+ 'candidate_list': {'text': '*点金 Midas · 找到多个标的*\n\n点选你要查看的标的 ↓',
+                    'keyboard': {'inline_keyboard': [[{'text': '600036 招商银行',
+                                                       'callback_data': 'qv:cn:600036'}],
+                                                     [{'text': '00700 腾讯控股',
+                                                       'callback_data': 'qv:hk:00700'}],
+                                                     [{'text': '⬅️ 返回菜单',
                                                        'callback_data': 'menu:main'}]]}},
  'kline_link': {'text': '*点金 Midas · K线*\n\n📈 NVDA · 美股 · K线(MA / RSI / MACD · 此刻)',
                 'keyboard': {'inline_keyboard': [[{'text': '📈 网页看K线',
@@ -376,6 +406,15 @@ _RECEIPT_BODY = (
     "*点金 Midas · 合约成交*\n\n"
     "📊 BTC/USDT · 永续 · 逐仓 20x\n开多 0.5 · 成交价 63,200 USDT"
 )
+_LITE_HK = SpotLite(
+    market="hk", symbol="00700", name="腾讯控股", last_price=380.0,
+    change_pct=1.23, amount=9.87e9,
+    ts=datetime(2026, 6, 15, 4, 30, tzinfo=UTC),
+)
+_NAME_HITS = [
+    NameHit(market="cn", symbol="600036", name="招商银行"),
+    NameHit(market="hk", symbol="00700", name="腾讯控股"),
+]
 
 # key → 新链路 ReplyModel(交给 render_for_telegram 后比对 GOLDEN[key])
 CASES = {
@@ -390,6 +429,9 @@ CASES = {
     "quote_noprice": replies.build_quote(_Q_NOPRICE),
     "symbol_not_found": replies.build_symbol_not_found("cn", "600519"),
     "code_not_found": replies.build_code_not_found("zzz"),
+    "name_not_found": replies.build_name_not_found("查无此名"),
+    "lite_quote_card": replies.build_lite_quote_card(_LITE_HK),
+    "candidate_list": replies.build_candidate_list(_NAME_HITS),
     "kline_link": replies.build_kline_link("us", "NVDA"),
     "watchlist_empty": replies.build_watchlist([]),
     "watchlist_rows": replies.build_watchlist(_WL),

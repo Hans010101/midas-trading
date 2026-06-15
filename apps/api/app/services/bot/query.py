@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
@@ -19,7 +20,11 @@ from app.models.alert_rule import AlertRule
 from app.models.perp import VirtualPerpPosition
 from app.models.virtual import VirtualAccount, VirtualPosition
 from app.models.watchlist import WatchlistItem
-from app.services import clickhouse_crypto
+from app.services import (
+    clickhouse_cn_market,
+    clickhouse_crypto,
+    clickhouse_hk_market,
+)
 from app.services.alerts.registry import get_indicator
 
 if TYPE_CHECKING:
@@ -47,6 +52,28 @@ class SymbolQuote:
     open_interest_usd: float | None = None
     long_short_ratio: float | None = None
     basis_pct: float | None = None
+
+
+@dataclass(frozen=True)
+class SpotLite:
+    """无 kline 时的轻量信息(只读 spot 快照 · 仅 cn/hk)· 给「无K线轻量卡」用。"""
+
+    market: str
+    symbol: str
+    name: str
+    last_price: float
+    change_pct: float
+    amount: float
+    ts: datetime
+
+
+@dataclass(frozen=True)
+class NameHit:
+    """中文名搜索命中(候选列表用)· market+symbol 定位 · name 展示。"""
+
+    market: str
+    symbol: str
+    name: str
 
 
 @dataclass(frozen=True)
@@ -178,6 +205,62 @@ async def detect_symbol_markets(
     if await ch.symbol_exists("us", s):
         hits.append(("us", s))
     return hits
+
+
+_SPOT_LITE_MARKETS = {"cn", "hk"}
+
+
+async def get_spot_lite(
+    ch: ClickHouseClient, market: str, symbol: str,
+) -> SpotLite | None:
+    """无 kline 时的轻量数据源:从 {market}_spot_snapshot 取该 symbol 最新一行。
+
+    仅 cn/hk(us/crypto 有自己的 kline 路径,不走轻量卡)· 无行 → None。
+    market 经白名单后内插表名(防注入)· ts DESC LIMIT 1 取最新快照行。
+    """
+    if market not in _SPOT_LITE_MARKETS:
+        return None
+    table = f"{market}_spot_snapshot"  # market 已白名单 cn/hk · 表名内插无注入风险
+    result = await ch._client.query(  # noqa: SLF001 · 与 _crypto_extras 一致:复用底层 client 只读查
+        "SELECT symbol, name, last_price, change_pct, amount, ts "  # noqa: S608
+        f"FROM {table} WHERE symbol = %(s)s ORDER BY ts DESC LIMIT 1",
+        parameters={"s": symbol},
+    )
+    rows = result.result_rows
+    if not rows:
+        return None
+    r = rows[0]
+    ts = r[5]
+    return SpotLite(
+        market=market, symbol=str(r[0]), name=str(r[1]),
+        last_price=float(r[2]), change_pct=float(r[3]), amount=float(r[4]),
+        ts=ts.replace(tzinfo=UTC) if ts.tzinfo is None else ts,
+    )
+
+
+async def search_by_name(
+    ch: ClickHouseClient, raw: str, limit: int = 8,
+) -> list[NameHit]:
+    """中文名搜索 A股 + 港股(只读 spot 快照 · symbol/name 子串)· 跨市场按成交额降序 · 截断 limit。
+
+    不含 us(产品决策:us 用代码搜,英文名搜索另议)· 返回 (market, symbol, name) 列表(可空)。
+    """
+    q = raw.strip()
+    if not q:
+        return []
+    raw_client = ch._client  # noqa: SLF001 · 同 _crypto_extras:market 服务函数收底层 client
+    cn_rows = await clickhouse_cn_market.select_spot_search(
+        raw_client, query=q, limit=limit,
+    )
+    hk_rows = await clickhouse_hk_market.select_hk_spot_search(
+        raw_client, query=q, limit=limit,
+    )
+    merged = [("cn", row) for row in cn_rows] + [("hk", row) for row in hk_rows]
+    merged.sort(key=lambda mr: mr[1].amount, reverse=True)  # 活跃(成交额)优先
+    return [
+        NameHit(market=mkt, symbol=row.symbol, name=row.name)
+        for mkt, row in merged[:limit]
+    ]
 
 
 async def query_watchlist(

@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
@@ -15,7 +16,11 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.feishu import _handle_menu_action, _parse_menu_event
+from app.api.v1.feishu import (
+    _handle_menu_action,
+    _handle_message,
+    _parse_menu_event,
+)
 from app.models.notification import NotificationConfig
 from app.models.virtual import VirtualPosition
 from tests.factories import make_user, make_virtual_account
@@ -174,3 +179,59 @@ async def test_menu_forged_ordok_does_not_execute(db_session: AsyncSession) -> N
     card = _sent_card(bg)
     assert "成交" not in _body(card)  # 兜底回主菜单 · 不报成交
     assert "menu:order" in _actions(card)  # 主菜单(含下单入口)
+
+
+# ── 本刀:飞书 transport 追平(文本路径多条发卡)─────────────────────────────
+
+
+class _MultiCH:
+    """同名两市场替身:select_kline 出 bar(query_symbol 非空)+ symbol_exists 命中 crypto+us。"""
+
+    def __init__(self) -> None:
+        self._client = object()
+
+    async def select_kline(self, **_kw: Any) -> list[Any]:
+        return [_bar(100.0), _bar(120.0)]
+
+    async def symbol_exists(
+        self, market: str, symbol: str, instrument: str = "spot",  # noqa: ARG002
+    ) -> bool:
+        return (market, symbol) in {("crypto", "AAA/USDT"), ("us", "AAA")}
+
+
+def _msg_event(open_id: str, text: str) -> dict[str, Any]:
+    """im.message.receive_v1 事件体 · open_id 在 sender.sender_id(已验签)· text 在 content JSON。"""
+    return {
+        "sender": {"sender_id": {"open_id": open_id}},
+        "message": {"message_type": "text", "content": json.dumps({"text": text})},
+    }
+
+
+@pytest.mark.asyncio
+async def test_feishu_message_multi_market_sends_two_cards(db_session: AsyncSession) -> None:
+    """🆕 飞书追平 TG:裸字母代码同名两市场 → 后台逐条发【两张卡】(加密在前)。"""
+    user = await make_user(db_session)
+    db_session.add(NotificationConfig(user_id=user.id, feishu_open_id="ou_multi"))
+    await db_session.commit()
+    bg = _CaptureBg()
+    await _handle_message(
+        db_session, _FakeRedis(), _MultiCH(), bg, _msg_event("ou_multi", "aaa"),  # type: ignore[arg-type]
+    )
+    assert len(bg.tasks) == 2  # noqa: PLR2004 — 同名两市场两张卡
+    s0 = json.dumps(bg.tasks[0][1][1], ensure_ascii=False)  # (fn,(open_id,card)) → card
+    s1 = json.dumps(bg.tasks[1][1][1], ensure_ascii=False)
+    assert "qk:crypto:AAA/USDT" in s0  # 第一张 = 加密(在前)
+    assert "qk:us:AAA" in s1           # 第二张 = 美股(在后)
+
+
+@pytest.mark.asyncio
+async def test_feishu_message_single_sends_one_card(db_session: AsyncSession) -> None:
+    """🆕 单命中(/menu)→ 飞书仍只发一张卡(多条改造零回归)。"""
+    user = await make_user(db_session)
+    db_session.add(NotificationConfig(user_id=user.id, feishu_open_id="ou_one"))
+    await db_session.commit()
+    bg = _CaptureBg()
+    await _handle_message(
+        db_session, _FakeRedis(), _FakeCH([_bar(100.0)]), bg, _msg_event("ou_one", "/menu"),  # type: ignore[arg-type]
+    )
+    assert len(bg.tasks) == 1  # 单条

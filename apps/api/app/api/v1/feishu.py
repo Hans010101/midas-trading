@@ -40,7 +40,7 @@ from app.core.redis_client import get_redis
 from app.models.notification import NotificationConfig
 from app.services.bot.renderers.feishu import render_for_feishu
 from app.services.bot.replies import InboundMessage
-from app.services.bot.router import handle_inbound
+from app.services.bot.router import handle_inbound, handle_inbound_multi
 from app.services.notifications import feishu_client
 from app.services.notifications.feishu_bind import (
     create_bind_token,
@@ -322,8 +322,10 @@ async def _handle_message(
     msg = InboundMessage(
         channel="feishu", channel_uid=open_id, kind="text", text=text,
     )
-    reply = await handle_inbound(db, redis, ch, msg)
-    background.add_task(_send_card_safe, open_id, render_for_feishu(reply))
+    # transport 追平 TG:裸字母代码命中多市场 → 多张卡逐条发(列表序 = 加密在前);
+    # 单命中 / 中文候选列表(本就单条)= 单条(行为不变)· open_id 仍来自已验签事件(身份红线)。
+    for reply in await handle_inbound_multi(db, redis, ch, msg):
+        background.add_task(_send_card_safe, open_id, render_for_feishu(reply))
 
 
 async def _handle_card_action(

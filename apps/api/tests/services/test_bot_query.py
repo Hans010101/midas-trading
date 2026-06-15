@@ -202,3 +202,96 @@ async def test_symbol_exists_limit1_query():
 
     empty = SimpleNamespace(_client=_Raw([]))
     assert await ClickHouseClient.symbol_exists(empty, "crypto", "ZZZ/USDT") is False
+
+
+# ── 本刀:中文名搜索 + 轻量卡数据源 ─────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_select_hk_spot_search_returns_rows():
+    """select_hk_spot_search:查 hk_spot_snapshot · 子串匹配 · 成交额降序 · 返回 HkSpotRow。"""
+    from app.services import clickhouse_hk_market as hk
+
+    captured: dict[str, Any] = {}
+
+    class _Raw:
+        async def query(self, sql: str, parameters: dict[str, Any] | None = None) -> Any:
+            captured["sql"] = sql
+            captured["params"] = parameters
+            return SimpleNamespace(result_rows=[
+                ["00700", "腾讯控股", 380.0, 1.2, 4.5, 9.9e9, 1e7],
+            ])
+
+    rows = await hk.select_hk_spot_search(_Raw(), query="腾讯", limit=8)  # type: ignore[arg-type]
+    assert len(rows) == 1
+    assert rows[0].symbol == "00700"
+    assert rows[0].name == "腾讯控股"
+    assert "hk_spot_snapshot" in captured["sql"]
+    assert "positionCaseInsensitive" in captured["sql"]
+    assert captured["params"]["q"] == "腾讯"
+
+
+@pytest.mark.asyncio
+async def test_get_spot_lite_found_and_missing():
+    """get_spot_lite:cn/hk 有行 → SpotLite(ts tz-aware) · 无行 → None · 非 cn/hk → None(不查)。"""
+    from datetime import datetime
+
+    naive_ts = datetime(2026, 6, 15, 4, 30)  # noqa: DTZ001 — 模拟 CH 读出的 naive ts
+
+    class _Raw:
+        def __init__(self, rows: list[Any]) -> None:
+            self._rows = rows
+
+        async def query(self, _sql: str, parameters: dict[str, Any] | None = None) -> Any:  # noqa: ARG002
+            return SimpleNamespace(result_rows=self._rows)
+
+    ch_has = SimpleNamespace(_client=_Raw([
+        ["600519", "贵州茅台", 1688.0, -1.2, 4.56e9, naive_ts],
+    ]))
+    lite = await q.get_spot_lite(ch_has, "cn", "600519")  # type: ignore[arg-type]
+    assert lite is not None
+    assert lite.name == "贵州茅台"
+    assert lite.ts.tzinfo is not None  # naive → 补 UTC
+
+    ch_empty = SimpleNamespace(_client=_Raw([]))
+    assert await q.get_spot_lite(ch_empty, "hk", "99999") is None  # type: ignore[arg-type]
+
+    # 非 cn/hk → 直接 None,不应触碰 _client(给一个会炸的 _client 证明没查)
+    ch_boom = SimpleNamespace(_client=object())
+    assert await q.get_spot_lite(ch_boom, "us", "NVDA") is None  # type: ignore[arg-type]
+    assert await q.get_spot_lite(ch_boom, "crypto", "BTC/USDT") is None  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_search_by_name_merges_cn_hk_by_amount(monkeypatch: pytest.MonkeyPatch):
+    """search_by_name:并 cn+hk · 跨市场按成交额降序 · 截断 · NameHit(market,symbol,name)。"""
+    from app.schemas.cn_market import CnSpotRow
+    from app.schemas.hk_market import HkSpotRow
+    from app.services import clickhouse_cn_market as cn
+    from app.services import clickhouse_hk_market as hk
+
+    def _row(cls: Any, sym: str, name: str, amount: float) -> Any:
+        return cls(
+            symbol=sym, name=name, last_price=1.0, change_pct=0.0,
+            change_amount=0.0, amount=amount, volume=0.0,
+        )
+
+    async def _fake_cn(_client: Any, *, query: str, limit: int) -> Any:  # noqa: ARG001
+        return [_row(CnSpotRow, "600036", "招商银行", 3e9)]
+
+    async def _fake_hk(_client: Any, *, query: str, limit: int) -> Any:  # noqa: ARG001
+        return [_row(HkSpotRow, "00700", "腾讯控股", 9e9)]
+
+    monkeypatch.setattr(cn, "select_spot_search", _fake_cn)
+    monkeypatch.setattr(hk, "select_hk_spot_search", _fake_hk)
+
+    ch = SimpleNamespace(_client=object())
+    hits = await q.search_by_name(ch, "银行", limit=8)  # type: ignore[arg-type]
+    # 跨市场按成交额降序:腾讯 9e9(hk)在前,招行 3e9(cn)在后
+    assert [(h.market, h.symbol) for h in hits] == [("hk", "00700"), ("cn", "600036")]
+
+
+@pytest.mark.asyncio
+async def test_search_by_name_empty_query():
+    ch = SimpleNamespace(_client=object())
+    assert await q.search_by_name(ch, "   ", limit=8) == []  # type: ignore[arg-type]

@@ -93,6 +93,33 @@ async def select_latest_spot(
     ]
 
 
+async def select_hk_spot_search(
+    client: AsyncClient, *, query: str, limit: int = 8,
+) -> list[HkSpotRow]:
+    """港股全市场搜索(最新快照 · symbol / name 子串命中 · 成交额降序)· 镜像 cn select_spot_search。
+
+    positionCaseInsensitive 子串匹配(非 LIKE → 无 % / _ 通配注入风险)· 中文名同样适用。
+    """
+    sql = """
+        SELECT symbol, name, last_price, change_pct, change_amount, amount, volume
+        FROM hk_spot_snapshot
+        WHERE ts = (SELECT max(ts) FROM hk_spot_snapshot)
+          AND (positionCaseInsensitive(symbol, %(q)s) > 0
+               OR positionCaseInsensitive(name, %(q)s) > 0)
+        ORDER BY amount DESC
+        LIMIT %(n)s
+    """
+    result = await client.query(sql, parameters={"q": query, "n": limit})
+    return [
+        HkSpotRow(
+            symbol=str(r[0]), name=str(r[1]), last_price=float(r[2]),
+            change_pct=float(r[3]), change_amount=float(r[4]),
+            amount=float(r[5]), volume=float(r[6]),
+        )
+        for r in result.result_rows
+    ]
+
+
 # ============================================================================
 # 2 · 情绪条(港股无涨跌停 → 只涨跌平 + 总成交额)
 # ============================================================================

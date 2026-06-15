@@ -591,3 +591,137 @@ async def test_pure_digit_skips_scan_single(db_session: AsyncSession):
     assert len(out) == 1
     assert "600519" in out[0].text
     assert "qk:cn:600519" in json.dumps(out[0].keyboard, ensure_ascii=False)
+
+
+# ── 本刀:中文名搜索 + 无K线轻量卡 + qv 候选点击 ─────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("茅台", True),
+        ("贵州茅台", True),
+        ("腾讯", True),
+        ("茅台600", True),      # 中文+数字混合也算名称
+        ("NVDA", False),         # 字母代码 → 上游 detect 处理
+        ("btc", False),
+        ("600519", False),       # 纯数字 → 上游处理
+        ("BTC/USDT", False),
+        ("hello world", False),  # 英文句子(全 ASCII)→ build_hint
+        ("", False),
+        ("   ", False),
+        ("/menu", False),        # 命令
+    ],
+)
+def test_looks_like_name(text: str, expected: bool):  # noqa: FBT001
+    assert router._looks_like_name(text) is expected
+
+
+@pytest.mark.asyncio
+async def test_chinese_name_single_hit_quotes(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+):
+    """🆕 中文名单命中(有 kline)→ 直接完整行情卡。"""
+    from app.services.bot.query import NameHit
+
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 743)
+
+    async def _fake_search(_ch: object, _raw: str, limit: int = 8) -> list[NameHit]:  # noqa: ARG001
+        return [NameHit(market="cn", symbol="600519", name="贵州茅台")]
+
+    monkeypatch.setattr(router, "search_by_name", _fake_search)
+    ch = _FakeCH([_bar(100.0), _bar(120.0)])  # 茅台有 kline → 完整卡
+    reply = await router.handle_command(db_session, _FakeRedis(), ch, 743, "茅台")  # type: ignore[arg-type]
+    assert "600519" in reply.text
+    assert "qk:cn:600519" in json.dumps(reply.keyboard, ensure_ascii=False)
+
+
+@pytest.mark.asyncio
+async def test_chinese_name_multi_hit_candidate_list(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+):
+    """🆕 中文名多命中 → 候选列表(单条卡 + qv 按钮 · 不需多条 transport)。"""
+    from app.services.bot.query import NameHit
+
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 744)
+
+    async def _fake_search(_ch: object, _raw: str, limit: int = 8) -> list[NameHit]:  # noqa: ARG001
+        return [
+            NameHit(market="cn", symbol="600036", name="招商银行"),
+            NameHit(market="hk", symbol="00700", name="腾讯控股"),
+        ]
+
+    monkeypatch.setattr(router, "search_by_name", _fake_search)
+    reply = await router.handle_command(db_session, _FakeRedis(), _FakeCH(), 744, "银行")  # type: ignore[arg-type]
+    assert "点选" in reply.text
+    flat = json.dumps(reply.keyboard, ensure_ascii=False)
+    assert "qv:cn:600036" in flat
+    assert "qv:hk:00700" in flat
+
+
+@pytest.mark.asyncio
+async def test_chinese_name_no_hit(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+):
+    """🆕 中文名 0 命中 → 友好未找到(不含加密斜杠提示)。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 745)
+
+    async def _fake_search(_ch: object, _raw: str, limit: int = 8) -> list:  # noqa: ARG001
+        return []
+
+    monkeypatch.setattr(router, "search_by_name", _fake_search)
+    reply = await router.handle_command(db_session, _FakeRedis(), _FakeCH(), 745, "查无此名")  # type: ignore[arg-type]
+    assert "未找到" in reply.text
+
+
+@pytest.mark.asyncio
+async def test_qv_cn_no_kline_shows_lite_card(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+):
+    """🆕 候选点击 qv:(cn/hk 无 kline 但 spot 有)→ 轻量卡 · 诚实标注无K线 · 无下单按钮。"""
+    from datetime import UTC, datetime
+
+    from app.services.bot.query import SpotLite
+
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 746)
+
+    async def _fake_lite(_ch: object, market: str, symbol: str) -> SpotLite:
+        return SpotLite(
+            market=market, symbol=symbol, name="长尾港股", last_price=12.3,
+            change_pct=2.1, amount=1.5e8, ts=datetime(2026, 6, 15, 4, 30, tzinfo=UTC),
+        )
+
+    monkeypatch.setattr(router, "get_spot_lite", _fake_lite)
+    ch = _FakeCH([])  # 无 kline → query_symbol None → 走 lite
+    reply = await router.handle_callback(db_session, _FakeRedis(), ch, 746, "qv:hk:00700")  # type: ignore[arg-type]
+    assert "暂无 K线" in reply.text
+    assert "长尾港股" in reply.text
+    flat = json.dumps(reply.keyboard, ensure_ascii=False)
+    assert "网页查看" in flat
+    assert "qo:" not in flat  # ★轻量卡不放下单
+    assert "qk:" not in flat  # 也不放 K线(本就无)
+
+
+@pytest.mark.asyncio
+async def test_qv_with_kline_full_card(db_session: AsyncSession):
+    """🆕 qv:(有 kline)→ 完整行情卡(qk/qo/qr 按钮)。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 747)
+    ch = _FakeCH([_bar(100.0), _bar(120.0)])
+    reply = await router.handle_callback(db_session, _FakeRedis(), ch, 747, "qv:cn:600519")  # type: ignore[arg-type]
+    assert "600519" in reply.text
+    assert "qk:cn:600519" in json.dumps(reply.keyboard, ensure_ascii=False)
+
+
+@pytest.mark.asyncio
+async def test_quote_or_lite_crypto_us_no_regression(db_session: AsyncSession):
+    """🆕 crypto/us 无 kline → 仍 build_symbol_not_found(永不进 lite · 零回归)。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 748)
+    ch = _FakeCH([])  # 无 kline
+    reply = await router.handle_callback(db_session, _FakeRedis(), ch, 748, "qr:us:NVDA")  # type: ignore[arg-type]
+    assert "未找到" in reply.text  # 不是轻量卡

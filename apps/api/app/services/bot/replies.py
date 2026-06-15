@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import timedelta, timezone
 from typing import TYPE_CHECKING, Literal
 
 from app.core.config import settings
@@ -28,11 +29,16 @@ if TYPE_CHECKING:
     from app.services.bot.order import OrderPreview
     from app.services.bot.query import (
         AlertRuleRow,
+        NameHit,
         PositionRow,
+        SpotLite,
         SymbolQuote,
         WatchlistRow,
     )
     from app.services.bot.quiet import QuietHoursView
+
+# A股/港股均 UTC+8(无 DST)· 轻量卡「更新时间」按北京时间展示
+_CN_TZ = timezone(timedelta(hours=8))
 
 # 产品决策:bot 输出不再带免责句 / VIRTUAL 徽章噪音(平台层已说明全程虚拟)。
 # disclaimer / badge 字段保留(供未来用),默认空 —— 渲染器条件渲染,空则不输出。
@@ -135,6 +141,17 @@ def _fmt_compact_usd(v: float) -> str:
     if a >= 1e3:  # noqa: PLR2004
         return f"${v / 1e3:.2f}K"
     return f"${v:.2f}"
+
+
+def _fmt_compact_cny(v: float, market: str) -> str:
+    """大额成交额紧凑(人民币/港币口径):45.6亿 / 1180万 · cn=¥ · hk=HK$。"""
+    sym = "HK$" if market == "hk" else "¥"
+    a = abs(v)
+    if a >= 1e8:
+        return f"{sym}{v / 1e8:.2f}亿"
+    if a >= 1e4:  # noqa: PLR2004
+        return f"{sym}{v / 1e4:.2f}万"
+    return f"{sym}{v:.0f}"
 
 
 def _fmt_qty(v: float) -> str:
@@ -382,6 +399,63 @@ def build_code_not_found(raw: str) -> ReplyModel:
         "· 或检查代码是否正确(只查已采集标的)"
     )
     return ReplyModel(text=text, disclaimer=None, buttons=_back_buttons())
+
+
+def build_name_not_found(raw: str) -> ReplyModel:
+    """中文名搜索未命中 · 提示换关键词 / 直接发代码(不含加密斜杠提示)。"""
+    text = (
+        f"未找到「{raw}」相关标的。\n"
+        "· 换个关键词试试,或直接发代码(如 600519 / 00700)"
+    )
+    return ReplyModel(text=text, disclaimer=None, buttons=_back_buttons())
+
+
+def build_lite_quote_card(lite: SpotLite) -> ReplyModel:
+    """无 kline 的轻量信息卡(只读 spot 快照 · cn/hk 长尾兜底)。
+
+    ★诚实标注「暂无 K线/深度分析」(守不伪造红线)· 只展示 spot 能给的(价/涨跌/成交额/更新)·
+    按钮仅【网页查看 + 返回菜单】· 不放下单 / 不放加自选(本刀范围外)。
+    """
+    mlabel = _MARKET_LABEL.get(lite.market, lite.market)
+    ccy = _market_ccy(lite.market)
+    when = lite.ts.astimezone(_CN_TZ).strftime("%m-%d %H:%M")
+    lines = [
+        f"📋 {lite.name} · {mlabel} · {lite.symbol}",
+        f"最新价 {_fmt_price(lite.last_price, ccy)}",
+        f"涨跌幅 {_fmt_pct(lite.change_pct)}",
+        f"成交额 {_fmt_compact_cny(lite.amount, lite.market)}",
+        f"更新 {when}",
+        "",
+        "ℹ️ 暂无 K线/深度分析数据,可在网页端查看完整信息",
+    ]
+    return ReplyModel(
+        text="\n".join(lines),
+        title="行情(简)",
+        disclaimer=None,
+        buttons=(
+            (Button("🌐 网页查看", url=web_chart_url(lite.market, lite.symbol)),),
+            (Button("⬅️ 返回菜单", "menu:main"),),
+        ),
+    )
+
+
+def build_candidate_list(hits: list[NameHit]) -> ReplyModel:
+    """中文名多命中候选(单条卡 + 一列按钮 · 照 build_alert_rules 范式)。
+
+    每个候选一个按钮 `qv:<market>:<symbol>`(点击出该标的卡 · 有K线完整卡 / 无K线轻量卡)·
+    label「代码 中文名」截断 60(兼容 TG 按钮文字上限 · 飞书同样适用)· 末行返回菜单。
+    """
+    rows: list[tuple[Button, ...]] = [
+        (Button(f"{h.symbol} {h.name}"[:60], f"qv:{h.market}:{h.symbol}"),)
+        for h in hits
+    ]
+    rows.append((Button("⬅️ 返回菜单", "menu:main"),))
+    return ReplyModel(
+        text="点选你要查看的标的 ↓",
+        title="找到多个标的",
+        disclaimer=None,
+        buttons=tuple(rows),
+    )
 
 
 def build_kline_link(market: str, symbol: str) -> ReplyModel:
