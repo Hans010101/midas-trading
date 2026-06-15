@@ -121,6 +121,44 @@ async def _kline_quote(
     return _last_price_change(ks)
 
 
+_PERP_QUOTES = ("USDT", "USDC", "BUSD", "FDUSD")
+
+
+def _to_ccxt(symbol: str) -> str:
+    """归一到 ccxt 形态 BTC/USDT(crypto_ticker_24h 表的 symbol 键)· 带斜杠原样 upper ·
+    无斜杠按 quote 后缀补斜杠(BTCUSDT→BTC/USDT)。"""
+    if "/" in symbol:
+        return symbol.upper()
+    s = symbol.upper()
+    for q in _PERP_QUOTES:
+        if s.endswith(q) and len(s) > len(q):
+            return f"{s[: -len(q)]}/{q}"
+    return s
+
+
+async def _crypto_ticker_quote(
+    ch: ClickHouseClient, symbol: str,
+) -> tuple[float | None, float | None, float | None]:
+    """crypto 实时 价/24h涨跌/24h量 ← perp ticker(与下单页 _perp_mark 同源)。
+
+    修「显示价≠下单价」:原行情卡价取 1d kline(日线收盘 · 可能几天前),与下单页实时 perp ticker
+    差几个点。改用同源 ticker → 卡价≈下单价。取不到(理论上主流币不会)→ (None,None,None),
+    调用方兜底回 1d kline(fail-soft · 不报错)。
+    """
+    raw = ch._client  # noqa: SLF001 · 同 _crypto_extras:复用底层 client 读 ticker 快照
+    ccxt = _to_ccxt(symbol)
+    try:
+        tickers = await clickhouse_crypto.select_tickers_by_symbols(
+            raw, instrument="perp", symbols=[ccxt],
+        )
+    except Exception:  # noqa: BLE001 · 取价失败 fail-soft → 调用方兜底 1d kline
+        return None, None, None
+    t = tickers.get(ccxt)
+    if t is None or t.last_price <= 0:
+        return None, None, None
+    return float(t.last_price), float(t.change_pct_24h), float(t.volume_24h) or None
+
+
 async def _crypto_extras(
     ch: ClickHouseClient, symbol: str,
 ) -> dict[str, float | None]:
@@ -167,8 +205,17 @@ async def _crypto_extras(
 async def query_symbol(
     ch: ClickHouseClient, market: str, symbol: str,
 ) -> SymbolQuote | None:
-    """单标的核心信息卡 · 无任何 K 线数据(标的不存在/未采)→ None。"""
-    price, change, volume = await _kline_quote(ch, market, symbol)
+    """单标的核心信息卡 · 无任何 K 线数据(标的不存在/未采)→ None。
+
+    crypto 价/涨跌走【实时 perp ticker】(与下单页同源 · 修"显示价≠下单价");ticker 缺则兜底 1d ·
+    cn/us/hk 维持 1d kline(各自市场日线 · 行为不变 · 零回归)。
+    """
+    if market == "crypto":
+        price, change, volume = await _crypto_ticker_quote(ch, symbol)
+        if price is None:  # ticker 缺 → 兜底 1d kline
+            price, change, volume = await _kline_quote(ch, market, symbol)
+    else:
+        price, change, volume = await _kline_quote(ch, market, symbol)
     if price is None:
         return None
     extras: dict[str, float | None] = {}

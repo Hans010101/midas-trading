@@ -168,3 +168,26 @@ class TestSymbolMeta:
         found = await ch.search_symbols(query=sym, market="us")
         first = next(m for m in found if m.symbol == sym)
         assert first.listed_date is None
+
+
+# ── 本刀:已收盘根过滤(方案 C · 15m 采集只写已收盘)─────────────────────────
+
+
+def test_drop_unclosed_klines_drops_current_window():
+    """drop_unclosed_klines:当前 period 窗口的未收盘根被丢、已收盘根保留 · 未知 period 原样(纯函数·无需CH)。"""
+    from app.services.clickhouse_client import drop_unclosed_klines
+
+    secs = 900  # 15m
+    now_epoch = int(datetime.now(tz=UTC).timestamp())
+    boundary = datetime.fromtimestamp(now_epoch - now_epoch % secs, tz=UTC)
+    current = _make_kline(boundary)                         # ts==窗口起点 → 当前未收盘根
+    closed = _make_kline(boundary - timedelta(minutes=15))  # 上一根 → 已收盘
+    older = _make_kline(boundary - timedelta(hours=3))      # 更早 → 已收盘
+
+    out = drop_unclosed_klines([older, closed, current], "15m")
+    out_ts = {k.ts for k in out}
+    assert boundary not in out_ts                              # ★未收盘根被丢
+    assert (boundary - timedelta(minutes=15)) in out_ts        # 已收盘根保留
+    assert (boundary - timedelta(hours=3)) in out_ts
+    # 未知 period → 保守原样返回(不丢)
+    assert drop_unclosed_klines([current], "nope") == [current]

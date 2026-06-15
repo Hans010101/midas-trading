@@ -165,11 +165,14 @@ def _market_ccy(market: str) -> str:
 
 
 def web_chart_url(market: str, symbol: str) -> str:
-    """拼网页 K 线深链(DP14)· crypto 用 Binance 风格无斜杠。"""
+    """拼网页 K 线深链(DP14)· crypto 用 Binance 风格无斜杠 + 默认 15m。"""
     base = settings.public_web_base_url.rstrip("/")
     path = _PREVIEW_PATH.get(market, "workbench")
     sym = symbol.replace("/", "") if market == "crypto" else symbol
-    return f"{base}/{path}?symbol={sym}"
+    url = f"{base}/{path}?symbol={sym}"
+    if market == "crypto":  # crypto K线默认 15m(已收盘形态;当前实时价由行情卡 ticker 承载)
+        url += "&period=15m"
+    return url
 
 
 def chart_png_url(market: str, symbol: str, name: str = "") -> str:
@@ -183,6 +186,8 @@ def chart_png_url(market: str, symbol: str, name: str = "") -> str:
     q = f"market={market}&symbol={quote(symbol, safe='')}"
     if name:
         q += f"&name={quote(name, safe='')}"
+    if market == "crypto":  # crypto 默认 15m K线(kline.png 端点 period 默认 1d · crypto 改 15m)
+        q += "&period=15m"
     return f"{base}/api/v1/chart/kline.png?{q}"
 
 

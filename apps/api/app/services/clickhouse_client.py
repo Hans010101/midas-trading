@@ -61,6 +61,28 @@ def normalize_kline_symbol(symbol: str, market: str, instrument: str) -> str:
         return symbol.replace("/", "")
     return symbol
 
+
+_PERIOD_SECONDS: dict[str, int] = {
+    "1m": 60, "5m": 300, "15m": 900, "30m": 1800,
+    "1h": 3600, "1d": 86400, "1w": 604800,
+}
+
+
+def drop_unclosed_klines(rows: list[Kline], period: str) -> list[Kline]:
+    """丢弃【当前未收盘】根(ts >= 当前 period 窗口起点)· 只留已收盘根。
+
+    采集"方案 C"关键:写入 kline 的根必须都已收盘(close 已定盘不再变)→ 完美契合
+    insert_kline 同 ts 跳过(写过的根永不被覆盖),绕开普通 MergeTree 无法重写当前根的拦路虎。
+    binance klines 末根通常是当前未收盘根 · 按窗口边界过滤(比"丢最后一根"更稳,边界时刻不误删)。
+    未知 period(不在表)→ 原样返回(保守不丢)。
+    """
+    secs = _PERIOD_SECONDS.get(period)
+    if not secs:
+        return rows
+    now_epoch = int(datetime.now(tz=UTC).timestamp())
+    boundary = now_epoch - (now_epoch % secs)  # 当前窗口起点 epoch · ts >= 此 = 未收盘
+    return [r for r in rows if int(r.ts.timestamp()) < boundary]
+
 _SYMBOL_META_COLUMNS: tuple[str, ...] = (
     "symbol",
     "market",

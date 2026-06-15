@@ -44,6 +44,13 @@ beat_schedule = {
         # 加密 7×24 市场,每 5 分钟一次
         "schedule": crontab(minute="*/5"),
     },
+    "update-crypto-15m": {
+        "task": "tasks.incremental.update_crypto_15m",
+        # 加密主流 5 币 15m 已收盘 K线 · 每 5 分钟(15m 根 15min 收一次 · 5min 轮询冗余覆盖收盘)·
+        # drop_unclosed 只写已收盘根 · expires 280 防堆积(下个 5min beat 会补)
+        "schedule": crontab(minute="*/5"),
+        "options": {"expires": 280},
+    },
     "warm-popular-klines": {
         "task": "tasks.incremental.warm_popular_klines",
         # KLINE-001 性能 B:预热热门标的 1d K线(bot K线命中缓存秒出图)· 每 30 分钟刷新保鲜

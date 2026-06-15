@@ -61,3 +61,8 @@ def _on_worker_ready(**_kwargs: object) -> None:
         incremental.warm_popular_klines.delay()
     except Exception:  # noqa: BLE001
         logger.exception("[worker_ready] 入队 warm_popular_klines 失败")
+    try:
+        # 加密 15m 已收盘 K线部署即预采(bot crypto K线图读 15m · 免冷启动空图 · 5min beat 保鲜)
+        incremental.update_crypto_15m.delay()
+    except Exception:  # noqa: BLE001
+        logger.exception("[worker_ready] 入队 update_crypto_15m 失败")

@@ -20,7 +20,7 @@ from celery import shared_task
 
 from app.core.logging import configure_logging
 from app.schemas.market import Market, Period, SymbolMeta
-from app.services.clickhouse_client import ClickHouseClient
+from app.services.clickhouse_client import ClickHouseClient, drop_unclosed_klines
 from app.services.data_sources.binance_futures_source import BinanceFuturesSource
 from app.services.data_sources.cn_source import AKShareCnSource
 from app.services.data_sources.crypto_source import CcxtBinanceCryptoSource
@@ -46,6 +46,7 @@ async def _backfill_one(
     limit: int,
     *,
     instrument: str = "spot",
+    drop_unclosed: bool = False,
 ) -> dict[str, Any]:
     """单标的回填:fetch upstream → 写 CH kline → upsert symbol_meta。
 
@@ -84,6 +85,9 @@ async def _backfill_one(
             raise ValueError(msg)
 
         rows = await source.fetch_kline(symbol, period, limit=limit)
+        fetched = len(rows)
+        if drop_unclosed:  # 方案 C:只写已收盘根(丢当前未收盘根)
+            rows = drop_unclosed_klines(rows, period)
         written = await ch.insert_kline(
             rows, symbol=symbol, market=market, period=period, instrument=instrument,
         )
@@ -100,7 +104,7 @@ async def _backfill_one(
         return {
             "symbol": symbol,
             "market": market,
-            "fetched_rows": len(rows),
+            "fetched_rows": fetched,
             "ch_new_rows": written,
         }
     finally:

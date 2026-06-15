@@ -295,3 +295,67 @@ async def test_search_by_name_merges_cn_hk_by_amount(monkeypatch: pytest.MonkeyP
 async def test_search_by_name_empty_query():
     ch = SimpleNamespace(_client=object())
     assert await q.search_by_name(ch, "   ", limit=8) == []  # type: ignore[arg-type]
+
+
+# ── 本刀:crypto 行情卡价/涨跌走实时 perp ticker(修"显示价≠下单价")────────────
+
+
+@pytest.mark.asyncio
+async def test_query_symbol_crypto_uses_ticker(monkeypatch: pytest.MonkeyPatch):
+    """crypto 价/涨跌 ← perp ticker(实时)· 不再用 1d kline close(修显示价≠下单价)。"""
+    from datetime import UTC, datetime
+
+    from app.schemas.crypto import Ticker24h
+    from app.services import clickhouse_crypto as cc
+
+    async def _fake_tickers(_client: Any, *, instrument: str, symbols: list[str]) -> Any:  # noqa: ARG001
+        return {
+            "BTC/USDT": Ticker24h(
+                symbol="BTC/USDT", instrument="perp",
+                ts=datetime(2026, 6, 15, tzinfo=UTC),
+                last_price=66420.0, change_pct_24h=3.1,
+                high_24h=67000.0, low_24h=65000.0, volume_24h=12345.0,
+                quote_volume_24h=8.2e8, count_24h=0,
+            ),
+        }
+
+    monkeypatch.setattr(cc, "select_tickers_by_symbols", _fake_tickers)
+    # 1d kline close 63510 应被【忽略】(用 ticker 实时 66420)
+    ch = _FakeCH([_bar(63510.0, 1000)])
+    quote = await q.query_symbol(ch, "crypto", "BTC/USDT")  # type: ignore[arg-type]
+    assert quote is not None
+    assert quote.price == 66420.0  # ★ ticker 价,不是 1d 63510
+    assert quote.change_pct == 3.1
+
+
+@pytest.mark.asyncio
+async def test_query_symbol_crypto_ticker_missing_falls_back_1d(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """crypto ticker 缺(理论上主流币不会)→ 兜底回 1d kline(fail-soft · 不报错)。"""
+    from app.services import clickhouse_crypto as cc
+
+    async def _empty(_client: Any, *, instrument: str, symbols: list[str]) -> Any:  # noqa: ARG001
+        return {}
+
+    monkeypatch.setattr(cc, "select_tickers_by_symbols", _empty)
+    ch = _FakeCH([_bar(63510.0, 1000)])
+    quote = await q.query_symbol(ch, "crypto", "BTC/USDT")  # type: ignore[arg-type]
+    assert quote is not None
+    assert quote.price == 63510.0  # 兜底 1d close
+
+
+@pytest.mark.asyncio
+async def test_query_symbol_us_unchanged_uses_kline(monkeypatch: pytest.MonkeyPatch):
+    """cn/us/hk 不走 ticker(零回归)· 即便 ticker mock 也不被 us 调用 → 用 1d kline。"""
+    from app.services import clickhouse_crypto as cc
+
+    async def _boom(_client: Any, *, instrument: str, symbols: list[str]) -> Any:  # noqa: ARG001
+        msg = "us 不该调 ticker"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(cc, "select_tickers_by_symbols", _boom)
+    ch = _FakeCH([_bar(100.0, 1000), _bar(110.0, 2000)])
+    quote = await q.query_symbol(ch, "us", "NVDA")  # type: ignore[arg-type]
+    assert quote is not None
+    assert quote.price == 110.0  # 1d kline 最新 close · ticker 未被调用

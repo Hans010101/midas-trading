@@ -78,7 +78,7 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                                                  [{'text': '🔄 刷新',
                                                    'callback_data': 'qr:crypto:BTC/USDT'},
                                                   {'text': '🌐 网页K线',
-                                                   'url': 'http://localhost:3000/crypto-preview?symbol=BTCUSDT'}],
+                                                   'url': 'http://localhost:3000/crypto-preview?symbol=BTCUSDT&period=15m'}],
                                                  [{'text': '⬅️ 返回菜单',
                                                    'callback_data': 'menu:main'}]]}},
  'quote_min': {'text': '*点金 Midas · 行情*\n\n📊 600519 · A股\n最新价 ¥1,688\n涨跌幅 🟢 -1.20%\n成交量 98,765',
