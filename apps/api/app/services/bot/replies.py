@@ -373,6 +373,17 @@ def build_symbol_not_found(market: str, symbol: str) -> ReplyModel:
     return ReplyModel(text=text, disclaimer=None, buttons=_back_buttons())
 
 
+def build_code_not_found(raw: str) -> ReplyModel:
+    """字母代码扫库(加密 + 美股)均未命中 · 提示带斜杠加密形态 / 检查代码。"""
+    s = raw.strip().upper()
+    text = (
+        f"未找到「{raw}」对应的标的。\n"
+        f"· 加密永续请带斜杠,如 `{s}/USDT`\n"
+        "· 或检查代码是否正确(只查已采集标的)"
+    )
+    return ReplyModel(text=text, disclaimer=None, buttons=_back_buttons())
+
+
 def build_kline_link(market: str, symbol: str) -> ReplyModel:
     """K线回复(KLINE-001)· 优先发【此刻 K线图截图】(photo_url)· 文本作 caption ·
     保留「网页看K线」按钮(交互式缠论/指标)· 发图失败/数据不足由 transport 回退发文本链接。

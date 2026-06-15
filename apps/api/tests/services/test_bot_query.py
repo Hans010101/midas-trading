@@ -124,3 +124,81 @@ async def test_query_positions_empty_when_no_account(db_session: AsyncSession):
     await db_session.commit()
     rows = await q.query_positions(db_session, user.id)
     assert rows == []
+
+
+# ── detect_symbol_markets / symbol_exists(本刀:扫库判定 + 大小写模糊 + 同名双出)──────
+
+
+class _ScanCH:
+    """探测替身 · exists = 命中的 (market, canonical_symbol) 集合。"""
+
+    def __init__(self, exists: set[tuple[str, str]]) -> None:
+        self._exists = exists
+
+    async def symbol_exists(
+        self, market: str, symbol: str, instrument: str = "spot",  # noqa: ARG002
+    ) -> bool:
+        return (market, symbol) in self._exists
+
+
+@pytest.mark.asyncio
+async def test_detect_crypto_only():
+    ch = _ScanCH({("crypto", "BTC/USDT")})
+    assert await q.detect_symbol_markets(ch, "BTC") == [("crypto", "BTC/USDT")]  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_detect_us_only():
+    ch = _ScanCH({("us", "NVDA")})
+    assert await q.detect_symbol_markets(ch, "NVDA") == [("us", "NVDA")]  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_detect_lowercase_uppercased():
+    """小写输入 → upper 后命中(问题②)。"""
+    ch = _ScanCH({("us", "NVDA")})
+    assert await q.detect_symbol_markets(ch, "nvda") == [("us", "NVDA")]  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_detect_same_name_both_crypto_first():
+    """同名两库都中 → 都出 · 加密在前、美股在后。"""
+    ch = _ScanCH({("crypto", "AAA/USDT"), ("us", "AAA")})
+    assert await q.detect_symbol_markets(ch, "aaa") == [  # type: ignore[arg-type]
+        ("crypto", "AAA/USDT"),
+        ("us", "AAA"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_detect_no_hit_empty():
+    ch = _ScanCH(set())
+    assert await q.detect_symbol_markets(ch, "ZZZ") == []  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_symbol_exists_limit1_query():
+    """ClickHouseClient.symbol_exists:有行 True / 无行 False · SQL 带 SELECT 1 + LIMIT 1(不 SELECT *)。"""
+    from app.services.clickhouse_client import ClickHouseClient
+
+    captured: dict[str, Any] = {}
+
+    class _Raw:
+        def __init__(self, rows: list[Any]) -> None:
+            self._rows = rows
+
+        async def query(
+            self, sql: str, parameters: dict[str, Any] | None = None,
+        ) -> Any:
+            captured["sql"] = sql
+            captured["params"] = parameters
+            return SimpleNamespace(result_rows=self._rows)
+
+    has = SimpleNamespace(_client=_Raw([[1]]))
+    assert await ClickHouseClient.symbol_exists(has, "us", "NVDA") is True
+    assert "SELECT 1" in captured["sql"]
+    assert "LIMIT 1" in captured["sql"]
+    assert captured["params"]["s"] == "NVDA"
+
+    empty = SimpleNamespace(_client=_Raw([]))
+    assert await ClickHouseClient.symbol_exists(empty, "crypto", "ZZZ/USDT") is False

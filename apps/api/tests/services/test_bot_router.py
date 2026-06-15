@@ -47,12 +47,23 @@ class _FakeRedis:
 
 
 class _FakeCH:
-    def __init__(self, klines: list[Any] | None = None) -> None:
+    def __init__(
+        self,
+        klines: list[Any] | None = None,
+        exists: set[tuple[str, str]] | None = None,
+    ) -> None:
         self._klines = klines or []
+        # 扫库存在性:命中的 (market, canonical_symbol) 集合(detect_symbol_markets 用)
+        self._exists = exists or set()
         self._client = object()
 
     async def select_kline(self, **_kwargs: Any) -> list[Any]:
         return list(self._klines)
+
+    async def symbol_exists(
+        self, market: str, symbol: str, instrument: str = "spot",  # noqa: ARG002
+    ) -> bool:
+        return (market, symbol) in self._exists
 
 
 def _bar(close: float) -> SimpleNamespace:
@@ -427,7 +438,8 @@ async def test_free_text_symbol_quotes_without_session(db_session: AsyncSession)
     user = await make_user(db_session)
     await _bind(db_session, user.id, 720)
     redis = _FakeRedis()
-    ch = _FakeCH([_bar(100.0), _bar(120.0)])
+    # 扫库:NVDA 命中美股(不命中加密)→ 单条美股卡
+    ch = _FakeCH([_bar(100.0), _bar(120.0)], exists={("us", "NVDA")})
     reply = await router.handle_command(db_session, redis, ch, 720, "NVDA")  # type: ignore[arg-type]
     assert "NVDA" in reply.text
     # 行情卡挂【就地操作】按钮(K线/下单/刷新 · qk/qo/qr),不是 build_hint
@@ -502,3 +514,80 @@ async def test_bare_price_asks_then_bare_code_quotes(db_session: AsyncSession):
     # 下一条裸代码 → 行情(走 awaiting 分支 · 市场自动判断)
     quote = await router.handle_command(db_session, redis, ch, 725, "600519")  # type: ignore[arg-type]
     assert "600519" in quote.text
+
+
+# ── 扫库判定 + 大小写模糊 + 同名两边都出(本刀)─────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_bare_lowercase_crypto_resolves(db_session: AsyncSession):
+    """🆕 问题①:裸 `btc` 扫到加密(带斜杠 spot 形态)· 不再被判美股查不到。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 730)
+    ch = _FakeCH([_bar(100.0), _bar(120.0)], exists={("crypto", "BTC/USDT")})
+    reply = await router.handle_command(db_session, _FakeRedis(), ch, 730, "btc")  # type: ignore[arg-type]
+    assert "BTC/USDT" in reply.text
+    flat = json.dumps(reply.keyboard, ensure_ascii=False)
+    assert "qk:crypto:BTC/USDT" in flat  # 卡片 action = 带斜杠形态
+
+
+@pytest.mark.asyncio
+async def test_bare_lowercase_us_resolves(db_session: AsyncSession):
+    """🆕 问题②:小写 `nvda` 经 upper 扫到美股 · 不再要求大写。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 731)
+    ch = _FakeCH([_bar(100.0), _bar(120.0)], exists={("us", "NVDA")})
+    reply = await router.handle_command(db_session, _FakeRedis(), ch, 731, "nvda")  # type: ignore[arg-type]
+    assert "NVDA" in reply.text
+    assert "qk:us:NVDA" in json.dumps(reply.keyboard, ensure_ascii=False)
+
+
+@pytest.mark.asyncio
+async def test_same_name_both_markets_multi_crypto_first(db_session: AsyncSession):
+    """🆕 同名两边都中 → handle_command_multi 返回【两条】· 加密在前、美股在后。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 732)
+    ch = _FakeCH(
+        [_bar(100.0), _bar(120.0)],
+        exists={("crypto", "AAA/USDT"), ("us", "AAA")},
+    )
+    out = await router.handle_command_multi(db_session, _FakeRedis(), ch, 732, "aaa")  # type: ignore[arg-type]
+    assert len(out) == 2  # noqa: PLR2004
+    first = json.dumps(out[0].keyboard, ensure_ascii=False)
+    second = json.dumps(out[1].keyboard, ensure_ascii=False)
+    assert "qk:crypto:AAA/USDT" in first  # 加密在前
+    assert "qk:us:AAA" in second          # 美股在后
+
+
+@pytest.mark.asyncio
+async def test_single_hit_multi_is_one_message(db_session: AsyncSession):
+    """🆕 单命中 → handle_command_multi 返回单元素列表(transport 单条零回归)。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 733)
+    ch = _FakeCH([_bar(100.0), _bar(120.0)], exists={("us", "NVDA")})
+    out = await router.handle_command_multi(db_session, _FakeRedis(), ch, 733, "NVDA")  # type: ignore[arg-type]
+    assert len(out) == 1
+    assert "qk:us:NVDA" in json.dumps(out[0].keyboard, ensure_ascii=False)
+
+
+@pytest.mark.asyncio
+async def test_bare_code_no_hit_suggests_slash(db_session: AsyncSession):
+    """🆕 字母代码两库都未命中 → 提示带斜杠加密形态(不静默 not_found)。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 734)
+    ch = _FakeCH([], exists=set())  # 啥都不命中
+    reply = await router.handle_command(db_session, _FakeRedis(), ch, 734, "zzz")  # type: ignore[arg-type]
+    assert "未找到" in reply.text
+    assert "ZZZ/USDT" in reply.text  # 带斜杠提示(已 upper)
+
+
+@pytest.mark.asyncio
+async def test_pure_digit_skips_scan_single(db_session: AsyncSession):
+    """🆕 纯数字(6位 cn)→ 单条 · 不走扫库(exists 为空也能查到 = 没调 symbol_exists)。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 735)
+    ch = _FakeCH([_bar(100.0), _bar(120.0)], exists=set())  # 空 exists
+    out = await router.handle_command_multi(db_session, _FakeRedis(), ch, 735, "600519")  # type: ignore[arg-type]
+    assert len(out) == 1
+    assert "600519" in out[0].text
+    assert "qk:cn:600519" in json.dumps(out[0].keyboard, ensure_ascii=False)

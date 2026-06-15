@@ -203,16 +203,22 @@ async def telegram_webhook(
             background.add_task(_send_reply_safe, chat_id, result.reply_text)
         return {"ok": True}
 
-    # 4. 非绑定文本 → G3 命令(/menu·/price·会话续输)· 需 CH(prod 必有)
+    # 4. 非绑定文本 → G3 命令(/menu·/price·会话续输·裸代码扫库)· 需 CH(prod 必有)·
+    #    裸字母代码命中多市场 → 多卡逐条发(加密在前);单命中 = 单条(零回归)。
     if ch is not None:
-        reply: BotReply = await bot_router.handle_command(db, redis, ch, chat_id, text)
+        bot_replies: list[BotReply] = await bot_router.handle_command_multi(
+            db, redis, ch, chat_id, text,
+        )
         if settings.tg_bot_token:
-            if reply.photo_url:  # KLINE-001:K线 → sendPhoto(失败回退文本链接)
-                background.add_task(
-                    _send_photo_safe, chat_id, reply.photo_url, reply.text, reply.keyboard,
-                )
-            else:
-                background.add_task(_send_reply_safe, chat_id, reply.text, reply.keyboard)
+            for reply in bot_replies:
+                if reply.photo_url:  # KLINE-001:K线 → sendPhoto(失败回退文本链接)
+                    background.add_task(
+                        _send_photo_safe, chat_id, reply.photo_url, reply.text, reply.keyboard,
+                    )
+                else:
+                    background.add_task(
+                        _send_reply_safe, chat_id, reply.text, reply.keyboard,
+                    )
     return {"ok": True}
 
 

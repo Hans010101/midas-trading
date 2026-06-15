@@ -269,6 +269,23 @@ class ClickHouseClient:
         klines.reverse()
         return klines
 
+    async def symbol_exists(
+        self, market: str, symbol: str, instrument: str = KLINE_INSTRUMENT_DEFAULT,
+    ) -> bool:
+        """轻量存在性探测(SELECT 1 ... LIMIT 1 · 不 SELECT *)· 给 bot 扫库判定市场用。
+
+        symbol 经 normalize_kline_symbol(与 select_kline 同口径:crypto perp 去斜杠 · 其余原样;
+        crypto spot 带斜杠 'BTC/USDT' 不变)· 有行即 True。instrument 默认 spot(cn/us 列存在但无关;
+        crypto 查 spot)。
+        """
+        symbol = normalize_kline_symbol(symbol, market, instrument)
+        result = await self._client.query(
+            "SELECT 1 FROM kline WHERE symbol = %(s)s AND market = %(m)s "
+            "AND instrument = %(inst)s LIMIT 1",
+            parameters={"s": symbol, "m": market, "inst": instrument},
+        )
+        return len(result.result_rows) > 0
+
     async def select_first_kline_at_or_after(
         self,
         *,

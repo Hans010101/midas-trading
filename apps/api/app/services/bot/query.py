@@ -161,6 +161,25 @@ async def query_symbol(
     )
 
 
+async def detect_symbol_markets(
+    ch: ClickHouseClient, raw: str,
+) -> list[tuple[str, str]]:
+    """裸【字母】代码 → 扫库命中的 (market, canonical_symbol) 列表(加密在前、美股在后)。
+
+    问题修复:裸 `btc` 原会被猜成美股查不到、小写 `nvda` 不识别。改为扫库判定 + 统一 upper:
+      · 加密 spot 表主流币是带斜杠 `XXX/USDT`(取证最全)→ 探 `<UPPER>/USDT`;
+      · 美股 ClickHouse 大写存储 → 探 `<UPPER>`。
+    命中即出、两边都中就都出(不做优先级二选一)· 纯数字代码(cn/hk)不走本函数(调用方先判)。
+    """
+    s = raw.strip().upper()
+    hits: list[tuple[str, str]] = []
+    if await ch.symbol_exists("crypto", f"{s}/USDT"):
+        hits.append(("crypto", f"{s}/USDT"))
+    if await ch.symbol_exists("us", s):
+        hits.append(("us", s))
+    return hits
+
+
 async def query_watchlist(
     db: AsyncSession, ch: ClickHouseClient, user_id: UUID,
 ) -> list[WatchlistRow]:

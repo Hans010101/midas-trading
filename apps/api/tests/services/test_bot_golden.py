@@ -107,6 +107,13 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
  'symbol_not_found': {'text': '*点金 Midas*\n\n未找到 600519(A股)的数据。\n请确认代码,或换一个再试(只查已采集标的)。',
                       'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                          'callback_data': 'menu:main'}]]}},
+ 'code_not_found': {'text': '*点金 Midas*\n'
+                            '\n'
+                            '未找到「zzz」对应的标的。\n'
+                            '· 加密永续请带斜杠,如 `ZZZ/USDT`\n'
+                            '· 或检查代码是否正确(只查已采集标的)',
+                    'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
+                                                       'callback_data': 'menu:main'}]]}},
  'kline_link': {'text': '*点金 Midas · K线*\n\n📈 NVDA · 美股 · K线(MA / RSI / MACD · 此刻)',
                 'keyboard': {'inline_keyboard': [[{'text': '📈 网页看K线',
                                                    'url': 'http://localhost:3000/us-preview?symbol=NVDA'}],
@@ -382,6 +389,7 @@ CASES = {
     "quote_min": replies.build_quote(_Q_MIN),
     "quote_noprice": replies.build_quote(_Q_NOPRICE),
     "symbol_not_found": replies.build_symbol_not_found("cn", "600519"),
+    "code_not_found": replies.build_code_not_found("zzz"),
     "kline_link": replies.build_kline_link("us", "NVDA"),
     "watchlist_empty": replies.build_watchlist([]),
     "watchlist_rows": replies.build_watchlist(_WL),

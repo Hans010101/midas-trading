@@ -29,6 +29,7 @@ from app.services.bot import quiet as quiet_mod
 from app.services.bot import ratelimit, replies
 from app.services.bot.identity import resolve_user_id
 from app.services.bot.query import (
+    detect_symbol_markets,
     query_alert_rules,
     query_positions,
     query_symbol,
@@ -113,20 +114,52 @@ async def _do_quote(ch: ClickHouseClient, market: str, symbol: str) -> ReplyMode
 # ── 通道中立核心 ──────────────────────────────────────────────────────
 
 
+async def handle_inbound_multi(
+    db: AsyncSession,
+    redis: Redis,
+    ch: ClickHouseClient,
+    msg: InboundMessage,
+) -> list[ReplyModel]:
+    """通道中立入站编排(多条版)· text → ReplyModel 列表(裸字母命中多市场 → 多张卡 · 加密在前);
+    button → 单张包成 [x]。TG webhook 走本入口逐条发;单条入口 handle_inbound 取首条。
+
+    ADR 0032 阶段三:session / ratelimit 按 (channel, channel_uid) 键控 · channel_uid 是字符串
+    (TG=chat_id 串、飞书=open_id),通道无关。
+    """
+    if msg.kind == "text":
+        return await _handle_text(db, redis, ch, msg.channel, msg.channel_uid, msg.text)
+    return [await _handle_button(db, redis, ch, msg.channel, msg.channel_uid, msg.action)]
+
+
 async def handle_inbound(
     db: AsyncSession,
     redis: Redis,
     ch: ClickHouseClient,
     msg: InboundMessage,
 ) -> ReplyModel:
-    """通道中立入站编排 · 入站 InboundMessage → 出站 ReplyModel。
+    """通道中立入站编排(单条 · 向后兼容飞书 + 旧测试)· 取首条 ReplyModel。
 
-    ADR 0032 阶段三:session / ratelimit 按 (channel, channel_uid) 键控(去掉阶段一的
-    int(chat_id) 假设)· channel_uid 是字符串(TG=chat_id 串、飞书=open_id),通道无关。
+    单条路径(button / 单命中 text)首条即唯一;「裸字母命中多市场」的多条由 handle_inbound_multi +
+    TG handle_command_multi 走,本单条入口取加密优先的首条(飞书侧零回归 · 飞书暂不做多卡)。
     """
-    if msg.kind == "text":
-        return await _handle_text(db, redis, ch, msg.channel, msg.channel_uid, msg.text)
-    return await _handle_button(db, redis, ch, msg.channel, msg.channel_uid, msg.action)
+    return (await handle_inbound_multi(db, redis, ch, msg))[0]
+
+
+async def _quote_code_replies(ch: ClickHouseClient, body: str) -> list[ReplyModel]:
+    """裸代码 → 行情卡列表(P0 升级:扫库判定 + 大小写模糊 + 同名两边都出)。
+
+    · 纯数字(6位 cn / 5位 hk / 其余 us)→ _guess_market 单条(原样)。
+    · 字母代码 → detect_symbol_markets 扫库(统一 upper):命中即出、加密+美股都中就【都出】
+      (多条 · 加密在前);均未命中 → build_code_not_found(带斜杠提示)。
+    crypto 命中用带斜杠 spot 形态 / us 用大写 —— 由 detect 统一产出,_do_quote 直接可查。
+    """
+    s = body.strip()
+    if s.isdigit():
+        return [await _do_quote(ch, _guess_market(s), s)]
+    hits = await detect_symbol_markets(ch, s)
+    if not hits:
+        return [replies.build_code_not_found(s)]
+    return [await _do_quote(ch, market, sym) for market, sym in hits]
 
 
 async def _handle_text(
@@ -136,79 +169,81 @@ async def _handle_text(
     channel: str,
     uid: str,
     text: str | None,
-) -> ReplyModel:
-    """消息文本入口(非绑定)· 返回中立 ReplyModel。"""
+) -> list[ReplyModel]:
+    """消息文本入口(非绑定)· 返回中立 ReplyModel【列表】。
+
+    绝大多数路径单条([x]);仅「无会话裸【字母】代码同时命中加密 + 美股」返回多条(加密在前)·
+    由 TG handle_command_multi 逐条发;单条入口 handle_inbound 取首条(飞书 / 旧测试零回归)。
+    """
     if not await ratelimit.allow_command(redis, channel, uid):
-        return replies.build_rate_limited()
+        return [replies.build_rate_limited()]
     user_id = await resolve_user_id(db, channel, uid)
     if user_id is None:
-        return replies.build_not_bound()
+        return [replies.build_not_bound()]
 
     body = (text or "").strip()
 
     # /menu 或裸 /start → 主菜单
     if body in {"/menu", "/start"} or body.startswith("/start@"):
         await clear_session(redis, channel, uid)
-        return replies.build_main_menu()
+        return [replies.build_main_menu()]
 
-    # /price <代码> → 直接查行情(自动猜市场)
+    # /price <代码> → 扫库查行情(裸字母命中多市场 → 多条);裸 /price 无参 → 引导
     if body.startswith("/price"):
         parts = body.split(maxsplit=1)
         if len(parts) < 2:  # noqa: PLR2004
-            # P0-3:裸 /price 不再强制点市场 · 设 awaiting=quote → 下一条裸代码经
-            # 上方 awaiting 分支直接查(市场由 _guess_market 自动判断)。
+            # P0-3:裸 /price 不强制点市场 · 设 awaiting=quote · 下条裸代码走 awaiting 分支查。
             await set_session(redis, channel, uid, {"awaiting": "quote"})
-            return replies.build_quote_ask()
-        symbol = parts[1].strip()
+            return [replies.build_quote_ask()]
         await clear_session(redis, channel, uid)
-        return await _do_quote(ch, _guess_market(symbol), symbol)
+        return await _quote_code_replies(ch, parts[1].strip())
 
-    # 会话态续输代码
+    # 会话态续输代码(★ 大小写兜底:us 大写存储 / crypto 带斜杠大写 · 用户小写直输也能命中)
     sess = await get_session(redis, channel, uid)
     if sess and sess.get("awaiting") in {"quote", "kline"}:
-        symbol = body
+        symbol = body.upper()
         market = str(sess.get("market") or _guess_market(symbol))
         intent = str(sess["awaiting"])
         await clear_session(redis, channel, uid)
         if not symbol:
-            return replies.build_ask_symbol(intent, market)
+            return [replies.build_ask_symbol(intent, market)]
         if intent == "kline":
-            return replies.build_kline_link(market, symbol)
-        return await _do_quote(ch, market, symbol)
+            return [replies.build_kline_link(market, symbol)]
+        return [await _do_quote(ch, market, symbol)]
 
     # 下单流程:之前点了「下单 → 选市场」,正在等代码 → 规范化 + 校验 → 方向选择
     if sess and sess.get("step") == "order_symbol":
         raw = body
         market = str(sess.get("market") or _guess_market(raw))
         if not raw:
-            return replies.build_order_ask_symbol(market)
-        # #296 改动二:规范化(大小写无关 + 简称/缺斜杠)+ 存在性校验(crypto 走 perp mark)
+            return [replies.build_order_ask_symbol(market)]
+        # #296 改动二:规范化(normalize_symbol 已 upper · 大小写无关 + 简称/缺斜杠)+ 存在性校验
         canonical = order_mod.normalize_symbol(market, raw)
         price = (
             await order_mod.quote_price(ch, market, canonical) if canonical else None
         )
         if not canonical or price is None:
             # 不静默继续(原会走到撮合才报"无报价")· 直接提示重输 · session 仍停 order_symbol
-            return replies.build_order_symbol_invalid(market, raw)
+            return [replies.build_order_symbol_invalid(market, raw)]
         await set_session(
             redis, channel, uid,
             {"step": "order_direction", "market": market, "symbol": canonical},
         )
-        return replies.build_order_directions(market, canonical, float(price))
+        return [replies.build_order_directions(market, canonical, float(price))]
 
     # 选方向那步误输文字 → 友好引导(标的已选 · session 不清 · 上条方向按钮仍可点)·
     # 不再落到泛化 build_hint(把人推回主菜单)
     if sess and sess.get("step") == "order_direction":
-        return replies.build_order_direction_hint()
+        return [replies.build_order_direction_hint()]
 
-    # P0-1:无会话自由文本【疑似代码】→ 秒查行情(降链路:不必先 /price 或点菜单)·
-    # 自动猜市场(斜杠 crypto / 6位 cn / 5位 hk / 其余 us)· 清残留会话再查。
+    # P0-1 升级:无会话自由文本【疑似代码】→ 扫库判定(纯数字单条 · 字母命中多市场多条 · 加密前)·
+    # 修「裸 btc 被判美股查不到 / 小写 nvda 不识别」· 清残留会话再查。
     if _looks_like_symbol(body):
         await clear_session(redis, channel, uid)
-        return await _do_quote(ch, _guess_market(body), body.strip())
+        return await _quote_code_replies(ch, body)
 
     # 其它文本(多 token / 句子)→ 提示
-    return replies.build_hint()
+    return [replies.build_hint()]
 
 
 async def _handle_button(
@@ -448,6 +483,26 @@ async def handle_command(
         channel="telegram", channel_uid=str(chat_id), kind="text", text=text,
     )
     return render_for_telegram(await handle_inbound(db, redis, ch, msg))
+
+
+async def handle_command_multi(
+    db: AsyncSession,
+    redis: Redis,
+    ch: ClickHouseClient,
+    chat_id: int,
+    text: str | None,
+) -> list[BotReply]:
+    """Telegram 文本入口(多条版)· 裸字母代码命中多市场 → 多张卡(加密在前)· webhook 逐条发。
+
+    单命中 / 非代码文本 → 单元素列表(行为与 handle_command 一致)· 保证单条路径零回归。
+    """
+    msg = InboundMessage(
+        channel="telegram", channel_uid=str(chat_id), kind="text", text=text,
+    )
+    return [
+        render_for_telegram(r)
+        for r in await handle_inbound_multi(db, redis, ch, msg)
+    ]
 
 
 async def handle_callback(

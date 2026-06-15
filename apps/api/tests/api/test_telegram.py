@@ -325,3 +325,76 @@ async def test_unbind_clears_chat_id(
     )
     assert config is not None
     assert config.tg_chat_id is None
+
+
+# ── 本刀:裸字母代码扫库 → 同名两市场 webhook 发多条 ─────────────────────────
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("bot_configured", "fake_redis")
+async def test_webhook_bare_code_multi_market_sends_two(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    captured_tg: dict[str, list],
+):
+    """🆕 裸字母代码同时命中加密 + 美股 → webhook 后台逐条发【两条】消息(加密在前)。
+
+    transport 多条路径(handle_command_multi)真机契约:每条一张卡 + 自己的按钮。
+    """
+    import json as _json
+    from decimal import Decimal
+    from types import SimpleNamespace
+
+    user = await make_user(db_session, demo_prefilled=True)
+    await _bind_chat(db_session, user, "990")
+
+    class _MultiCH:
+        def __init__(self) -> None:
+            self._client = object()
+
+        async def select_kline(self, **_kw: object) -> list[object]:
+            return [
+                SimpleNamespace(close=Decimal("100"), volume=Decimal("1")),
+                SimpleNamespace(close=Decimal("120"), volume=Decimal("2")),
+            ]
+
+        async def symbol_exists(
+            self, market: str, symbol: str, instrument: str = "spot",  # noqa: ARG002
+        ) -> bool:
+            return (market, symbol) in {("crypto", "AAA/USDT"), ("us", "AAA")}
+
+    app.dependency_overrides[get_clickhouse_optional] = _MultiCH
+    try:
+        r = await client.post(
+            "/api/v1/telegram/webhook",
+            json={"message": {"chat": {"id": 990}, "text": "aaa"}},
+            headers={_SECRET_HEADER: webhook_secret()},
+        )
+    finally:
+        app.dependency_overrides.pop(get_clickhouse_optional, None)
+
+    assert r.status_code == 200
+    assert len(captured_tg["send"]) == 2, "同名两市场应发两条消息"
+    first_markup = _json.dumps(captured_tg["send"][0][2], ensure_ascii=False)
+    second_markup = _json.dumps(captured_tg["send"][1][2], ensure_ascii=False)
+    assert "qk:crypto:AAA/USDT" in first_markup  # 第一条 = 加密(在前)
+    assert "qk:us:AAA" in second_markup          # 第二条 = 美股(在后)
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("bot_configured", "fake_redis", "ch_override")
+async def test_webhook_single_command_still_one_message(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    captured_tg: dict[str, list],
+):
+    """🆕 单条路径零回归:/menu 仍只发一条(多条改造不影响单命中)。"""
+    user = await make_user(db_session, demo_prefilled=True)
+    await _bind_chat(db_session, user, "991")
+    r = await client.post(
+        "/api/v1/telegram/webhook",
+        json={"message": {"chat": {"id": 991}, "text": "/menu"}},
+        headers={_SECRET_HEADER: webhook_secret()},
+    )
+    assert r.status_code == 200
+    assert len(captured_tg["send"]) == 1  # 单条
