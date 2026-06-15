@@ -108,6 +108,11 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                        '直接发代码即可,例如 `BTC/USDT` / `NVDA` / `600519` / `00700`(市场自动识别)',
                'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                   'callback_data': 'menu:main'}]]}},
+ 'kline_ask': {'text': '*点金 Midas · 看K线*\n'
+                       '\n'
+                       '发代码看 K线,例如 `BTC/USDT` / `NVDA` / `600519` / `00700`(市场自动识别)',
+               'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
+                                                  'callback_data': 'menu:main'}]]}},
  'symbol_not_found': {'text': '*点金 Midas*\n\n未找到 600519(A股)的数据。\n请确认代码,或换一个再试(只查已采集标的)。',
                       'keyboard': {'inline_keyboard': [[{'text': '⬅️ 返回菜单',
                                                          'callback_data': 'menu:main'}]]}},
@@ -422,6 +427,7 @@ CASES = {
     "market_picker_quote": replies.build_market_picker("quote"),
     "market_picker_kline": replies.build_market_picker("kline"),
     "quote_ask": replies.build_quote_ask(),
+    "kline_ask": replies.build_kline_ask(),
     "ask_symbol_quote_cn": replies.build_ask_symbol("quote", "cn"),
     "ask_symbol_kline_crypto": replies.build_ask_symbol("kline", "crypto"),
     "quote_full": replies.build_quote(_Q_FULL),

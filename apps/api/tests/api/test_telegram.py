@@ -398,3 +398,55 @@ async def test_webhook_single_command_still_one_message(
     )
     assert r.status_code == 200
     assert len(captured_tg["send"]) == 1  # 单条
+
+
+# ── 本刀:常驻快捷键盘设置时机 ──────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("bot_configured")
+async def test_webhook_bind_success_sets_reply_keyboard(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    fake_redis: _FakeRedis,
+    captured_tg: dict[str, list],
+):
+    """🆕 时机A:绑定成功 → 欢迎消息挂【常驻快捷键盘】(is_persistent + 含「📊 行情」)。"""
+    user = await make_user(db_session, demo_prefilled=True)
+    await db_session.commit()
+    token = await create_bind_token(fake_redis, user.id)  # type: ignore[arg-type]
+    r = await client.post(
+        "/api/v1/telegram/webhook",
+        json={"message": {"chat": {"id": 924}, "text": f"/start {token}"}},
+        headers={_SECRET_HEADER: webhook_secret()},
+    )
+    assert r.status_code == 200
+    assert captured_tg["send"], "应发欢迎回执"
+    _chat, text, markup = captured_tg["send"][0]
+    assert "绑定成功" in text
+    assert markup is not None
+    assert "keyboard" in markup
+    assert markup["is_persistent"] is True
+    labels = [lbl for row in markup["keyboard"] for lbl in row]
+    assert "📊 行情" in labels
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("bot_configured", "fake_redis", "ch_override")
+async def test_webhook_bare_start_sets_reply_keyboard(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    captured_tg: dict[str, list],
+):
+    """🆕 时机B:已绑定用户发裸 /start → 主菜单(inline)+ 追加一条【常驻键盘】(reply-kb)。"""
+    user = await make_user(db_session, demo_prefilled=True)
+    await _bind_chat(db_session, user, "925")
+    r = await client.post(
+        "/api/v1/telegram/webhook",
+        json={"message": {"chat": {"id": 925}, "text": "/start"}},
+        headers={_SECRET_HEADER: webhook_secret()},
+    )
+    assert r.status_code == 200
+    markups = [m for (_c, _t, m) in captured_tg["send"]]
+    assert any(m and "keyboard" in m for m in markups), "应有一条设置常驻键盘(reply-kb)"
+    assert any(m and "inline_keyboard" in m for m in markups), "主菜单仍走 inline"

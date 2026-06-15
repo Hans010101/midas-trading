@@ -725,3 +725,117 @@ async def test_quote_or_lite_crypto_us_no_regression(db_session: AsyncSession):
     ch = _FakeCH([])  # 无 kline
     reply = await router.handle_callback(db_session, _FakeRedis(), ch, 748, "qr:us:NVDA")  # type: ignore[arg-type]
     assert "未找到" in reply.text  # 不是轻量卡
+
+
+# ── 本刀:常驻快捷键盘(reply keyboard)dispatch ─────────────────────────────
+
+
+def test_reply_kb_markup_labels_match_actions():
+    """🆕 防漂移:reply-kb markup 里每个按钮文字都在 _REPLY_KB_ACTIONS(否则点了无反应)。"""
+    labels = [lbl for row in router.REPLY_KB_MARKUP["keyboard"] for lbl in row]  # type: ignore[attr-defined]
+    assert set(labels) == set(router._REPLY_KB_ACTIONS)
+    assert router.REPLY_KB_MARKUP["is_persistent"] is True
+    assert router.REPLY_KB_MARKUP["resize_keyboard"] is True
+
+
+@pytest.mark.asyncio
+async def test_reply_kb_quote_sets_awaiting(db_session: AsyncSession):
+    """🆕 点[📊 行情]→ 设 awaiting=quote + 引导发代码(不弹市场选择器)。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 760)
+    redis = _FakeRedis()
+    reply = await router.handle_command(db_session, redis, _FakeCH(), 760, "📊 行情")  # type: ignore[arg-type]
+    assert "直接发代码" in reply.text
+    assert json.loads(redis._d["tg_session:760"]) == {"awaiting": "quote"}
+
+
+@pytest.mark.asyncio
+async def test_reply_kb_kline_sets_awaiting(db_session: AsyncSession):
+    """🆕 点[📈 K线]→ 设 awaiting=kline + 引导发代码。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 761)
+    redis = _FakeRedis()
+    reply = await router.handle_command(db_session, redis, _FakeCH(), 761, "📈 K线")  # type: ignore[arg-type]
+    assert "K线" in reply.text
+    assert json.loads(redis._d["tg_session:761"]) == {"awaiting": "kline"}
+
+
+@pytest.mark.asyncio
+async def test_reply_kb_positions_reuses_handler(db_session: AsyncSession):
+    """🆕 点[💼 持仓]→ 复用 act:positions 处理器(无持仓→提示)。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 762)
+    reply = await router.handle_command(db_session, _FakeRedis(), _FakeCH(), 762, "💼 持仓")  # type: ignore[arg-type]
+    assert "没有活仓" in reply.text
+
+
+@pytest.mark.asyncio
+async def test_reply_kb_menu_and_order(db_session: AsyncSession):
+    """🆕 [☰ 菜单]→主菜单 · [🛒 下单]→选市场(完整下单流程不简化)。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 763)
+    menu = await router.handle_command(db_session, _FakeRedis(), _FakeCH(), 763, "☰ 菜单")  # type: ignore[arg-type]
+    assert "menu:quote" in json.dumps(menu.keyboard, ensure_ascii=False)  # 主菜单
+    order = await router.handle_command(db_session, _FakeRedis(), _FakeCH(), 763, "🛒 下单")  # type: ignore[arg-type]
+    assert "omkt:" in json.dumps(order.keyboard, ensure_ascii=False)  # 选市场(完整流程)
+
+
+@pytest.mark.asyncio
+async def test_reply_kb_intercepts_before_name_search(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+):
+    """🆕 ★坑守卫:emoji 版「📊 行情」被 dispatch 拦截(不被当股票名搜);纯「行情」仍走中文搜索。"""
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 764)
+    called: list[str] = []
+
+    async def _spy_search(_ch: object, raw: str, limit: int = 8) -> list:  # noqa: ARG001
+        called.append(raw)
+        return []
+
+    monkeypatch.setattr(router, "search_by_name", _spy_search)
+    # emoji 版 → dispatch 拦截 · 绝不进 search_by_name
+    await router.handle_command(db_session, _FakeRedis(), _FakeCH(), 764, "📊 行情")  # type: ignore[arg-type]
+    assert called == [], "reply-kb 按钮不应进中文搜索"
+    # 纯「行情」(无 emoji · 用户手打)→ 走中文搜索
+    await router.handle_command(db_session, _FakeRedis(), _FakeCH(), 764, "行情")  # type: ignore[arg-type]
+    assert called == ["行情"], "纯中文应进中文搜索"
+
+
+@pytest.mark.asyncio
+async def test_reply_kb_clears_session(db_session: AsyncSession):
+    """🆕 下单会话中途点[💼 持仓]→ 会话清掉(干净切换 · 不残留订单态)。"""
+    user = await make_user(db_session)
+    await make_virtual_account(db_session, user_id=user.id, market="us")
+    await _bind(db_session, user.id, 765)
+    redis = _FakeRedis()
+    ch = _FakeCH([_bar(100.0)])
+    # 进下单 → 选市场(停在 order_symbol 会话)
+    await router.handle_callback(db_session, redis, ch, 765, "menu:order")  # type: ignore[arg-type]
+    await router.handle_callback(db_session, redis, ch, 765, "omkt:us")  # type: ignore[arg-type]
+    assert "tg_session:765" in redis._d  # 有订单会话
+    # 点[持仓]→ 会话清
+    await router.handle_command(db_session, redis, ch, 765, "💼 持仓")  # type: ignore[arg-type]
+    assert "tg_session:765" not in redis._d
+
+
+@pytest.mark.asyncio
+async def test_reply_kb_quote_then_chinese_name(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+):
+    """🆕 [📊 行情]→awaiting quote(无市场)→ 续输中文名「茅台」走全检测(名称搜索)· 而非 _guess_market。"""
+    from app.services.bot.query import NameHit
+
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 766)
+    redis = _FakeRedis()
+
+    async def _fake_search(_ch: object, _raw: str, limit: int = 8) -> list[NameHit]:  # noqa: ARG001
+        return [NameHit(market="cn", symbol="600519", name="贵州茅台")]
+
+    monkeypatch.setattr(router, "search_by_name", _fake_search)
+    await router.handle_command(db_session, redis, _FakeCH(), 766, "📊 行情")  # type: ignore[arg-type]
+    # 续输中文名 → awaiting quote 无市场 → _resolve_free_text_replies → 名称搜索 → 单命中出卡
+    ch = _FakeCH([_bar(100.0), _bar(120.0)])
+    reply = await router.handle_command(db_session, redis, ch, 766, "茅台")  # type: ignore[arg-type]
+    assert "600519" in reply.text  # 名称搜索命中(非 _guess_market 判 us 查不到)

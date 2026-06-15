@@ -346,6 +346,14 @@ def build_quote_ask() -> ReplyModel:
     )
 
 
+def build_kline_ask() -> ReplyModel:
+    """reply-kb [📈 K线] 引导 · 发代码看 K线(市场自动判断)· K线按代码出图,中文名先用[行情]查。"""
+    text = "发代码看 K线,例如 `BTC/USDT` / `NVDA` / `600519` / `00700`(市场自动识别)"
+    return ReplyModel(
+        text=text, title="看K线", disclaimer=None, buttons=_back_buttons(),
+    )
+
+
 def build_ask_symbol(intent: str, market: str) -> ReplyModel:
     examples = {"cn": "600519", "us": "NVDA", "crypto": "BTC/USDT", "hk": "00700"}
     what = "查行情" if intent == "quote" else "看K线"

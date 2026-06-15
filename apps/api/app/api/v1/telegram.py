@@ -45,6 +45,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# 常驻快捷键盘开启提示(reply-kb 单独发一条 · 不混 inline 卡)
+_REPLY_KB_HINT = "⌨️ 快捷键盘已开启,点输入框上方按钮快速操作 ↓"
+
 router = APIRouter(prefix="/telegram", tags=["telegram"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
@@ -195,12 +198,15 @@ async def telegram_webhook(
         return {"ok": True}
     chat_id = int(chat_id)
 
-    # 3. /start 绑定(G1 原逻辑 · 一行不动)
+    # 3. /start 绑定(G1 原逻辑)
     result = await handle_start(db, redis, chat_id=chat_id, text=text)
     if result.kind != "ignored":
         # 是 /start 绑定尝试 → 发绑定回执后结束(G3 不介入)
         if result.reply_text and settings.tg_bot_token:
-            background.add_task(_send_reply_safe, chat_id, result.reply_text)
+            # 时机A:绑定成功(bound)→ 欢迎消息同时设【常驻快捷键盘】;
+            #        失败绑定(invalid_token/chat_taken · 未绑定)→ 纯文本不设键盘。
+            kb = bot_router.REPLY_KB_MARKUP if result.kind == "bound" else None
+            background.add_task(_send_reply_safe, chat_id, result.reply_text, kb)
         return {"ok": True}
 
     # 4. 非绑定文本 → G3 命令(/menu·/price·会话续输·裸代码扫库)· 需 CH(prod 必有)·
@@ -219,6 +225,14 @@ async def telegram_webhook(
                     background.add_task(
                         _send_reply_safe, chat_id, reply.text, reply.keyboard,
                     )
+
+    # 时机B:裸 /start(kind=ignored · 主菜单 inline 已发)→ 追加一条设置常驻键盘 ·
+    #        reply-kb 不能与 inline 同消息,故单独发;不每条都设,只 /start 重申(防用户手动收起)。
+    txt = (text or "").strip()
+    if (txt == "/start" or txt.startswith("/start@")) and settings.tg_bot_token:
+        background.add_task(
+            _send_reply_safe, chat_id, _REPLY_KB_HINT, bot_router.REPLY_KB_MARKUP,
+        )
     return {"ok": True}
 
 

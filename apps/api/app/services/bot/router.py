@@ -62,6 +62,29 @@ _SYMBOL_CHARS = frozenset(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/",
 )
 
+# ── 常驻快捷键盘(reply keyboard · P1)──────────────────────────────────────
+# 按钮文字 → 动作(精确 dispatch · ★必须在 _looks_like_symbol / _looks_like_name 之前拦截,
+# 否则中文按钮文字会被中文名搜索当股票名搜)。__quote_ask/__kline_ask 是内部哨兵(非 callback)。
+_REPLY_KB_ACTIONS: dict[str, str] = {
+    "📊 行情": "__quote_ask",
+    "📈 K线": "__kline_ask",
+    "💼 持仓": "act:positions",
+    "⭐ 自选": "act:watchlist",
+    "🛒 下单": "menu:order",
+    "☰ 菜单": "menu:main",
+}
+# TG sendMessage 的 reply_markup(常驻键盘 · 设一次后输入框上方常驻;布局 3 行 × 2)·
+# transport(绑定成功 / /start)import 本常量发一条独立消息设置。labels 与 _REPLY_KB_ACTIONS 同源。
+REPLY_KB_MARKUP: dict[str, object] = {
+    "keyboard": [
+        ["📊 行情", "📈 K线"],
+        ["💼 持仓", "⭐ 自选"],
+        ["🛒 下单", "☰ 菜单"],
+    ],
+    "resize_keyboard": True,
+    "is_persistent": True,
+}
+
 
 def _guess_market(symbol: str) -> str:
     """从代码形态猜市场:含斜杠→crypto,6 位纯数字→cn,5 位纯数字→hk,其余→us。"""
@@ -185,6 +208,26 @@ async def _quote_code_replies(ch: ClickHouseClient, body: str) -> list[ReplyMode
     return [await _quote_or_lite(ch, market, sym) for market, sym in hits]
 
 
+async def _resolve_free_text_replies(
+    ch: ClickHouseClient, body: str,
+) -> list[ReplyModel]:
+    """自由文本 → 行情卡列表(市场自动识别):字母/数字代码扫库 · 中文名搜索 · 否则提示。
+
+    无会话裸文本、裸 /price 续输、reply-kb [行情] 续输【共用】本逻辑 —— 打代码或中文名都自动
+    识别市场出卡(代码:detect 扫库 crypto+us / 数字 cn-hk;名称:search_by_name cn+hk)。
+    """
+    if _looks_like_symbol(body):
+        return await _quote_code_replies(ch, body)
+    if _looks_like_name(body):
+        hits = await search_by_name(ch, body)
+        if not hits:
+            return [replies.build_name_not_found(body)]
+        if len(hits) == 1:
+            return [await _quote_or_lite(ch, hits[0].market, hits[0].symbol)]
+        return [replies.build_candidate_list(hits)]
+    return [replies.build_hint()]
+
+
 async def _handle_text(
     db: AsyncSession,
     redis: Redis,
@@ -206,6 +249,21 @@ async def _handle_text(
 
     body = (text or "").strip()
 
+    # 常驻快捷键盘(reply keyboard)精确 dispatch · ★必须在所有启发式分支(尤其 _looks_like_name
+    # 中文名搜索)之前,否则中文按钮文字会被当股票名搜(已确认坑)· 统一 clear_session = 干净切换。
+    if body in _REPLY_KB_ACTIONS:
+        await clear_session(redis, channel, uid)
+        target = _REPLY_KB_ACTIONS[body]
+        if target == "__quote_ask":
+            # [行情] 不设 awaiting 会绕过名称搜索;设 awaiting=quote(无市场)· 续输走全检测分支
+            await set_session(redis, channel, uid, {"awaiting": "quote"})
+            return [replies.build_quote_ask()]
+        if target == "__kline_ask":
+            await set_session(redis, channel, uid, {"awaiting": "kline"})
+            return [replies.build_kline_ask()]
+        # [持仓]/[自选]/[下单]/[菜单] 复用现有 inline 处理器(reply-kb 点击=文本,故在此转发)
+        return [await _handle_button(db, redis, ch, channel, uid, target)]
+
     # /menu 或裸 /start → 主菜单
     if body in {"/menu", "/start"} or body.startswith("/start@"):
         await clear_session(redis, channel, uid)
@@ -224,15 +282,18 @@ async def _handle_text(
     # 会话态续输代码(★ 大小写兜底:us 大写存储 / crypto 带斜杠大写 · 用户小写直输也能命中)
     sess = await get_session(redis, channel, uid)
     if sess and sess.get("awaiting") in {"quote", "kline"}:
-        symbol = body.upper()
-        market = str(sess.get("market") or _guess_market(symbol))
         intent = str(sess["awaiting"])
+        chosen = sess.get("market")  # inline 选过市场则非空;裸 /price · reply-kb[行情] 为空
         await clear_session(redis, channel, uid)
-        if not symbol:
-            return [replies.build_ask_symbol(intent, market)]
+        if not body:
+            return [replies.build_ask_symbol(intent, str(chosen or "us"))]
         if intent == "kline":
-            return [replies.build_kline_link(market, symbol)]
-        return [await _quote_or_lite(ch, market, symbol)]
+            sym = body.upper()
+            return [replies.build_kline_link(str(chosen or _guess_market(sym)), sym)]
+        # quote:已选市场 → 直接查该市场;未选(/price · [行情])→ 全检测(代码扫库 + 中文名搜索)
+        if chosen:
+            return [await _quote_or_lite(ch, str(chosen), body.upper())]
+        return await _resolve_free_text_replies(ch, body)
 
     # 下单流程:之前点了「下单 → 选市场」,正在等代码 → 规范化 + 校验 → 方向选择
     if sess and sess.get("step") == "order_symbol":
@@ -259,25 +320,9 @@ async def _handle_text(
     if sess and sess.get("step") == "order_direction":
         return [replies.build_order_direction_hint()]
 
-    # P0-1 升级:无会话自由文本【疑似代码】→ 扫库判定(纯数字单条 · 字母命中多市场多条 · 加密前)·
-    # 修「裸 btc 被判美股查不到 / 小写 nvda 不识别」· 清残留会话再查。
-    if _looks_like_symbol(body):
-        await clear_session(redis, channel, uid)
-        return await _quote_code_replies(ch, body)
-
-    # 中文/名称搜索(全新分支 · 不改 detect)· cn+hk spot 快照按 symbol/name 搜:
-    # 0 命中→提示 · 1 命中→直接出卡(有K线完整 / 无K线轻量) · N 命中→候选列表(单条+按钮)。
-    if _looks_like_name(body):
-        await clear_session(redis, channel, uid)
-        hits = await search_by_name(ch, body)
-        if not hits:
-            return [replies.build_name_not_found(body)]
-        if len(hits) == 1:
-            return [await _quote_or_lite(ch, hits[0].market, hits[0].symbol)]
-        return [replies.build_candidate_list(hits)]
-
-    # 其它文本(多 token / 句子)→ 提示
-    return [replies.build_hint()]
+    # 无会话自由文本 → 代码扫库(裸 btc/小写 nvda 自动识别)/ 中文名搜索 / 提示 · 清残留会话再查。
+    await clear_session(redis, channel, uid)
+    return await _resolve_free_text_replies(ch, body)
 
 
 async def _handle_button(
