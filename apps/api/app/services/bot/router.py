@@ -29,6 +29,7 @@ from app.services.bot import quiet as quiet_mod
 from app.services.bot import ratelimit, replies
 from app.services.bot.identity import resolve_user_id
 from app.services.bot.query import (
+    crypto_has_realtime_kline,
     detect_symbol_markets,
     get_spot_lite,
     query_alert_rules,
@@ -149,6 +150,10 @@ async def _quote_or_lite(ch: ClickHouseClient, market: str, symbol: str) -> Repl
     """
     quote = await query_symbol(ch, market, symbol)
     if quote is not None:
+        # crypto:有实时 15m kline(主流 5 币)→ 完整卡;否则(TRX 等长尾)→ 加密轻量卡
+        # (ticker 价 + perp 指标 · 诚实标无实时K线 · 可下单)。cn/us 维持完整卡。
+        if market == "crypto" and not await crypto_has_realtime_kline(ch, symbol):
+            return replies.build_crypto_lite_card(quote)
         return replies.build_quote(quote)
     if market in ("cn", "hk"):
         lite = await get_spot_lite(ch, market, symbol)

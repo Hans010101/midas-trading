@@ -198,6 +198,13 @@ class _MultiCH:
     ) -> bool:
         return (market, symbol) in {("crypto", "AAA/USDT"), ("us", "AAA")}
 
+    async def crypto_ticker_exists(self, ccxt_symbol: str) -> bool:
+        return ccxt_symbol == "AAA/USDT"
+
+    async def latest_kline_ts(self, **_kw: Any) -> Any:
+        from datetime import UTC, datetime
+        return datetime.now(tz=UTC)  # 近期 → crypto 完整卡(同名双卡测试要完整卡)
+
 
 def _msg_event(open_id: str, text: str) -> dict[str, Any]:
     """im.message.receive_v1 事件体 · open_id 在 sender.sender_id(已验签)· text 在 content JSON。"""

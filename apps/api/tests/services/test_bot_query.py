@@ -140,6 +140,10 @@ class _ScanCH:
     ) -> bool:
         return (market, symbol) in self._exists
 
+    async def crypto_ticker_exists(self, ccxt_symbol: str) -> bool:
+        # 加密判据改用 ticker 全库:复用 exists 集的 ("crypto", ccxt) 键
+        return ("crypto", ccxt_symbol) in self._exists
+
 
 @pytest.mark.asyncio
 async def test_detect_crypto_only():
@@ -359,3 +363,62 @@ async def test_query_symbol_us_unchanged_uses_kline(monkeypatch: pytest.MonkeyPa
     quote = await q.query_symbol(ch, "us", "NVDA")  # type: ignore[arg-type]
     assert quote is not None
     assert quote.price == 110.0  # 1d kline 最新 close · ticker 未被调用
+
+
+# ── 本刀:加密判据扩到 ticker 全库 + 实时15m判据 ─────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_crypto_ticker_exists_queries_ticker_table():
+    """ClickHouseClient.crypto_ticker_exists:查 crypto_ticker_24h perp · 有行 True / 无行 False。"""
+    from app.services.clickhouse_client import ClickHouseClient
+
+    captured: dict[str, Any] = {}
+
+    class _Raw:
+        def __init__(self, rows: list[Any]) -> None:
+            self._rows = rows
+
+        async def query(self, sql: str, parameters: dict[str, Any] | None = None) -> Any:
+            captured["sql"] = sql
+            captured["params"] = parameters
+            return SimpleNamespace(result_rows=self._rows)
+
+    has = SimpleNamespace(_client=_Raw([[1]]))
+    assert await ClickHouseClient.crypto_ticker_exists(has, "TRX/USDT") is True
+    assert "crypto_ticker_24h" in captured["sql"]
+    assert "perp" in captured["sql"]
+    assert captured["params"]["s"] == "TRX/USDT"
+
+    empty = SimpleNamespace(_client=_Raw([]))
+    assert await ClickHouseClient.crypto_ticker_exists(empty, "NOPE/USDT") is False
+
+
+@pytest.mark.asyncio
+async def test_detect_trx_hits_crypto_via_ticker():
+    """🆕 TRX 用 ticker 判据命中加密(原 spot kline 只 3 币会漏)· 不存在币不命中。"""
+    ch = _ScanCH({("crypto", "TRX/USDT")})
+    assert await q.detect_symbol_markets(ch, "trx") == [("crypto", "TRX/USDT")]  # type: ignore[arg-type]
+    assert await q.detect_symbol_markets(_ScanCH(set()), "zzz") == []  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_crypto_has_realtime_kline_age_gate():
+    """crypto_has_realtime_kline:最新根 ≤2h→True;旧根(停更)/None→False(排除 TRX 旧 kline)。"""
+    from datetime import UTC, datetime, timedelta
+
+    class _TsCH:
+        def __init__(self, ts: Any) -> None:
+            self._ts = ts
+
+        async def latest_kline_ts(self, **_kw: Any) -> Any:
+            return self._ts
+
+    now = datetime.now(tz=UTC)
+    assert await q.crypto_has_realtime_kline(_TsCH(now), "BTC/USDT") is True  # type: ignore[arg-type]
+    # 旧根(3 周前 · TRX 那种停更)→ False
+    assert await q.crypto_has_realtime_kline(  # type: ignore[arg-type]
+        _TsCH(now - timedelta(days=21)), "TRX/USDT",
+    ) is False
+    # 无 kline → False
+    assert await q.crypto_has_realtime_kline(_TsCH(None), "TRX/USDT") is False  # type: ignore[arg-type]

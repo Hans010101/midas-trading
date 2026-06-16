@@ -142,6 +142,23 @@ GOLDEN: dict[str, dict[str, object]] = {'main_menu': {'text': '*点金 Midas · 
                                                         'url': 'http://localhost:3000/workbench?symbol=00700'}],
                                                       [{'text': '⬅️ 返回菜单',
                                                         'callback_data': 'menu:main'}]]}},
+ 'crypto_lite_card': {'text': '*点金 Midas · 行情(简)*\n'
+                              '\n'
+                              '📊 TRX/USDT · 加密(永续)\n'
+                              '最新价 0.31854 USDT\n'
+                              '涨跌幅 🔴 +2.50%\n'
+                              '资金费率 +0.0100%\n'
+                              '未平仓额 $123.00M\n'
+                              '多空比(大户) 1.30\n'
+                              '基差 +0.050%\n'
+                              '\n'
+                              'ℹ️ 暂无实时 K线图,可在网页端查看',
+                      'keyboard': {'inline_keyboard': [[{'text': '🌐 网页查看',
+                                                         'url': 'http://localhost:3000/crypto-preview?symbol=TRXUSDT&period=15m'},
+                                                        {'text': '🛒 下单',
+                                                         'callback_data': 'qo:crypto:TRX/USDT'}],
+                                                       [{'text': '⬅️ 返回菜单',
+                                                         'callback_data': 'menu:main'}]]}},
  'candidate_list': {'text': '*点金 Midas · 找到多个标的*\n\n点选你要查看的标的 ↓',
                     'keyboard': {'inline_keyboard': [[{'text': '600036 招商银行',
                                                        'callback_data': 'qv:cn:600036'}],
@@ -420,6 +437,11 @@ _NAME_HITS = [
     NameHit(market="cn", symbol="600036", name="招商银行"),
     NameHit(market="hk", symbol="00700", name="腾讯控股"),
 ]
+_Q_CRYPTO_LITE = SymbolQuote(
+    market="crypto", symbol="TRX/USDT", currency="USDT", price=0.31854,
+    change_pct=2.5, volume=None, funding_rate=0.0001, open_interest_usd=1.23e8,
+    long_short_ratio=1.30, basis_pct=0.05,
+)
 
 # key → 新链路 ReplyModel(交给 render_for_telegram 后比对 GOLDEN[key])
 CASES = {
@@ -437,6 +459,7 @@ CASES = {
     "code_not_found": replies.build_code_not_found("zzz"),
     "name_not_found": replies.build_name_not_found("查无此名"),
     "lite_quote_card": replies.build_lite_quote_card(_LITE_HK),
+    "crypto_lite_card": replies.build_crypto_lite_card(_Q_CRYPTO_LITE),
     "candidate_list": replies.build_candidate_list(_NAME_HITS),
     "kline_link": replies.build_kline_link("us", "NVDA"),
     "watchlist_empty": replies.build_watchlist([]),

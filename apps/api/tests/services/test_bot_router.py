@@ -8,6 +8,7 @@ chat 绑定取(查询/下单永远只作用于该 chat 绑定账号,跨用户隔
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
@@ -22,6 +23,8 @@ from app.services.bot import router
 from app.services.bot.renderers.telegram import render_for_telegram
 from app.services.bot.replies import InboundMessage, ReplyModel
 from tests.factories import make_user, make_virtual_account
+
+_RECENT = object()  # _FakeCH.kline_ts 默认哨兵 → 近期 ts(crypto 走完整卡)
 
 
 class _FakeRedis:
@@ -51,10 +54,13 @@ class _FakeCH:
         self,
         klines: list[Any] | None = None,
         exists: set[tuple[str, str]] | None = None,
+        kline_ts: Any = _RECENT,
     ) -> None:
         self._klines = klines or []
-        # 扫库存在性:命中的 (market, canonical_symbol) 集合(detect_symbol_markets 用)
+        # 扫库存在性:命中的 (market, canonical_symbol) 集合(symbol_exists / crypto_ticker_exists 用)
         self._exists = exists or set()
+        # latest_kline_ts 返回值:默认近期(crypto→完整卡)· 传 None/旧 ts → crypto 轻量卡
+        self._kline_ts = datetime.now(tz=UTC) if kline_ts is _RECENT else kline_ts
         self._client = object()
 
     async def select_kline(self, **_kwargs: Any) -> list[Any]:
@@ -64,6 +70,12 @@ class _FakeCH:
         self, market: str, symbol: str, instrument: str = "spot",  # noqa: ARG002
     ) -> bool:
         return (market, symbol) in self._exists
+
+    async def crypto_ticker_exists(self, ccxt_symbol: str) -> bool:
+        return ("crypto", ccxt_symbol) in self._exists
+
+    async def latest_kline_ts(self, **_kwargs: Any) -> Any:
+        return self._kline_ts
 
 
 def _bar(close: float) -> SimpleNamespace:
@@ -839,3 +851,82 @@ async def test_reply_kb_quote_then_chinese_name(
     ch = _FakeCH([_bar(100.0), _bar(120.0)])
     reply = await router.handle_command(db_session, redis, ch, 766, "茅台")  # type: ignore[arg-type]
     assert "600519" in reply.text  # 名称搜索命中(非 _guess_market 判 us 查不到)
+
+
+# ── 本刀:加密 ticker 全库判据 + 无实时K线轻量卡 ─────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_crypto_no_realtime_kline_shows_lite_card(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+):
+    """🆕 TRX 等(有 ticker · 无实时15m kline)→ 加密轻量卡:ticker价+perp指标 · 有下单 · 无K线按钮 · 诚实标。"""
+    from app.services.bot.query import SymbolQuote
+
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 770)
+
+    async def _fake_query(_ch: object, _market: str, symbol: str) -> SymbolQuote:
+        return SymbolQuote(
+            market="crypto", symbol=symbol, currency="USDT", price=0.31854,
+            change_pct=2.5, volume=None, funding_rate=0.0001,
+            open_interest_usd=1.2e8, long_short_ratio=1.3, basis_pct=0.05,
+        )
+
+    monkeypatch.setattr(router, "query_symbol", _fake_query)
+    # kline_ts=None → 无实时 15m kline → 加密轻量卡
+    ch = _FakeCH([], exists={("crypto", "TRX/USDT")}, kline_ts=None)
+    reply = await router.handle_callback(db_session, _FakeRedis(), ch, 770, "qv:crypto:TRX/USDT")  # type: ignore[arg-type]
+    assert "TRX/USDT" in reply.text
+    assert "暂无实时 K线" in reply.text
+    assert "0.31854" in reply.text     # ticker 实时价
+    assert "资金费率" in reply.text     # perp 指标(fail-soft 有则显示)
+    flat = json.dumps(reply.keyboard, ensure_ascii=False)
+    assert "qo:crypto:TRX/USDT" in flat  # ★加密轻量卡可下单
+    assert "qk:" not in flat             # 无 K线按钮(本就无实时图)
+
+
+@pytest.mark.asyncio
+async def test_crypto_realtime_kline_shows_full_card(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+):
+    """🆕 主流币(有实时15m kline · kline_ts 近期)→ 完整卡(qk/qo/qr 按钮)。"""
+    from app.services.bot.query import SymbolQuote
+
+    user = await make_user(db_session)
+    await _bind(db_session, user.id, 772)
+
+    async def _fake_query(_ch: object, _market: str, symbol: str) -> SymbolQuote:
+        return SymbolQuote(
+            market="crypto", symbol=symbol, currency="USDT", price=66420.0,
+            change_pct=3.1, volume=123.0,
+        )
+
+    monkeypatch.setattr(router, "query_symbol", _fake_query)
+    ch = _FakeCH([], exists={("crypto", "BTC/USDT")})  # kline_ts 默认近期 → 完整卡
+    reply = await router.handle_callback(db_session, _FakeRedis(), ch, 772, "qv:crypto:BTC/USDT")  # type: ignore[arg-type]
+    assert "qk:crypto:BTC/USDT" in json.dumps(reply.keyboard, ensure_ascii=False)
+
+
+@pytest.mark.asyncio
+async def test_crypto_lite_order_button_to_directions(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+):
+    """🆕 加密轻量卡[下单] qo:crypto:TRX/USDT → 进方向页(quote_price 走 perp_mark · 不依赖 kline · 不成交)。"""
+    from decimal import Decimal
+
+    user = await make_user(db_session)
+    await make_virtual_account(db_session, user_id=user.id, market="crypto")
+    await _bind(db_session, user.id, 771)
+
+    async def _fake_price(_ch: object, _market: str, _symbol: str) -> Decimal:
+        return Decimal("0.31854")  # TRX 有 ticker → perp_mark 有价(不依赖 kline)
+
+    monkeypatch.setattr(router.order_mod, "quote_price", _fake_price)
+    redis = _FakeRedis()
+    reply = await router.handle_callback(db_session, redis, _FakeCH(), 771, "qo:crypto:TRX/USDT")  # type: ignore[arg-type]
+    assert "选择操作" in reply.text  # 进方向页(复用完整二次确认链)
+    sess = json.loads(redis._d["tg_session:771"])
+    assert sess["step"] == "order_direction"
+    assert sess["market"] == "crypto"
+    assert sess["symbol"] == "TRX/USDT"

@@ -363,6 +363,13 @@ async def test_webhook_bare_code_multi_market_sends_two(
         ) -> bool:
             return (market, symbol) in {("crypto", "AAA/USDT"), ("us", "AAA")}
 
+        async def crypto_ticker_exists(self, ccxt_symbol: str) -> bool:
+            return ccxt_symbol == "AAA/USDT"
+
+        async def latest_kline_ts(self, **_kw: object) -> object:
+            from datetime import UTC, datetime
+            return datetime.now(tz=UTC)  # 近期 → crypto 完整卡
+
     app.dependency_overrides[get_clickhouse_optional] = _MultiCH
     try:
         r = await client.post(

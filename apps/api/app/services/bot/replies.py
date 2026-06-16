@@ -452,6 +452,41 @@ def build_lite_quote_card(lite: SpotLite) -> ReplyModel:
     )
 
 
+def build_crypto_lite_card(quote: SymbolQuote) -> ReplyModel:
+    """加密无【实时】K线时的轻量卡(ticker 价 + perp 指标 · 比股票轻量卡丰富)。
+
+    ★诚实标注「暂无实时 K线图」(守不伪造)· 各 perp 指标项独立 fail-soft(None 不显示该行)·
+    ★可放下单按钮:加密 perp 有实时 ticker 价、下单走 perp 撮合不依赖 kline(TRX 等主流永续可下单,
+    与股票长尾轻量卡不同——股票长尾流动性差不放下单)。
+    """
+    lines = [f"📊 {quote.symbol} · 加密(永续)"]
+    if quote.price is not None:
+        lines.append(f"最新价 {_fmt_price(quote.price, quote.currency)}")
+    lines.append(f"涨跌幅 {_fmt_pct(quote.change_pct)}")
+    if quote.funding_rate is not None:
+        lines.append(f"资金费率 {quote.funding_rate * 100:+.4f}%")
+    if quote.open_interest_usd is not None:
+        lines.append(f"未平仓额 {_fmt_compact_usd(quote.open_interest_usd)}")
+    if quote.long_short_ratio is not None:
+        lines.append(f"多空比(大户) {quote.long_short_ratio:.2f}")
+    if quote.basis_pct is not None:
+        lines.append(f"基差 {quote.basis_pct:+.3f}%")
+    lines.append("")
+    lines.append("ℹ️ 暂无实时 K线图,可在网页端查看")
+    return ReplyModel(
+        text="\n".join(lines),
+        title="行情(简)",
+        disclaimer=None,
+        buttons=(
+            (
+                Button("🌐 网页查看", url=web_chart_url("crypto", quote.symbol)),
+                Button("🛒 下单", f"qo:crypto:{quote.symbol}"),
+            ),
+            (Button("⬅️ 返回菜单", "menu:main"),),
+        ),
+    )
+
+
 def build_candidate_list(hits: list[NameHit]) -> ReplyModel:
     """中文名多命中候选(单条卡 + 一列按钮 · 照 build_alert_rules 范式)。
 

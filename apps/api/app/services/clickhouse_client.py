@@ -308,6 +308,45 @@ class ClickHouseClient:
         )
         return len(result.result_rows) > 0
 
+    async def crypto_ticker_exists(self, ccxt_symbol: str) -> bool:
+        """加密币是否在 ticker 全库(crypto_ticker_24h perp · 实时全市场 ~675 币)· bot 加密判据用。
+
+        ccxt_symbol = 'XXX/USDT' 带斜杠(与 ticker 表 symbol 键一致)· 有行即 True。
+        ★扩判据:原 symbol_exists 查 spot kline 只 3 币(除 BTC 几乎全漏);ticker 全库 TRX 等都命中。
+        """
+        result = await self._client.query(
+            "SELECT 1 FROM crypto_ticker_24h WHERE symbol = %(s)s "
+            "AND instrument = 'perp' LIMIT 1",
+            parameters={"s": ccxt_symbol},
+        )
+        return len(result.result_rows) > 0
+
+    async def latest_kline_ts(
+        self,
+        *,
+        symbol: str,
+        market: str,
+        period: str,
+        instrument: str = KLINE_INSTRUMENT_DEFAULT,
+    ) -> datetime | None:
+        """某标的/周期 kline 的最新 ts(tz-aware UTC)· 无数据 → None · 给"是否有实时图"判据用。
+
+        symbol 经 normalize_kline_symbol(同 select_kline)· CH max() 空集返 1970,year<2000 视为无。
+        """
+        symbol = normalize_kline_symbol(symbol, market, instrument)
+        result = await self._client.query(
+            "SELECT max(ts) FROM kline WHERE symbol = %(s)s AND market = %(m)s "
+            "AND instrument = %(inst)s AND period = %(p)s",
+            parameters={"s": symbol, "m": market, "inst": instrument, "p": period},
+        )
+        rows = result.result_rows
+        if not rows or rows[0][0] is None:
+            return None
+        ts: datetime = rows[0][0]
+        if ts.year < 2000:  # noqa: PLR2004 · CH max() 对空集返 1970(无数据)
+            return None
+        return ts if ts.tzinfo is not None else ts.replace(tzinfo=UTC)
+
     async def select_first_kline_at_or_after(
         self,
         *,

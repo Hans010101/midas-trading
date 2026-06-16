@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
@@ -247,11 +247,29 @@ async def detect_symbol_markets(
     """
     s = raw.strip().upper()
     hits: list[tuple[str, str]] = []
-    if await ch.symbol_exists("crypto", f"{s}/USDT"):
+    if await ch.crypto_ticker_exists(f"{s}/USDT"):
         hits.append(("crypto", f"{s}/USDT"))
     if await ch.symbol_exists("us", s):
         hits.append(("us", s))
     return hits
+
+
+_CRYPTO_REALTIME_KLINE_MAX_AGE_H = 2  # perp 15m 最新根 ≤2h 才算"有实时图"
+
+
+async def crypto_has_realtime_kline(ch: ClickHouseClient, symbol: str) -> bool:
+    """该加密币是否有【实时】perp 15m kline(最新根 ≤2h)· 给行情卡分层(完整卡 vs 加密轻量卡)用。
+
+    ★排除"有旧 kline 但停更"(如 TRX 停在 3 周前的早期回填)——只主流 5 币(BTC/ETH/SOL/BNB/XRP)
+    在实时 15m 采集名单 → 有实时图走完整卡;其余(TRX 等 600+ 币)→ False → 走加密轻量卡。
+    """
+    ts = await ch.latest_kline_ts(
+        symbol=symbol, market="crypto", period="15m", instrument="perp",
+    )
+    if ts is None:
+        return False
+    cutoff = datetime.now(tz=UTC) - timedelta(hours=_CRYPTO_REALTIME_KLINE_MAX_AGE_H)
+    return ts >= cutoff
 
 
 _SPOT_LITE_MARKETS = {"cn", "hk"}
