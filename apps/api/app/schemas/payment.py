@@ -21,12 +21,11 @@ class CreateOrderIn(BaseModel):
 
 
 class CreateOrderOut(BaseModel):
-    """收款信息(前端展示二维码/地址 + 应付额)· external_id 给前端轮询订单态用。"""
+    """收款信息(前端跳转 OxaPay 托管收款页)· external_id 给前端轮询订单态用。"""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    address: str            # Bcon 收款地址(USDT/BSC)
-    payment_amount: str     # 用户应付精确额(Bcon 返回)
+    payment_url: str        # OxaPay 托管收款页(前端跳转 · 用户在此自选链/币付款)
     external_id: str        # 我方订单号(不可猜)
     period: str
 

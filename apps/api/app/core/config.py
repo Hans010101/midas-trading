@@ -68,11 +68,22 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 1024               # 单次响应硬上限
     llm_timeout_seconds: float = 30.0
 
-    # 支付 · Bcon(会员订阅收款 · USDT/BSC · Phase 2a)
+    # 支付 · Bcon(旧网关 · 保留作回归参照 · order/payment 已不 import · Phase 2a)
     # ⚠ 敏感:bcon_api_key 只从 env 读 · 绝不进 git/前端/DB/日志 · 空 = 支付未启用。
     bcon_api_key: str = ""
     bcon_api_base: str = "https://external-api.bcon.global"
     bcon_timeout_seconds: float = 15.0
+
+    # 支付 · OxaPay(现行网关 · 会员订阅收款 · USDT 多链托管页 · Phase 2a)
+    # ⚠ 敏感:oxapay_merchant_api_key 只从 env 读 · 绝不进 git/前端/DB/日志 ·
+    #    既是建单/查单凭证,又是回调 HMAC-SHA512 验签密钥 · 空 = 支付未启用(回调全拒)。
+    oxapay_merchant_api_key: str = ""
+    oxapay_api_base: str = "https://api.oxapay.com"
+    oxapay_timeout_seconds: float = 20.0
+    # 沙盒开关:True = 建单走 OxaPay 测试网(不收真钱,验回调全链路);上真钱前设 False。
+    oxapay_sandbox: bool = False
+    # 托管收款页有效期(分钟)· 超时未付订单作废。
+    oxapay_lifetime_minutes: int = 60
 
 
 settings = Settings()

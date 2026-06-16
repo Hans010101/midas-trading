@@ -1,14 +1,18 @@
-"""支付订单业务(Phase 2a 刀1 · 建单 + 回调核验开权益)。
+"""支付订单业务(Phase 2a · 建单 + 回调核验开权益 · OxaPay 托管收款)。
 
 🔴 红线:支付域【不 import virtual_trading/engine】(收订阅费非交易)·
 开权益走 growth.extend_subscription(source='paid' · 不传 cap_days = 不封顶 · 复用 pro 档额度)。
 
-建单 = 生成不可猜 external_id → Bcon 建收款地址 → 存 pending(Bcon 失败回滚,无残留);
-回调 = ★ 防伪造三重(status==2 + 查单真实金额≥应付 + external_id 命中 pending)+ rowcount 幂等。
+建单 = 生成不可猜 external_id → OxaPay 建托管收款单 → 存 pending + track_id(失败回滚,无残留);
+回调 = ★ 防伪造多重(① HMAC-SHA512 raw-body 验签 = 安全命门 → ② 命中 pending →
+       ③ track_id 绑定建单值 → ④ 独立查单真实 status=paid & 金额≥应付)+ rowcount 幂等。
 """
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import logging
 import secrets
 from datetime import UTC, datetime
@@ -19,10 +23,11 @@ from uuid import UUID
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.payment_order import PaymentOrder
 from app.services.growth import extend_subscription
 from app.services.membership import PERIOD_DAYS
-from app.services.payment.bcon_client import BconError, create_address, get_transaction
+from app.services.payment.oxapay_client import OxaPayError, create_invoice, get_payment
 
 logger = logging.getLogger(__name__)
 
@@ -32,32 +37,35 @@ _PLAN = "pro"
 
 
 async def create_payment_order(
-    db: AsyncSession, user_id: UUID, period: str, *, chain: str = "binance",
+    db: AsyncSession, user_id: UUID, period: str,
 ) -> tuple[PaymentOrder, str]:
-    """建 pending 订单 → Bcon 建收款地址 → 回填 pay_address + ★ Bcon 精确收款额。
+    """建 pending 订单 → OxaPay 托管收款单 → 回填 pay_address/gateway_txid(URL/track_id)。
 
-    ★ amount_usdt 存【Bcon 返回的 payment_amount】(唯一尾数收款额,如 4.93)= 用户应付/匹配/核验额;
-      名义价(4.9/9.9/19.9)是 PRICE_USDT[period],仅展示用(可由 period 反查,不单独存)。
-    period 非法 → ValueError(端点转 400);Bcon 失败 → BconError(端点转 502 · get_db 回滚无残留)。
+    ★ OxaPay 托管页模型 · 无唯一尾数:amount_usdt 存【名义价】(4.9/9.9/19.9 · USD 计价)=
+      查单核验基准;track_id 建单即存进 gateway_txid(回调时核对绑定,防拿别单 track_id 套现)。
+    period 非法 → ValueError(端点转 400);OxaPay 失败 → OxaPayError(端点转 502 · get_db 回滚无残留)。
     """
     if period not in PRICE_USDT:
         msg = f"未知周期: {period}"
         raise ValueError(msg)
-    nominal = PRICE_USDT[period]  # 名义价 → 传 Bcon,Bcon 据此分配唯一尾数收款额
-    external_id = secrets.token_urlsafe(24)  # 不可猜 · 给 Bcon + 回调匹配键
+    nominal = PRICE_USDT[period]  # 名义价(USD 计价)· 传 OxaPay · 查单核验基准
+    external_id = secrets.token_urlsafe(24)  # 不可猜 · 给 OxaPay order_id + 回调匹配键
     order = PaymentOrder(
         external_id=external_id, user_id=user_id, plan=_PLAN, period=period,
-        amount_usdt=Decimal(nominal), chain=chain, status="pending",  # 先存名义,拿到 Bcon 额后覆写
+        amount_usdt=Decimal(nominal), chain="multi", status="pending",  # 多链 · 名义价即核验额
     )
     db.add(order)
     await db.flush()
-    # 调 Bcon 建收款地址 · 失败抛 BconError → 端点 502 → get_db 回滚 · 无 pending 残留
-    address, payment_amount = await create_address(external_id, nominal, chain=chain)
-    order.pay_address = address
-    # ★ 用 Bcon 返回的精确收款额(唯一尾数)作为应付/匹配/核验额 —— 用户付这个才被匹配
-    order.amount_usdt = Decimal(payment_amount)
+    # 回调 URL · 复用 public_api_base_url(prod = https://api.midastrade.asia)
+    callback_url = f"{settings.public_api_base_url.rstrip('/')}/api/v1/payment/oxapay/callback"
+    # 调 OxaPay 建托管收款单 · 失败抛 OxaPayError → 端点 502 → get_db 回滚 · 无 pending 残留
+    track_id, payment_url = await create_invoice(
+        external_id, nominal, callback_url=callback_url, sandbox=settings.oxapay_sandbox,
+    )
+    order.pay_address = payment_url   # 复用 pay_address 字段存托管收款页 URL(前端跳转)
+    order.gateway_txid = track_id     # ★ 建单即存 track_id · 回调核对绑定(防伪造)
     await db.commit()
-    return order, payment_amount
+    return order, payment_url
 
 
 async def get_order_status(
@@ -73,59 +81,84 @@ async def get_order_status(
     return order
 
 
-async def process_bcon_callback(
-    db: AsyncSession, *, status: str | None, txid: str | None,
-    external_id: str | None, addr: str | None = None,
+async def process_oxapay_callback(
+    db: AsyncSession, *, raw_body: bytes, hmac_header: str | None,
 ) -> str:
-    """Bcon 回调处理 · 返回结果标签(端点恒返 200,标签仅日志)。
+    """OxaPay 回调处理 · 返回结果标签(端点据标签返 200/400,标签仅日志)。
 
-    ★ 防伪造三重(+ addr 交叉守卫):
-      ① status==2(confirmed)才处理;② external_id 命中 pending 订单(不可猜 · 不存在/已付忽略);
-      ③ 查单二次核验:独立向 Bcon 查真实金额 ≥ 订单应付额(防伪造回调);
-      (+ addr 若与订单收款地址不符 → 拒,防拿别单 txid 套现)。
+    ★ 防伪造多重(① 验签 = 安全命门):
+      ① HMAC-SHA512(raw_body, merchant_api_key).hexdigest() == HMAC 头(常量时间比对)·
+         ★ 必须用【原始字节】验签(json 解析再序列化会变字节 → 签名不符)· 验签后才解析;
+      ② status.lower()=="paid" 才开权益(Paying 等中间态忽略);
+      ③ order_id 命中 pending 订单(不可猜 · 不存在/已付忽略);
+      ④ track_id 须 == 建单存的 gateway_txid(防拿别单 track_id 套现);
+      ⑤ 独立查单二次核验:OxaPay 真实 status=paid 且真实金额 ≥ 订单应付额(防伪造回调)。
     rowcount 幂等:pending→paid 只成功一次 → 同回调重复只开一次权益。
     """
-    if not external_id or not txid:
-        return "ignored: missing external_id/txid"
-    if status != "2":  # 只处理 confirmed(partial/unconfirmed 等后续 confirmed 回调)
-        return f"ignored: status={status} not confirmed"
+    # ① ★ 验签(安全命门)· 用原始字节 · 常量时间比对 · 失败一律拒(端点转 400)
+    key = settings.oxapay_merchant_api_key
+    calc = hmac.new(key.encode(), raw_body, hashlib.sha512).hexdigest()
+    if not hmac_header or not hmac.compare_digest(calc, hmac_header):
+        logger.warning("[payment.callback] 验签失败(拒绝伪造)")
+        return "rejected: bad signature"
 
+    # 验签通过后才解析 body(顺序不可换:解析在前会给攻击者免费解析)
+    try:
+        body = json.loads(raw_body)
+    except (ValueError, TypeError):
+        return "rejected: bad json"
+    if not isinstance(body, dict):
+        return "rejected: bad json"
+
+    order_id = body.get("order_id")
+    status = str(body.get("status") or "")
+    track_id = body.get("track_id")
+
+    # ② 状态:只处理 paid(大小写不敏感 · OxaPay 回调 "Paid" / 查单 "paid")· Paying 等中间态忽略
+    if status.lower() != "paid":
+        return f"ignored: status={status} not paid"
+    if not order_id or not track_id:
+        return "ignored: missing order_id/track_id"
+
+    # ③ 命中 pending 订单(不可猜 external_id · 不存在/已付 → 幂等忽略)
     order = await db.scalar(
         select(PaymentOrder).where(
-            PaymentOrder.external_id == external_id,
+            PaymentOrder.external_id == order_id,
             PaymentOrder.status == "pending",
         ),
     )
-    if order is None:  # 不存在 / 已 paid → 幂等忽略
+    if order is None:
         return "ignored: no pending order"
 
-    # addr 交叉守卫:回调收款地址须与建单时 Bcon 返回的一致(防拿别单 txid 套现)
-    if addr and order.pay_address and addr.lower() != order.pay_address.lower():
+    # ④ track_id 绑定守卫:回调 track_id 须与建单存的 gateway_txid 一致(防拿别单 track_id 套现)
+    if str(track_id) != str(order.gateway_txid or ""):
         logger.warning(
-            "[payment.callback] addr 不符 ext=%s cb=%s order=%s",
-            external_id, addr, order.pay_address,
+            "[payment.callback] track_id 不符 ext=%s cb=%s order=%s",
+            order_id, track_id, order.gateway_txid,
         )
-        return "rejected: addr mismatch"
+        return "rejected: track_id mismatch"
 
-    # ★ 查单二次核验(防伪造:独立向 Bcon 查真实金额,不信回调自带 value)
+    # ⑤ ★ 查单二次核验(防伪造:独立向 OxaPay 查真实 status/金额,不信回调自带值)
     try:
-        tx = await get_transaction(txid)
-    except BconError as exc:
-        logger.warning("[payment.callback] get_transaction 失败 ext=%s: %s", external_id, exc)
+        info = await get_payment(str(track_id))
+    except OxaPayError as exc:
+        logger.warning("[payment.callback] get_payment 失败 ext=%s: %s", order_id, exc)
         return "ignored: verify failed"
-    real_amount = _tx_amount(tx)
-    if real_amount is None or real_amount < order.amount_usdt:
+    real_status = str(info.get("status") or "")
+    real_amount = _oxapay_amount(info)
+    if real_status.lower() != "paid" or real_amount is None or real_amount < order.amount_usdt:
         logger.warning(
-            "[payment.callback] 金额核验不足 ext=%s real=%s need=%s",
-            external_id, real_amount, order.amount_usdt,
+            "[payment.callback] 核验不足 ext=%s real_status=%s real_amt=%s need=%s",
+            order_id, real_status, real_amount, order.amount_usdt,
         )
-        return "rejected: amount insufficient"
+        return "rejected: amount/status insufficient"
 
-    # ★ 幂等闸:pending→paid 只成功一次(照 redeem returning+first 范式 · 并发/重复回调只开一次)
+    # ★ 幂等闸:pending→paid 只成功一次(照 redeem returning+first 范式 · 并发/重复回调只开一次)·
+    #   gateway_txid 建单时已存 track_id,此处不覆写
     res = await db.execute(
         update(PaymentOrder)
-        .where(PaymentOrder.external_id == external_id, PaymentOrder.status == "pending")
-        .values(status="paid", gateway_txid=txid, paid_at=datetime.now(UTC))
+        .where(PaymentOrder.external_id == order_id, PaymentOrder.status == "pending")
+        .values(status="paid", paid_at=datetime.now(UTC))
         .returning(PaymentOrder.id),
     )
     if res.first() is None:  # pending 行已被另一回调抢走(竞态)→ 已付,只开一次
@@ -136,23 +169,17 @@ async def process_bcon_callback(
     await db.commit()
     logger.info(
         "[payment.callback] paid ext=%s user=%s period=%s",
-        external_id, order.user_id, order.period,
+        order_id, order.user_id, order.period,
     )
     return "paid"
 
 
-def _tx_amount(tx: dict[str, Any]) -> Decimal | None:
-    """从查单响应提真实金额(defensive:data.sum / sum / value / payment_amount)· 非数 None。"""
-    candidates: list[Any] = []
-    data = tx.get("data")
-    if isinstance(data, dict):
-        candidates += [data.get("sum"), data.get("value"), data.get("payment_amount")]
-    candidates += [tx.get("sum"), tx.get("value")]
-    for c in candidates:
-        if c is None:
-            continue
-        try:
-            return Decimal(str(c))
-        except (InvalidOperation, ValueError):
-            continue
-    return None
+def _oxapay_amount(info: dict[str, Any]) -> Decimal | None:
+    """从查单 data 提真实金额(OxaPay data.amount · USD 计价)· 非数 None。"""
+    raw = info.get("amount")
+    if raw is None:
+        return None
+    try:
+        return Decimal(str(raw))
+    except (InvalidOperation, ValueError):
+        return None

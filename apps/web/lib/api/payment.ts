@@ -1,10 +1,10 @@
 /**
- * 会员订阅支付 API client(Phase 2a 刀2)· 照 quota.ts Bearer 范式。
+ * 会员订阅支付 API client(Phase 2a · OxaPay 托管收款)· 照 quota.ts Bearer 范式。
  *
- * - POST /payment/order                      建订单 → Bcon 收款地址
+ * - POST /payment/order                      建订单 → OxaPay 托管收款页 URL
  * - GET  /payment/order/{external_id}/status 订单状态(到账轮询 · 限本人)
  *
- * 🔴 红线:订阅费非交易 · 金额字段全 string(避免 JS 浮点损失)· 前端只展示不撮合。
+ * 🔴 红线:订阅费非交易 · 前端只跳转托管页 + 查状态,不判付款真伪(后端回调 HMAC 验签开权益)。
  */
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
@@ -12,8 +12,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 export type Period = 'month' | 'quarter' | 'year'
 
 export interface CreateOrderOut {
-  address: string
-  payment_amount: string
+  payment_url: string
   external_id: string
   period: string
 }

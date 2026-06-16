@@ -1,22 +1,21 @@
 'use client'
 
 /**
- * 会员订阅支付弹层(Phase 2a 刀2)· 选档后:建单 → 收款地址/二维码/金额 → 到账轮询 → 成功开 Pro。
+ * 会员订阅支付弹层(Phase 2a · OxaPay 托管收款)· 选档后:建单 → 跳转托管收款页 → 到账轮询 → 成功开 Pro。
  *
- * 🔴 红线:前端只建单 + 展示收款 + 查状态;开权益由后端回调核验(防伪造四重)· 前端不判付款真伪。
- * 价格如实(USDT)· BSC 链警示醒目(转错链丢币)。
+ * 🔴 红线:前端只建单 + 跳转 OxaPay 托管页 + 查状态;开权益由后端回调 HMAC 验签核验(防伪造多重)·
+ * 前端不判付款真伪。托管页由 OxaPay 处理链/币选择与确认,无需前端展示地址/二维码。
  */
 
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, Copy, Loader2 } from 'lucide-react'
-import { QRCodeSVG } from 'qrcode.react'
-import { useEffect, useRef, useState } from 'react'
+import { Check, ExternalLink, Loader2 } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 
 import { QUOTA_QUERY_KEY } from '@/hooks/use-quota'
 import { useCreatePaymentOrder, useOrderStatus } from '@/hooks/use-payment'
 import { PaymentApiError, type Period } from '@/lib/api/payment'
-import { CHAIN_WARNING, PLAN_TIERS } from '@/lib/payment-plans'
+import { PLAN_TIERS } from '@/lib/payment-plans'
 import { cn } from '@/lib/utils'
 
 export function PaymentDialog({
@@ -28,8 +27,8 @@ export function PaymentDialog({
   const tier = PLAN_TIERS.find((t) => t.period === period)
   const create = useCreatePaymentOrder()
   const qc = useQueryClient()
-  const [copied, setCopied] = useState(false)
   const startedRef = useRef(false)
+  const openedRef = useRef(false)
 
   // 弹层打开即建单(只发一次)· StrictMode 双调用由 ref 守住
   useEffect(() => {
@@ -42,6 +41,14 @@ export function PaymentDialog({
   const statusQ = useOrderStatus(order?.external_id ?? null)
   const paid = statusQ.data?.status === 'paid'
 
+  // 建单成功 → 自动在新标签打开 OxaPay 托管收款页(只开一次)· 弹窗被拦截时用下方按钮兜底
+  useEffect(() => {
+    if (order?.payment_url && !openedRef.current) {
+      openedRef.current = true
+      window.open(order.payment_url, '_blank', 'noopener,noreferrer')
+    }
+  }, [order])
+
   // 到账 → 刷新额度(plan 即时变 pro)+ 成功 toast
   useEffect(() => {
     if (paid) {
@@ -49,17 +56,6 @@ export function PaymentDialog({
       toast.success('Pro 已开通 · 感谢支持点金', { className: 'midas-toast-success', duration: 5000 })
     }
   }, [paid, qc])
-
-  async function copyAddr() {
-    if (!order) return
-    try {
-      await navigator.clipboard.writeText(order.address)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1800)
-    } catch {
-      toast.error('复制失败 · 请手动选择地址')
-    }
-  }
 
   return (
     <div
@@ -77,7 +73,7 @@ export function PaymentDialog({
         {create.isPending && (
           <div className="flex flex-col items-center gap-3 py-10 text-sm text-muted-foreground">
             <Loader2 className="h-6 w-6 animate-spin text-gold" />
-            生成收款地址…
+            生成收款单…
           </div>
         )}
 
@@ -85,7 +81,7 @@ export function PaymentDialog({
         {create.isError && (
           <div className="py-8 text-center">
             <p className="mb-4 text-sm text-midas-red">
-              {create.error instanceof PaymentApiError ? create.error.detail : '生成收款地址失败'}
+              {create.error instanceof PaymentApiError ? create.error.detail : '生成收款单失败'}
             </p>
             <button
               type="button"
@@ -97,41 +93,26 @@ export function PaymentDialog({
           </div>
         )}
 
-        {/* 3 · 收款信息 + 到账轮询 */}
+        {/* 3 · 跳转托管收款页 + 到账轮询 */}
         {order && !paid && (
           <>
-            <p className="mb-1 text-center text-sm">
-              <span className="font-mono text-lg font-bold text-foreground">{order.payment_amount}</span>
+            <p className="mb-1 mt-3 text-center text-sm text-foreground">
+              <span className="font-mono text-lg font-bold">{tier?.priceUsdt}</span>
               <span className="ml-1 text-muted-foreground">USDT</span>
             </p>
-            {/* ★ Bcon 靠唯一金额尾数匹配订单 · 必须付这个精确额才能被识别开通 */}
-            <p className="mb-3 text-center text-[11px] text-midas-red">
-              请付上方【精确金额】(含尾数用于订单识别,多付少付都无法自动开通)
+            <p className="mb-4 text-center text-xs leading-relaxed text-muted-foreground">
+              前往 OxaPay 安全收款页完成付款 · 支持 USDT 等多链(在收款页内选择链与币种)
             </p>
 
-            <div className="mb-3 flex justify-center rounded-lg bg-white p-3">
-              <QRCodeSVG value={order.address} size={160} />
-            </div>
-
-            <label className="mb-1 block text-xs text-muted-foreground">收款地址</label>
-            <div className="mb-3 flex items-center gap-2">
-              <code className="flex-1 break-all rounded border border-paper bg-background px-2 py-1.5 font-mono text-[11px]">
-                {order.address}
-              </code>
-              <button
-                type="button"
-                onClick={() => void copyAddr()}
-                aria-label="复制地址"
-                className="shrink-0 rounded border border-paper p-2 text-muted-foreground hover:text-gold"
-              >
-                {copied ? <Check className="h-4 w-4 text-up" /> : <Copy className="h-4 w-4" />}
-              </button>
-            </div>
-
-            {/* ★ BSC 链警示(转错链丢币)*/}
-            <p className="mb-3 rounded-md border border-midas-red/50 bg-midas-red-glow/40 px-3 py-2 text-xs leading-relaxed text-midas-red">
-              ⚠ {CHAIN_WARNING}
-            </p>
+            <a
+              href={order.payment_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mb-3 flex w-full items-center justify-center gap-2 rounded-md bg-midas-red px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-midas-red-deep"
+            >
+              <ExternalLink className="h-4 w-4" />
+              前往收款页付款
+            </a>
 
             <div className="flex items-center justify-center gap-2 rounded-md bg-gold/10 px-3 py-2.5 text-xs text-gold">
               <Loader2 className="h-4 w-4 animate-spin" />

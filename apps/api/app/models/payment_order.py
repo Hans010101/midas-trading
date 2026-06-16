@@ -1,7 +1,8 @@
-"""会员订阅支付订单(Phase 2a 刀1 · Bcon USDT/BSC)。
+"""会员订阅支付订单(Phase 2a · OxaPay USDT 多链托管收款)。
 
 🔴 红线:本表只记会员订阅【订单】—— 收的是订阅费,非交易;支付域不碰 virtual_trading/engine。
-external_id 不可猜(secrets · 给 Bcon 作我方订单号 + 回调匹配键);凭证不入表。
+external_id 不可猜(secrets · 给 OxaPay 作 order_id + 回调匹配键);凭证不入表。
+表结构沿用刀1(Bcon 时):pay_address 复用存 OxaPay payment_url,gateway_txid 复用存 track_id。
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ class PaymentOrder(Base):
     __tablename__ = "payment_order"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    # 不可猜订单号(secrets.token_urlsafe)· 给 Bcon external_id + 回调匹配键 · unique
+    # 不可猜订单号(secrets.token_urlsafe)· 给 OxaPay order_id + 回调匹配键 · unique
     external_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
     user_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey("user.id", ondelete="CASCADE"), nullable=False,
@@ -30,13 +31,13 @@ class PaymentOrder(Base):
     plan: Mapped[str] = mapped_column(String(16), nullable=False)  # 'pro'
     period: Mapped[str] = mapped_column(String(16), nullable=False)  # month|quarter|year
     amount_usdt: Mapped[Decimal] = mapped_column(Numeric(20, 8), nullable=False)  # 应付额
-    # chain 默认 binance(BSC)· 字段留作多链扩展位
+    # chain · OxaPay 托管页多链(建单写 "multi")· server_default 沿用旧值(不改 schema)
     chain: Mapped[str] = mapped_column(String(16), nullable=False, server_default="binance")
-    pay_address: Mapped[str | None] = mapped_column(String(128))  # Bcon 返回收款地址(建单后回填)
+    pay_address: Mapped[str | None] = mapped_column(String(128))  # OxaPay payment_url(建单后回填)
     status: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default="pending",  # pending|paid|expired
     )
-    gateway_txid: Mapped[str | None] = mapped_column(String(128))  # 链上 txid(回调核验后回填)
+    gateway_txid: Mapped[str | None] = mapped_column(String(128))  # OxaPay track_id(建单时即回填)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(),
     )

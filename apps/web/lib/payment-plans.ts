@@ -44,7 +44,3 @@ export const PRO_BENEFITS: readonly { label: string; free: string; pro: string }
 export const SUPPORTER_NOTE =
   '「支持者计划」是诚实订阅:按周期付费即开 Pro 全部更高额度,到期自动回落免费版 —— ' +
   '无自动续费、无隐藏条款。你的订阅直接支持点金持续打磨,而非广告或卖数据。'
-
-// 链路警示(USDT 走 BSC / BNB Chain · 转错链丢币)
-export const CHAIN_WARNING =
-  '务必用 BSC(BNB Chain)网络转 USDT —— 转错链(如 ERC20 / TRC20)资产将无法找回。'
