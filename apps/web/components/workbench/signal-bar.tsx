@@ -14,6 +14,7 @@
 
 import { useMemo } from 'react'
 
+import { ProLock } from '@/components/account/pro-lock'
 import { useAiDecision } from '@/hooks/use-ai-decision'
 import type { CompositeLabel, DecisionCard } from '@/lib/api/ai-decision'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
@@ -39,7 +40,10 @@ export function SignalBar() {
         {query.status === 'error' && (
           <span className="text-xs text-muted-foreground/60">暂无信号</span>
         )}
-        {query.status === 'success' && <SignalBarBody card={query.data} />}
+        {query.status === 'success' &&
+          (query.data.locked
+            ? <ProLock title="AI 信号" compact />
+            : <SignalBarBody card={query.data} />)}
       </div>
     </div>
   )

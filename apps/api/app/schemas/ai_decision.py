@@ -149,3 +149,7 @@ class DecisionCardResponse(BaseModel):
     token_usage: int = 0
     # mock 调用 / 真实调用 · 等 DEEPSEEK_API_KEY 配置后切到 "real"
     llm_mode: Literal["mock", "real"] = "mock"
+
+    # ★ Pro 门控:True = 非 Pro(未登录/免费)· 此时上方决策字段全为空壳(无真实内容 · 防 F12)·
+    #   前端据此 + 登录态出遮罩(未登录→注册墙 / 免费→付费墙)。
+    locked: bool = False

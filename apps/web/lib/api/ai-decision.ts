@@ -64,6 +64,9 @@ export interface DecisionCard {
   cached: boolean
   token_usage: number
   llm_mode: 'mock' | 'real'
+
+  // ★ Pro 门控:true = 非 Pro(未登录/免费)· 此时上方决策字段全为空壳(后端无真实内容)
+  locked: boolean
 }
 
 export class AiDecisionApiError extends Error {
@@ -80,6 +83,8 @@ export interface FetchDecisionCardArgs {
   limit?: number
   /** 'spot'(默认)· 'perp' USDT-M 永续合约 · 只 crypto 支持。不传 → 后端默认 spot。 */
   instrument?: 'spot' | 'perp'
+  /** ★ Pro 门控:登录态 session token · 带上后端才识别 Pro(无 token = 未登录 = locked)。 */
+  token?: string
   signal?: AbortSignal
 }
 
@@ -95,7 +100,10 @@ export async function fetchDecisionCard(
   if (args.instrument) params.set('instrument', args.instrument)
   const r = await fetch(
     `${API_BASE}/api/v1/analysis/decision-card?${params.toString()}`,
-    { signal: args.signal },
+    {
+      signal: args.signal,
+      headers: args.token ? { Authorization: `Bearer ${args.token}` } : undefined,
+    },
   )
   if (!r.ok) {
     let detail = `HTTP ${r.status}`

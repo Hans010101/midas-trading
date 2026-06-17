@@ -39,6 +39,8 @@ export interface StrategySignalsResponse {
   signals: StrategySignal[]
   current_triggered: boolean
   last_signal: StrategySignal | null
+  // ★ Pro 门控:true = 非 Pro(未登录/免费)· 此时 signals 为空(后端无真实信号)
+  locked: boolean
 }
 
 export interface StrategyRecommendResponse {
@@ -57,8 +59,13 @@ export class StrategyApiError extends Error {
   }
 }
 
-async function _getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const r = await fetch(url, { signal })
+async function _getJson<T>(
+  url: string, signal?: AbortSignal, token?: string,
+): Promise<T> {
+  const r = await fetch(url, {
+    signal,
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
   if (!r.ok) {
     let detail = `HTTP ${r.status}`
     try {
@@ -79,6 +86,8 @@ export interface FetchStrategySignalsArgs {
   strategy: StrategyKind
   limit?: number
   instrument?: Instrument
+  /** ★ Pro 门控:登录态 session token · 带上后端才识别 Pro(无 token = 未登录 = locked)。 */
+  token?: string
   signal?: AbortSignal
 }
 
@@ -96,6 +105,7 @@ export async function fetchStrategySignals(
   return _getJson<StrategySignalsResponse>(
     `${API_BASE}/api/v1/analysis/strategy-signals?${params.toString()}`,
     args.signal,
+    args.token,
   )
 }
 

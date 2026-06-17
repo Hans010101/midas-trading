@@ -75,6 +75,9 @@ class StrategySignalsResponse(BaseModel):
     current_triggered: bool
     # 最近一个信号(无则 None)· 给「当前/最近信号」提示
     last_signal: StrategySignal | None = None
+    # ★ Pro 门控:True = 非 Pro(未登录/免费)· 此时 signals 为空(无真实信号 · 防 F12)·
+    #   前端据此 + 登录态出遮罩(未登录→注册墙 / 免费→付费墙)。
+    locked: bool = False
 
 
 class StrategyRecommendResponse(BaseModel):

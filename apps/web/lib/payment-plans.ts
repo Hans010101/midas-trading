@@ -37,8 +37,8 @@ export function savingsPct(tier: Pick<PlanTier, 'priceUsdt' | 'months'>): number
 
 // Pro vs 免费版额度(与后端 PLAN_QUOTAS 同口径)
 export const PRO_BENEFITS: readonly { label: string; free: string; pro: string }[] = [
-  { label: 'AI 沙盘诊断', free: '20 次/日', pro: '100 次/日' },
-  { label: '策略回测', free: '10 次/日', pro: '50 次/日' },
+  { label: 'AI 沙盘诊断', free: '5 次/月', pro: '300 次/月' },
+  { label: '策略回测', free: '3 次/月', pro: '150 次/月' },
 ]
 
 export const SUPPORTER_NOTE =

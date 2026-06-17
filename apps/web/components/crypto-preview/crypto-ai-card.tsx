@@ -21,6 +21,7 @@
 import { Loader2 } from 'lucide-react'
 import { useState } from 'react'
 
+import { ProLock } from '@/components/account/pro-lock'
 import { AiOrderConfirmDialog, type AiTradeDirection } from '@/components/workbench/ai-order-confirm-dialog'
 import { useAiDecision } from '@/hooks/use-ai-decision'
 import {
@@ -60,7 +61,10 @@ export function CryptoAiCard({ klineSymbol, futuresSymbol, period }: CryptoAiCar
       {decision.status === 'error' && (
         <ErrorNote onRetry={() => void decision.refetch()} />
       )}
-      {decision.status === 'success' && <CompositeBlock card={decision.data} />}
+      {decision.status === 'success' &&
+        (decision.data.locked
+          ? <ProLock title="AI 决策分析" className="mb-3" />
+          : <CompositeBlock card={decision.data} />)}
 
       {/* A2 · AI 操作建议 + 一键模拟下单(0036 批次甲 · 走 ai-order → 同一虚拟撮合引擎 execute)*/}
       {adv && (

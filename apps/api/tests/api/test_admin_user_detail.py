@@ -102,11 +102,11 @@ async def test_detail_aggregates_all_fields(client: AsyncClient, db_session: Asy
     assert b["plan_status"] == "active"
     assert b["plan_source"] == "redeem"
     assert b["plan_expires_at"] is not None
-    # 额度(diagnose 用了 3,pro limit 100)
+    # 额度(diagnose 用了 3,pro 月 limit 300)
     by_feat = {q["feature"]: q for q in b["quota"]}
     assert by_feat["diagnose"]["used"] == 3
-    assert by_feat["diagnose"]["limit"] == 100
-    assert by_feat["backtest"]["limit"] == 50
+    assert by_feat["diagnose"]["limit"] == 300  # noqa: PLR2004 — pro diagnose 月额度
+    assert by_feat["backtest"]["limit"] == 150  # noqa: PLR2004 — pro backtest 月额度
     # 邀请
     assert b["invite_code"] == code
     assert b["invited_count"] == 1
@@ -129,7 +129,7 @@ async def test_detail_free_user_defaults(client: AsyncClient, db_session: AsyncS
     assert b["plan_status"] is None
     assert b["plan_expires_at"] is None
     by_feat = {q["feature"]: q for q in b["quota"]}
-    assert by_feat["diagnose"]["limit"] == 20  # free 档
+    assert by_feat["diagnose"]["limit"] == 5  # noqa: PLR2004 — free diagnose 月额度
     assert b["invited_count"] == 0
     assert b["redeemed"] == []
 

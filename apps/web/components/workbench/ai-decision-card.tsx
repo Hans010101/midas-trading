@@ -18,6 +18,7 @@
 import { Loader2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
+import { ProLock } from '@/components/account/pro-lock'
 import { AiOrderConfirmDialog } from '@/components/workbench/ai-order-confirm-dialog'
 import { useAiDecision } from '@/hooks/use-ai-decision'
 import { useHkBoardLot } from '@/hooks/use-virtual'
@@ -59,7 +60,10 @@ export function AiDecisionCard({
 
       {query.status === 'pending' && <CardSkeleton />}
       {query.status === 'error' && <CardError onRetry={() => void query.refetch()} />}
-      {query.status === 'success' && <CardBody card={query.data} />}
+      {query.status === 'success' &&
+        (query.data.locked
+          ? <ProLock title="AI 决策分析" />
+          : <CardBody card={query.data} />)}
     </div>
   )
 }

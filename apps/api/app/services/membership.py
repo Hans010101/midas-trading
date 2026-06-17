@@ -5,8 +5,8 @@
 
 设计(调研 P1-P5 + Hans 拍板):
 - plan 解析:subscription 无行 / 非 active / 已过期 → 'free'(lazy 先例)
-- 计数:Redis INCR quota:{user_id}:{feature}:{YYYYMMDD} · UTC+8 自然日切 ·
-  EXPIRE 48h(跨日残键自然过期);ai_usage_log(user_id 列)做审计副本
+- 计数:Redis INCR quota:{user_id}:{feature}:{YYYYMM} · UTC+8 自然月切 ·
+  EXPIRE 35天(跨月残键自然过期 · ≥31天+缓冲,防月内提前过期误重置);ai_usage_log 做审计副本
 - 扣减位置是灵魂:QuotaDep 只查(429 闸),INCR 由调用方放在
   「真实消耗」点 —— diagnose 缓存 miss 烧 LLM 后 / backtest 创建成功后
 - Redis 故障语义:检查/扣减失败一律放行 + warning(可用性 > 计费精确,
@@ -35,20 +35,21 @@ logger = logging.getLogger(__name__)
 
 QuotaFeature = Literal["diagnose", "backtest"]
 
-# plan → feature → 每日次数(Hans 拍板:free 20·10 / pro 100·50)。
+# plan → feature → 每月次数(Hans 拍板:free 5·3 / pro 300·150 · 变现强化)。
 # Phase 1 代码常量起步;DB 配置表是运营需求出现后(Phase 2+)的事。
 PLAN_QUOTAS: dict[str, dict[str, int]] = {
-    "free": {"diagnose": 20, "backtest": 10},
-    "pro": {"diagnose": 100, "backtest": 50},
+    "free": {"diagnose": 5, "backtest": 3},
+    "pro": {"diagnose": 300, "backtest": 150},
 }
 
 # 会员周期 → 天数(单一事实源 · 兑换码 / 未来 USDT 支付 / 续费共用,防各处散落漂移)。
 # month/quarter/year 与支付周期同口径(Phase2a 支付直接复用本表)。
 PERIOD_DAYS: dict[str, int] = {"month": 30, "quarter": 90, "year": 365}
 
-# 额度按产品受众自然日切(UTC+8)· 不用 trading_day(额度是商业概念非行情概念)
+# 额度按产品受众自然月切(UTC+8)· 不用 trading_day(额度是商业概念非行情概念)
 _QUOTA_TZ = timezone(timedelta(hours=8))
-_QUOTA_KEY_TTL_S = 48 * 3600
+# TTL 35 天:≥ 最长月 31 天 + 缓冲,确保整月不提前过期(否则月内 key 过期 → 配额误重置)
+_QUOTA_KEY_TTL_S = 35 * 24 * 3600
 
 
 async def resolve_plan(db: AsyncSession, user_id: UUID) -> str:
@@ -62,14 +63,21 @@ async def resolve_plan(db: AsyncSession, user_id: UUID) -> str:
 
 
 def quota_key(user_id: UUID, feature: QuotaFeature) -> str:
-    today = datetime.now(_QUOTA_TZ).strftime("%Y%m%d")
-    return f"quota:{user_id}:{feature}:{today}"
+    month = datetime.now(_QUOTA_TZ).strftime("%Y%m")  # 当月 YYYYMM(按月计数)
+    return f"quota:{user_id}:{feature}:{month}"
 
 
-def quota_reset_at() -> datetime:
-    """下一个 UTC+8 零点(429 detail / quota/me 共用口径)。"""
-    now = datetime.now(_QUOTA_TZ)
-    return (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+def quota_reset_at(now: datetime | None = None) -> datetime:
+    """下个自然月 1 号 0 点(UTC+8)· 配额按月切(429 detail / quota/me 共用口径)。
+
+    跨年:12 月 → 次年 1 月。day=1 一次性 replace 避开月末非法日(如 3/31 → 4/1)。
+    now 可选(默认当前 UTC+8)· 仅测试注入用,生产调用不传。
+    """
+    now = now or datetime.now(_QUOTA_TZ)
+    year, month = (now.year + 1, 1) if now.month == 12 else (now.year, now.month + 1)  # noqa: PLR2004
+    return now.replace(
+        year=year, month=month, day=1, hour=0, minute=0, second=0, microsecond=0,
+    )
 
 
 async def get_quota_used(user_id: UUID, feature: QuotaFeature) -> int:
@@ -79,7 +87,7 @@ async def get_quota_used(user_id: UUID, feature: QuotaFeature) -> int:
 
 
 async def consume_quota(user_id: UUID, feature: QuotaFeature) -> None:
-    """真实消耗后 +1 · INCR 原子 · 首次创建键时设 48h TTL · 失败仅 warning 不阻塞。"""
+    """真实消耗后 +1 · INCR 原子 · 首次创建键时设 35 天 TTL · 失败仅 warning 不阻塞。"""
     try:
         redis = await get_redis()
         key = quota_key(user_id, feature)

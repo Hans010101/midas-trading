@@ -8,6 +8,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { useSession } from 'next-auth/react'
 
 import {
   fetchStrategyRecommend,
@@ -30,10 +31,13 @@ export interface UseStrategySignalsArgs {
 }
 
 export function useStrategySignals(args: UseStrategySignalsArgs) {
+  // ★ Pro 门控:带 session token 后端才识别 Pro · token 并入 queryKey(登录/登出即刷新锁态)
+  const { data: session } = useSession()
+  const token = session?.accessToken ?? ''
   return useQuery<StrategySignalsResponse>({
     queryKey: [
       'strategy-signals', args.market, args.symbol, args.period,
-      args.instrument ?? 'spot', args.strategy, args.limit ?? 300,
+      args.instrument ?? 'spot', args.strategy, args.limit ?? 300, token,
     ],
     queryFn: ({ signal }) =>
       fetchStrategySignals({
@@ -43,6 +47,7 @@ export function useStrategySignals(args: UseStrategySignalsArgs) {
         strategy: args.strategy,
         instrument: args.instrument,
         limit: args.limit,
+        token,
         signal,
       }),
     enabled: args.enabled ?? true,

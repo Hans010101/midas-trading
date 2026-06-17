@@ -103,6 +103,24 @@ async def get_current_user(
     return user
 
 
+async def get_optional_current_user(
+    token: Annotated[str | None, Depends(_oauth2_scheme)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> User | None:
+    """可选当前用户(公开端点门控用)· 无 token / 无效 / 过期 / 已封禁 → None(不抛 401/403)。
+
+    与 get_current_user 同 session 解析逻辑,只是失败一律返 None ——
+    未登录访客访问公开详情页(决策卡/策略清单门控)不被 401 破坏页面 + 伤 SEO。
+    门控端点据此:None=未登录 / 返回的 User 再过 resolve_plan 判 free/pro。
+    """
+    if not token:
+        return None
+    user = await verify_session(db, token=token)
+    if user is None or user.banned_at is not None:
+        return None
+    return user
+
+
 async def get_current_admin(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:
@@ -128,4 +146,6 @@ HkSourceDep = Annotated[AKShareHkSource, Depends(get_hk_source)]
 CryptoSourceDep = Annotated[CcxtBinanceCryptoSource, Depends(get_crypto_source)]
 BinanceFuturesSourceDep = Annotated[BinanceFuturesSource, Depends(get_binance_futures_source)]
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
+# 可选登录(公开端点门控用 · None=未登录,不抛 401)
+OptionalCurrentUserDep = Annotated[User | None, Depends(get_optional_current_user)]
 AdminDep = Annotated[User, Depends(get_current_admin)]

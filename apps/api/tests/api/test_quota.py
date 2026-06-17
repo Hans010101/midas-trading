@@ -97,9 +97,9 @@ async def test_resolve_plan_expired_or_inactive_is_free(db_session: AsyncSession
 async def test_diagnose_free_quota_exceeded_429(
     client: AsyncClient, db_session: AsyncSession,
 ):
-    """free 用完 20 次 → 下一次 429 · detail 结构钉死。"""
+    """free 用完每月 5 次 → 下一次 429 · detail 结构钉死。"""
     user, headers = await _authed_user(db_session)
-    await _set_used(user.id, "diagnose", PLAN_QUOTAS["free"]["diagnose"])  # used=20
+    await _set_used(user.id, "diagnose", PLAN_QUOTAS["free"]["diagnose"])  # used=5(月额度)
 
     app.dependency_overrides[get_clickhouse] = lambda: SimpleNamespace(_client=object())
     r = await client.post(
@@ -112,8 +112,8 @@ async def test_diagnose_free_quota_exceeded_429(
     assert detail["error"] == "quota_exceeded"
     assert detail["feature"] == "diagnose"
     assert detail["plan"] == "free"
-    assert detail["limit"] == 20
-    assert detail["used"] == 20
+    assert detail["limit"] == 5  # noqa: PLR2004 — free diagnose 月额度
+    assert detail["used"] == 5  # noqa: PLR2004
     assert "reset_at" in detail
 
 
@@ -121,7 +121,7 @@ async def test_diagnose_free_quota_exceeded_429(
 async def test_diagnose_pro_within_quota_200(
     client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
 ):
-    """pro 用户 used=20(free 的红线)仍 200(pro limit=100)· service 整体 mock。"""
+    """pro 用户 used=20(> free 月额度 5)仍 200(pro limit=300)· service 整体 mock。"""
     user, headers = await _authed_user(db_session)
     db_session.add(Subscription(user_id=user.id, plan="pro", status="active", source="manual"))
     await db_session.commit()
@@ -192,7 +192,7 @@ async def test_consume_quota_increments_with_ttl():
 @pytest.mark.asyncio
 async def test_backtest_quota_exceeded_429(client: AsyncClient, db_session: AsyncSession):
     user, headers = await _authed_user(db_session)
-    await _set_used(user.id, "backtest", PLAN_QUOTAS["free"]["backtest"])  # used=10
+    await _set_used(user.id, "backtest", PLAN_QUOTAS["free"]["backtest"])  # used=3(月额度)
     r = await client.post(
         "/api/v1/backtest",
         headers=headers,
@@ -240,8 +240,8 @@ async def test_quota_me_shape_and_counts(client: AsyncClient, db_session: AsyncS
     body = r.json()
     assert body["plan"] == "free"
     by_feature = {it["feature"]: it for it in body["items"]}
-    assert by_feature["diagnose"] == {"feature": "diagnose", "limit": 20, "used": 3}
-    assert by_feature["backtest"] == {"feature": "backtest", "limit": 10, "used": 0}
+    assert by_feature["diagnose"] == {"feature": "diagnose", "limit": 5, "used": 3}
+    assert by_feature["backtest"] == {"feature": "backtest", "limit": 3, "used": 0}
     assert "reset_at" in body
     assert body["plan_expires_at"] is None  # free 无到期
 

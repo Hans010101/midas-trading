@@ -99,15 +99,15 @@ async def test_trial_only_once(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_trial_makes_plan_pro_and_quota_100(db_session: AsyncSession):
-    """试用期内 plan=pro → diagnose 限额走 100(quota 与 plan 联动)。"""
+async def test_trial_makes_plan_pro_and_quota_300(db_session: AsyncSession):
+    """试用期内 plan=pro → diagnose 限额走 300(quota 与 plan 联动 · 变现强化新数字)。"""
     from app.services.membership import PLAN_QUOTAS
 
     user = await make_user(db_session)
     await grant_trial_if_eligible(db_session, user.id)
     plan = await resolve_plan(db_session, user.id)
     assert plan == "pro"
-    assert PLAN_QUOTAS[plan]["diagnose"] == 100
+    assert PLAN_QUOTAS[plan]["diagnose"] == 300  # noqa: PLR2004 — pro diagnose 月额度
 
 
 # ===== 归因:无效码静默 / 正常归因 =====

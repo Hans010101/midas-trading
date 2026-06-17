@@ -9,6 +9,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { useSession } from 'next-auth/react'
 
 import {
   fetchDecisionCard, type DecisionCard,
@@ -26,10 +27,13 @@ export interface UseAiDecisionArgs {
 }
 
 export function useAiDecision(args: UseAiDecisionArgs) {
+  // ★ Pro 门控:带 session token 后端才识别 Pro · token 并入 queryKey(登录/登出即刷新锁态)
+  const { data: session } = useSession()
+  const token = session?.accessToken ?? ''
   return useQuery<DecisionCard>({
     queryKey: [
       'ai-decision', args.market, args.symbol, args.period, args.limit ?? 300,
-      args.instrument ?? 'spot',
+      args.instrument ?? 'spot', token,
     ],
     queryFn: ({ signal }) =>
       fetchDecisionCard({
@@ -38,6 +42,7 @@ export function useAiDecision(args: UseAiDecisionArgs) {
         period: args.period,
         limit: args.limit,
         instrument: args.instrument,
+        token,
         signal,
       }),
     enabled: args.enabled ?? true,

@@ -19,6 +19,7 @@ from app.api.deps import (
     CnSourceDep,
     CryptoSourceDep,
     HkSourceDep,
+    OptionalCurrentUserDep,
     UsSourceDep,
 )
 from app.core.database import get_db
@@ -46,6 +47,7 @@ from app.services.ai.strategy_signals import scan_signals
 from app.services.ai.workflow import run_decision_workflow
 from app.services.analysis.chan import analyze as analyze_chan
 from app.services.data_sources.base import BaseDataSource
+from app.services.membership import resolve_plan
 
 # 仅本路由用 · 不放 deps.py 避免对其他路由产生隐式依赖(virtual.py 已自定义本地 DbDep)
 DbDep = Annotated[AsyncSession, Depends(get_db)]
@@ -54,6 +56,37 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 Instrument = Literal["spot", "perp"]
 
 logger = logging.getLogger(__name__)
+
+
+# ===== Pro 门控空壳(变现强化 · 决策卡 + 策略清单后端真门控)=====
+# 🔴 非 Pro(未登录 OR 免费)返回这些空壳:绝不含真实 AI 决策内容(score/解读/信号全空)·
+#    防 F12 白嫖。前端据 locked=True + 登录态出遮罩(未登录→注册墙 / 免费→付费墙)。
+
+
+def _locked_decision_card(
+    symbol: str, market: Market, period: Period,
+) -> DecisionCardResponse:
+    """决策卡门控空壳 · 无真实内容(score=0/中性/空解读/无信号/无 actionable)。"""
+    return DecisionCardResponse(
+        symbol=symbol, market=market, period=period,
+        generated_at=datetime.now(UTC),
+        composite_score=0, composite_label="中性", composite_confidence=0.0,
+        agent_scores=[], contradiction=None, narrative="",
+        chan_signals=[], actionable=None, disclaimer="",
+        cached=False, token_usage=0, llm_mode="mock", locked=True,
+    )
+
+
+def _locked_strategy_signals(
+    symbol: str, market: Market, period: Period, instrument: Instrument,
+    strategy: StrategyKind,
+) -> StrategySignalsResponse:
+    """策略清单门控空壳 · 无真实信号(signals 空 · current_triggered=False)。"""
+    return StrategySignalsResponse(
+        symbol=symbol, market=market, period=period, instrument=instrument,
+        strategy=strategy, bar_count=0, signals=[], current_triggered=False,
+        last_signal=None, locked=True,
+    )
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 
@@ -199,6 +232,7 @@ async def get_decision_card(
     hk: HkSourceDep,
     binance_futures: BinanceFuturesSourceDep,
     db: DbDep,
+    user: OptionalCurrentUserDep,
     symbol: str = Query(..., min_length=1, examples=["BTC/USDT", "NVDA", "600519", "BTCUSDT"]),
     market: Market = Query(...),
     period: Period = Query("1d"),
@@ -208,6 +242,12 @@ async def get_decision_card(
         Query(description="'spot' 现货(默认)· 'perp' USDT-M 永续合约 · 只 crypto 支持"),
     ] = "spot",
 ) -> DecisionCardResponse:
+    # ★ Pro 门控:非 Pro(未登录 OR 免费)在跑 workflow / 查缓存【之前】拦截返 locked 空壳 ——
+    #   后端真门控(防 F12)+ 不烧 LLM 不算因子(省算力)。Pro 用户照常走下方完整流程。
+    plan = "free" if user is None else await resolve_plan(db, user.id)
+    if plan != "pro":
+        return _locked_decision_card(symbol, market, period)
+
     # M2-B 校验
     if instrument == "perp" and market != "crypto":
         raise HTTPException(
@@ -378,6 +418,8 @@ async def get_strategy_signals(
     crypto: CryptoSourceDep,
     hk: HkSourceDep,
     binance_futures: BinanceFuturesSourceDep,
+    db: DbDep,
+    user: OptionalCurrentUserDep,
     symbol: str = Query(..., min_length=1, examples=["BTC/USDT", "NVDA", "600519", "BTCUSDT"]),
     market: Market = Query(...),
     period: Period = Query("1d"),
@@ -388,6 +430,12 @@ async def get_strategy_signals(
     ] = "spot",
     strategy: StrategyKind = Query(..., description="ma_cross / rsi_reversal / boll_reversion"),
 ) -> StrategySignalsResponse:
+    # ★ Pro 门控:非 Pro(未登录 OR 免费)在 scan_signals【之前】拦截返 locked 空壳 ——
+    #   后端真门控(防 F12)+ 不算信号(省算力)。Pro 用户照常走下方完整流程。
+    plan = "free" if user is None else await resolve_plan(db, user.id)
+    if plan != "pro":
+        return _locked_strategy_signals(symbol, market, period, instrument, strategy)
+
     klines = await _fetch_klines_for_strategy(
         ch=ch, cn=cn, us=us, crypto=crypto, hk=hk, binance_futures=binance_futures,
         symbol=symbol, market=market, period=period, instrument=instrument,

@@ -13,6 +13,7 @@
  * ★ 红线:纯展示 · 不下单 / 不自动交易。
  */
 
+import { ProLock } from '@/components/account/pro-lock'
 import { useStrategyRecommend, useStrategySignals } from '@/hooks/use-strategy'
 import type { Instrument, StrategyKind, StrategySignal } from '@/lib/api/strategy'
 import { cn } from '@/lib/utils'
@@ -140,6 +141,11 @@ export function StrategyPanel({
             </p>
           )}
 
+          {/* 当前触发 / 历史信号 · Pro 门控(非 Pro → 后端 locked 空壳 → 遮罩两道门)*/}
+          {signals.data?.locked ? (
+            <ProLock title="实战策略信号" />
+          ) : (
+          <>
           {/* 当前触发状态(① 含触发价) */}
           <TriggerStatus
             triggered={sig?.current_triggered ?? false}
@@ -190,6 +196,8 @@ export function StrategyPanel({
                 })}
               </div>
             </details>
+          )}
+          </>
           )}
         </div>
       )}

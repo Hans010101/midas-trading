@@ -17,10 +17,24 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
+import pytest_asyncio
 from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.analysis import get_strategy_recommend, get_strategy_signals
+from app.models.subscription import Subscription
+from app.models.user import User
 from app.schemas.market import Kline
+from tests.factories import make_user
+
+
+@pytest_asyncio.fixture
+async def pro_user(db_session: AsyncSession) -> User:
+    """Pro 会员(active 订阅)· 门控端点对其放行返完整内容(回归 Pro 路径)。"""
+    user = await make_user(db_session)
+    db_session.add(Subscription(user_id=user.id, plan="pro", status="active", source="manual"))
+    await db_session.commit()
+    return user
 
 
 class _FakeCH:
@@ -50,11 +64,13 @@ def _kl(closes: list[float]) -> list[Kline]:
 
 
 @pytest.mark.asyncio
-async def test_strategy_signals_returns_buy_signal():
+async def test_strategy_signals_returns_buy_signal(
+    db_session: AsyncSession, pro_user: User,
+):
     """30 根平盘后转涨(金叉)→ ma_cross 返回 buy 信号。"""
     ch = _FakeCH(_kl([10.0] * 30 + [11.0, 12.0, 13.0, 14.0, 15.0]))
     resp = await get_strategy_signals(
-        ch, None, None, None, None, None,  # type: ignore[arg-type]
+        ch, None, None, None, None, None, db_session, pro_user,  # type: ignore[arg-type]
         symbol="NVDA", market="us", period="1d", limit=300,
         instrument="spot", strategy="ma_cross",
     )
@@ -69,13 +85,15 @@ async def test_strategy_signals_returns_buy_signal():
 
 
 @pytest.mark.asyncio
-async def test_strategy_signals_current_triggered_true():
+async def test_strategy_signals_current_triggered_true(
+    db_session: AsyncSession, pro_user: User,
+):
     """最后一根触发信号 → current_triggered=True(布林触下轨在最后一根)。"""
     # 30 根震荡(σ>0)+ 最后一根急跌穿下轨
     base = [100.0, 102.0, 98.0, 101.0, 99.0] * 6   # 30 根
     ch = _FakeCH(_kl(base + [80.0]))               # index30 = 最后一根触发
     resp = await get_strategy_signals(
-        ch, None, None, None, None, None,  # type: ignore[arg-type]
+        ch, None, None, None, None, None, db_session, pro_user,  # type: ignore[arg-type]
         symbol="600519", market="cn", period="1d", limit=300,
         instrument="spot", strategy="boll_reversion",
     )
@@ -86,11 +104,13 @@ async def test_strategy_signals_current_triggered_true():
 
 
 @pytest.mark.asyncio
-async def test_strategy_signals_crypto_perp():
+async def test_strategy_signals_crypto_perp(
+    db_session: AsyncSession, pro_user: User,
+):
     """crypto + perp(拍板⑦ 跟随详情页)· instrument 回显。"""
     ch = _FakeCH(_kl([20.0] * 30 + [19.0, 18.0, 17.0, 16.0, 15.0]))
     resp = await get_strategy_signals(
-        ch, None, None, None, None, None,  # type: ignore[arg-type]
+        ch, None, None, None, None, None, db_session, pro_user,  # type: ignore[arg-type]
         symbol="BTCUSDT", market="crypto", period="1h", limit=300,
         instrument="perp", strategy="ma_cross",
     )
@@ -100,11 +120,13 @@ async def test_strategy_signals_crypto_perp():
 
 
 @pytest.mark.asyncio
-async def test_strategy_signals_no_signal_empty_list():
+async def test_strategy_signals_no_signal_empty_list(
+    db_session: AsyncSession, pro_user: User,
+):
     """单调上涨(无金叉穿越)→ 空信号 · current_triggered=False · last_signal=None。"""
     ch = _FakeCH(_kl([100.0 + i for i in range(40)]))
     resp = await get_strategy_signals(
-        ch, None, None, None, None, None,  # type: ignore[arg-type]
+        ch, None, None, None, None, None, db_session, pro_user,  # type: ignore[arg-type]
         symbol="NVDA", market="us", period="1d", limit=300,
         instrument="spot", strategy="ma_cross",
     )
@@ -147,12 +169,14 @@ async def test_strategy_recommend_four_markets_echo():
 
 
 @pytest.mark.asyncio
-async def test_strategy_signals_perp_non_crypto_rejected():
+async def test_strategy_signals_perp_non_crypto_rejected(
+    db_session: AsyncSession, pro_user: User,
+):
     """instrument=perp + 非 crypto → 400(与 chan/decision-card 同校验)。"""
     ch = _FakeCH(_kl([10.0] * 35))
     with pytest.raises(HTTPException) as exc:
         await get_strategy_signals(
-            ch, None, None, None, None, None,  # type: ignore[arg-type]
+            ch, None, None, None, None, None, db_session, pro_user,  # type: ignore[arg-type]
             symbol="NVDA", market="us", period="1d", limit=300,
             instrument="perp", strategy="ma_cross",
         )
