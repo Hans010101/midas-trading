@@ -35,6 +35,7 @@ import {
 import Image from 'next/image'
 import Link from 'next/link'
 
+import { ContactUsLink } from '@/components/landing/contact-us-link'
 import { Membership } from '@/components/landing/membership'
 import { ResearchLab } from '@/components/landing/research-lab'
 import { StructureSandbox } from '@/components/landing/structure-sandbox'
@@ -463,17 +464,38 @@ function Footer() {
               { label: '会员', href: '#membership' },
             ]}
           />
-          {/* 法务页未建(M2)· 官网刀1:死链改不可点占位,明示「即将上线」 */}
+          {/* 法务 · 静态页已上线 + 联系我们(工单)+ 客服邮箱兜底 */}
           <div>
             <h4 className="mb-3 font-serif text-sm font-bold text-foreground">法务</h4>
             <ul className="space-y-2 text-sm">
-              {['服务条款', '隐私政策', '风险提示', '联系我们'].map((label) => (
-                <li key={label} className="flex items-center gap-1.5 text-muted-foreground/50">
-                  {label}
-                  <span className="rounded bg-surface-subtle px-1 py-0.5 text-[10px]">即将上线</span>
-                </li>
-              ))}
+              <li>
+                <Link href="/terms" className="text-muted-foreground transition-colors hover:text-midas-red">
+                  服务条款
+                </Link>
+              </li>
+              <li>
+                <Link href="/privacy" className="text-muted-foreground transition-colors hover:text-midas-red">
+                  隐私政策
+                </Link>
+              </li>
+              <li>
+                <Link href="/risk" className="text-muted-foreground transition-colors hover:text-midas-red">
+                  风险提示
+                </Link>
+              </li>
+              <li>
+                <ContactUsLink className="text-muted-foreground transition-colors hover:text-midas-red" />
+              </li>
             </ul>
+            <p className="mt-3 text-xs text-muted-foreground/70">
+              客服邮箱:
+              <a
+                href="mailto:support@midastrade.asia"
+                className="transition-colors hover:text-midas-red"
+              >
+                support@midastrade.asia
+              </a>
+            </p>
           </div>
         </div>
         <div className="mt-8 flex flex-col items-center justify-between gap-2 border-t border-paper pt-5 text-xs text-muted-foreground md:flex-row">
