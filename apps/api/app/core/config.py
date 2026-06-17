@@ -85,8 +85,9 @@ class Settings(BaseSettings):
     # 托管收款页有效期(分钟)· 超时未付订单作废。
     oxapay_lifetime_minutes: int = 60
     # 少付容差(百分比 · 0-60)· 实付 ≥ 应付 ×(1 - coverage/100)即判付清 ·
-    # 吸收链上手续费(用户付满额,手续费导致实到略少不该卡单)· 默认 3% · 商户自吸收不转嫁用户。
-    oxapay_under_paid_coverage: float = 3.0
+    # 吸收链上手续费(用户付满额,手续费导致实到略少不该卡单)· 默认 5%(覆盖手续费≤0.245 的链,
+    # 含 0.2 的高费链 + 余量)· 按百分比对 4.9/9.9/19.9 三档自动适配 · 商户自吸收不转嫁用户。
+    oxapay_under_paid_coverage: float = 5.0
 
 
 settings = Settings()
