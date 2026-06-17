@@ -71,14 +71,6 @@ export function CryptoHeader({
 
         <WatchlistToggleButton symbol={klineSymbol} market="crypto" />
 
-        {/* 现货 / 合约 tab · 本页聚焦合约 · 现货切换暂未开放 */}
-        <div className="flex overflow-hidden rounded-md border border-paper text-sm">
-          <span className="bg-midas-red px-3 py-1 text-white">合约</span>
-          <span className="px-3 py-1 text-muted-foreground/50" title="现货切换暂未开放">
-            现货
-          </span>
-        </div>
-
         {/* 周期切换 · 驱动主图 */}
         <div className="flex gap-1 text-xs">
           {PREVIEW_PERIODS.map((p) => (

@@ -18,7 +18,7 @@
  * 红线 · 真实 vs 待补:交易对/价格/涨跌/高低/成交额 = 真实(ticker);资金费率/多空比/OI =
  *   USDT 永续采集范围内真实,范围外(USDC 本位等)或未采到一律「—」,绝不伪造。
  *
- * 交互:行点击 → 新标签打开 /crypto-preview?symbol=<BTCUSDT>;Tab 合约/现货切 instrument。
+ * 交互:行点击 → 新标签打开 /crypto-preview?symbol=<BTCUSDT>。加密频道只展示合约榜(perp)。
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -29,7 +29,6 @@ import {
   fetchFuturesMetricsBatch,
   fetchTickers24h,
   type FuturesMetricItem,
-  type Instrument,
 } from '@/lib/api/crypto-market'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
@@ -75,7 +74,6 @@ function fgClassZh(c: string): string {
 }
 
 export default function CryptoMarketPage() {
-  const [tab, setTab] = useState<Instrument>('perp')
   const [sortKey, setSortKey] = useState<SortKey>('chgPct')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [query, setQuery] = useState('')
@@ -89,8 +87,8 @@ export default function CryptoMarketPage() {
 
   // 全域:一次取全市场 perp(top=1000 → 实际 ~623),进内存做排序/搜索/无限滚动
   const tickersQ = useQuery({
-    queryKey: ['crypto-tickers', tab],
-    queryFn: ({ signal }) => fetchTickers24h(tab, 1000, signal),
+    queryKey: ['crypto-tickers', 'perp'],
+    queryFn: ({ signal }) => fetchTickers24h('perp', 1000, signal),
     retry: 0,
     staleTime: 60_000,
   })
@@ -119,22 +117,15 @@ export default function CryptoMarketPage() {
   // 榜单显示前 100(去无限滚动)· 搜索仍覆盖全域 viewRows(全市场 ~623),只是显示截断前 100
   const visibleRows = useMemo(() => viewRows.slice(0, BOARD_SIZE), [viewRows])
 
-  // 排序/搜索/切 tab 变化 → 滚回顶部
+  // 排序/搜索变化 → 滚回顶部
   useEffect(() => {
     if (typeof window !== 'undefined') window.scrollTo({ top: 0 })
-  }, [tab, sortKey, sortDir, query])
+  }, [sortKey, sortDir, query])
 
   // ── 累积式分批 metrics(只对可见行,避开 200 上限)──────────────────────────
   const [metricsMap, setMetricsMap] = useState<Map<string, FuturesMetric>>(new Map())
   const fetchedRef = useRef<Set<string>>(new Set()) // 已请求过(含无数据)· 不再重复请求
   const inFlightRef = useRef<Set<string>>(new Set()) // 在途 · 防滚动抖动重复请求
-
-  // 切 tab:清空 metrics 累积状态(现货无合约指标)
-  useEffect(() => {
-    setMetricsMap(new Map())
-    fetchedRef.current = new Set()
-    inFlightRef.current = new Set()
-  }, [tab])
 
   // 注意:这里【不】用 cancelled 标志取消在飞批次。metricsMap 是按 symbol 幂等累积的,
   // 取消批次只会丢结果、不会带来正确性收益。曾因「在飞批次被 visibleRows 抖动取代 → 早退
@@ -142,7 +133,6 @@ export default function CryptoMarketPage() {
   // 修法:① 发请求时就乐观标 fetched(被取代也不悬空、不重复请求)· ② 返回一律 merge ·
   //       ③ 仅失败时回滚 fetched 以便重试。
   useEffect(() => {
-    if (tab !== 'perp') return // 现货 tab:3 列恒「—」,不请求 metrics
     const want = visibleRows
       .map((r) => toBinanceSymbol(r.symbol))
       .filter((s) => !fetchedRef.current.has(s) && !inFlightRef.current.has(s))
@@ -172,7 +162,7 @@ export default function CryptoMarketPage() {
         .catch(() => { chunk.forEach((s) => fetchedRef.current.delete(s)) }) // 失败回滚 fetched · 下次滚动可重试
         .finally(() => { chunk.forEach((s) => inFlightRef.current.delete(s)) })
     }
-  }, [visibleRows, tab])
+  }, [visibleRows])
 
   // ── 指标卡 ────────────────────────────────────────────────────────────────
   const ov = overviewQ.data?.market_overview
@@ -184,7 +174,6 @@ export default function CryptoMarketPage() {
     if (key === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
     else { setSortKey(key); setSortDir('desc') }
   }
-  function switchTab(t: Instrument) { setTab(t) }
   function openDetail(ccxtSymbol: string) {
     window.open(`/crypto-preview?symbol=${toBinanceSymbol(ccxtSymbol)}`, '_blank', 'noopener,noreferrer')
   }
@@ -231,16 +220,7 @@ export default function CryptoMarketPage() {
 
           {/* 工具条 */}
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex overflow-hidden rounded-md border border-paper text-sm">
-              <button type="button" onClick={() => switchTab('perp')}
-                className={cn('px-4 py-1.5 transition-colors', tab === 'perp' ? 'bg-midas-red text-white' : 'text-muted-foreground hover:bg-midas-red-glow/50')}>
-                合约 24H 涨幅榜
-              </button>
-              <button type="button" onClick={() => switchTab('spot')}
-                className={cn('px-4 py-1.5 transition-colors', tab === 'spot' ? 'bg-midas-red text-white' : 'text-muted-foreground hover:bg-midas-red-glow/50')}>
-                现货 24H 涨幅榜
-              </button>
-            </div>
+            <h2 className="font-serif text-base font-bold text-foreground">合约 24H 涨幅榜</h2>
 
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 rounded-md border border-paper bg-surface-card px-3 py-1.5 text-sm">

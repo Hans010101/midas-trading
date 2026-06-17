@@ -58,9 +58,9 @@ export function CryptoMainChart({ symbol, period }: CryptoMainChartProps) {
   const [chanEnabled, setChanEnabled] = useState(true)
   const [bollEnabled, setBollEnabled] = useState(true)
   const [macdEnabled, setMacdEnabled] = useState(true)
-  // 形态A 策略信号(默认关 · 不干扰现有缠论/指标)
+  // 形态A 策略信号(默认开 · 详情页加载即标注买卖信号 · Pro 门控由后端 locked 空壳 + 前端遮罩处理)
   const [strategy, setStrategy] = useState<StrategyKind>('ma_cross')
-  const [strategyEnabled, setStrategyEnabled] = useState(false)
+  const [strategyEnabled, setStrategyEnabled] = useState(true)
 
   // useMemo 稳定引用 · 否则每次 render 新对象会让 KlineChart 反复重建指标
   const indicators = useMemo<Record<IndicatorName, boolean>>(
