@@ -64,7 +64,10 @@ export function TopNav() {
                   {email}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {/* 用户中心四模块直达(重组刀1)· 自选已删(顶部导航已有入口,菜单内重复) */}
+                {/* 用户中心直达 · 个人中心置顶(账户重组 · 路由 /account/membership 不变)*/}
+                <DropdownMenuItem asChild className="justify-end">
+                  <Link href="/account/membership">个人中心</Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem asChild className="justify-end">
                   <Link href="/account">资产总览</Link>
                 </DropdownMenuItem>
@@ -75,7 +78,7 @@ export function TopNav() {
                   <Link href="/account/alerts">通知与提醒</Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild className="justify-end">
-                  <Link href="/account/profile">账号与偏好</Link>
+                  <Link href="/account/profile">偏好设置</Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild className="justify-end">
                   <Link href="/account/invite">邀请有礼</Link>

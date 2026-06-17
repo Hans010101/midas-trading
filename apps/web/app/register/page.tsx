@@ -158,7 +158,7 @@ function RegisterForm() {
 
         {/* 兑换码轻提示(兑换码刀2 · 仅引导 · 不在注册流程内兑换) */}
         <p className="text-center text-xs text-muted-foreground/60">
-          有兑换码?注册并登录后可在「账号与偏好」中使用
+          有兑换码?注册并登录后可在「个人中心」中使用
         </p>
       </form>
     </AuthShell>

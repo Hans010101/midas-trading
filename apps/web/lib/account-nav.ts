@@ -11,12 +11,13 @@ export interface AccountNavItem {
 }
 
 export const ACCOUNT_NAV_ITEMS: readonly AccountNavItem[] = [
+  // 个人中心置顶(账户重组)· 路由仍 /account/membership(付费墙跳转不变)· 账户身份+会员+额度+套餐+兑换码一站式
+  { href: '/account/membership', label: '个人中心' },
   { href: '/account', label: '资产总览', exact: true },
   { href: '/account/positions', label: '持仓与订单' },
   { href: '/account/alerts', label: '通知与提醒' },
-  { href: '/account/profile', label: '账号与偏好' },
+  { href: '/account/profile', label: '偏好设置' }, // 重组:仅留涨跌色 + Bot 预设
   { href: '/account/invite', label: '邀请有礼' }, // Phase 1.5 刀B
-  { href: '/account/membership', label: '会员' }, // Phase 2a 刀2
 ] as const
 
 export function isActiveNavItem(pathname: string | null, item: AccountNavItem): boolean {
