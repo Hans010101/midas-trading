@@ -1,24 +1,28 @@
 'use client'
 
 /**
- * 会员订阅区(Phase 2a 刀2 · /account/membership)· 当前档 + 三档定价 + 支持者叙事 + 权益对比。
+ * 会员订阅区(/account/membership)· 当前档 + 月/季/年 + 兑换码(第 4 框)+ 权益对比 + 客服。
  *
- * 叙事:诚实订阅(付 X 得 Pro 全部更高额度,到期回落免费版,无自动续费)+「支持者计划」品牌温度。
  * 价格如实(USDT)· 已是 Pro 显到期日 + 续费;免费版引导升级。开权益由后端回调核验。
+ * 标题保留「会员 · 支持者计划」· 描述段/自动回落行已删;兑换码整合自原 RedeemCard(复用 /redeem 逻辑)。
  */
 
-import { Check, Sparkles } from 'lucide-react'
+import { useMutation } from '@tanstack/react-query'
+import { Check, Sparkles, Ticket } from 'lucide-react'
+import { useSession } from 'next-auth/react'
 import { useState } from 'react'
+import { toast } from 'sonner'
 
-import { useQuota } from '@/hooks/use-quota'
+import { useInvalidateQuota, useQuota } from '@/hooks/use-quota'
 import { type Period } from '@/lib/api/payment'
+import { RedeemApiError, redeemCode } from '@/lib/api/redeem'
 import {
   monthlyEquivalent,
   PLAN_TIERS,
   PRO_BENEFITS,
   savingsPct,
-  SUPPORTER_NOTE,
 } from '@/lib/payment-plans'
+import { redeemErrorText, redeemSuccessText } from '@/lib/redeem-view'
 import { cn } from '@/lib/utils'
 
 import { PaymentDialog } from './payment-dialog'
@@ -40,11 +44,8 @@ export function MembershipSection() {
 
   return (
     <div className="space-y-6">
-      {/* 标题 + 支持者叙事 */}
-      <div>
-        <h2 className="font-serif text-xl font-bold text-foreground">会员 · 支持者计划</h2>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">{SUPPORTER_NOTE}</p>
-      </div>
+      {/* 标题(支持者计划描述段已删 · 直接接套餐框)*/}
+      <h2 className="font-serif text-xl font-bold text-foreground">会员 · 支持者计划</h2>
 
       {/* 当前档位 */}
       <div className="flex items-center justify-between rounded-lg border border-paper bg-surface-card px-4 py-3">
@@ -58,8 +59,8 @@ export function MembershipSection() {
         )}
       </div>
 
-      {/* 三档定价 */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      {/* 三档定价 + 兑换码(真 4 框横排 · 宽屏 4 / 中屏 2×2 / 窄屏堆叠)*/}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {PLAN_TIERS.map((t) => {
           const save = savingsPct(t)
           return (
@@ -101,6 +102,8 @@ export function MembershipSection() {
             </div>
           )
         })}
+        {/* 第 4 框 · 兑换码(与套餐框同尺寸 · 复用 /redeem 兑换逻辑)*/}
+        <RedeemPlanCard />
       </div>
 
       {/* Pro 权益对比 */}
@@ -130,9 +133,6 @@ export function MembershipSection() {
             ))}
           </tbody>
         </table>
-        <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground/60">
-          到期后自动回落免费版(额度恢复免费档)· 无自动续费 · 续费在有效期内累加不浪费。
-        </p>
       </div>
 
       {/* 支付遇到问题 → 工单(技术故障客服通道)*/}
@@ -153,6 +153,55 @@ export function MembershipSection() {
         <PaymentDialog period={payPeriod} onClose={() => setPayPeriod(null)} />
       )}
       {showSupport && <SupportTicketDialog onClose={() => setShowSupport(false)} />}
+    </div>
+  )
+}
+
+// 兑换码框(套餐排第 4 框 · 与月/季/年同卡片样式)· 复用 /redeem 兑换逻辑(原 RedeemCard 整合)
+function RedeemPlanCard() {
+  const { data: session } = useSession()
+  const token = session?.accessToken ?? ''
+  const invalidateQuota = useInvalidateQuota()
+  const [code, setCode] = useState('')
+
+  const redeem = useMutation({
+    mutationFn: () => redeemCode(token, code.trim()),
+    onSuccess: (res) => {
+      toast.success(redeemSuccessText(res))
+      setCode('')
+      invalidateQuota() // 额度卡 plan/到期日即时刷新(逻辑不变)
+    },
+    onError: (err) => {
+      const friendly = err instanceof RedeemApiError ? redeemErrorText(err.detail) : null
+      toast.error(friendly ?? '兑换失败,请稍后重试')
+    },
+  })
+
+  return (
+    <div className="flex flex-col rounded-2xl border border-paper bg-background p-5 shadow-sm">
+      <div className="flex items-center gap-1.5">
+        <Ticket className="h-4 w-4 text-midas-red" />
+        <span className="font-serif text-base font-bold">兑换码</span>
+      </div>
+      <p className="mt-1 text-[11px] text-muted-foreground/70">输入兑换码开通 / 续期 Pro</p>
+      <input
+        value={code}
+        onChange={(e) => setCode(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && code.trim() !== '') redeem.mutate()
+        }}
+        placeholder="输入兑换码"
+        maxLength={32}
+        className="mt-3 min-h-9 w-full rounded-md border border-paper bg-surface-card px-2.5 font-mono text-sm uppercase tracking-wider focus:border-gold focus:outline-none"
+      />
+      <button
+        type="button"
+        onClick={() => redeem.mutate()}
+        disabled={redeem.isPending || code.trim() === '' || token === ''}
+        className="mt-auto rounded-md border border-midas-red py-2 text-sm font-medium text-midas-red transition-colors hover:bg-midas-red-glow disabled:opacity-60"
+      >
+        {redeem.isPending ? '兑换中…' : '兑换'}
+      </button>
     </div>
   )
 }

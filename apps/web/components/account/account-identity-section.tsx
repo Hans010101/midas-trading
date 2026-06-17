@@ -42,7 +42,7 @@ export function AccountIdentitySection() {
     <section className="mb-10">
       <h2 className="mb-3 font-serif text-xl font-bold text-foreground">账户基本信息</h2>
       <div className="rounded-lg border border-paper bg-cream p-5 shadow-sm">
-        {/* 头像 + 邮箱/ID */}
+        {/* 头像 + 邮箱/ID + 操作按钮(同排最右:更换头像 / 修改密码)· OAuth 无密码不出改密码按钮 */}
         <div className="flex items-center gap-4">
           <UserAvatar email={me?.email} avatarId={me?.avatar_id} size={56} />
           <div className="min-w-0 flex-1">
@@ -51,22 +51,20 @@ export function AccountIdentitySection() {
               ID {me?.user_id ?? '—'}
             </p>
           </div>
-        </div>
-
-        {/* 操作按钮并排:更换头像 / 修改密码(OAuth 用户无密码 → 不出改密码按钮)*/}
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button type="button" onClick={() => toggle('avatar')} className={btnCls(panel === 'avatar')}>
-            更换头像
-          </button>
-          {me?.has_password && (
-            <button
-              type="button"
-              onClick={() => toggle('password')}
-              className={btnCls(panel === 'password')}
-            >
-              修改密码
+          <div className="flex shrink-0 gap-2">
+            <button type="button" onClick={() => toggle('avatar')} className={btnCls(panel === 'avatar')}>
+              更换头像
             </button>
-          )}
+            {me?.has_password && (
+              <button
+                type="button"
+                onClick={() => toggle('password')}
+                className={btnCls(panel === 'password')}
+              >
+                修改密码
+              </button>
+            )}
+          </div>
         </div>
 
         {/* OAuth-only 提示(无密码用户)*/}

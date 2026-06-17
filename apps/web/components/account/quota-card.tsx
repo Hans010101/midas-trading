@@ -8,7 +8,7 @@
  */
 
 import { useQuota } from '@/hooks/use-quota'
-import { RESET_NOTE, planLabel, quotaRemaining } from '@/lib/quota-view'
+import { planLabel, quotaRemaining } from '@/lib/quota-view'
 
 const FEATURE_LABEL: Record<string, string> = {
   diagnose: '沙盘诊断',
@@ -62,7 +62,6 @@ export function QuotaCard() {
                 </div>
               ))}
             </dl>
-            <p className="mt-3 text-xs text-muted-foreground/60">{RESET_NOTE}</p>
           </>
         )}
       </div>
