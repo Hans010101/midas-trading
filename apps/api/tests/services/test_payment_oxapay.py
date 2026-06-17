@@ -112,6 +112,9 @@ async def test_create_invoice_sends_body(monkeypatch: pytest.MonkeyPatch) -> Non
     assert body["callback_url"].endswith("/api/v1/payment/oxapay/callback")
     assert body["sandbox"] is True
     assert body["lifetime"] == settings.oxapay_lifetime_minutes
+    # ★ 少付容差(百分比数字 · 默认 3)· 吸收链上手续费
+    assert body["under_paid_coverage"] == settings.oxapay_under_paid_coverage
+    assert body["under_paid_coverage"] == 3.0  # noqa: PLR2004 — 默认 3%
     assert captured["method"] == "POST"
     assert captured["url"].endswith("/v1/payment/invoice")
 
@@ -379,6 +382,81 @@ async def test_callback_unknown_order_id_ignored(
     raw, sig = _signed_callback("__NOPE__", "trk_any", status="Paid")
     label = await process_oxapay_callback(db_session, raw_body=raw, hmac_header=sig)
     assert label.startswith("ignored")
+
+
+# ── ★ 少付容差(under_paid_coverage · 吸收手续费 · 不破防伪造主防线)──────────────
+
+
+@pytest.mark.asyncio
+async def test_callback_underpaid_within_coverage_grants(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """用户付 4.9 实到 4.89(手续费 0.01,容差 3% 下限 4.753 内)+ 查单 paid → 开通。"""
+    monkeypatch.setattr(settings, "oxapay_under_paid_coverage", 3.0)
+    order = await _make_pending(db_session, monkeypatch, "month", "trk_uc")
+    assert order.amount_usdt == Decimal("4.9")
+    monkeypatch.setattr(order_mod, "get_payment", _fake_get_payment("paid", "4.89"))
+
+    raw, sig = _signed_callback(order.external_id, "trk_uc", status="Paid")
+    label = await process_oxapay_callback(db_session, raw_body=raw, hmac_header=sig)
+    assert label == "paid"
+    await db_session.refresh(order)
+    assert order.status == "paid"
+
+
+@pytest.mark.asyncio
+async def test_callback_underpaid_below_floor_rejected(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """极端少付(实到 3.0,远低于容差下限 4.753)即便查单 paid → 辅助金额核验拒。"""
+    monkeypatch.setattr(settings, "oxapay_under_paid_coverage", 3.0)
+    order = await _make_pending(db_session, monkeypatch, "month", "trk_low2")
+    monkeypatch.setattr(order_mod, "get_payment", _fake_get_payment("paid", "3.0"))
+
+    raw, sig = _signed_callback(order.external_id, "trk_low2", status="Paid")
+    label = await process_oxapay_callback(db_session, raw_body=raw, hmac_header=sig)
+    assert label.startswith("rejected")
+    await db_session.refresh(order)
+    assert order.status == "pending"
+    assert await _sub(db_session, order.user_id) is None
+
+
+@pytest.mark.asyncio
+async def test_callback_coverage_boundary(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """★ 容差边界:实到恰好 = 4.9×0.97 = 4.753 → 通过;4.752 → 拒(下限精确对齐 OxaPay 容差)。"""
+    monkeypatch.setattr(settings, "oxapay_under_paid_coverage", 3.0)
+
+    ok = await _make_pending(db_session, monkeypatch, "month", "trk_edge_ok")
+    monkeypatch.setattr(order_mod, "get_payment", _fake_get_payment("paid", "4.753"))
+    raw, sig = _signed_callback(ok.external_id, "trk_edge_ok", status="Paid")
+    assert await process_oxapay_callback(db_session, raw_body=raw, hmac_header=sig) == "paid"
+
+    bad = await _make_pending(db_session, monkeypatch, "month", "trk_edge_bad")
+    monkeypatch.setattr(order_mod, "get_payment", _fake_get_payment("paid", "4.752"))
+    raw2, sig2 = _signed_callback(bad.external_id, "trk_edge_bad", status="Paid")
+    label = await process_oxapay_callback(db_session, raw_body=raw2, hmac_header=sig2)
+    assert label.startswith("rejected")
+    await db_session.refresh(bad)
+    assert bad.status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_callback_forged_paid_within_coverage_still_rejected(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """★ 容差不削主防线:回调称 Paid、金额够(容差内),但查单真实 status='paying' → 仍拒。"""
+    monkeypatch.setattr(settings, "oxapay_under_paid_coverage", 3.0)
+    order = await _make_pending(db_session, monkeypatch, "month", "trk_forge2")
+    monkeypatch.setattr(order_mod, "get_payment", _fake_get_payment("paying", "4.9"))  # 金额够但未付清
+
+    raw, sig = _signed_callback(order.external_id, "trk_forge2", status="Paid")
+    label = await process_oxapay_callback(db_session, raw_body=raw, hmac_header=sig)
+    assert label.startswith("rejected")
+    await db_session.refresh(order)
+    assert order.status == "pending"
+    assert await _sub(db_session, order.user_id) is None
 
 
 # ── 订单状态查询(前端轮询 · 限本人)─────────────────────────────────────────────

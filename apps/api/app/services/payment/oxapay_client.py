@@ -47,6 +47,8 @@ async def create_invoice(
         "callback_url": callback_url,       # OxaPay 到账 POST 此 URL(HMAC 验签)
         "description": "Midas Pro",
         "sandbox": sandbox,                 # True = 测试网不收真钱
+        # 少付容差(百分比数字 · 3 = 3%)· 实付 ≥ 应付 ×97% 即判付清 · 吸收链上手续费不卡单
+        "under_paid_coverage": settings.oxapay_under_paid_coverage,
     }
     data = await _request("POST", f"{settings.oxapay_api_base}/v1/payment/invoice", json=body)
     d = data.get("data") if isinstance(data, dict) else None

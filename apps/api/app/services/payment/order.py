@@ -146,10 +146,15 @@ async def process_oxapay_callback(
         return "ignored: verify failed"
     real_status = str(info.get("status") or "")
     real_amount = _oxapay_amount(info)
-    if real_status.lower() != "paid" or real_amount is None or real_amount < order.amount_usdt:
+    # 金额下限与 OxaPay 容差对齐:实付 ≥ 应付 ×(1 - coverage%)· 吸收链上手续费(用户付满额,
+    # 手续费导致实到略少不该卡单)· ★ 仅放宽【辅助】金额核验到与 OxaPay 一致,不更松;
+    # 主防线仍是验签 + 真实 status==paid(OxaPay 确认收到钱)→ 伪造回调(status≠paid)照拒。
+    coverage = settings.oxapay_under_paid_coverage
+    min_acceptable = order.amount_usdt * Decimal(str(1 - coverage / 100))
+    if real_status.lower() != "paid" or real_amount is None or real_amount < min_acceptable:
         logger.warning(
-            "[payment.callback] 核验不足 ext=%s real_status=%s real_amt=%s need=%s",
-            order_id, real_status, real_amount, order.amount_usdt,
+            "[payment.callback] 核验不足 ext=%s status=%s amt=%s need>=%s(应付%s 容差%s%%)",
+            order_id, real_status, real_amount, min_acceptable, order.amount_usdt, coverage,
         )
         return "rejected: amount/status insufficient"
 
