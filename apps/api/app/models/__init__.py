@@ -16,6 +16,7 @@ from app.models.perp import (  # noqa: F401
     VirtualPerpPosition,
 )
 from app.models.session import Session as AuthSession  # noqa: F401
+from app.models.support_ticket import SupportTicket  # noqa: F401
 from app.models.user import User  # noqa: F401
 from app.models.verification_token import TokenPurpose, VerificationToken  # noqa: F401
 from app.models.virtual import (  # noqa: F401

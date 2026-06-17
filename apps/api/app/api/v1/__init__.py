@@ -20,6 +20,7 @@ from app.api.v1.perp import router as perp_router
 from app.api.v1.quota import router as quota_router
 from app.api.v1.redeem import router as redeem_router
 from app.api.v1.structure import router as structure_router
+from app.api.v1.support import router as support_router
 from app.api.v1.telegram import router as telegram_router
 from app.api.v1.us import router as us_router
 from app.api.v1.virtual import router as virtual_router
@@ -63,3 +64,6 @@ router.include_router(redeem_router)
 # Phase 2a 刀1 · 会员订阅支付(Bcon USDT/BSC · 建单 + 回调核验开 pro · source='paid')
 # 🔴 红线:支付域不碰 engine(收订阅费非交易)· 凭证只从 env 读
 router.include_router(payment_router)
+# 支付工单 / 退款申请(support 模块 · authed)· 工单存 DB + Resend 通知客服 · 图走附件不落盘
+# 🔴 红线:独立模块不碰 engine/收款逻辑 · 身份从 session 取 · Resend key env 读不入日志
+router.include_router(support_router)

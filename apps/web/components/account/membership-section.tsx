@@ -22,6 +22,7 @@ import {
 import { cn } from '@/lib/utils'
 
 import { PaymentDialog } from './payment-dialog'
+import { SupportTicketDialog } from './support-ticket-dialog'
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—'
@@ -32,6 +33,7 @@ function fmtDate(iso: string | null): string {
 export function MembershipSection() {
   const { data: quota } = useQuota()
   const [payPeriod, setPayPeriod] = useState<Period | null>(null)
+  const [showSupport, setShowSupport] = useState(false)
 
   const isPro = quota?.plan === 'pro'
   const cta = isPro ? '续费' : '开通'
@@ -133,9 +135,24 @@ export function MembershipSection() {
         </p>
       </div>
 
+      {/* 支付遇到问题 → 工单 / 退款入口 */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-paper bg-surface-card px-4 py-3">
+        <span className="text-sm text-muted-foreground">
+          支付遇到问题?(未到账 / 重复扣款 / 申请退款)
+        </span>
+        <button
+          type="button"
+          onClick={() => setShowSupport(true)}
+          className="text-sm font-medium text-midas-red hover:underline"
+        >
+          联系客服 / 申请退款
+        </button>
+      </div>
+
       {payPeriod && (
         <PaymentDialog period={payPeriod} onClose={() => setPayPeriod(null)} />
       )}
+      {showSupport && <SupportTicketDialog onClose={() => setShowSupport(false)} />}
     </div>
   )
 }

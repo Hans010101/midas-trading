@@ -89,5 +89,13 @@ class Settings(BaseSettings):
     # 含 0.2 的高费链 + 余量)· 按百分比对 4.9/9.9/19.9 三档自动适配 · 商户自吸收不转嫁用户。
     oxapay_under_paid_coverage: float = 5.0
 
+    # 支付工单 / 退款申请(support 模块)· 工单存 DB + Resend 邮件通知客服 · 图走附件不落盘。
+    # ⚠ Resend API key 复用 email.py 的 env RESEND_API_KEY(不在此重复配)。
+    # 发件必须用已验证域名 support@midastrade.asia(onboarding@resend.dev 测试域名发不到 Gmail)。
+    support_email_to: str = "hans.pan002@gmail.com"            # 客服收件箱(env SUPPORT_EMAIL_TO)
+    support_email_from: str = "Midas Support <support@midastrade.asia>"  # env SUPPORT_EMAIL_FROM
+    support_max_images: int = 3       # 单工单图片张数上限
+    support_max_image_mb: int = 5     # 单张图片大小上限(MB)
+
 
 settings = Settings()
