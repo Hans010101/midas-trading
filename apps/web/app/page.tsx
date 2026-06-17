@@ -175,7 +175,7 @@ function Hero() {
             <span className="text-midas-red">点石成金</span>
           </h1>
           <p className="mt-5 max-w-xl text-base leading-relaxed text-foreground/80 lg:text-lg">
-            覆盖加密货币、美股、A 股与港股四大市场——AI 沙盘看懂多空结构,研究室回测验证想法,虚拟资金零风险磨练交易直觉。
+            覆盖加密货币、美股、A 股与港股四大市场——AI 决策卡研判多空,沙盘看懂结构,研究室回测验证想法,虚拟资金零风险磨练交易直觉。
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link
@@ -193,6 +193,7 @@ function Hero() {
             </a>
           </div>
           <div className="mt-8 flex flex-wrap items-center gap-5 text-xs text-foreground/70">
+            <Stat icon={<Target className="h-4 w-4 text-midas-red" />} label="AI 决策卡" />
             <Stat icon={<Network className="h-4 w-4 text-gold" />} label="11 因子结构沙盘" />
             <Stat icon={<FlaskConical className="h-4 w-4 text-midas-red" />} label="回测研究室" />
             <Stat icon={<Wallet className="h-4 w-4 text-gold" />} label="虚拟资金 0 风险" />
