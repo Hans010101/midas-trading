@@ -1,1 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><!-- 占位头像 · 待设计资源替换(文件名/编号映射 lib/avatars.ts 不变) --><circle cx="32" cy="32" r="32" fill="hsl(220,55%,58%)"/><text x="32" y="41" font-family="sans-serif" font-size="24" font-weight="bold" fill="#fff" text-anchor="middle">11</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <circle cx="256" cy="256" r="256" fill="#F4EFE4"></circle>
+  <g stroke="#1C1C1C" stroke-width="13" stroke-linecap="round">
+    <line x1="224" y1="158" x2="224" y2="372"></line>
+    <line x1="290" y1="196" x2="290" y2="372"></line>
+  </g>
+  <g stroke="#1C1C1C" stroke-width="8" stroke-linecap="round">
+    <line x1="214" y1="212" x2="234" y2="212"></line>
+    <line x1="214" y1="272" x2="234" y2="272"></line>
+    <line x1="214" y1="332" x2="234" y2="332"></line>
+    <line x1="280" y1="248" x2="300" y2="248"></line>
+    <line x1="280" y1="312" x2="300" y2="312"></line>
+  </g>
+  <g fill="#C9A24B">
+    <ellipse cx="196" cy="150" rx="11" ry="33" transform="rotate(-38 196 150)"></ellipse>
+    <ellipse cx="246" cy="128" rx="11" ry="35" transform="rotate(-10 246 128)"></ellipse>
+    <ellipse cx="300" cy="152" rx="11" ry="31" transform="rotate(30 300 152)"></ellipse>
+  </g>
+</svg>

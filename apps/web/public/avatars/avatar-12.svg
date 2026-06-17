@@ -1,1 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><!-- 占位头像 · 待设计资源替换(文件名/编号映射 lib/avatars.ts 不变) --><circle cx="32" cy="32" r="32" fill="hsl(242,55%,58%)"/><text x="32" y="41" font-family="sans-serif" font-size="24" font-weight="bold" fill="#fff" text-anchor="middle">12</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <circle cx="256" cy="256" r="256" fill="#F4EFE4"></circle>
+  <line x1="176" y1="158" x2="176" y2="356" stroke="#C8102E" stroke-width="7" stroke-linecap="round"></line>
+  <rect x="152" y="212" width="48" height="106" rx="7" fill="#C8102E"></rect>
+  <line x1="256" y1="186" x2="256" y2="372" stroke="#1C1C1C" stroke-width="7" stroke-linecap="round"></line>
+  <rect x="232" y="250" width="48" height="92" rx="7" fill="#1C1C1C"></rect>
+  <line x1="336" y1="146" x2="336" y2="332" stroke="#C8102E" stroke-width="7" stroke-linecap="round"></line>
+  <rect x="312" y="190" width="48" height="112" rx="7" fill="#C8102E"></rect>
+</svg>
