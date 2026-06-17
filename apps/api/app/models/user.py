@@ -16,7 +16,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, String, Uuid, func, text
+from sqlalchemy import Boolean, DateTime, SmallInteger, String, Uuid, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -52,6 +52,9 @@ class User(Base):
     demo_prefilled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false"), default=False,
     )
+    # 头像选择器:NULL/0 = 默认邮箱首字母圆底;1-16 = 选了第 N 个预设头像。
+    # ★ 零图片存储 —— 只存所选编号,绝不存上传图(用户只能从预设里选)。
+    avatar_id: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

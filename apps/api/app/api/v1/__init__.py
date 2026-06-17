@@ -23,6 +23,7 @@ from app.api.v1.structure import router as structure_router
 from app.api.v1.support import router as support_router
 from app.api.v1.telegram import router as telegram_router
 from app.api.v1.us import router as us_router
+from app.api.v1.user import router as user_router
 from app.api.v1.virtual import router as virtual_router
 from app.api.v1.watchlist import router as watchlist_router
 
@@ -67,3 +68,5 @@ router.include_router(payment_router)
 # 支付工单 / 退款申请(support 模块 · authed)· 工单存 DB + Resend 通知客服 · 图走附件不落盘
 # 🔴 红线:独立模块不碰 engine/收款逻辑 · 身份从 session 取 · Resend key env 读不入日志
 router.include_router(support_router)
+# 用户资料(头像选择器骨架)· PATCH /user/avatar 零图片存储只存编号
+router.include_router(user_router)

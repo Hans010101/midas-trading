@@ -102,6 +102,19 @@ class MeOut(BaseModel):
     email: str
     email_verified: bool
     role: str = "user"
+    # 改密码 UI 分支:False = OAuth-only(无密码)→ 前端不显示改密码表单
+    has_password: bool = False
+    # 头像:NULL/0 = 默认首字母 · 1-16 = 预设头像
+    avatar_id: int | None = None
+
+
+class ChangePasswordIn(BaseModel):
+    old_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)  # 与注册同口径
+
+
+class ChangePasswordOut(BaseModel):
+    message: str = "密码已修改"
 
 
 # =====================
@@ -460,4 +473,32 @@ async def me(current_user: CurrentUserDep) -> MeOut:
         email=current_user.email,
         email_verified=current_user.email_verified_at is not None,
         role=current_user.role,
+        has_password=current_user.password_hash is not None,
+        avatar_id=current_user.avatar_id,
     )
+
+
+@router.post("/change-password", response_model=ChangePasswordOut)
+async def change_password(
+    payload: ChangePasswordIn, current_user: CurrentUserDep, db: DbDep,
+) -> ChangePasswordOut:
+    """修改密码(邮箱密码用户)· 旧密码校验通过后写入新 hash。
+
+    🔴 OAuth-only 用户(password_hash=None)→ 409 拒(账户安全由 Google 管理)· 前端也不显示表单。
+    复用 verify_password / hash_password · 密码明文绝不进日志/返回/异常。
+    TODO(M1+ 安全):改密后是否 revoke_all_user_sessions 其它设备下线 · 本期不做(避免复杂化)。
+    """
+    if current_user.password_hash is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="你通过 Google 登录,账户安全由 Google 管理,无需在此修改密码",
+        )
+    if not verify_password(payload.old_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="旧密码错误",
+        )
+    current_user.password_hash = hash_password(payload.new_password)
+    await db.commit()
+    logger.info("[change-password] user_id=%s 改密成功", current_user.id)  # 不记明文
+    return ChangePasswordOut()

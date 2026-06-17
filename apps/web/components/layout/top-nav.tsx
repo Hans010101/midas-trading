@@ -15,6 +15,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { signOut, useSession } from 'next-auth/react'
 
+import { UserAvatar } from '@/components/account/user-avatar'
 import { MarketSwitcher } from '@/components/layout/market-switcher'
 import {
   DropdownMenu,
@@ -24,11 +25,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { useMe } from '@/hooks/use-me'
 
 export function TopNav() {
   const { data: session, status } = useSession()
+  const { data: me } = useMe() // 头像编号(选了预设则渲染预设图)
   const email = session?.user?.email ?? ''
-  const initial = email.charAt(0).toUpperCase() || '?'
 
   return (
     <header className="h-12 shrink-0 border-b border-paper bg-background">
@@ -50,9 +52,9 @@ export function TopNav() {
                 <button
                   type="button"
                   aria-label="用户菜单"
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-midas-red text-sm font-bold text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-midas-red/40"
+                  className="rounded-full transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-midas-red/40"
                 >
-                  {initial}
+                  <UserAvatar email={email} avatarId={me?.avatar_id} size={32} />
                 </button>
               </DropdownMenuTrigger>
               {/* 右上角弹出 → 全菜单右对齐 + 收窄(Hans 真机反馈 · 刀2 补充) */}
