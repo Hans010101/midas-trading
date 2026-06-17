@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * 支付工单 / 退款申请弹层(support 模块)· 联系邮箱 + 类型 + 描述 + 图片(1-3 张 · 预览 + 预校验)。
+ * 支付工单弹层(support 模块 · 技术故障客服通道)· 联系邮箱 + 类型 + 描述 + 图片(1-3 张 · 预览 + 预校验)。
  *
  * 🔴 前端只提交;图片随 multipart 上传,后端走 Resend 邮件附件【不落盘】。
  * 图片数量/类型/大小前端预校验(减少无效提交),与后端校验一致(3 张 · JPEG/PNG · ≤5MB)。
@@ -21,16 +21,17 @@ const MAX_MB = 5
 const MAX_DESC = 2000
 const ACCEPT = ['image/jpeg', 'image/png']
 const CATEGORIES: { value: TicketCategory; label: string }[] = [
-  { value: 'payment', label: '支付问题(未到账 / 重复扣款)' },
-  { value: 'refund', label: '退款申请' },
-  { value: 'other', label: '其他' },
+  { value: 'not_received', label: '未到账' },
+  { value: 'duplicate_charge', label: '重复扣款' },
+  { value: 'activation_failed', label: '开通失败' },
+  { value: 'other', label: '其他问题' },
 ]
 
 export function SupportTicketDialog({ onClose }: { onClose: () => void }) {
   const { data: session } = useSession()
   const submit = useSubmitTicket()
 
-  const [category, setCategory] = useState<TicketCategory>('payment')
+  const [category, setCategory] = useState<TicketCategory>('not_received')
   const [description, setDescription] = useState('')
   const [contactEmail, setContactEmail] = useState('')
   const [emailEdited, setEmailEdited] = useState(false)
@@ -105,7 +106,7 @@ export function SupportTicketDialog({ onClose }: { onClose: () => void }) {
     >
       <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border border-gold/60 bg-cream p-6 shadow-xl">
         <h3 className="mb-4 text-center font-serif text-xl font-bold text-foreground">
-          {done ? '工单已提交' : '联系客服 / 申请退款'}
+          {done ? '工单已提交' : '联系客服'}
         </h3>
 
         {done ? (
@@ -219,7 +220,7 @@ export function SupportTicketDialog({ onClose }: { onClose: () => void }) {
               提交工单
             </button>
             <p className="text-center text-[11px] leading-relaxed text-muted-foreground/70">
-              退款为人工处理 · 提交后我们会通过邮件与你联系
+              我们预计会在 0-3 天内给您回复解决
             </p>
           </div>
         )}

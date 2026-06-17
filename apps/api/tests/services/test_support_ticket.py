@@ -70,7 +70,7 @@ async def test_create_ticket_stores(db_session: AsyncSession) -> None:
     user = await make_user(db_session)
     t = await create_ticket(
         db_session, user.id,
-        contact_email="a@b.com", category="payment", description="支付没开通",
+        contact_email="a@b.com", category="not_received", description="支付没开通",
         related_order_id="ord_1", image_count=2,
     )
     assert t.id > 0
@@ -88,7 +88,7 @@ async def test_send_ticket_email_attachments_base64(
     user = await make_user(db_session)
     t = await create_ticket(
         db_session, user.id,
-        contact_email="c@d.com", category="refund", description="退款",
+        contact_email="c@d.com", category="duplicate_charge", description="重复扣了两次",
         related_order_id=None, image_count=1,
     )
     monkeypatch.setenv("RESEND_API_KEY", "test_key")
@@ -102,6 +102,9 @@ async def test_send_ticket_email_attachments_base64(
     assert body["from"] == settings.support_email_from
     assert body["to"] == [settings.support_email_to]
     assert f"#{t.id}" in body["subject"]
+    # ★ category 英文值 → 中文标签(邮件 subject + 正文展示)
+    assert "重复扣款" in body["subject"]
+    assert "重复扣款" in body["html"]
     assert body["attachments"][0]["content"] == base64.b64encode(b"IMGBYTES").decode("ascii")
     assert body["attachments"][0]["filename"] == "p.png"
     # 凭证只在 header,不进 body
@@ -131,7 +134,7 @@ async def test_submit_ticket_creates(client: AsyncClient, db_session: AsyncSessi
     """登录用户提工单(无图)→ 200 + 存 DB(默认联系邮箱=账号邮箱 · image_count=0)。"""
     user, headers = await _authed(db_session)
     resp = await client.post(
-        _URL, data={"category": "payment", "description": "支付后没开通会员"}, headers=headers,
+        _URL, data={"category": "not_received", "description": "支付后没开通会员"}, headers=headers,
     )
     assert resp.status_code == 200  # noqa: PLR2004
     body = resp.json()
@@ -140,7 +143,7 @@ async def test_submit_ticket_creates(client: AsyncClient, db_session: AsyncSessi
     t = await db_session.get(SupportTicket, body["ticket_id"])
     assert t is not None
     assert t.user_id == user.id
-    assert t.category == "payment"
+    assert t.category == "not_received"
     assert t.image_count == 0
     assert t.contact_email == user.email  # 未填 → 默认账号邮箱
 
@@ -161,7 +164,7 @@ async def test_submit_ticket_with_images_and_email(
     ]
     resp = await client.post(
         _URL,
-        data={"category": "refund", "description": "申请退款", "related_order_id": "ord_123"},
+        data={"category": "duplicate_charge", "description": "重复扣款了", "related_order_id": "ord_123"},
         files=files, headers=headers,
     )
     assert resp.status_code == 200  # noqa: PLR2004
@@ -179,7 +182,7 @@ async def test_submit_ticket_with_images_and_email(
 @pytest.mark.asyncio
 async def test_submit_ticket_unauthed_401(client: AsyncClient) -> None:
     """🔴 未登录 → 401(CurrentUserDep 拦 · 不接受伪造身份)。"""
-    resp = await client.post(_URL, data={"category": "payment", "description": "x"})
+    resp = await client.post(_URL, data={"category": "not_received", "description": "x"})
     assert resp.status_code == 401  # noqa: PLR2004
 
 
@@ -189,7 +192,7 @@ async def test_submit_ticket_blank_description_422(
 ) -> None:
     _user, headers = await _authed(db_session)
     resp = await client.post(
-        _URL, data={"category": "payment", "description": "   "}, headers=headers,
+        _URL, data={"category": "not_received", "description": "   "}, headers=headers,
     )
     assert resp.status_code == 422  # noqa: PLR2004
 
@@ -212,7 +215,7 @@ async def test_submit_ticket_bad_email_422(
     _user, headers = await _authed(db_session)
     resp = await client.post(
         _URL,
-        data={"category": "payment", "description": "x", "contact_email": "notanemail"},
+        data={"category": "not_received", "description": "x", "contact_email": "notanemail"},
         headers=headers,
     )
     assert resp.status_code == 422  # noqa: PLR2004
@@ -226,7 +229,7 @@ async def test_submit_ticket_too_many_images_422(
     _user, headers = await _authed(db_session)
     files = [("images", (f"{i}.png", b"x", "image/png")) for i in range(4)]
     resp = await client.post(
-        _URL, data={"category": "payment", "description": "多图"}, files=files, headers=headers,
+        _URL, data={"category": "not_received", "description": "多图"}, files=files, headers=headers,
     )
     assert resp.status_code == 422  # noqa: PLR2004
 
@@ -239,7 +242,7 @@ async def test_submit_ticket_non_image_type_422(
     _user, headers = await _authed(db_session)
     files = [("images", ("evil.txt", b"hi", "text/plain"))]
     resp = await client.post(
-        _URL, data={"category": "payment", "description": "坏类型"}, files=files, headers=headers,
+        _URL, data={"category": "not_received", "description": "坏类型"}, files=files, headers=headers,
     )
     assert resp.status_code == 422  # noqa: PLR2004
 
@@ -254,7 +257,7 @@ async def test_submit_ticket_oversize_image_422(
     big = b"x" * (1024 * 1024 + 16)
     files = [("images", ("big.png", big, "image/png"))]
     resp = await client.post(
-        _URL, data={"category": "payment", "description": "超大图"}, files=files, headers=headers,
+        _URL, data={"category": "not_received", "description": "超大图"}, files=files, headers=headers,
     )
     assert resp.status_code == 422  # noqa: PLR2004
 
@@ -270,7 +273,7 @@ async def test_submit_ticket_email_failure_still_creates(
     _install_fake_resend(monkeypatch, captured, fail=True)
 
     resp = await client.post(
-        _URL, data={"category": "payment", "description": "邮件挂了但工单要在"}, headers=headers,
+        _URL, data={"category": "not_received", "description": "邮件挂了但工单要在"}, headers=headers,
     )
     assert resp.status_code == 200  # noqa: PLR2004
     body = resp.json()
@@ -287,13 +290,13 @@ async def test_my_tickets_owner_only(
     user, headers = await _authed(db_session)
     await create_ticket(
         db_session, user.id,
-        contact_email=user.email, category="payment", description="我的工单",
+        contact_email=user.email, category="not_received", description="我的工单",
         related_order_id=None, image_count=0,
     )
     other = await make_user(db_session)
     await create_ticket(
         db_session, other.id,
-        contact_email=other.email, category="payment", description="他人工单",
+        contact_email=other.email, category="not_received", description="他人工单",
         related_order_id=None, image_count=0,
     )
     resp = await client.get("/api/v1/support/tickets", headers=headers)

@@ -1,4 +1,4 @@
-"""支付工单 / 退款申请端点(support 模块)。
+"""支付工单端点(support 模块 · 技术故障客服通道:未到账/重复扣款/开通失败)。
 
 - POST /support/ticket   · 登录用户提工单(multipart · 图走 Resend 附件不落盘)
 - GET  /support/tickets  · 查本人工单列表(提交历史 · 限本人)
@@ -31,7 +31,7 @@ router = APIRouter(tags=["support"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 
-_ALLOWED_CATEGORIES = {"payment", "refund", "other"}
+_ALLOWED_CATEGORIES = {"not_received", "duplicate_charge", "activation_failed", "other"}
 _ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png"}
 _MAX_DESC = 2000
 _DESC_SUMMARY = 200

@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * 支付工单 / 退款 hooks(support 模块)· 提交工单(multipart)。
+ * 支付工单 hooks(support 模块)· 提交工单(multipart)。
  * 🔴 红线:前端只提交 · token 从 next-auth session 取(与 use-payment 同范式)。
  */
 

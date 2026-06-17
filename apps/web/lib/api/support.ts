@@ -1,5 +1,5 @@
 /**
- * 支付工单 / 退款申请 API client(support 模块)· 照 payment.ts Bearer 范式。
+ * 支付工单 API client(support 模块 · 技术故障客服通道)· 照 payment.ts Bearer 范式。
  *
  * - POST /support/ticket  multipart:类型 + 描述 + 联系邮箱 + 关联订单 + 图片(0-3)
  *
@@ -9,7 +9,11 @@
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
-export type TicketCategory = 'payment' | 'refund' | 'other'
+export type TicketCategory =
+  | 'not_received'
+  | 'duplicate_charge'
+  | 'activation_failed'
+  | 'other'
 
 export interface SubmitTicketInput {
   category: TicketCategory

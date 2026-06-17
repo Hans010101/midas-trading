@@ -25,6 +25,19 @@ logger = logging.getLogger(__name__)
 
 _RESEND_ENDPOINT = "https://api.resend.com/emails"
 
+# 工单类型英文值 → 中文标签(邮件展示用)· 与前端下拉、api 白名单一致(技术故障导向)
+_CATEGORY_LABELS = {
+    "not_received": "未到账",
+    "duplicate_charge": "重复扣款",
+    "activation_failed": "开通失败",
+    "other": "其他问题",
+}
+
+
+def category_label(category: str) -> str:
+    """工单类型中文标签(未知值原样返回,容错)。"""
+    return _CATEGORY_LABELS.get(category, category)
+
 
 async def create_ticket(
     db: AsyncSession,
@@ -66,7 +79,7 @@ async def send_ticket_email(
         return False
 
     uid8 = str(ticket.user_id)[:8]
-    subject = f"[工单] {ticket.category} - 用户 {uid8} - #{ticket.id}"
+    subject = f"[工单] {category_label(ticket.category)} - 用户 {uid8} - #{ticket.id}"
     # ★ 图片 base64 → Resend 附件(content 为 base64 字符串)· 不落盘
     attachments = [
         {"filename": fn, "content": base64.b64encode(data).decode("ascii")}
@@ -105,7 +118,7 @@ def _ticket_email_html(*, ticket: SupportTicket, user_email: str) -> str:
     """工单通知邮件正文(内部客服用)· 用户输入全部 html 转义(防 HTML 注入)。"""
     desc = html_lib.escape(ticket.description)
     contact = html_lib.escape(ticket.contact_email)
-    category = html_lib.escape(ticket.category)
+    category = html_lib.escape(category_label(ticket.category))
     order_line = (
         f'<p><b>关联订单</b>:{html_lib.escape(ticket.related_order_id)}</p>'
         if ticket.related_order_id
