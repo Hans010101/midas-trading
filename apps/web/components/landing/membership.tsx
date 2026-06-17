@@ -14,7 +14,7 @@ const FREE_FEATURES = [
   'AI 沙盘诊断 5 次 / 月',
   '策略回测 3 次 / 月',
   '加密 · 美股 · A 股 · 港股 四市场 K 线与行情',
-  '合约维度图 · 缠论自动标注(笔 / 分型 / 中枢 / 买卖点)',
+  '合约维度图 · 缠论自动标注',
   '虚拟交易与条件单 · 飞书 / Telegram 推送',
 ]
 
@@ -87,9 +87,13 @@ export function Membership() {
                 </li>
               ))}
             </ul>
+            <p className="mt-4 flex items-center gap-1.5 text-[11px] text-gold/80">
+              <Sparkles className="h-3 w-3 shrink-0" />
+              更多专属功能陆续上线
+            </p>
             <Link
               href="/account/membership"
-              className="mt-6 inline-flex items-center gap-2 self-start rounded-md bg-midas-red px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-midas-red-deep"
+              className="mt-3 inline-flex items-center gap-2 self-start rounded-md bg-midas-red px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-midas-red-deep"
             >
               了解会员
               <ArrowRight className="h-4 w-4" />

@@ -487,15 +487,6 @@ function Footer() {
                 <ContactUsLink className="text-muted-foreground transition-colors hover:text-midas-red" />
               </li>
             </ul>
-            <p className="mt-3 text-xs text-muted-foreground/70">
-              客服邮箱:
-              <a
-                href="mailto:support@midastrade.asia"
-                className="transition-colors hover:text-midas-red"
-              >
-                support@midastrade.asia
-              </a>
-            </p>
           </div>
         </div>
         <div className="mt-8 flex flex-col items-center justify-between gap-2 border-t border-paper pt-5 text-xs text-muted-foreground md:flex-row">
