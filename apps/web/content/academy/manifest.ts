@@ -64,4 +64,12 @@ export const ACADEMY_ARTICLES: AcademyArticle[] = [
   { slug: "F8", stage: "system", order: 8, title: "趋势交易体系:顺势而为的完整框架", file: "F8.md", excerpt: "识别趋势、回调进场、跌破离场、让利润奔跑;趋势行情好、震荡行情易反复止损。" },
   { slug: "F9", stage: "system", order: 9, title: "震荡交易体系:区间里的高抛低吸", file: "F9.md", excerpt: "区间内高抛低吸的框架,以及假突破、趋势启动被套两大风险与严格止损。" },
   { slug: "F10", stage: "system", order: 10, title: "构建适合自己的交易体系", file: "F10.md", excerpt: "没有最好只有适合自己的体系:从模仿到原创,并用回测与虚拟实盘检验迭代。" },
+  { slug: "F11", stage: "system", order: 11, title: "交易策略概览:你有哪些「打法」", file: "F11.md", excerpt: "交易策略 = 体系里「分析方法 + 进出场规则」的实现;按趋势/震荡、顺势/逆势、左侧/右侧分类,没有最好只有适配。" },
+  { slug: "F12", stage: "system", order: 12, title: "趋势跟踪策略:让利润奔跑", file: "F12.md", excerpt: "只顺势不预测顶底、移动止损让利润奔跑;胜率往往不高、盈利集中在少数大趋势(附海龟法则的历史警示)。" },
+  { slug: "F13", stage: "system", order: 13, title: "突破交易策略:关键位变盘进场", file: "F13.md", excerpt: "关键位突破时顺势进场;最大敌人是假突破,用放量/收盘/回踩提高确认,但无法 100% 排除。" },
+  { slug: "F14", stage: "system", order: 14, title: "均值回归策略:价格回归常态", file: "F14.md", excerpt: "价格过度偏离均值后倾向回归;致命前提是必须真震荡,趋势中逆势会被一路碾压。" },
+  { slug: "F15", stage: "system", order: 15, title: "网格交易:震荡套利的双刃剑", file: "F15.md", excerpt: "区间内分层高抛低吸,绝非躺赚;单边行情越套越深或踏空、加杠杆可能爆仓(附马丁格尔强警示)。" },
+  { slug: "F16", stage: "system", order: 16, title: "左侧交易 vs 右侧交易", file: "F16.md", excerpt: "左侧(拐点前埋伏/抄底)vs 右侧(确认后追随);没有方法精确抄底逃顶,新手右侧更安全。" },
+  { slug: "F17", stage: "system", order: 17, title: "没有圣杯:策略与市场环境匹配", file: "F17.md", excerpt: "没有能全天候有效的策略;核心能力是识别行情、用对策略、靠完整体系活下来。" },
+  { slug: "F18", stage: "system", order: 18, title: "用策略研究室回测验证你的策略", file: "F18.md", excerpt: "把想法变成可量化规则,用策略研究室回测 + 虚拟验证;回测有效≠未来有效(过拟合/幸存者偏差)。" },
 ];
