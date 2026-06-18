@@ -47,6 +47,8 @@ export function MarketSwitcher({ className }: { className?: string }) {
   const onWatchlist = pathname === '/watchlist'
   // 策略研究室(P1-4d)· 非市场 · /lab 与 /lab/report 都算 · 单独高亮
   const onLab = pathname?.startsWith('/lab') ?? false
+  // 训练营(教学内容)· 非市场 · /academy 及子页(stage/article/glossary)都算 · 单独高亮
+  const onAcademy = pathname?.startsWith('/academy') ?? false
   const active = resolveActiveMarket(pathname, storeMarket)
 
   function handleSelect(m: Market) {
@@ -132,6 +134,18 @@ export function MarketSwitcher({ className }: { className?: string }) {
         )}
       >
         策略研究室
+      </button>
+      <button
+        type="button"
+        onClick={() => router.push('/academy')}
+        className={cn(
+          'whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+          onAcademy
+            ? 'bg-midas-red text-primary-foreground'
+            : 'text-muted-foreground hover:bg-midas-red-glow hover:text-foreground',
+        )}
+      >
+        训练营
       </button>
     </nav>
   )

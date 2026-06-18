@@ -28,11 +28,7 @@ export default function AcademyHomePage() {
               交易训练营
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              从零开始的系统交易课程:K 线、做多做空、杠杆、均线 / MACD / 布林带、缠论结构……
-              由浅入深、配图讲解,新手也能一步步看懂市场。
-            </p>
-            <p className="mt-2 text-xs text-muted-foreground/60">
-              教学内容,仅供学习参考,不构成投资建议。
+              从 K 线、杠杆到缠论结构,由浅入深、配图讲解,新手也能一步步看懂市场。
             </p>
           </header>
 
