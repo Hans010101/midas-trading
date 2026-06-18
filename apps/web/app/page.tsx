@@ -8,6 +8,7 @@
  *   4. Markets       · 四市场卡:加密 → 美股 → A股 → 港股(★规格一致 · 不给加密加戏)
  *   5. StructureSandbox · 看懂结构(AI 沙盘助手 · components/landing/)
  *   6. ResearchLab   · 验证想法(策略研究室 · components/landing/)
+ *   6.5 AcademyEntry · 交易训练营入口(教学内容 · 同 /lab 触达方式 · components/landing/)
  *   7. VirtualPractice · 虚拟实战(决策卡→一键下单→条件单 · components/landing/)
  *   8. ChanAndMore   · 缠论标注 + 其余能力收纳网格
  *   9. Membership    · 会员体系「进阶解锁」接口区(components/landing/)
@@ -35,6 +36,7 @@ import {
 import Image from 'next/image'
 import Link from 'next/link'
 
+import { AcademyEntry } from '@/components/landing/academy-entry'
 import { ContactUsLink } from '@/components/landing/contact-us-link'
 import { Membership } from '@/components/landing/membership'
 import { ResearchLab } from '@/components/landing/research-lab'
@@ -63,6 +65,7 @@ export default function HomePage() {
       <Markets />
       <StructureSandbox />
       <ResearchLab />
+      <AcademyEntry />
       <VirtualPractice />
       <ChanAndMore />
       <Membership />
