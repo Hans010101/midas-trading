@@ -172,7 +172,12 @@ if [ "$OLD_HEAD" = "$NEW_HEAD" ]; then
   CHANGED=""
   TOTAL_FILES=0
 else
-  CHANGED=$(git diff --name-only "${OLD_HEAD}" "${NEW_HEAD}")
+  # ★ core.quotePath=false:git 默认对非 ASCII(中文)路径加引号 + 八进制转义(如
+  #   "apps/web/public/academy-img/A10-\351\205..png"),致该行行首是 " → 下方各
+  #   `grep -qE "^apps/web/"` 等锚点不匹配 → 纯中文名文件改动(如 academy 中文配图单图替换)
+  #   被漏判、NEED_BUILD_WEB=false、容器不重建(A10 重画版单图事故根因 · task_e2c38de3)。
+  #   设 false 让路径原样 UTF-8 输出,^ 锚点恢复正常匹配;per-command 不污染全局/仓库 config。
+  CHANGED=$(git -c core.quotePath=false diff --name-only "${OLD_HEAD}" "${NEW_HEAD}")
   TOTAL_FILES=$(echo "$CHANGED" | grep -c "" || true)
   echo "  本次变更 ${TOTAL_FILES} 个文件"
 fi
@@ -223,7 +228,7 @@ if echo "$CHANGED" | grep -qE "^deploy/vibe/.*\.py$|^apps/api/app/services/backt
 fi
 
 # alembic migration 新增(只看新文件 · 不看修改)
-NEW_MIGRATIONS=$(git diff --name-only --diff-filter=A "${OLD_HEAD}" "${NEW_HEAD}" | grep "^apps/api/alembic/versions/.*\.py$" || true)
+NEW_MIGRATIONS=$(git -c core.quotePath=false diff --name-only --diff-filter=A "${OLD_HEAD}" "${NEW_HEAD}" | grep "^apps/api/alembic/versions/.*\.py$" || true)
 if [ -n "$NEW_MIGRATIONS" ]; then
   NEED_ALEMBIC=true
   echo "  ${MAGENTA}▸${NC} 检测到新 migration:$(echo "$NEW_MIGRATIONS" | tr '\n' ' ')"
