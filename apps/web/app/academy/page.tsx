@@ -70,7 +70,7 @@ export default function AcademyHomePage() {
             <div className="min-w-0 flex-1">
               <h2 className="font-serif text-lg font-bold">名词词典</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                66 个交易名词速查 · 8 大类 · 一句话定义 + 展开说明
+                88 个交易名词速查 · 10 大类 · 一句话定义 + 展开说明
               </p>
             </div>
             <ArrowRight className="h-5 w-5 shrink-0 text-muted-foreground/50" />
