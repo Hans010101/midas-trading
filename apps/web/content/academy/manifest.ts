@@ -21,6 +21,7 @@ export const ACADEMY_STAGES: AcademyStage[] = [
   { slug: "basics", name: "入门筑基", stageLabel: "第一阶", desc: "从零认识交易：K线、做多做空、杠杆、支撑阻力、四大市场、虚拟交易。" },
   { slug: "technical", name: "技术分析", stageLabel: "第二阶", desc: "经典技术指标：均线、金叉死叉、MACD、布林带、RSI。" },
   { slug: "chan", name: "缠论专题", stageLabel: "第三阶", desc: "缠论结构化分析：包含关系、分型、笔、线段、中枢、三类买卖点。" },
+  { slug: "contract", name: "合约与衍生品", stageLabel: "第四阶", desc: "加密核心战场:永续合约、资金费率、保证金模式、爆仓与强平机制,以及 OI / 多空比 / 基差等合约数据与风险防范。全程虚拟,教学内容仅供学习参考。" },
   { slug: "system", name: "交易体系与实战", stageLabel: "第五阶", desc: "把前四阶的 K 线、指标、缠论、合约整合成完整交易体系——涵盖交易计划、风险与仓位、心理、纪律、复盘,以及趋势 / 震荡两类实战框架。教学内容仅供学习参考。" },
 ];
 
@@ -92,4 +93,14 @@ export const ACADEMY_ARTICLES: AcademyArticle[] = [
   { slug: "F36", stage: "system", order: 36, title: "回顾:从入门到体系,你学了什么", file: "F36.md", excerpt: "五阶学习路径回顾(A入门→B技术→C缠论→E合约→F体系实战);前四阶认识、第五阶组织运用;★学完≠会赚钱,真正决定长期的是执行/纪律/风控/复盘/敬畏。" },
   { slug: "F37", stage: "system", order: 37, title: "成长心态:亏损、进步与对市场的敬畏", file: "F37.md", excerpt: "正确看待亏损(过程对的亏可接受vs过程错的亏必须改)、进步靠复盘迭代(慢就是快)、对市场永远敬畏;★反对速成暴富,追求长期稳健活下来。" },
   { slug: "F38", stage: "system", order: 38, title: "长期主义:把交易当成一场持续修炼", file: "F38.md", excerpt: "交易是长期持续的修炼;靠体系活下来/纪律执行/复盘进步/风控保命四根支柱;长期主义 vs 短期赌博——活得久是最大的优势(全训练营收尾)。" },
+  { slug: "E1", stage: "contract", order: 1, title: "永续合约是什么:没有到期日的合约", file: "E1.md", excerpt: "永续合约 = 没有到期日、可长期持有的合约,加密最主流;靠资金费率锚定现货;带杠杆双向放大盈亏、有爆仓风险,是高风险工具。" },
+  { slug: "E2", stage: "contract", order: 2, title: "资金费率:永续合约的锚", file: "E2.md", excerpt: "资金费率是多空之间定期收付的费用(正费率多头付空头/负费率空头付多头),让永续价锚定现货;是情绪参考、不预测,也是持有成本。" },
+  { slug: "E3", stage: "contract", order: 3, title: "保证金模式:全仓与逐仓", file: "E3.md", excerpt: "全仓(账户全部余额兜底)vs 逐仓(每仓独立保证金);选择只改变风险分布、不消除爆仓风险,都需谨慎配合控制杠杆与仓位。" },
+  { slug: "E4", stage: "contract", order: 4, title: "爆仓价是怎么算的:强平机制", file: "E4.md", excerpt: "爆仓价 = 价格反向触及时被强平的价格;多单在开仓价下方、空单在上方;杠杆越高爆仓价越近,维持保证金率致实际爆仓常比理论更早。" },
+  { slug: "E5", stage: "contract", order: 5, title: "持仓量(OI):合约市场的资金温度计", file: "E5.md", excerpt: "持仓量 OI = 尚未平仓的合约总量(存量);增仓 = 新资金进场、减仓 = 资金离场;与价格配合是参考解读、有例外、不预测。" },
+  { slug: "E6", stage: "contract", order: 6, title: "多空比:市场情绪的参考", file: "E6.md", excerpt: "多空比 = 做多与做空力量的比例,有大户/账户数等不同口径;不是\"多头多就一定涨\",是情绪参考、不是信号、不预测。" },
+  { slug: "E7", stage: "contract", order: 7, title: "基差与价差:永续与现货的价格关系", file: "E7.md", excerpt: "基差 = 永续价 − 现货价(正基差升水/负基差贴水);与资金费率方向高度相关,是参考数据、不预测价格。" },
+  { slug: "E8", stage: "contract", order: 8, title: "合约的风险:为什么说合约是把双刃剑", file: "E8.md", excerpt: "合约是高风险工具,风险叠加(杠杆双向放大/爆仓本金可能归零/资金费成本/高波动),还放大情绪行为风险;风险管理是生死线。" },
+  { slug: "E9", stage: "contract", order: 9, title: "合约交易中的爆仓预防", file: "E9.md", excerpt: "爆仓预防:控制杠杆(低杠杆起步)+ 止损(设在爆仓价之前)+ 控仓 + 留足保证金 + 管情绪;没有方法保证不爆仓,降低风险≠消除风险。" },
+  { slug: "E10", stage: "contract", order: 10, title: "点金的合约分析:在虚拟环境里理解合约市场", file: "E10.md", excerpt: "点金是全程虚拟分析终端,以永续为主,提供 K 线指标/缠论/合约维度(OI/多空比/资金费率)/AI 决策卡;AI 仅供参考、不构成投资建议、不预测。" },
 ];
