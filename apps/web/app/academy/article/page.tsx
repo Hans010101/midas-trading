@@ -13,6 +13,7 @@
 import { ChevronLeft, ChevronRight, Home } from 'lucide-react'
 import Link from 'next/link'
 
+import { AcademySideNav } from '@/components/academy/academy-side-nav'
 import { ArticleRenderer } from '@/components/academy/article-renderer'
 import { TopNav } from '@/components/layout/top-nav'
 import {
@@ -37,7 +38,10 @@ export default async function AcademyArticlePage({
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <TopNav />
       <main className="flex-1">
-        <article className="mx-auto max-w-3xl px-6 py-6">
+        <div className="mx-auto max-w-5xl px-6 py-6">
+          <div className="lg:flex lg:gap-8">
+            <AcademySideNav active={meta?.stage ?? ''} />
+            <article className="min-w-0 flex-1">
           {!markdown || !meta ? (
             <div className="py-20 text-center">
               <p className="text-sm text-muted-foreground">文章不存在</p>
@@ -116,7 +120,9 @@ export default async function AcademyArticlePage({
               </p>
             </>
           )}
-        </article>
+            </article>
+          </div>
+        </div>
       </main>
     </div>
   )

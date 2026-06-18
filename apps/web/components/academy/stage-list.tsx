@@ -4,13 +4,15 @@
  * 某阶文章列表 · 薄 server 壳的 'use client' 内层(stage/page.tsx 用 Suspense 包它)。
  * useSearchParams 读 ?s={stageSlug};仅用 manifest(纯数据 · 无 fs)过滤 + 按 order 排序。
  * ⛔ 不读 md 文件(那是文章页 server 端的事),所以可安全留在 client。
+ *
+ * UI 修补:删二级标签行 + 「‹ 训练营首页」返回链接;改为常驻左侧导航 AcademySideNav(active=当前阶 slug)。
  */
 
-import { ArrowRight, ChevronLeft } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
-import { AcademyNav } from '@/components/academy/academy-nav'
+import { AcademySideNav } from '@/components/academy/academy-side-nav'
 import { TopNav } from '@/components/layout/top-nav'
 import { ACADEMY_ARTICLES, ACADEMY_STAGES } from '@/content/academy/manifest'
 
@@ -26,53 +28,51 @@ export function StageList() {
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <TopNav />
       <main className="flex-1">
-        <div className="mx-auto max-w-3xl px-6 py-6">
-          <AcademyNav />
-          <Link
-            href="/academy"
-            className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-midas-red"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            训练营首页
-          </Link>
+        <div className="mx-auto max-w-5xl px-6 py-6">
+          <div className="lg:flex lg:gap-8">
+            <AcademySideNav active={slug} />
+            <div className="min-w-0 flex-1">
+              {!stage ? (
+                <p className="py-16 text-center text-sm text-muted-foreground">阶段不存在</p>
+              ) : (
+                <>
+                  <header className="mb-6">
+                    <span className="rounded-full bg-midas-red/10 px-2.5 py-0.5 font-mono text-xs text-midas-red">
+                      {stage.stageLabel}
+                    </span>
+                    <h1 className="mt-2 font-serif text-2xl font-bold">{stage.name}</h1>
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                      {stage.desc}
+                    </p>
+                  </header>
 
-          {!stage ? (
-            <p className="py-16 text-center text-sm text-muted-foreground">阶段不存在</p>
-          ) : (
-            <>
-              <header className="mb-6">
-                <span className="rounded-full bg-midas-red/10 px-2.5 py-0.5 font-mono text-xs text-midas-red">
-                  {stage.stageLabel}
-                </span>
-                <h1 className="mt-2 font-serif text-2xl font-bold">{stage.name}</h1>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{stage.desc}</p>
-              </header>
-
-              <ul className="space-y-2.5">
-                {articles.map((a) => (
-                  <li key={a.slug}>
-                    <Link
-                      href={`/academy/article?slug=${a.slug}`}
-                      className="group flex items-start gap-3 rounded-lg border border-paper bg-cream p-4 shadow-sm transition-colors hover:border-midas-red/40"
-                    >
-                      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-midas-red/10 font-mono text-xs text-midas-red">
-                        {a.order}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <h2 className="font-serif font-bold text-foreground transition-colors group-hover:text-midas-red">
-                          {a.title}
-                        </h2>
-                        <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
-                          {a.excerpt}
-                        </p>
-                      </div>
-                      <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-midas-red" />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
+                  <ul className="space-y-2.5">
+                    {articles.map((a) => (
+                      <li key={a.slug}>
+                        <Link
+                          href={`/academy/article?slug=${a.slug}`}
+                          className="group flex items-start gap-3 rounded-lg border border-paper bg-cream p-4 shadow-sm transition-colors hover:border-midas-red/40"
+                        >
+                          <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-midas-red/10 font-mono text-xs text-midas-red">
+                            {a.order}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <h2 className="font-serif font-bold text-foreground transition-colors group-hover:text-midas-red">
+                              {a.title}
+                            </h2>
+                            <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
+                              {a.excerpt}
+                            </p>
+                          </div>
+                          <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-midas-red" />
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </main>
     </div>

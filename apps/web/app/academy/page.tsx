@@ -1,15 +1,14 @@
 /**
  * 训练营首页 · 列表页(server component · 无 hooks · 全免费无门控)。
  *
- * TopNav + AcademyNav + 简介/免责 + 五阶概览卡片(当前 basics/technical/chan 三阶有内容)+
- * 词典入口卡片。阶卡点击 → /academy/stage?s={slug};词典 → /academy/glossary。
- * ⛔ 不用 [id] 动态段;入口走查询参数(项目零先例规矩)。
+ * TopNav + 五阶概览卡片 + 词典入口卡片(★UI 修补:删二级标签行 + 大标题/副标题,直接从阶卡开始)。
+ * 阶卡点击 → /academy/stage?s={slug};词典 → /academy/glossary。
+ * ⛔ 不用 [id] 动态段;入口走查询参数(项目零先例规矩)。左侧导航只在内页(列表/详情/词典),首页不挂。
  */
 
-import { ArrowRight, BookOpen, GraduationCap } from 'lucide-react'
+import { ArrowRight, BookOpen } from 'lucide-react'
 import Link from 'next/link'
 
-import { AcademyNav } from '@/components/academy/academy-nav'
 import { TopNav } from '@/components/layout/top-nav'
 import { ACADEMY_ARTICLES, ACADEMY_STAGES } from '@/content/academy/manifest'
 
@@ -19,20 +18,7 @@ export default function AcademyHomePage() {
       <TopNav />
       <main className="flex-1">
         <div className="mx-auto max-w-5xl px-6 py-6">
-          <AcademyNav />
-
-          {/* 简介 + 免责 */}
-          <header className="mb-8">
-            <h1 className="flex items-center gap-2 font-serif text-2xl font-bold lg:text-3xl">
-              <GraduationCap className="h-7 w-7 text-midas-red" />
-              交易训练营
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              从 K 线、杠杆到缠论结构,由浅入深、配图讲解,新手也能一步步看懂市场。
-            </p>
-          </header>
-
-          {/* 五阶概览(目前 3 阶有内容)*/}
+          {/* 五阶概览 */}
           <div className="grid gap-4 sm:grid-cols-2">
             {ACADEMY_STAGES.map((stage) => {
               const count = ACADEMY_ARTICLES.filter((a) => a.stage === stage.slug).length
