@@ -21,6 +21,7 @@ export const ACADEMY_STAGES: AcademyStage[] = [
   { slug: "basics", name: "入门筑基", stageLabel: "第一阶", desc: "从零认识交易：K线、做多做空、杠杆、支撑阻力、四大市场、虚拟交易。" },
   { slug: "technical", name: "技术分析", stageLabel: "第二阶", desc: "经典技术指标：均线、金叉死叉、MACD、布林带、RSI。" },
   { slug: "chan", name: "缠论专题", stageLabel: "第三阶", desc: "缠论结构化分析：包含关系、分型、笔、线段、中枢、三类买卖点。" },
+  { slug: "system", name: "交易体系与实战", stageLabel: "第五阶", desc: "把前四阶的 K 线、指标、缠论、合约整合成完整交易体系——涵盖交易计划、风险与仓位、心理、纪律、复盘,以及趋势 / 震荡两类实战框架。教学内容仅供学习参考。" },
 ];
 
 export const ACADEMY_ARTICLES: AcademyArticle[] = [
@@ -53,4 +54,14 @@ export const ACADEMY_ARTICLES: AcademyArticle[] = [
   { slug: "C7", stage: "chan", order: 7, title: "中枢：缠论的核心概念", file: "C7.md", excerpt: "如果说分型、笔、线段是缠论的\"骨架\"，那么中枢就是缠论的\"心脏\"——它是整个体系里最核心、也最难的概念。后面要讲的买卖点…" },
   { slug: "C8", stage: "chan", order: 8, title: "缠论的三类买卖点", file: "C8.md", excerpt: "在讲\"买卖点\"之前，有一句话必须先说清楚，而且贯穿全篇：" },
   { slug: "C9", stage: "chan", order: 9, title: "缠论怎么用、怎么不被它误导", file: "C9.md", excerpt: "走到这里，缠论专题的核心概念——包含关系、分型、笔、线段、中枢、买卖点——你已经都认识了。但学会概念，和正确地使用它，是…" },
+  { slug: "F1", stage: "system", order: 1, title: "什么是交易体系:从零散知识到完整系统", file: "F1.md", excerpt: "把 K 线、指标、缠论、合约等零散工具,整合成一套可重复执行的完整交易规则。" },
+  { slug: "F2", stage: "system", order: 2, title: "交易计划:每一笔交易前该想清楚什么", file: "F2.md", excerpt: "先计划后交易——进场前定好理由、止损、目标、仓位,用事前理性对抗持仓情绪。" },
+  { slug: "F3", stage: "system", order: 3, title: "风险回报比:为什么不能只看胜率", file: "F3.md", excerpt: "盈亏比与胜率配合,才决定一个方法长期是赚是亏;高胜率也可能亏钱。" },
+  { slug: "F4", stage: "system", order: 4, title: "仓位管理:决定你能在市场活多久", file: "F4.md", excerpt: "固定比例风险法与「仓位 = 风险金额 ÷ 止损幅度」,让单笔亏损恒定可控。" },
+  { slug: "F5", stage: "system", order: 5, title: "交易心理:认识你的情绪敌人", file: "F5.md", excerpt: "恐惧、贪婪、希望、后悔四大情绪陷阱,以及它们如何让人做出错误决策。" },
+  { slug: "F6", stage: "system", order: 6, title: "纪律与执行:知道和做到之间的鸿沟", file: "F6.md", excerpt: "为什么道理都懂却做不到,以及如何用规则与纪律真正落地执行。" },
+  { slug: "F7", stage: "system", order: 7, title: "复盘:从每一笔交易中学习", file: "F7.md", excerpt: "看过程对错而非单次盈亏——最危险的是「做错却赚钱」,最该坚持的是「做对却亏钱」。" },
+  { slug: "F8", stage: "system", order: 8, title: "趋势交易体系:顺势而为的完整框架", file: "F8.md", excerpt: "识别趋势、回调进场、跌破离场、让利润奔跑;趋势行情好、震荡行情易反复止损。" },
+  { slug: "F9", stage: "system", order: 9, title: "震荡交易体系:区间里的高抛低吸", file: "F9.md", excerpt: "区间内高抛低吸的框架,以及假突破、趋势启动被套两大风险与严格止损。" },
+  { slug: "F10", stage: "system", order: 10, title: "构建适合自己的交易体系", file: "F10.md", excerpt: "没有最好只有适合自己的体系:从模仿到原创,并用回测与虚拟实盘检验迭代。" },
 ];
