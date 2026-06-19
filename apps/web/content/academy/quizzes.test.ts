@@ -99,3 +99,34 @@ describe('第二期 C1进阶/C2/C3/F理念(54 篇 70 题)', () => {
     }
   })
 })
+
+// 第三批 收尾(7 篇 16 题)· 第六阶末段 平台应用 + 方法/红线
+const BATCH3_SLUGS = ['F30', 'F32', 'F33', 'F29', 'F31', 'F34', 'F35'] as const
+
+describe('第三批 第六阶末段(7 篇 16 题)', () => {
+  it('7 篇 slug 全部就位、各有题', () => {
+    expect(BATCH3_SLUGS.length).toBe(7)
+    for (const slug of BATCH3_SLUGS) {
+      expect(getQuiz(slug).length).toBeGreaterThan(0)
+    }
+  })
+
+  it('全批合计 16 题', () => {
+    const total = BATCH3_SLUGS.reduce((n, s) => n + getQuiz(s).length, 0)
+    expect(total).toBe(16)
+  })
+
+  it.each(BATCH3_SLUGS)('「%s」每题:选项固定 4 个 + answerIndex 0–3 + 题干/解析非空', (slug) => {
+    const questions = getQuiz(slug)
+    expect(questions.length).toBeGreaterThan(0)
+    for (const q of questions) {
+      expect(q.options.length).toBe(4)
+      expect(Number.isInteger(q.answerIndex)).toBe(true)
+      expect(q.answerIndex).toBeGreaterThanOrEqual(0)
+      expect(q.answerIndex).toBeLessThanOrEqual(3)
+      expect(q.stem.trim().length).toBeGreaterThan(0)
+      expect(q.explanation.trim().length).toBeGreaterThan(0)
+      expect(q.options.every((o) => o.trim().length > 0)).toBe(true)
+    }
+  })
+})
