@@ -62,3 +62,40 @@ describe('E/C/F 组随堂小测(35 篇 84 题)', () => {
     }
   })
 })
+
+// 第二期(54 篇 70 题)· C1-1~20 缠论进阶 + C2 案例库 + C3 策略 + F 理念篇
+const BATCH2_SLUGS = [
+  'C1-1', 'C1-2', 'C1-3', 'C1-4', 'C1-5', 'C1-6', 'C1-7', 'C1-8', 'C1-9', 'C1-10',
+  'C1-11', 'C1-12', 'C1-13', 'C1-14', 'C1-15', 'C1-16', 'C1-17', 'C1-18', 'C1-19', 'C1-20',
+  'C2-1', 'C2-2', 'C2-3', 'C2-4', 'C2-5', 'C2-6', 'C2-7', 'C2-8', 'C2-9', 'C2-10',
+  'C3-1', 'C3-2', 'C3-3', 'C3-4', 'C3-5', 'C3-6', 'C3-7', 'C3-8', 'C3-9', 'C3-10',
+  'F1', 'F5', 'F7', 'F10', 'F11', 'F18', 'F19', 'F20', 'F25', 'F26', 'F27', 'F28', 'F37', 'F38',
+] as const
+
+describe('第二期 C1进阶/C2/C3/F理念(54 篇 70 题)', () => {
+  it('54 篇 slug 全部就位、各有题', () => {
+    expect(BATCH2_SLUGS.length).toBe(54)
+    for (const slug of BATCH2_SLUGS) {
+      expect(getQuiz(slug).length).toBeGreaterThan(0)
+    }
+  })
+
+  it('全批合计 70 题', () => {
+    const total = BATCH2_SLUGS.reduce((n, s) => n + getQuiz(s).length, 0)
+    expect(total).toBe(70)
+  })
+
+  it.each(BATCH2_SLUGS)('「%s」每题:选项固定 4 个 + answerIndex 0–3 + 题干/解析非空', (slug) => {
+    const questions = getQuiz(slug)
+    expect(questions.length).toBeGreaterThan(0)
+    for (const q of questions) {
+      expect(q.options.length).toBe(4)
+      expect(Number.isInteger(q.answerIndex)).toBe(true)
+      expect(q.answerIndex).toBeGreaterThanOrEqual(0)
+      expect(q.answerIndex).toBeLessThanOrEqual(3)
+      expect(q.stem.trim().length).toBeGreaterThan(0)
+      expect(q.explanation.trim().length).toBeGreaterThan(0)
+      expect(q.options.every((o) => o.trim().length > 0)).toBe(true)
+    }
+  })
+})
