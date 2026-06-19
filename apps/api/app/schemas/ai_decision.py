@@ -40,6 +40,10 @@ class TechnicalSnapshot(BaseModel):
     chan_last_bi_direction: Literal["up", "down"] | None
     chan_zhongshu_count: int
     chan_recent_buy_sell_points: list[dict[str, object]]
+    # 三价位算价素材(交易计划参考)· 带默认值保证旧调用/测试兼容
+    atr: float = 0.0                       # ATR(14) · 止损缓冲用(compute_atr 注入)
+    zhongshu_high: float | None = None     # 最近中枢上沿(无中枢→None)
+    zhongshu_low: float | None = None      # 最近中枢下沿
 
 
 # ===== Agent 输出 =====
@@ -108,6 +112,32 @@ class ActionableAdvice(BaseModel):
     disclaimer: str = ""
 
 
+# ===== 交易计划参考(三价位纯规则算 + AI 解释)=====
+
+
+PlanDirection = Literal["long", "short", "neutral"]
+
+
+class TradingPlan(BaseModel):
+    """交易计划参考 · 入场区间/止损失效价/双目标/盈亏比 = 后端【纯规则】计算(非 LLM 生成数字)·
+    plan_note = AI 写的"为什么这么定"解释(复用 rationale 机制 · mock/失败走规则模板)。
+
+    ★ 仅【模拟】参考 · 真下单走虚拟撮合 + 二次确认。第一版止损 = 纯结构失效价,不做爆仓校验
+      (无杠杆上下文 · 留待后续"仓位/杠杆建议"阶段)。中性方向三价位全 None(前端优雅降级)。
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    direction: PlanDirection
+    entry_low: float | None = None
+    entry_high: float | None = None
+    stop: float | None = None                 # 失效价(结构失效位 ∓ N×ATR)
+    target1: float | None = None
+    target2: float | None = None
+    risk_reward: float | None = None          # |(target1 - entry) / (entry - stop)|
+    plan_note: str = Field(default="", max_length=400)
+
+
 class DecisionCardResponse(BaseModel):
     """GET /api/v1/analysis/decision-card 响应。
 
@@ -140,6 +170,9 @@ class DecisionCardResponse(BaseModel):
 
     # 可下单建议(0036 批次甲)· 由 actionable 适配层在 API 层派生填充(workflow 不设 · 不改 AI 管线)
     actionable: ActionableAdvice | None = None
+
+    # 交易计划参考 · workflow 产出(三价位规则算 + plan_note)· 前端两卡共用 · 中性/非 Pro 可为 None
+    trading_plan: TradingPlan | None = None
 
     # disclaimer 字段保留(API 契约不破)· 产品决策置空(平台层已说明全程虚拟)
     disclaimer: str = ""

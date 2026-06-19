@@ -27,11 +27,14 @@ from app.schemas.ai_decision import (
     ChanBuySellPoint,
     DecisionCardResponse,
     TechnicalSnapshot,
+    TradingPlan,
 )
 from app.schemas.market import Kline, Market, Period
 from app.services.ai import indicators as ind
+from app.services.ai.agents.plan_note import generate_plan_note
 from app.services.ai.agents.technical import analyze_technical, score_to_label
 from app.services.ai.llm import is_mock_mode
+from app.services.ai.trading_plan import compute_trading_plan
 from app.services.ai.usage import log_usage
 from app.services.ai.validator import has_imperative, rewrite_imperatives
 from app.services.analysis import chan as chan_service
@@ -60,6 +63,9 @@ class DecisionState(TypedDict, total=False):
     # 技术面 Agent 产出
     technical_score: AgentScore
     token_usage: int
+
+    # TradingPlanNode 产出(三价位规则算 + AI plan_note)
+    trading_plan: TradingPlan
 
     # DecisionCardNode 产出
     narrative: str
@@ -100,6 +106,9 @@ async def _node_data_prepare(state: DecisionState) -> dict[str, Any]:
     boll = ind.compute_boll(klines)
     trend = ind.compute_trend_5d(klines)
 
+    atr = ind.compute_atr(klines)
+    last_zs = chan_result.zhongshus[-1] if chan_result.zhongshus else None
+
     last = klines[-1]
     last_bi_direction = chan_result.bis[-1].direction if chan_result.bis else None
 
@@ -126,6 +135,9 @@ async def _node_data_prepare(state: DecisionState) -> dict[str, Any]:
         chan_last_bi_direction=last_bi_direction,
         chan_zhongshu_count=len(chan_result.zhongshus),
         chan_recent_buy_sell_points=recent_bsp_dicts,
+        atr=atr,
+        zhongshu_high=last_zs.high if last_zs else None,
+        zhongshu_low=last_zs.low if last_zs else None,
     )
 
     return {"chan_result": chan_result, "snapshot": snapshot}
@@ -154,6 +166,30 @@ async def _node_technical_agent(state: DecisionState) -> dict[str, Any]:
         )
 
     return {"technical_score": score, "token_usage": total_tokens}
+
+
+async def _node_trading_plan(state: DecisionState) -> dict[str, Any]:
+    """TradingPlanNode · 规则算三价位 + AI 写 plan_note(★价位 100% 规则 · LLM 只写解释)。
+
+    compute_trading_plan 按 score 方向纯规则算出 入场区间/止损/双目标/盈亏比;
+    generate_plan_note 让 LLM 解释(mock / 失败回退价位感知模板)。中性方向三价位全 None。
+    """
+    snapshot = state["snapshot"]
+    score = state["technical_score"].score
+    plan = compute_trading_plan(
+        score=score,
+        last_close=snapshot.last_close,
+        boll=snapshot.boll,
+        atr=snapshot.atr,
+        zhongshu_high=snapshot.zhongshu_high,
+        zhongshu_low=snapshot.zhongshu_low,
+    )
+    note, note_tokens = await generate_plan_note(plan, state["market"])
+    plan = plan.model_copy(update={"plan_note": note})
+    return {
+        "trading_plan": plan,
+        "token_usage": state.get("token_usage", 0) + note_tokens,
+    }
 
 
 async def _node_decision_card(state: DecisionState) -> dict[str, Any]:
@@ -209,6 +245,7 @@ async def _node_exit(state: DecisionState) -> dict[str, Any]:
         contradiction=None,             # M1 二波永远 None
         narrative=narrative,
         chan_signals=chan_signals,
+        trading_plan=state.get("trading_plan"),
         cached=False,
         token_usage=state.get("token_usage", 0),
         llm_mode="mock" if is_mock_mode() else "real",
@@ -229,6 +266,7 @@ def _build_workflow() -> Any:
     graph.add_node("entry", _node_entry)
     graph.add_node("data_prepare", _node_data_prepare)
     graph.add_node("technical_agent", _node_technical_agent)
+    graph.add_node("trading_plan", _node_trading_plan)
     graph.add_node("decision_card", _node_decision_card)
     graph.add_node("validator", _node_validator)
     graph.add_node("exit", _node_exit)
@@ -236,7 +274,8 @@ def _build_workflow() -> Any:
     graph.set_entry_point("entry")
     graph.add_edge("entry", "data_prepare")
     graph.add_edge("data_prepare", "technical_agent")
-    graph.add_edge("technical_agent", "decision_card")
+    graph.add_edge("technical_agent", "trading_plan")
+    graph.add_edge("trading_plan", "decision_card")
     graph.add_edge("decision_card", "validator")
     graph.add_edge("validator", "exit")
     graph.add_edge("exit", END)
