@@ -14,8 +14,12 @@ import { ChevronLeft, ChevronRight, Home } from 'lucide-react'
 import Link from 'next/link'
 
 import { AcademySideNav } from '@/components/academy/academy-side-nav'
+import { ArticleQuiz } from '@/components/academy/article-quiz'
 import { ArticleRenderer } from '@/components/academy/article-renderer'
+import { PracticeCTA } from '@/components/academy/practice-cta'
 import { TopNav } from '@/components/layout/top-nav'
+import { getPractice, buildPracticeHref } from '@/content/academy/practice'
+import { getQuiz } from '@/content/academy/quizzes'
 import {
   getAdjacentArticles,
   getArticleBySlug,
@@ -33,6 +37,8 @@ export default async function AcademyArticlePage({
   const meta = getArticleMeta(slug)
   const stage = meta ? getStage(meta.stage) : undefined
   const { prev, next } = getAdjacentArticles(slug)
+  const quiz = getQuiz(slug)
+  const practice = getPractice(slug)
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
@@ -77,6 +83,12 @@ export default async function AcademyArticlePage({
 
               {/* 正文(markdown 首行即 # 标题 → ArticleRenderer 的 h1)*/}
               <ArticleRenderer markdown={markdown} />
+
+              {/* 随堂小测(无题 → 组件返回 null,不渲染该区)*/}
+              <ArticleQuiz questions={quiz} />
+
+              {/* 去实战练入口(无配置 → 不渲染)*/}
+              {practice && <PracticeCTA entry={practice} href={buildPracticeHref(practice)} />}
 
               {/* 上一篇 / 下一篇(同阶内按 order)*/}
               <nav className="mt-10 flex items-stretch justify-between gap-3 border-t border-paper pt-6">
