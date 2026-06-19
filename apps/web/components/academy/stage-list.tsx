@@ -8,13 +8,15 @@
  * UI 修补:删二级标签行 + 「‹ 训练营首页」返回链接;改为常驻左侧导航 AcademySideNav(active=当前阶 slug)。
  */
 
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
 import { AcademySideNav } from '@/components/academy/academy-side-nav'
+import { StageProgress } from '@/components/academy/stage-progress'
 import { TopNav } from '@/components/layout/top-nav'
 import { ACADEMY_ARTICLES, ACADEMY_STAGES } from '@/content/academy/manifest'
+import { useAcademyProgress } from '@/hooks/use-academy-progress'
 
 export function StageList() {
   const params = useSearchParams()
@@ -23,6 +25,7 @@ export function StageList() {
   const articles = ACADEMY_ARTICLES.filter((a) => a.stage === slug).sort(
     (a, b) => a.order - b.order,
   )
+  const { completedSet } = useAcademyProgress()
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
@@ -44,6 +47,12 @@ export function StageList() {
                     <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                       {stage.desc}
                     </p>
+                    {/* 本阶学习进度(登录后显示 · B 期刀1)*/}
+                    <StageProgress
+                      stageSlug={slug}
+                      total={articles.length}
+                      className="mt-4 max-w-xs"
+                    />
                   </header>
 
                   <ul className="space-y-2.5">
@@ -53,9 +62,18 @@ export function StageList() {
                           href={`/academy/article?slug=${a.slug}`}
                           className="group flex items-start gap-3 rounded-lg border border-paper bg-cream p-4 shadow-sm transition-colors hover:border-midas-red/40"
                         >
-                          <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-midas-red/10 font-mono text-xs text-midas-red">
-                            {a.order}
-                          </span>
+                          {completedSet.has(a.slug) ? (
+                            <span
+                              title="已学完"
+                              className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success/15 text-success"
+                            >
+                              <CheckCircle2 className="h-4 w-4" />
+                            </span>
+                          ) : (
+                            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-midas-red/10 font-mono text-xs text-midas-red">
+                              {a.order}
+                            </span>
+                          )}
                           <div className="min-w-0 flex-1">
                             <h2 className="font-serif font-bold text-foreground transition-colors group-hover:text-midas-red">
                               {a.title}

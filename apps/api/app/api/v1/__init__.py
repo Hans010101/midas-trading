@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.v1.academy import router as academy_router
 from app.api.v1.admin import router as admin_router
 from app.api.v1.alert_rules import router as alert_rules_router
 from app.api.v1.analysis import router as analysis_router
@@ -73,3 +74,6 @@ router.include_router(support_router)
 router.include_router(user_router)
 # 访问看板埋点 ingest · Next 中间件 beacon 调用 · 公开端点只 bump Redis 计数(不写 PG · 仅匿名 vid)
 router.include_router(track_router)
+# 训练营 B 期刀1 · 学习进度追踪(标记学完 + 进度展示)· 纯增量只读写 academy_progress
+# 🔴 红线:不碰交易/支付/会员 · article_slug 用 catalog 校验 · 未登录 GET 返空进度不 401
+router.include_router(academy_router)

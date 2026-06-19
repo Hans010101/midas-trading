@@ -9,6 +9,7 @@
 import { ArrowRight, BookOpen } from 'lucide-react'
 import Link from 'next/link'
 
+import { StageProgress } from '@/components/academy/stage-progress'
 import { TopNav } from '@/components/layout/top-nav'
 import { ACADEMY_ARTICLES, ACADEMY_STAGES } from '@/content/academy/manifest'
 
@@ -38,6 +39,8 @@ export default function AcademyHomePage() {
                   <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">
                     {stage.desc}
                   </p>
+                  {/* 学习进度(登录后显示已学 X/Y · B 期刀1)*/}
+                  <StageProgress stageSlug={stage.slug} total={count} className="mt-4" />
                   <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-midas-red">
                     开始学习
                     <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />

@@ -14,6 +14,7 @@ import { ChevronLeft, ChevronRight, Home } from 'lucide-react'
 import Link from 'next/link'
 
 import { AcademySideNav } from '@/components/academy/academy-side-nav'
+import { ArticleCompleteButton } from '@/components/academy/article-complete-button'
 import { ArticleQuiz } from '@/components/academy/article-quiz'
 import { ArticleRenderer } from '@/components/academy/article-renderer'
 import { PracticeCTA } from '@/components/academy/practice-cta'
@@ -89,6 +90,9 @@ export default async function AcademyArticlePage({
 
               {/* 去实战练入口(无配置 → 不渲染)*/}
               {practice && <PracticeCTA entry={practice} href={buildPracticeHref(practice)} />}
+
+              {/* 标记学完(登录 toggle · 未登录引导登录)· 进度存后端 B 期刀1 */}
+              <ArticleCompleteButton slug={slug} />
 
               {/* 上一篇 / 下一篇(同阶内按 order)*/}
               <nav className="mt-10 flex items-stretch justify-between gap-3 border-t border-paper pt-6">
