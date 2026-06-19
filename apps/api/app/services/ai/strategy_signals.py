@@ -106,6 +106,73 @@ def _rsi_series(closes: list[float], period: int) -> list[float | None]:
     return out
 
 
+def _ema_full(values: list[float], period: int) -> list[float | None]:
+    """逐根 EMA 序列 · 前 period-1 位 None · seed = 前 period 均值(同 indicators._ema 口径)。"""
+    n = len(values)
+    out: list[float | None] = [None] * n
+    if n < period:
+        return out
+    alpha = 2.0 / (period + 1)
+    ema = sum(values[:period]) / period
+    out[period - 1] = ema
+    for i in range(period, n):
+        ema = alpha * values[i] + (1 - alpha) * ema
+        out[i] = ema
+    return out
+
+
+def _macd_series(
+    closes: list[float], fast: int = 12, slow: int = 26, signal: int = 9,
+) -> list[tuple[float, float] | None]:
+    """逐根 (DIF, DEA) 序列 · 未预热 None · 与 indicators.compute_macd 同口径。
+
+    DIF = EMA_fast − EMA_slow(从 slow-1 起连续);DEA = EMA_signal(DIF)(再延迟 signal-1 起出值)。
+    """
+    n = len(closes)
+    out: list[tuple[float, float] | None] = [None] * n
+    e_fast = _ema_full(closes, fast)
+    e_slow = _ema_full(closes, slow)
+    dif_start = slow - 1
+    dif_vals: list[float] = []
+    for i in range(dif_start, n):
+        ef, es = e_fast[i], e_slow[i]
+        if ef is None or es is None:
+            continue
+        dif_vals.append(ef - es)
+    if len(dif_vals) < signal:
+        return out
+    alpha = 2.0 / (signal + 1)
+    dea = sum(dif_vals[:signal]) / signal
+    out[dif_start + signal - 1] = (dif_vals[signal - 1], dea)
+    for j in range(signal, len(dif_vals)):
+        dea = alpha * dif_vals[j] + (1 - alpha) * dea
+        out[dif_start + j] = (dif_vals[j], dea)
+    return out
+
+
+def _kdj_series(
+    klines: list[Kline], n: int = 9, m1: int = 3, m2: int = 3,
+) -> list[tuple[float, float, float] | None]:
+    """逐根 (K, D, J) 序列 · 前 n-1 位 None · 与 indicators.compute_kdj 同口径(K/D 初值 50)。"""
+    length = len(klines)
+    out: list[tuple[float, float, float] | None] = [None] * length
+    if length < n:
+        return out
+    highs = [float(k.high) for k in klines]
+    lows = [float(k.low) for k in klines]
+    closes = [float(k.close) for k in klines]
+    k_val = 50.0
+    d_val = 50.0
+    for i in range(n - 1, length):
+        hn = max(highs[i - n + 1 : i + 1])
+        ln = min(lows[i - n + 1 : i + 1])
+        rsv = 0.0 if hn == ln else (closes[i] - ln) / (hn - ln) * 100.0
+        k_val = (m1 - 1) / m1 * k_val + 1 / m1 * rsv
+        d_val = (m2 - 1) / m2 * d_val + 1 / m2 * k_val
+        out[i] = (k_val, d_val, 3 * k_val - 2 * d_val)
+    return out
+
+
 # ===== 穿越检测(相邻两根) =====
 
 
@@ -238,12 +305,84 @@ def scan_boll_reversion(
     return signals
 
 
+def scan_macd_cross(
+    klines: list[Kline], fast: int = 12, slow: int = 26, signal: int = 9,
+) -> list[StrategySignal]:
+    """MACD 金叉/死叉(★DIF 穿 DEA · 不是均线穿越):
+
+    DIF 上穿 DEA = buy(金叉);DIF 下穿 DEA = sell(死叉)。
+    ⑤ 关键价位:DIF / DEA / 柱(=(DIF−DEA)×2)· ⑥ 成色:柱体绝对值(动能强弱)。
+    """
+    closes = [float(k.close) for k in klines]
+    series = _macd_series(closes, fast, slow, signal)
+    signals: list[StrategySignal] = []
+    for i in range(1, len(klines)):
+        prev, cur = series[i - 1], series[i]
+        if prev is None or cur is None:
+            continue
+        pdif, pdea = prev
+        cdif, cdea = cur
+        hist = round((cdif - cdea) * 2, 4)
+        levels = {"DIF": round(cdif, 4), "DEA": round(cdea, 4), "柱": hist}
+        if _crosses_up(pdif, pdea, cdif, cdea):
+            signals.append(StrategySignal(
+                ts=klines[i].ts, price=closes[i], kind="buy",
+                reason="DIF 上穿 DEA(MACD 金叉)", levels=levels,
+                strength=abs(hist), strength_note=f"柱体 {hist:+.4f}",
+            ))
+        elif _crosses_down(pdif, pdea, cdif, cdea):
+            signals.append(StrategySignal(
+                ts=klines[i].ts, price=closes[i], kind="sell",
+                reason="DIF 下穿 DEA(MACD 死叉)", levels=levels,
+                strength=abs(hist), strength_note=f"柱体 {hist:+.4f}",
+            ))
+    return signals
+
+
+def scan_kdj_cross(
+    klines: list[Kline], n: int = 9, m1: int = 3, m2: int = 3,
+) -> list[StrategySignal]:
+    """KDJ 金叉/死叉:K 上穿 D = buy(低位 <20 更强)· K 下穿 D = sell(高位 >80 更强)。
+
+    ⑤ 关键价位:K / D / J · ⑥ 成色:低位金叉(20−K)/ 高位死叉(K−80)· 非低/高位则 0。
+    """
+    series = _kdj_series(klines, n, m1, m2)
+    closes = [float(k.close) for k in klines]
+    signals: list[StrategySignal] = []
+    for i in range(1, len(klines)):
+        prev, cur = series[i - 1], series[i]
+        if prev is None or cur is None:
+            continue
+        pk, pd, _ = prev
+        ck, cd, cj = cur
+        levels = {"K": round(ck, 1), "D": round(cd, 1), "J": round(cj, 1)}
+        if _crosses_up(pk, pd, ck, cd):
+            low = ck < 20
+            signals.append(StrategySignal(
+                ts=klines[i].ts, price=closes[i], kind="buy",
+                reason="K 上穿 D(KDJ 金叉)", levels=levels,
+                strength=round(max(0.0, 20 - ck), 1) if low else 0.0,
+                strength_note=(f"低位金叉 · K={ck:.0f}" if low else None),
+            ))
+        elif _crosses_down(pk, pd, ck, cd):
+            high = ck > 80
+            signals.append(StrategySignal(
+                ts=klines[i].ts, price=closes[i], kind="sell",
+                reason="K 下穿 D(KDJ 死叉)", levels=levels,
+                strength=round(max(0.0, ck - 80), 1) if high else 0.0,
+                strength_note=(f"高位死叉 · K={ck:.0f}" if high else None),
+            ))
+    return signals
+
+
 # ===== dispatcher =====
 
 _SCANNERS: dict[StrategyKind, Callable[[list[Kline]], list[StrategySignal]]] = {
     "ma_cross": scan_ma_cross,
     "rsi_reversal": scan_rsi_reversal,
     "boll_reversion": scan_boll_reversion,
+    "macd_cross": scan_macd_cross,
+    "kdj_cross": scan_kdj_cross,
 }
 
 
@@ -260,6 +399,8 @@ def scan_signals(klines: list[Kline], strategy: StrategyKind) -> list[StrategySi
 
 __all__ = [
     "scan_boll_reversion",
+    "scan_kdj_cross",
+    "scan_macd_cross",
     "scan_ma_cross",
     "scan_rsi_reversal",
     "scan_signals",

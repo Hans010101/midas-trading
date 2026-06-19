@@ -19,8 +19,10 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from app.schemas.market import Market, Period
 
-# 3 个经典策略 key(拍板①)
-StrategyKind = Literal["ma_cross", "rsi_reversal", "boll_reversion"]
+# 经典策略 key(拍板① + 第一刀扩展 macd/kdj · 均纯规则四市场通用)
+StrategyKind = Literal[
+    "ma_cross", "rsi_reversal", "boll_reversion", "macd_cross", "kdj_cross",
+]
 
 # 信号方向 · 统一抽象(拍板③ · 不分现货/合约 · 看完走第一层)
 SignalKind = Literal["buy", "sell"]

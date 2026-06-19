@@ -12,7 +12,12 @@ import type { Market, Period } from '@midas/shared'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
-export type StrategyKind = 'ma_cross' | 'rsi_reversal' | 'boll_reversion'
+export type StrategyKind =
+  | 'ma_cross'
+  | 'rsi_reversal'
+  | 'boll_reversion'
+  | 'macd_cross'
+  | 'kdj_cross'
 export type SignalKind = 'buy' | 'sell'
 export type Instrument = 'spot' | 'perp'
 

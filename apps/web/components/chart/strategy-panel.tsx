@@ -16,6 +16,8 @@
 import { ProLock } from '@/components/account/pro-lock'
 import { useStrategyRecommend, useStrategySignals } from '@/hooks/use-strategy'
 import type { Instrument, StrategyKind, StrategySignal } from '@/lib/api/strategy'
+import { DEFAULT_STRATEGY_ORDER } from '@/lib/store/ui-store'
+import { useUiStore } from '@/lib/store/ui-store-provider'
 import { cn } from '@/lib/utils'
 import type { Market, Period } from '@midas/shared'
 
@@ -23,9 +25,17 @@ const STRATEGY_LABELS: Record<StrategyKind, string> = {
   ma_cross: '均线金叉',
   rsi_reversal: 'RSI 反弹',
   boll_reversion: '布林均值回归',
+  macd_cross: 'MACD 金叉死叉',
+  kdj_cross: 'KDJ 金叉死叉',
 }
 
-const STRATEGY_ORDER: StrategyKind[] = ['ma_cross', 'rsi_reversal', 'boll_reversion']
+/** 顺序以 ui-store.strategyOrder 为准(用户左右调 · 全页持久化);此处对其做"已知键过滤 + 缺失键补全"。 */
+function effectiveOrder(stored: StrategyKind[]): StrategyKind[] {
+  const known = new Set(DEFAULT_STRATEGY_ORDER)
+  const fromStored = stored.filter((k) => known.has(k))
+  const missing = DEFAULT_STRATEGY_ORDER.filter((k) => !fromStored.includes(k))
+  return [...fromStored, ...missing]
+}
 
 // 价格符号(按市场)· cn ¥ / hk HK$ / us·crypto $
 function priceSym(market: Market): string {
@@ -80,9 +90,22 @@ export function StrategyPanel({
 }: Props) {
   const recommend = useStrategyRecommend({ symbol, market, period, instrument, enabled })
   const signals = useStrategySignals({ symbol, market, period, strategy, instrument, enabled })
+  const storedOrder = useUiStore((s) => s.strategyOrder)
+  const setOrder = useUiStore((s) => s.setStrategyOrder)
 
   const rec = recommend.data
   const sig = signals.data
+  const order = effectiveOrder(storedOrder)
+
+  // 左右移:与相邻项交换 · 写回 ui-store(全页持久化)。端点处 dir 越界则不动。
+  function moveStrategy(k: StrategyKind, dir: -1 | 1): void {
+    const i = order.indexOf(k)
+    const j = i + dir
+    if (j < 0 || j >= order.length) return
+    const next = [...order]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    setOrder(next)
+  }
 
   return (
     <div className="rounded-lg border border-paper bg-surface-card p-3">
@@ -111,25 +134,44 @@ export function StrategyPanel({
         <div className="mt-3 space-y-2">
           {/* 策略选择 */}
           <div className="flex flex-wrap items-center gap-2">
-            {STRATEGY_ORDER.map((k) => {
+            {order.map((k, idx) => {
               const isRecommended = rec?.recommended_strategy === k
               return (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => onStrategyChange(k)}
-                  className={cn(
-                    'relative rounded-md border px-3 py-1 text-xs transition-colors',
-                    strategy === k
-                      ? 'border-midas-red bg-midas-red-glow text-midas-red'
-                      : 'border-paper text-muted-foreground hover:border-midas-red/40 hover:text-foreground',
-                  )}
-                >
-                  {STRATEGY_LABELS[k]}
-                  {isRecommended && (
-                    <span className="ml-1 text-[10px] text-gold">★荐</span>
-                  )}
-                </button>
+                <div key={k} className="flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    aria-label={`${STRATEGY_LABELS[k]} 左移`}
+                    disabled={idx === 0}
+                    onClick={() => moveStrategy(k, -1)}
+                    className="px-1 text-[11px] text-muted-foreground/50 transition-colors hover:text-midas-red disabled:opacity-25"
+                  >
+                    ◀
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onStrategyChange(k)}
+                    className={cn(
+                      'relative rounded-md border px-3 py-1 text-xs transition-colors',
+                      strategy === k
+                        ? 'border-midas-red bg-midas-red-glow text-midas-red'
+                        : 'border-paper text-muted-foreground hover:border-midas-red/40 hover:text-foreground',
+                    )}
+                  >
+                    {STRATEGY_LABELS[k]}
+                    {isRecommended && (
+                      <span className="ml-1 text-[10px] text-gold">★荐</span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`${STRATEGY_LABELS[k]} 右移`}
+                    disabled={idx === order.length - 1}
+                    onClick={() => moveStrategy(k, 1)}
+                    className="px-1 text-[11px] text-muted-foreground/50 transition-colors hover:text-midas-red disabled:opacity-25"
+                  >
+                    ▶
+                  </button>
+                </div>
               )
             })}
           </div>
