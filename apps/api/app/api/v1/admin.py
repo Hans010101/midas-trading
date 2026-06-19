@@ -11,7 +11,8 @@
 - register_method:由 google_sub / password_hash 非空推导(google|password|both)。
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from datetime import date as date_type
 from typing import Annotated
 from uuid import UUID
 
@@ -22,13 +23,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import AdminDep
 from app.core.database import get_db
+from app.core.redis_client import get_redis
 from app.models.admin_action_log import AdminActionLog
+from app.models.daily_visit_stat import DailyVisitStat
 from app.models.redeem_code import RedeemCode
 from app.models.session import Session
 from app.models.subscription import Subscription
 from app.models.user import User
 from app.services.growth import extend_subscription, invite_stats
 from app.services.membership import PLAN_QUOTAS, get_quota_used, resolve_plan
+from app.services.visit_stats import CN_TZ, cn_today, read_redis_day
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -357,3 +361,132 @@ async def ban_user(user_id: str, payload: BanIn, admin: AdminDep, db: DbDep) -> 
 @router.post("/users/{user_id}/unban", response_model=BanOut)
 async def unban_user(user_id: str, payload: BanIn, admin: AdminDep, db: DbDep) -> BanOut:
     return await _set_ban(user_id, admin, db, ban=False, note=payload.note)
+
+
+# ── 网站访问看板(PV/UV 趋势 + 注册趋势)· AdminDep · 纯只读 ──────────────────────
+# 访问数据自上线起累积、历史不可回溯(部署前无访问日志);注册数据可回溯(user.created_at)。
+# PV/UV:PG daily_visit_stat 历史 + Redis 今/昨实时叠加(不等下次 flush)。隐私:仅匿名计数。
+
+
+class VisitDailyPoint(BaseModel):
+    date: str  # ISO yyyy-mm-dd(CN 日)
+    pv: int
+    uv: int
+
+
+class RegistrationPoint(BaseModel):
+    date: str
+    count: int
+
+
+class VisitStatsOut(BaseModel):
+    range_days: int
+    daily: list[VisitDailyPoint]  # 近 N 天 PV/UV(含今日实时)
+    registrations: list[RegistrationPoint]  # 近 N 天每日注册数(user.created_at 回溯)
+    today: VisitDailyPoint
+    yesterday: VisitDailyPoint
+    cumulative_pv: int  # 累计 PV(全历史 · 含今日实时)
+    cumulative_uv: int  # 累计 UV = 各天 UV 之和(跨天不可去重 · 口径=每日 UV 累加)
+    total_registrations: int  # 累计注册用户数(全历史)
+
+
+def _empty(d: date_type) -> VisitDailyPoint:
+    return VisitDailyPoint(date=d.isoformat(), pv=0, uv=0)
+
+
+@router.get("/visit-stats", response_model=VisitStatsOut)
+async def visit_stats(
+    _admin: AdminDep,
+    db: DbDep,
+    days: int = Query(30, ge=1, le=365),
+) -> VisitStatsOut:
+    """访问看板取数 · PV/UV 日趋势(PG 历史 + Redis 今/昨实时)+ 注册日趋势(可回溯)。"""
+    today = cn_today()
+    yest = today - timedelta(days=1)
+    start = today - timedelta(days=days - 1)
+
+    # ① PV/UV:PG daily_visit_stat 历史(窗口内)
+    rows = (
+        await db.execute(
+            select(DailyVisitStat.date, DailyVisitStat.pv, DailyVisitStat.uv)
+            .where(DailyVisitStat.date >= start)
+            .order_by(DailyVisitStat.date)
+        )
+    ).all()
+    pg_map: dict[date_type, tuple[int, int]] = {r.date: (int(r.pv), int(r.uv)) for r in rows}
+    today_pg = pg_map.get(today, (0, 0))
+
+    # 叠加 Redis 今/昨实时(取 max 防回退);记今日实时增量用于累计补足
+    redis = await get_redis()
+    live_map = dict(pg_map)
+    today_live = today_pg
+    for d in (today, yest):
+        if d < start:
+            continue
+        rpv, ruv = await read_redis_day(redis, d)
+        bpv, buv = live_map.get(d, (0, 0))
+        merged = (max(bpv, rpv), max(buv, ruv))
+        live_map[d] = merged
+        if d == today:
+            today_live = merged
+
+    daily = [
+        VisitDailyPoint(
+            date=(start + timedelta(days=i)).isoformat(),
+            pv=live_map.get(start + timedelta(days=i), (0, 0))[0],
+            uv=live_map.get(start + timedelta(days=i), (0, 0))[1],
+        )
+        for i in range(days)
+    ]
+    today_pt = VisitDailyPoint(date=today.isoformat(), pv=today_live[0], uv=today_live[1])
+    yest_pt = VisitDailyPoint(
+        date=yest.isoformat(),
+        pv=live_map.get(yest, (0, 0))[0],
+        uv=live_map.get(yest, (0, 0))[1],
+    )
+
+    # ② 累计 PV/UV(全历史 PG sum + 今日实时增量补足,因 flush 有 ≤10min 延迟)
+    cum = (
+        await db.execute(
+            select(
+                func.coalesce(func.sum(DailyVisitStat.pv), 0),
+                func.coalesce(func.sum(DailyVisitStat.uv), 0),
+            )
+        )
+    ).one()
+    cumulative_pv = int(cum[0]) - today_pg[0] + today_live[0]
+    cumulative_uv = int(cum[1]) - today_pg[1] + today_live[1]
+
+    # ③ 注册趋势:user.created_at 按 CN 日聚合(窗口内 · 零填充缺失天)
+    reg_day = func.date(func.timezone("Asia/Shanghai", User.created_at)).label("d")
+    start_dt = datetime(start.year, start.month, start.day, tzinfo=CN_TZ)
+    reg_rows = (
+        await db.execute(
+            select(reg_day, func.count().label("c"))
+            .where(User.created_at >= start_dt)
+            .group_by(reg_day)
+            .order_by(reg_day)
+        )
+    ).all()
+    reg_map = {
+        (r.d.isoformat() if hasattr(r.d, "isoformat") else str(r.d)): int(r.c) for r in reg_rows
+    }
+    registrations = [
+        RegistrationPoint(
+            date=(start + timedelta(days=i)).isoformat(),
+            count=reg_map.get((start + timedelta(days=i)).isoformat(), 0),
+        )
+        for i in range(days)
+    ]
+    total_reg = (await db.execute(select(func.count()).select_from(User))).scalar() or 0
+
+    return VisitStatsOut(
+        range_days=days,
+        daily=daily,
+        registrations=registrations,
+        today=today_pt,
+        yesterday=yest_pt,
+        cumulative_pv=cumulative_pv,
+        cumulative_uv=cumulative_uv,
+        total_registrations=int(total_reg),
+    )

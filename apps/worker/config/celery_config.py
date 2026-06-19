@@ -44,6 +44,12 @@ beat_schedule = {
         # 加密 7×24 市场,每 5 分钟一次
         "schedule": crontab(minute="*/5"),
     },
+    "flush-visit-stats": {
+        "task": "tasks.visit.flush_visit_stats",
+        # 访问看板:每 10 分钟把 Redis 实时 PV/UV 落库 daily_visit_stat(今/昨两天)
+        "schedule": crontab(minute="*/10"),
+        "options": {"expires": 540},
+    },
     "update-crypto-15m": {
         "task": "tasks.incremental.update_crypto_15m",
         # 加密主流 5 币 15m 已收盘 K线 · 每 5 分钟(15m 根 15min 收一次 · 5min 轮询冗余覆盖收盘)·

@@ -22,6 +22,7 @@ from app.api.v1.redeem import router as redeem_router
 from app.api.v1.structure import router as structure_router
 from app.api.v1.support import router as support_router
 from app.api.v1.telegram import router as telegram_router
+from app.api.v1.track import router as track_router
 from app.api.v1.us import router as us_router
 from app.api.v1.user import router as user_router
 from app.api.v1.virtual import router as virtual_router
@@ -70,3 +71,5 @@ router.include_router(payment_router)
 router.include_router(support_router)
 # 用户资料(头像选择器骨架)· PATCH /user/avatar 零图片存储只存编号
 router.include_router(user_router)
+# 访问看板埋点 ingest · Next 中间件 beacon 调用 · 公开端点只 bump Redis 计数(不写 PG · 仅匿名 vid)
+router.include_router(track_router)

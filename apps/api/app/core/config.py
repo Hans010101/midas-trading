@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 
+    # 访问统计埋点 ingest 防滥用密钥(可选 · 空=不校验)· Next 中间件 beacon 带 x-track-secret。
+    track_ingest_secret: str = ""
+
     # CORS
     cors_origins: list[str] = ["http://localhost:3000"]
 
