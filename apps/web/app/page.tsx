@@ -37,6 +37,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 
 import { AcademyEntry } from '@/components/landing/academy-entry'
+import { BotRemote } from '@/components/landing/bot-remote'
 import { ContactUsLink } from '@/components/landing/contact-us-link'
 import { Membership } from '@/components/landing/membership'
 import { ResearchLab } from '@/components/landing/research-lab'
@@ -67,6 +68,7 @@ export default function HomePage() {
       <ResearchLab />
       <AcademyEntry />
       <VirtualPractice />
+      <BotRemote />
       <ChanAndMore />
       <Membership />
       <BottomCTA />
