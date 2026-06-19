@@ -8,8 +8,11 @@
  * 入参 markdown 为原始字符串(由 server 端 lib/academy 用 fs 读出后传入)。
  */
 
+import Link from 'next/link'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+
+import { glossaryAnchorId, reactChildrenToText } from '@/lib/academy-anchor'
 
 const components: Components = {
   // h1 = 文章主标题(md 首行 · 中国红 · 大)
@@ -24,10 +27,18 @@ const components: Components = {
       {children}
     </h2>
   ),
-  // h3 = 暖金小标题
-  h3: ({ children }) => (
-    <h3 className="mb-2 mt-6 font-serif text-base font-bold text-gold">{children}</h3>
-  ),
+  // h3 = 暖金小标题 · 词典词条标题(`### N. 术语名`)额外输出锚点 id(术语名生成 · 不含序号)
+  h3: ({ children }) => {
+    const id = glossaryAnchorId(reactChildrenToText(children)) ?? undefined
+    return (
+      <h3
+        id={id}
+        className="mb-2 mt-6 scroll-mt-24 font-serif text-base font-bold text-gold"
+      >
+        {children}
+      </h3>
+    )
+  },
   p: ({ children }) => <p className="my-4 leading-[1.85] text-foreground/85">{children}</p>,
   ul: ({ children }) => (
     <ul className="my-4 ml-5 list-disc space-y-2 leading-[1.85] text-foreground/85 marker:text-midas-red/60">
@@ -42,15 +53,28 @@ const components: Components = {
   li: ({ children }) => <li className="pl-1">{children}</li>,
   strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
   em: ({ children }) => <em className="italic">{children}</em>,
+  // a = 链接 · 站内链(如 [中枢](/academy/glossary#中枢))走 Next <Link> 软导航(不整页刷新);
+  //     站外链(http)新开页。词典锚点定位由 glossary 页的 HashScroller 兜底。
   a: ({ href, children }) => {
-    const external = typeof href === 'string' && href.startsWith('http')
+    const h = typeof href === 'string' ? href : ''
+    const className = 'text-midas-red underline-offset-2 hover:underline'
+    if (h.startsWith('http')) {
+      return (
+        <a href={h} className={className} target="_blank" rel="noopener noreferrer">
+          {children}
+        </a>
+      )
+    }
+    if (h.startsWith('/')) {
+      return (
+        <Link href={h} className={className}>
+          {children}
+        </Link>
+      )
+    }
+    // 兜底(如纯 #hash 或空):原生 a
     return (
-      <a
-        href={href}
-        className="text-midas-red underline-offset-2 hover:underline"
-        target={external ? '_blank' : undefined}
-        rel={external ? 'noopener noreferrer' : undefined}
-      >
+      <a href={h || undefined} className={className}>
         {children}
       </a>
     )

@@ -9,6 +9,7 @@
 
 import { AcademySideNav } from '@/components/academy/academy-side-nav'
 import { ArticleRenderer } from '@/components/academy/article-renderer'
+import { HashScroller } from '@/components/academy/hash-scroller'
 import { TopNav } from '@/components/layout/top-nav'
 import { getGlossary } from '@/lib/academy'
 
@@ -18,6 +19,8 @@ export default function AcademyGlossaryPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <TopNav />
+      {/* 到达 /academy/glossary#<术语id> 时滚动定位到对应词条(软导航/直接访问都兜底)*/}
+      <HashScroller />
       <main className="flex-1">
         <div className="mx-auto max-w-5xl px-6 py-6">
           <div className="lg:flex lg:gap-8">
