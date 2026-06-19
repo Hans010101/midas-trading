@@ -154,3 +154,40 @@ export async function fetchAdminUserDetail(
   if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
   return (await r.json()) as AdminUserDetail
 }
+
+// ── 网站访问看板(PV/UV 趋势 + 注册趋势)──
+
+export interface VisitDailyPoint {
+  date: string // yyyy-mm-dd(CN 日)
+  pv: number
+  uv: number
+}
+
+export interface RegistrationPoint {
+  date: string
+  count: number
+}
+
+export interface VisitStats {
+  range_days: number
+  daily: VisitDailyPoint[]
+  registrations: RegistrationPoint[]
+  today: VisitDailyPoint
+  yesterday: VisitDailyPoint
+  cumulative_pv: number
+  cumulative_uv: number
+  total_registrations: number
+}
+
+export async function fetchAdminVisitStats(
+  token: string,
+  days: number,
+  signal?: AbortSignal,
+): Promise<VisitStats> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/visit-stats?days=${days}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as VisitStats
+}
