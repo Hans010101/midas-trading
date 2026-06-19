@@ -243,10 +243,14 @@ fi
 # ── ADR 0029 DP4:FORCE_REBUILD 顶替 diff 判定 ──
 # 在所有 diff-based flag 计算完成之后强行 OR 上 · 不破坏正常 push 部署的 diff 判定路径
 if [ "$FORCE_REBUILD" = "true" ]; then
-  warn "FORCE_REBUILD=true · 忽略 diff · 强制重建 api + worker + web"
+  warn "FORCE_REBUILD=true · 忽略 diff · 强制重建 api + worker + web + alembic upgrade head"
   NEED_BUILD_API=true
   NEED_BUILD_WEB=true
   NEED_COMPOSE_UP=true
+  # ★ 2026-06-19 翻车修:force_rebuild 也强制跑迁移(幂等 · 已 head 则 no-op)。
+  #   坑:迁移文件早被前面的 git reset --hard 带进 VPS 树 → OLD..NEW diff 无新文件 → NEED_ALEMBIC=false
+  #   → 容器是新码但表没建 → authed 查表 500。force_rebuild = "prod 全面对齐 main",必须含表结构。
+  NEED_ALEMBIC=true
 fi
 
 if [ "$NEED_BUILD_API" = "false" ] && [ "$NEED_BUILD_WEB" = "false" ] \
