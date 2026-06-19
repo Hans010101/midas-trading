@@ -18,6 +18,8 @@ export type StrategyKind =
   | 'boll_reversion'
   | 'macd_cross'
   | 'kdj_cross'
+  // 第二刀:极端信号(★仅 crypto perp · 合约 funding/OI/多空比情绪 · 现货不出)
+  | 'extreme'
 export type SignalKind = 'buy' | 'sell'
 export type Instrument = 'spot' | 'perp'
 

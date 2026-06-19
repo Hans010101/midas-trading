@@ -23,7 +23,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from app.schemas.market import Kline
-from app.schemas.strategy import StrategyKind, StrategySignal
+from app.schemas.strategy import SignalKind, StrategyKind, StrategySignal
 
 # ★ 复用 indicators 的纯数学基础(不改其对外 compute_* 契约 · 现有指标零回归)
 from app.services.ai.indicators import _sma, _stdev
@@ -36,6 +36,13 @@ _RSI_OVERSOLD = 30.0
 _RSI_OVERBOUGHT = 70.0
 _BOLL_PERIOD = 20
 _BOLL_K = 2.0
+
+# ===== 极端信号阈值(第二刀 · 仅 crypto perp · 合理默认避免频繁误触发 · 便于后续调)=====
+_FUNDING_EXTREME = 0.0005   # |资金费率| > 0.05%/8h = 极端(Binance 常态 ~0.01%)· 正高=多头拥挤偏空
+_LS_HIGH = 2.0              # 大户多空比 > 2 = 过度做多 → 反向偏空
+_LS_LOW = 0.5               # 大户多空比 < 0.5 = 过度做空 → 反向偏多
+_OI_CHANGE = 0.10           # 近窗口 OI(USD)变动 ≥ ±10% = 异动(情绪转折)
+_OI_WINDOW = 12             # OI 异动回看窗口点数(5min 粒度 ≈ 近 1h)
 
 
 # ===== 序列指标(复用 indicators 数学 · 吐整段序列 · 未预热位 = None)=====
@@ -375,8 +382,85 @@ def scan_kdj_cross(
     return signals
 
 
-# ===== dispatcher =====
+def scan_extreme(
+    klines: list[Kline],
+    *,
+    funding_rate: float | None = None,
+    oi_usd_series: list[float] | None = None,
+    long_short_ratio: float | None = None,
+) -> list[StrategySignal]:
+    """极端信号(★仅 crypto perp · 合约情绪)· 三者任一走极端即触发,合并为一个当前态信号。
 
+    解耦:只吃标量/序列(端点从 select_funding_rates/open_interest/long_short 提取后传入),
+    不导入 crypto schema。某项为 None = 数据缺 → 该项不参与(优雅降级,不报错)。
+    方向(★反向情绪 · 拥挤的一方反向):
+      · 资金费率正高=多头付空头=多头拥挤→偏空(sell);负低=空头付多头=空头拥挤→偏多(buy)。
+      · 大户多空比偏高=过度做多→偏空;偏低=过度做空→偏多。
+      · OI 急变=情绪转折(本身不定多空):有 funding/多空比方向则随之;仅 OI 异动则逆近期价格。
+    数据全不极端 → 返回空(不触发)。只在最新一根 K 标一个点(当前态信号)。
+    """
+    if not klines:
+        return []
+    closes = [float(k.close) for k in klines]
+    last = klines[-1]
+    reasons: list[str] = []
+    levels: dict[str, float] = {}
+    votes = 0  # buy=+1 / sell=-1(反向情绪净票)
+
+    if funding_rate is not None:
+        levels["资金费率%"] = round(funding_rate * 100, 4)
+        if funding_rate > _FUNDING_EXTREME:
+            reasons.append("资金费率正向偏高")
+            votes -= 1
+        elif funding_rate < -_FUNDING_EXTREME:
+            reasons.append("资金费率负向偏低")
+            votes += 1
+
+    if long_short_ratio is not None:
+        levels["多空比"] = round(long_short_ratio, 2)
+        if long_short_ratio > _LS_HIGH:
+            reasons.append("多空比偏高")
+            votes -= 1
+        elif long_short_ratio < _LS_LOW:
+            reasons.append("多空比偏低")
+            votes += 1
+
+    if oi_usd_series and len(oi_usd_series) >= 2:
+        k = min(_OI_WINDOW, len(oi_usd_series) - 1)
+        base = oi_usd_series[-1 - k]
+        if base > 0:
+            chg = (oi_usd_series[-1] - base) / base
+            levels["OI变动%"] = round(chg * 100, 1)
+            if abs(chg) >= _OI_CHANGE:
+                reasons.append("OI急增" if chg > 0 else "OI急减")
+
+    if not reasons:
+        return []  # 三者都不极端 → 不触发
+
+    if votes > 0:
+        kind: SignalKind = "buy"
+    elif votes < 0:
+        kind = "sell"
+    else:
+        # 仅 OI 异动(无 funding/多空比方向)→ 逆近期价格(过热反向)· 数据不足则默认 sell
+        w = min(_OI_WINDOW, len(closes) - 1)
+        base_c = closes[-1 - w] if w >= 1 else 0.0
+        recent = (closes[-1] - base_c) / base_c if base_c else 0.0
+        kind = "sell" if recent > 0 else "buy"
+
+    reason = f"极端信号 · {' · '.join(reasons)}"[:80]
+    return [
+        StrategySignal(
+            ts=last.ts, price=closes[-1], kind=kind, reason=reason, levels=levels,
+            strength=float(len(reasons)),
+            strength_note=f"{len(reasons)}/3 项走极端",
+        ),
+    ]
+
+
+# ===== dispatcher =====
+# ⚠ extreme 不入 _SCANNERS:它需合约数据(funding/oi/多空比)· 端点对 crypto perp 特判直调
+#   scan_extreme(带数据);其余 5 个纯 klines 走 _SCANNERS。scan_signals 不处理 extreme。
 _SCANNERS: dict[StrategyKind, Callable[[list[Kline]], list[StrategySignal]]] = {
     "ma_cross": scan_ma_cross,
     "rsi_reversal": scan_rsi_reversal,
@@ -399,6 +483,7 @@ def scan_signals(klines: list[Kline], strategy: StrategyKind) -> list[StrategySi
 
 __all__ = [
     "scan_boll_reversion",
+    "scan_extreme",
     "scan_kdj_cross",
     "scan_macd_cross",
     "scan_ma_cross",

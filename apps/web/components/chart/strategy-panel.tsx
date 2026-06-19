@@ -13,11 +13,13 @@
  * ★ 红线:纯展示 · 不下单 / 不自动交易。
  */
 
+import { useEffect } from 'react'
+
 import { ProLock } from '@/components/account/pro-lock'
 import { useStrategyRecommend, useStrategySignals } from '@/hooks/use-strategy'
 import type { Instrument, StrategyKind, StrategySignal } from '@/lib/api/strategy'
-import { DEFAULT_STRATEGY_ORDER } from '@/lib/store/ui-store'
 import { useUiStore } from '@/lib/store/ui-store-provider'
+import { availableStrategies, effectiveOrder } from '@/lib/strategy-order'
 import { cn } from '@/lib/utils'
 import type { Market, Period } from '@midas/shared'
 
@@ -27,14 +29,7 @@ const STRATEGY_LABELS: Record<StrategyKind, string> = {
   boll_reversion: '布林均值回归',
   macd_cross: 'MACD 金叉死叉',
   kdj_cross: 'KDJ 金叉死叉',
-}
-
-/** 顺序以 ui-store.strategyOrder 为准(用户左右调 · 全页持久化);此处对其做"已知键过滤 + 缺失键补全"。 */
-function effectiveOrder(stored: StrategyKind[]): StrategyKind[] {
-  const known = new Set(DEFAULT_STRATEGY_ORDER)
-  const fromStored = stored.filter((k) => known.has(k))
-  const missing = DEFAULT_STRATEGY_ORDER.filter((k) => !fromStored.includes(k))
-  return [...fromStored, ...missing]
+  extreme: '合约极端',
 }
 
 // 价格符号(按市场)· cn ¥ / hk HK$ / us·crypto $
@@ -95,7 +90,17 @@ export function StrategyPanel({
 
   const rec = recommend.data
   const sig = signals.data
-  const order = effectiveOrder(storedOrder)
+  const order = effectiveOrder(storedOrder, availableStrategies(market, instrument))
+
+  // 选中策略在当前市场不可用(如从 crypto perp 选着「合约极端」切到现货)→ 回退首个可用,
+  // 避免「选中态无对应按钮 + 拉取空信号」。order 内容变化才触发(join 当稳定依赖)。
+  const orderKey = order.join('|')
+  useEffect(() => {
+    if (order.length > 0 && !order.includes(strategy)) {
+      onStrategyChange(order[0])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderKey, strategy, onStrategyChange])
 
   // 左右移:与相邻项交换 · 写回 ui-store(全页持久化)。端点处 dir 越界则不动。
   function moveStrategy(k: StrategyKind, dir: -1 | 1): void {

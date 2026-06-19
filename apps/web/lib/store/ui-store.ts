@@ -4,13 +4,16 @@ import { immer } from 'zustand/middleware/immer'
 
 import type { StrategyKind } from '@/lib/api/strategy'
 
-/** AI 策略信号默认显示顺序(用户可左右调 · 持久化)· 加新信号在此追加。 */
+/** AI 策略信号默认显示顺序(用户可左右调 · 持久化)· 加新信号在此追加。
+ *  ★ extreme 仅 crypto perp 可用 —— 它在此作为"已知键 + 默认末位",
+ *  实际是否显示由 strategy-panel 按市场过滤(现货不出)。 */
 export const DEFAULT_STRATEGY_ORDER: StrategyKind[] = [
   'ma_cross',
   'rsi_reversal',
   'boll_reversion',
   'macd_cross',
   'kdj_cross',
+  'extreme',
 ]
 
 export interface UiState {

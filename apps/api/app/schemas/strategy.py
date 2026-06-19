@@ -19,9 +19,11 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from app.schemas.market import Market, Period
 
-# 经典策略 key(拍板① + 第一刀扩展 macd/kdj · 均纯规则四市场通用)
+# 经典策略 key(拍板① + 第一刀 macd/kdj 四市场通用 + 第二刀 extreme 仅 crypto perp)
 StrategyKind = Literal[
     "ma_cross", "rsi_reversal", "boll_reversion", "macd_cross", "kdj_cross",
+    # 极端信号(★仅 crypto perp · 合约 funding/OI/多空比情绪 · 现货不出)
+    "extreme",
 ]
 
 # 信号方向 · 统一抽象(拍板③ · 不分现货/合约 · 看完走第一层)
