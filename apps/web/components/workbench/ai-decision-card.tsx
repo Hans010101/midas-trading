@@ -54,7 +54,6 @@ export function AiDecisionCard({
         <p className="font-serif text-sm font-bold text-foreground">
           AI 决策卡
         </p>
-        <p className="text-[10px] text-muted-foreground/70">· 技术面分析</p>
       </header>
 
       {query.status === 'pending' && <CardSkeleton />}
@@ -170,7 +169,7 @@ function CardBody({ card }: { card: DecisionCard }) {
       )}
 
       {/* 交易计划参考(三价位 + plan_note + 按计划价挂限价单)· 缠论买卖点区之后 */}
-      <TradingPlanBlock plan={card.trading_plan} symbol={card.symbol} market={card.market} />
+      <TradingPlanBlock plan={card.trading_plan} symbol={card.symbol} market={card.market} actionable={card.actionable} />
 
       {/* footer · cached + mock 标记 */}
       <div className="flex items-center justify-between border-t border-paper pt-2 text-[10px] text-muted-foreground/60">

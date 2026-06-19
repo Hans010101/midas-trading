@@ -14,8 +14,9 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { AiOrderConfirmDialog } from '@/components/workbench/ai-order-confirm-dialog'
 import { usePlaceAiPlanOrder } from '@/hooks/use-conditional-orders'
-import type { TradingPlan } from '@/lib/api/ai-decision'
+import type { ActionableAdvice, TradingPlan } from '@/lib/api/ai-decision'
 import { ConditionalApiError } from '@/lib/api/conditional-order'
 import { cn } from '@/lib/utils'
 import type { Market } from '@midas/shared'
@@ -44,13 +45,17 @@ export function TradingPlanBlock({
   plan,
   symbol,
   market,
+  actionable,
 }: {
   plan: TradingPlan | null
   symbol: string
   market: Market
+  /** 用于「按市价下单」二次确认展示(基础依据/仓位口径)· 可空走默认文案 */
+  actionable?: ActionableAdvice | null
 }) {
   const aiPlanOrder = usePlaceAiPlanOrder()
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [marketOpen, setMarketOpen] = useState(false)
 
   if (!plan) return null
 
@@ -74,7 +79,6 @@ export function TradingPlanBlock({
   // 挂单入场价:多头取区间上沿(价回落先触)· 空头取区间下沿(价反弹先触)
   const entryPrice = isLong ? plan.entry_high : plan.entry_low
   const od = orderDirection(market, plan.direction)
-  const canOrder = od !== null && entryPrice !== null
 
   async function handlePlaceLimit() {
     if (entryPrice === null || od === null) return
@@ -135,18 +139,29 @@ export function TradingPlanBlock({
         </p>
       )}
 
-      {canOrder && (
-        <button
-          type="button"
-          onClick={() => setConfirmOpen(true)}
-          className="mt-3 w-full rounded-md py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
-          style={{ background: tone }}
-        >
-          按计划入场价挂限价单
-        </button>
+      {od !== null && entryPrice !== null && (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setConfirmOpen(true)}
+            className="rounded-md py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+            style={{ background: tone }}
+          >
+            按计划挂限价单
+          </button>
+          <button
+            type="button"
+            onClick={() => setMarketOpen(true)}
+            className="rounded-md border py-2 text-sm font-medium transition-opacity hover:opacity-80"
+            style={{ borderColor: tone, color: tone }}
+          >
+            按市价下单
+          </button>
+        </div>
       )}
 
-      {canOrder && entryPrice !== null && (
+      {/* 限价单二次确认 → ai-plan-order → 条件单 LIMIT */}
+      {od !== null && entryPrice !== null && (
         <PlanLimitConfirm
           open={confirmOpen}
           onClose={() => setConfirmOpen(false)}
@@ -156,6 +171,19 @@ export function TradingPlanBlock({
           tone={tone}
           pending={aiPlanOrder.isPending}
           onConfirm={handlePlaceLimit}
+        />
+      )}
+
+      {/* 市价单二次确认 → ai-order → 同一虚拟撮合引擎(复用现成市价链路)*/}
+      {od !== null && (
+        <AiOrderConfirmDialog
+          open={marketOpen}
+          onClose={() => setMarketOpen(false)}
+          symbol={symbol}
+          market={market}
+          direction={od}
+          basis={actionable?.basis ?? 'AI 交易计划方向'}
+          sizeNote={actionable?.size_note ?? '按你的下单预设'}
         />
       )}
     </section>

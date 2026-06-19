@@ -47,11 +47,8 @@ export function CryptoAiCard({ klineSymbol, futuresSymbol, period }: CryptoAiCar
 
   return (
     <div className="rounded-lg border border-paper bg-cream p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3">
         <span className="font-serif text-base font-bold text-midas-red">AI 决策卡</span>
-        <span className="rounded bg-midas-red-glow px-2 py-0.5 text-[10px] text-midas-red">
-          技术面 + 合约面 · 合并版
-        </span>
       </div>
 
       {/* A · 技术面综合评分 */}
@@ -80,7 +77,7 @@ export function CryptoAiCard({ klineSymbol, futuresSymbol, period }: CryptoAiCar
 
       {/* C · 交易计划参考(三价位 + plan_note + 按计划价挂限价单)· 合约面之后 */}
       {decision.status === 'success' && !decision.data.locked && (
-        <TradingPlanBlock plan={plan} symbol={klineSymbol} market="crypto" />
+        <TradingPlanBlock plan={plan} symbol={klineSymbol} market="crypto" actionable={adv} />
       )}
     </div>
   )
@@ -102,7 +99,6 @@ function CompositeBlock({ card }: { card: DecisionCard }) {
       </div>
 
       <div className="text-xs text-foreground/80">
-        <div className="mb-1 font-medium text-muted-foreground">技术面 · 缠论</div>
         <p className="leading-relaxed">{card.narrative}</p>
       </div>
 
@@ -226,9 +222,6 @@ function ContractRead({ futuresSymbol }: { futuresSymbol: string }) {
         </ul>
       )}
 
-      <p className="mt-2 text-[10px] text-gold/80">
-        合约面综合评分算法待 M2-B/M2-C 定义 · 此处仅列实时指标 + 规则解读 · 不构成评分
-      </p>
     </div>
   )
 }
