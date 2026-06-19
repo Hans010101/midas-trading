@@ -47,12 +47,8 @@ export function StageList() {
                     <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                       {stage.desc}
                     </p>
-                    {/* 本阶学习进度(登录后显示 · B 期刀1)*/}
-                    <StageProgress
-                      stageSlug={slug}
-                      total={articles.length}
-                      className="mt-4 max-w-xs"
-                    />
+                    {/* 本阶学习进度(登录后显示 · 分母=有小测文章数 · B 期刀1.5)*/}
+                    <StageProgress stageSlug={slug} className="mt-4 max-w-xs" />
                   </header>
 
                   <ul className="space-y-2.5">

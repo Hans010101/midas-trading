@@ -1,28 +1,29 @@
 'use client'
 
 /**
- * 某阶学习进度条 · 训练营 B 期刀1(client · 首页阶卡 + 阶列表页头共用)。
+ * 某阶学习进度条 · 训练营 B 期刀1(刀1.5 调整分母)· 首页阶卡 + 阶列表页头共用。
  *
  * 登录后显示「已学 X/Y」+ 进度条(success 绿);未登录 / 数据未到 → 不渲染(只留 manifest 计数)。
- * total 由调用方从 manifest 传(Y 的权威 · 与后端 stage_totals 一致)。
+ * ★分母 Y = 该阶【有小测】的文章数(刀1.5:答完小测=学完,无小测篇如 F36 不计);
+ *   分子 X = 已完成的有小测文章数(从后端 completed_slugs 过滤)。见 academy-progress-calc。
  */
 
 import { useAcademyProgress } from '@/hooks/use-academy-progress'
+import { stageQuizDone, stageQuizTotal } from '@/lib/academy-progress-calc'
 import { cn } from '@/lib/utils'
 
 export function StageProgress({
   stageSlug,
-  total,
   className,
 }: {
   stageSlug: string
-  total: number
   className?: string
 }) {
   const { data, isLoggedIn } = useAcademyProgress()
   if (!isLoggedIn || !data) return null // 未登录不显示进度(游客只看 manifest 计数)
 
-  const done = data.by_stage[stageSlug] ?? 0
+  const total = stageQuizTotal(stageSlug)
+  const done = stageQuizDone(data.completed_slugs, stageSlug)
   const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0
   const finished = total > 0 && done >= total
 

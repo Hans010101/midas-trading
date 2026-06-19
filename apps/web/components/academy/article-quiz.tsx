@@ -1,21 +1,26 @@
 'use client'
 
 /**
- * 训练营随堂小测 · 训练营第一个交互组件(client · React state · 无后端)。
+ * 训练营随堂小测 · 训练营第一个交互组件(client · React state)。
  *
- * 渲染某篇文章的题目(由 server 端 app/academy/article/page.tsx 从 content/academy/quizzes.ts
- * 按 slug 取出后作为 prop 传入)。交互:点选项 → 即时比对 answerIndex → 高亮对 / 错 +
- * 永远标出正确项 + 展示解析。每题独立、可重答(再点别的选项即重判)。
+ * 刀1.5 升级:
+ * ① 选项前端运行时洗牌(Fisher-Yates · useState 惰性初始化【挂载洗一次】· 判定用洗牌后下标)
+ *    —— 修正题库正确答案扎堆 B 位;题库数据零改;新增题自动享受打散。
+ * ② 答完本篇所有题(每题都选过)→ 自动标记学完(复用刀1 POST /academy/progress/complete)·
+ *    幂等(已完成/未登录/进行中不重复触发,见 shouldAutoMark)· 删手动按钮 · 保留「已学完」反馈。
  *
- * 视觉沿用训练营:中国红强调 / 暖米白卡片 / Noto Serif 标题 / success 绿表「答对」
- * (success 与涨跌 up/down 解耦,不随偏好开关翻转 · tailwind.config.ts:81)。
- * 无题(questions 为空)→ 返回 null,不渲染该区。
+ * 视觉沿用训练营:中国红强调 / 暖米白卡片 / success 绿表「答对 / 已学完」(与涨跌解耦)。
+ * 无题(questions 为空)→ 返回 null,不渲染该区(无小测文章不参与进度,见 academy-progress-calc)。
  */
 
 import { CheckCircle2, ListChecks, XCircle } from 'lucide-react'
-import { useState } from 'react'
+import Link from 'next/link'
+import { useEffect, useState } from 'react'
 
 import type { QuizQuestion } from '@/content/academy/quizzes'
+import { useAcademyProgress, useMarkComplete } from '@/hooks/use-academy-progress'
+import { shouldAutoMark } from '@/lib/academy-progress-calc'
+import { shuffleQuestion } from '@/lib/quiz-shuffle'
 import { cn } from '@/lib/utils'
 
 /** 选项序号 → A / B / C / D */
@@ -23,11 +28,33 @@ function optionLabel(index: number): string {
   return String.fromCharCode(65 + index)
 }
 
-export function ArticleQuiz({ questions }: { questions: QuizQuestion[] }) {
-  // 每题选中的选项下标(题序 → 选项序);未答的题不在 map 中
+export function ArticleQuiz({ questions, slug }: { questions: QuizQuestion[]; slug: string }) {
+  // ★ 挂载时洗一次(惰性初始化)· 不每次 render 重洗(否则选完选项跳位)。文章切换由父组件 key=slug 强制重挂。
+  const [shuffled] = useState(() => questions.map((q) => shuffleQuestion(q)))
+  // 每题选中的(洗牌后)选项下标;未答的题不在 map 中
   const [picked, setPicked] = useState<Record<number, number>>({})
 
+  const { completedSet, isLoggedIn } = useAcademyProgress()
+  const mark = useMarkComplete()
+
+  const allAnswered = questions.length > 0 && Object.keys(picked).length === questions.length
+  const alreadyCompleted = completedSet.has(slug)
+
+  // ② 答完所有题 → 自动标记学完(幂等判定见 shouldAutoMark · 已完成/未登录/进行中不触发)
+  useEffect(() => {
+    if (shouldAutoMark({ allAnswered, isLoggedIn, alreadyCompleted, isPending: mark.isPending })) {
+      mark.mutate(slug)
+    }
+    // mark 故意不入依赖(其 isPending 在判定内读 · 入依赖会重复触发);仅 4 个真实条件变化时重算
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allAnswered, isLoggedIn, alreadyCompleted, slug])
+
   if (questions.length === 0) return null
+
+  // 完成反馈:已登录且(已完成 OR 刚答完将被标记)→ 显示「已学完本篇」(乐观,标记请求在途也显)
+  const showCompleted = isLoggedIn && (alreadyCompleted || allAnswered)
+  // 未登录答完 → 引导登录(不强制 · 不报错)
+  const showLoginHint = !isLoggedIn && allAnswered
 
   return (
     <section className="mt-12 border-t border-paper pt-8" aria-label="随堂小测">
@@ -36,14 +63,15 @@ export function ArticleQuiz({ questions }: { questions: QuizQuestion[] }) {
         随堂小测
       </h2>
       <p className="mb-5 text-sm text-muted-foreground">
-        共 {questions.length} 题 · 点选项即时查看对错与解析,可重答。
+        共 {questions.length} 题 · 点选项即时查看对错与解析,可重答;答完本篇自动记录学习进度。
       </p>
 
       <div className="space-y-5">
         {questions.map((q, qi) => {
+          const sq = shuffled[qi] // 洗牌后的 options + answerIndex
           const chosen = picked[qi]
           const answered = chosen !== undefined
-          const isRight = answered && chosen === q.answerIndex
+          const isRight = answered && chosen === sq.answerIndex
           return (
             <div
               key={qi}
@@ -57,11 +85,11 @@ export function ArticleQuiz({ questions }: { questions: QuizQuestion[] }) {
                 <p className="font-medium leading-relaxed text-foreground">{q.stem}</p>
               </div>
 
-              {/* 选项 */}
+              {/* 选项(洗牌后顺序)*/}
               <ul className="mt-3 space-y-2">
-                {q.options.map((opt, oi) => {
+                {sq.options.map((opt, oi) => {
                   const isChosen = chosen === oi
-                  const isCorrect = oi === q.answerIndex
+                  const isCorrect = oi === sq.answerIndex
                   const showCorrect = answered && isCorrect
                   const showWrong = answered && isChosen && !isCorrect
                   return (
@@ -98,7 +126,7 @@ export function ArticleQuiz({ questions }: { questions: QuizQuestion[] }) {
                 })}
               </ul>
 
-              {/* 反馈 + 解析 */}
+              {/* 反馈 + 解析(正确答案用洗牌后下标)*/}
               {answered && (
                 <div
                   className={cn(
@@ -114,7 +142,7 @@ export function ArticleQuiz({ questions }: { questions: QuizQuestion[] }) {
                   >
                     {isRight
                       ? '✓ 回答正确'
-                      : `✗ 回答错误 · 正确答案 ${optionLabel(q.answerIndex)}`}
+                      : `✗ 回答错误 · 正确答案 ${optionLabel(sq.answerIndex)}`}
                   </p>
                   <p>{q.explanation}</p>
                 </div>
@@ -123,6 +151,25 @@ export function ArticleQuiz({ questions }: { questions: QuizQuestion[] }) {
           )
         })}
       </div>
+
+      {/* 完成反馈 / 登录引导(替代刀1 的手动「标记学完」按钮)*/}
+      {showCompleted && (
+        <div className="mt-6 flex items-center gap-2 rounded-lg border border-success bg-success/10 px-4 py-3 text-sm font-medium text-success">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          已学完本篇 · 学习进度已记录
+        </div>
+      )}
+      {showLoginHint && (
+        <div className="mt-6 flex items-center justify-between gap-3 rounded-lg border border-dashed border-paper bg-surface-subtle px-4 py-3">
+          <span className="text-sm text-muted-foreground">登录后自动记录学习进度</span>
+          <Link
+            href="/login"
+            className="shrink-0 rounded-md border border-midas-red/40 px-3 py-1.5 text-sm font-medium text-midas-red transition-colors hover:bg-midas-red-glow"
+          >
+            去登录
+          </Link>
+        </div>
+      )}
     </section>
   )
 }
