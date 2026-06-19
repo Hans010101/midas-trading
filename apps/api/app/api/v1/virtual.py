@@ -22,7 +22,7 @@ from app.models.conditional_order import (
     ConditionalOrder,
     ConditionalStatus,
 )
-from app.models.perp import PerpSide, VirtualPerpPosition
+from app.models.perp import MarginMode, PerpSide, VirtualPerpPosition
 from app.models.virtual import (
     MARKET_CURRENCY,
     OrderSide,
@@ -44,6 +44,7 @@ from app.schemas.virtual import (
     AccountSummaryResponse,
     AiOrderRequest,
     AiOrderResponse,
+    AiPlanOrderRequest,
     EquityCurvesResponse,
     EquitySnapshotResponse,
     HkBoardLotResponse,
@@ -370,6 +371,84 @@ async def place_ai_order(
     #   notify_user=True:网页 AI 一键路径恢复成交异步推送(bot 默认 False 保持 #296 去重)。
     result = await bot_order.execute(db, ch, current_user.id, intent, notify_user=True)
     return AiOrderResponse(filled=result.filled, title=result.title, detail=result.detail)
+
+
+async def _floor_spot_qty(
+    db: AsyncSession, market: str, symbol: str, raw_qty: Decimal,
+) -> Decimal | None:
+    """现货数量按市场最小交易单位下取整(hk 按手 / cn 100 股 / us 整股)· 不足→None。"""
+    if market == "hk":
+        lot = await resolve_hk_board_lot(db, symbol)
+        if lot is None:
+            return None
+        units = int(raw_qty // lot)
+        return Decimal(units * lot) if units > 0 else None
+    if market == "cn":
+        units = int(raw_qty // 100)  # A 股 1 手 = 100 股
+        return Decimal(units * 100) if units > 0 else None
+    n = int(raw_qty)  # us 整股
+    return Decimal(n) if n > 0 else None
+
+
+@router.post(
+    "/ai-plan-order",
+    response_model=ConditionalOrderResponse,
+    summary="按 AI 交易计划入场价挂限价单 · 复用 conditional LIMIT · 同一虚拟撮合",
+)
+async def place_ai_plan_order(
+    payload: AiPlanOrderRequest, current_user: CurrentUserDep, db: DbDep,
+) -> ConditionalOrderResponse:
+    """决策卡「按计划入场价挂限价单」· entry_price → trigger_price · 仓位走 BotOrderPreset。
+
+    🔴 红线:复用现成 create_conditional_order(LIMIT)· 触发由 60s 扫描器走唯一虚拟撮合入口
+       (route_open_perp / place_market_order)· 不新增下单出口、绝不接真实交易。
+    crypto:perp 限价开仓(杠杆/保证金来自预设)· spot:仅限价买入(数量=预设名义/入场价下取整)。
+    """
+    if not bot_order.direction_valid(payload.market, payload.direction):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"市场 {payload.market} 不支持方向 {payload.direction}",
+        )
+    preset = await bot_order.load_preset(db, current_user.id)
+
+    if payload.market == "crypto":
+        is_long = payload.direction == "open_long"
+        leverage = preset.perp_leverage
+        margin = (preset.perp_notional_usdt / Decimal(leverage)).quantize(Decimal("0.0001"))
+        create = ConditionalOrderCreate(
+            symbol=payload.symbol,
+            market="crypto",
+            order_kind=ConditionalKind.LIMIT,
+            side=OrderSide.BUY if is_long else OrderSide.SELL,
+            position_side=PositionSide.LONG if is_long else PositionSide.SHORT,
+            trigger_price=payload.entry_price,
+            leverage=leverage,
+            margin=margin,
+            margin_mode=MarginMode(preset.perp_margin_mode),
+        )
+    else:
+        if payload.direction != "buy":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="现货仅支持按计划价限价买入(看空请走平仓,不经此端点)",
+            )
+        raw_qty = preset.spot_notional(payload.market) / payload.entry_price
+        qty = await _floor_spot_qty(db, payload.market, payload.symbol, raw_qty)
+        if qty is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="按预设名义与入场价算出的数量不足一个最小交易单位",
+            )
+        create = ConditionalOrderCreate(
+            symbol=payload.symbol,
+            market=payload.market,
+            order_kind=ConditionalKind.LIMIT,
+            side=OrderSide.BUY,
+            position_side=PositionSide.LONG,
+            trigger_price=payload.entry_price,
+            quantity=qty,
+        )
+    return await create_conditional_order(create, current_user, db)
 
 
 @router.get(

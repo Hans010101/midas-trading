@@ -16,13 +16,12 @@
  */
 
 import { Loader2 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 
+import { TradingPlanBlock } from '@/components/ai/trading-plan-block'
 import { ProLock } from '@/components/account/pro-lock'
-import { AiOrderConfirmDialog } from '@/components/workbench/ai-order-confirm-dialog'
 import { useAiDecision } from '@/hooks/use-ai-decision'
-import { useHkBoardLot } from '@/hooks/use-virtual'
-import type { ActionableDirection, CompositeLabel, DecisionCard } from '@/lib/api/ai-decision'
+import type { CompositeLabel, DecisionCard } from '@/lib/api/ai-decision'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
 import { cn } from '@/lib/utils'
 import type { Market, Period } from '@midas/shared'
@@ -74,17 +73,7 @@ export function AiDecisionCard({
 
 function CardBody({ card }: { card: DecisionCard }) {
   const labelColor = useMemo(() => composeLabelColor(card.composite_label), [card.composite_label])
-  const [orderOpen, setOrderOpen] = useState(false)
   const adv = card.actionable
-  // 仅 4 个可下单方向出按钮(hold/close 不出)· tradeDir 收窄类型给确认模态
-  const tradeDir = adv && adv.actionable && isTradeDir(adv.direction) ? adv.direction : null
-  // 港股一键下单 gate(镜像 A2b):不在下单池(resolve None → board-lot 404)→ 不出按钮 · 避免点了才被拒。
-  //   非 hk 恒 in-pool(cn/us 零影响 · query 禁用);hk 仅在已解析 + 在池才出按钮(载入中/不在池不出)。
-  const isHk = card.market === 'hk'
-  const hkLot = useHkBoardLot(card.symbol, isHk)
-  const hkInPool = !isHk || (hkLot.isSuccess && hkLot.data !== null)
-  const hkNotInPool = isHk && hkLot.isSuccess && hkLot.data === null
-  const showTrade = tradeDir !== null && hkInPool
 
   return (
     <div className="space-y-3">
@@ -143,25 +132,6 @@ function CardBody({ card }: { card: DecisionCard }) {
           <p className="mt-0.5 text-[10px] text-muted-foreground/60">
             {adv.basis} · 仓位:{adv.size_note}
           </p>
-          {/* 一键模拟下单(走 ai-order → 同一虚拟撮合引擎)· 港股已接入(按手取整在 execute 内)*/}
-          {showTrade && tradeDir && (
-            <button
-              type="button"
-              onClick={() => setOrderOpen(true)}
-              className={cn(
-                'mt-2 inline-flex items-center rounded-md bg-midas-red px-3 py-1.5',
-                'text-xs font-medium text-white transition-colors hover:bg-midas-red-deep',
-              )}
-            >
-              一键下单 · {TRADE_DIR_LABEL[tradeDir]}
-            </button>
-          )}
-          {/* 港股不在下单池(镜像 A2b 手动)→ 不出一键下单按钮 · 提示原因(行情仍可看)*/}
-          {tradeDir && hkNotInPool && (
-            <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground/60">
-              该标的不在港股下单池 · 暂不可一键下单(仅主板 HKD 可下单)
-            </p>
-          )}
         </div>
       )}
 
@@ -199,6 +169,9 @@ function CardBody({ card }: { card: DecisionCard }) {
         </div>
       )}
 
+      {/* 交易计划参考(三价位 + plan_note + 按计划价挂限价单)· 缠论买卖点区之后 */}
+      <TradingPlanBlock plan={card.trading_plan} symbol={card.symbol} market={card.market} />
+
       {/* footer · cached + mock 标记 */}
       <div className="flex items-center justify-between border-t border-paper pt-2 text-[10px] text-muted-foreground/60">
         <span>{card.cached ? '· 缓存命中' : '· 实时计算'}</span>
@@ -209,19 +182,6 @@ function CardBody({ card }: { card: DecisionCard }) {
         )}
       </div>
 
-      {/* AI 一键模拟下单 · 二次确认模态(复用手动下单口径 · 路由 ai-order → 同一虚拟引擎)
-          港股已接入:在池才挂(showTrade)· 按手取整在 execute 内 · sizeNote 标「港股按手取整」*/}
-      {adv && showTrade && tradeDir && (
-        <AiOrderConfirmDialog
-          open={orderOpen}
-          onClose={() => setOrderOpen(false)}
-          symbol={card.symbol}
-          market={card.market}
-          direction={tradeDir}
-          basis={adv.basis}
-          sizeNote={isHk ? `${adv.size_note} · 港股按手取整` : adv.size_note}
-        />
-      )}
     </div>
   )
 }
@@ -259,17 +219,6 @@ function CardError({ onRetry }: { onRetry: () => void }) {
 
 
 // ===== Helpers =====
-
-
-const TRADE_DIR_LABEL: Record<'buy' | 'sell' | 'open_long' | 'open_short', string> = {
-  buy: '买入', sell: '卖出', open_long: '开多', open_short: '开空',
-}
-
-function isTradeDir(
-  d: ActionableDirection,
-): d is 'buy' | 'sell' | 'open_long' | 'open_short' {
-  return d === 'buy' || d === 'sell' || d === 'open_long' || d === 'open_short'
-}
 
 
 function composeLabelColor(label: CompositeLabel): string {

@@ -41,6 +41,20 @@ export interface ActionableAdvice {
   disclaimer: string
 }
 
+// 交易计划参考(三价位后端规则算 + AI plan_note)· 镜像后端 TradingPlan
+export type PlanDirection = 'long' | 'short' | 'neutral'
+
+export interface TradingPlan {
+  direction: PlanDirection
+  entry_low: number | null
+  entry_high: number | null
+  stop: number | null
+  target1: number | null
+  target2: number | null
+  risk_reward: number | null
+  plan_note: string
+}
+
 export interface DecisionCard {
   symbol: string
   market: Market
@@ -59,6 +73,9 @@ export interface DecisionCard {
 
   // 可下单建议(0036 批次甲)· 后端 actionable 适配层派生 · null 表示无(老缓存/中性)
   actionable: ActionableAdvice | null
+
+  // 交易计划参考 · 后端规则算 · null 表示无(老缓存 / 中性 / 非 Pro 空壳)
+  trading_plan: TradingPlan | null
 
   disclaimer: string
   cached: boolean

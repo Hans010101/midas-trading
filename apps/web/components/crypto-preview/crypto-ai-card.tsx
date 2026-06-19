@@ -19,17 +19,16 @@
  */
 
 import { Loader2 } from 'lucide-react'
-import { useState } from 'react'
 
+import { TradingPlanBlock } from '@/components/ai/trading-plan-block'
 import { ProLock } from '@/components/account/pro-lock'
-import { AiOrderConfirmDialog, type AiTradeDirection } from '@/components/workbench/ai-order-confirm-dialog'
 import { useAiDecision } from '@/hooks/use-ai-decision'
 import {
   useFuturesInfo,
   useLongShortRatio,
   useOpenInterest,
 } from '@/hooks/use-crypto'
-import type { ActionableDirection, CompositeLabel, DecisionCard } from '@/lib/api/ai-decision'
+import type { CompositeLabel, DecisionCard } from '@/lib/api/ai-decision'
 import { cn } from '@/lib/utils'
 import type { Period } from '@midas/shared'
 
@@ -42,10 +41,9 @@ interface CryptoAiCardProps {
 export function CryptoAiCard({ klineSymbol, futuresSymbol, period }: CryptoAiCardProps) {
   // 合约(perp)技术面 · 跟主图/缠论/Header 同源,保证全链路一致
   const decision = useAiDecision({ symbol: klineSymbol, market: 'crypto', period, instrument: 'perp' })
-  const [orderOpen, setOrderOpen] = useState(false)
-  // 操作建议(0036 批次甲)· crypto → open_long/open_short(合约)· hold/中性不出按钮
+  // 操作建议(0036 批次甲)· crypto → open_long/open_short(合约)· hold/中性不出文案
   const adv = decision.status === 'success' ? decision.data.actionable : null
-  const tradeDir = adv && adv.actionable && isTradeDir(adv.direction) ? adv.direction : null
+  const plan = decision.status === 'success' ? decision.data.trading_plan : null
 
   return (
     <div className="rounded-lg border border-paper bg-cream p-4 shadow-sm">
@@ -74,36 +72,15 @@ export function CryptoAiCard({ klineSymbol, futuresSymbol, period }: CryptoAiCar
           <p className="mt-0.5 text-[10px] text-muted-foreground/60">
             {adv.basis} · 仓位:{adv.size_note}
           </p>
-          {tradeDir && (
-            <button
-              type="button"
-              onClick={() => setOrderOpen(true)}
-              className={cn(
-                'mt-2 inline-flex items-center rounded-md bg-midas-red px-3 py-1.5',
-                'text-xs font-medium text-white transition-colors hover:bg-midas-red-deep',
-              )}
-            >
-              一键下单 · {TRADE_DIR_LABEL[tradeDir]}
-            </button>
-          )}
         </div>
       )}
 
       {/* B · 多空研判(合约面)· 实时指标 + 规则解读 */}
       <ContractRead futuresSymbol={futuresSymbol} />
 
-
-      {/* AI 一键模拟下单 · 二次确认模态(复用手动口径 · 路由 ai-order · crypto→perp open_long/open_short)*/}
-      {adv && tradeDir && (
-        <AiOrderConfirmDialog
-          open={orderOpen}
-          onClose={() => setOrderOpen(false)}
-          symbol={klineSymbol}
-          market="crypto"
-          direction={tradeDir}
-          basis={adv.basis}
-          sizeNote={adv.size_note}
-        />
+      {/* C · 交易计划参考(三价位 + plan_note + 按计划价挂限价单)· 合约面之后 */}
+      {decision.status === 'success' && !decision.data.locked && (
+        <TradingPlanBlock plan={plan} symbol={klineSymbol} market="crypto" />
       )}
     </div>
   )
@@ -303,14 +280,6 @@ function ErrorNote({ onRetry }: { onRetry: () => void }) {
       </button>
     </div>
   )
-}
-
-const TRADE_DIR_LABEL: Record<AiTradeDirection, string> = {
-  buy: '买入', sell: '卖出', open_long: '开多', open_short: '开空',
-}
-
-function isTradeDir(d: ActionableDirection): d is AiTradeDirection {
-  return d === 'buy' || d === 'sell' || d === 'open_long' || d === 'open_short'
 }
 
 function labelColor(label: CompositeLabel): string {

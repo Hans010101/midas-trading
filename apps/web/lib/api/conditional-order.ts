@@ -96,6 +96,27 @@ export async function postConditionalOrder(
   return (await r.json()) as ConditionalOrder
 }
 
+/** AI 决策卡「按计划入场价挂限价单」入参 · 后端拉预设填 leverage/margin/quantity。 */
+export interface AiPlanOrderInput {
+  symbol: string
+  market: Market
+  /** crypto: open_long/open_short · spot: buy(现货不限价做空) */
+  direction: 'buy' | 'open_long' | 'open_short'
+  entry_price: string
+}
+
+export async function placeAiPlanOrder(
+  token: string, input: AiPlanOrderInput,
+): Promise<ConditionalOrder> {
+  const r = await fetch(`${API_BASE}/api/v1/virtual/ai-plan-order`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(input),
+  })
+  if (!r.ok) throw new ConditionalApiError(r.status, await readDetail(r))
+  return (await r.json()) as ConditionalOrder
+}
+
 export async function listConditionalOrders(
   token: string, opts: { status?: ConditionalStatus } = {}, signal?: AbortSignal,
 ): Promise<ConditionalOrder[]> {

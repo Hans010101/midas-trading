@@ -167,6 +167,24 @@ class AiOrderRequest(BaseModel):
     direction: Literal["buy", "sell", "open_long", "open_short"]
 
 
+class AiPlanOrderRequest(BaseModel):
+    """POST /virtual/ai-plan-order 入参 · 按 AI 交易计划入场价挂【限价】条件单。
+
+    ★ 红线:不新增下单出口 —— 复用现成 conditional_orders LIMIT 通道(后端 60s 扫描器命中后
+      走唯一虚拟撮合入口 route_open_perp / place_market_order),绝不接真实交易。
+    仓位:杠杆/保证金(perp)、数量(spot)由 BotOrderPreset 派生(拍板③),前端不传。
+    方向:crypto open_long/open_short;spot 仅 buy(现货不能限价做空 · 看空只能平仓不走此端点)。
+    entry_price:来自决策卡 trading_plan 的规则算入场价(前端透传 · 后端当 trigger_price)。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str = Field(min_length=1, max_length=64)
+    market: Market
+    direction: Literal["buy", "open_long", "open_short"]
+    entry_price: Decimal = Field(gt=0)
+
+
 class AiOrderResponse(BaseModel):
     """AI 模拟下单结果 · 与手动下单同一虚拟引擎成交 · 标 source=ai_signal。"""
 

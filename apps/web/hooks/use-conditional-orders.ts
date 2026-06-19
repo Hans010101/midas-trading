@@ -12,10 +12,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSession } from 'next-auth/react'
 
 import {
+  type AiPlanOrderInput,
   type ConditionalOrder,
   type ConditionalOrderCreate,
   cancelConditionalOrder,
   listConditionalOrders,
+  placeAiPlanOrder,
   postConditionalOrder,
 } from '@/lib/api/conditional-order'
 import type { ConditionalStatus } from '@/lib/conditional'
@@ -49,6 +51,17 @@ export function usePlaceConditionalOrder() {
   const { token } = useToken()
   return useMutation<ConditionalOrder, Error, ConditionalOrderCreate>({
     mutationFn: (input) => postConditionalOrder(token, input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['conditional-orders'] })
+    },
+  })
+}
+
+export function usePlaceAiPlanOrder() {
+  const queryClient = useQueryClient()
+  const { token } = useToken()
+  return useMutation<ConditionalOrder, Error, AiPlanOrderInput>({
+    mutationFn: (input) => placeAiPlanOrder(token, input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['conditional-orders'] })
     },
