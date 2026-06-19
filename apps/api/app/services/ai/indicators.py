@@ -114,6 +114,31 @@ def compute_rsi(klines: list[Kline], period: int = 14) -> dict[int, float]:
     return {period: rsi}
 
 
+def compute_kdj(
+    klines: list[Kline], n: int = 9, m1: int = 3, m2: int = 3,
+) -> dict[str, float]:
+    """KDJ(9,3,3)· 随机指标 · 返回 K / D / J 最新值。
+
+    RSV = (C − Ln) / (Hn − Ln) × 100(Ln/Hn = 近 n 根最低/最高价);
+    K = (m1−1)/m1·prevK + 1/m1·RSV(K 初值 50);D = (m2−1)/m2·prevD + 1/m2·K(D 初值 50);
+    J = 3K − 2D。数据不足 n 根 → 返回 K=D=J=50(中性)。Hn==Ln(无波动)→ RSV 记 0。
+    """
+    if len(klines) < n:
+        return {"K": 50.0, "D": 50.0, "J": 50.0}
+    highs = [float(k.high) for k in klines]
+    lows = [float(k.low) for k in klines]
+    closes = [float(k.close) for k in klines]
+    k_val = 50.0
+    d_val = 50.0
+    for i in range(n - 1, len(klines)):
+        hn = max(highs[i - n + 1 : i + 1])
+        ln = min(lows[i - n + 1 : i + 1])
+        rsv = 0.0 if hn == ln else (closes[i] - ln) / (hn - ln) * 100.0
+        k_val = (m1 - 1) / m1 * k_val + 1 / m1 * rsv
+        d_val = (m2 - 1) / m2 * d_val + 1 / m2 * k_val
+    return {"K": k_val, "D": d_val, "J": 3 * k_val - 2 * d_val}
+
+
 def compute_boll(
     klines: list[Kline], period: int = 20, k: float = 2.0,
 ) -> dict[str, float]:
