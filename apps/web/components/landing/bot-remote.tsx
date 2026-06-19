@@ -6,7 +6,7 @@
  * ★文案为产品负责人逐字定稿,不可改:① "交易下单"(2026-06 产品负责人改定 · 原"模拟下单")· ②"看 K 线图(Telegram)"
  *   保留 (Telegram) 标注(飞书端无 K 线图,写上即失真)· ③ 其余 5 条 TG/飞书通用不做两端区分 ·
  *   ④ 本区块不放任何底部声明小字。
- * 配图:public/marketing/bot-remote.png(纯手机 mockup · 从 Design 合成稿裁出右侧手机 · 878×1292)。
+ * 配图:public/marketing/bot-remote.png(Design 直供透明底免扣手机图 · 1380×1980 · RGBA)。
  */
 
 import { Smartphone } from 'lucide-react'
@@ -55,8 +55,8 @@ export function BotRemote() {
           <Image
             src="/marketing/bot-remote.png"
             alt="点金机器人:在聊天软件里查行情、收推送、确认交易下单"
-            width={878}
-            height={1292}
+            width={1380}
+            height={1980}
             className="h-auto w-full max-w-[300px]"
             sizes="(max-width: 1024px) 70vw, 300px"
           />
