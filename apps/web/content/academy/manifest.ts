@@ -22,7 +22,8 @@ export const ACADEMY_STAGES: AcademyStage[] = [
   { slug: "technical", name: "技术分析", stageLabel: "第二阶", desc: "经典技术指标：均线、金叉死叉、MACD、布林带、RSI。" },
   { slug: "chan", name: "缠论专题", stageLabel: "第三阶", desc: "缠论结构化分析：包含关系、分型、笔、线段、中枢、三类买卖点。" },
   { slug: "contract", name: "合约与衍生品", stageLabel: "第四阶", desc: "加密核心战场:永续合约、资金费率、保证金模式、爆仓与强平机制,以及 OI / 多空比 / 基差等合约数据与风险防范。全程虚拟,教学内容仅供学习参考。" },
-  { slug: "system", name: "交易体系与实战", stageLabel: "第五阶", desc: "把前四阶的 K 线、指标、缠论、合约整合成完整交易体系——涵盖交易计划、风险与仓位、心理、纪律、复盘,以及趋势 / 震荡两类实战框架。教学内容仅供学习参考。" },
+  { slug: "strategy", name: "策略专题", stageLabel: "第五阶", desc: "把策略思想落到可执行规则:均线 / MACD / 趋势跟踪 / 突破 / 布林带 / RSI / 均值回归 / 网格 / 马丁格尔(风险警示)/ 套利,逐个拆原理、适用与失效、优缺点与风险。教学内容仅供学习参考。" },
+  { slug: "system", name: "交易体系与实战", stageLabel: "第六阶", desc: "把前面各阶的 K 线、指标、缠论、合约、策略整合成完整交易体系——涵盖交易计划、风险与仓位、心理、纪律、复盘,以及趋势 / 震荡两类实战框架。教学内容仅供学习参考。" },
 ];
 
 export const ACADEMY_ARTICLES: AcademyArticle[] = [
@@ -133,4 +134,14 @@ export const ACADEMY_ARTICLES: AcademyArticle[] = [
   { slug: "C2-8", stage: "contract", order: 18, title: "加仓与减仓", file: "C2-8.md", excerpt: "赚钱时人会面临诱惑：“涨得这么好，要不要加仓多赚点？”用两个示意案例对照——浮盈乱加仓 vs 合理减仓锁利，看赚钱时怎么操作仓位，往往决定你把利润带走还是吐回去。" },
   { slug: "C2-9", stage: "contract", order: 19, title: "情绪化交易的代价", file: "C2-9.md", excerpt: "交易里最大的敌人往往不是市场，而是自己的情绪。而在合约里，杠杆会把情绪化交易的代价成倍放大。用示意案例看交易者 L 怎么被情绪拖入“恶性循环”、账户快速缩水。" },
   { slug: "C2-10", stage: "contract", order: 20, title: "一个完整的合约交易计划", file: "C2-10.md", excerpt: "前九篇有反面教材也有正面演示。最后一篇把所有正确做法串成完整流程——看交易者 M 如何从计划、开仓、管理、平仓到复盘规规矩矩走完一笔合约交易。C2 案例库收尾。" },
+  { slug: "C3-1", stage: "strategy", order: 1, title: "均线策略", file: "C3-1.md", excerpt: "均线策略是最古老、最广为人知的趋势策略,几乎是每个交易者的入门第一课。按「原理→适用/失效→用法→优缺点风险」讲透——重点不是能不能赚,而是它的逻辑和适用边界。" },
+  { slug: "C3-2", stage: "strategy", order: 2, title: "MACD 策略", file: "C3-2.md", excerpt: "MACD 是最流行的动能指标之一,围绕它的策略也很多。讲清 MACD 策略的原理、用法和边界,并把那个最常被搞错的定义钉死。" },
+  { slug: "C3-3", stage: "strategy", order: 3, title: "趋势跟踪策略", file: "C3-3.md", excerpt: "均线、MACD 是「工具」,趋势跟踪则是一种完整的策略思想——很多成功的交易体系骨架都是趋势跟踪。讲清它的逻辑、做法和边界。" },
+  { slug: "C3-4", stage: "strategy", order: 4, title: "突破策略", file: "C3-4.md", excerpt: "「突破就追」是很多人的本能,但突破策略最大的坑——假突破——也坑过无数人。讲清突破策略的原理、做法,以及怎么对待绕不开的假突破风险。" },
+  { slug: "C3-5", stage: "strategy", order: 5, title: "布林带策略", file: "C3-5.md", excerpt: "布林带是个「一图两用」的指标——既能用于震荡市的均值回归,又能用于变盘时的突破。讲清它的定义、两种用法和适用边界。" },
+  { slug: "C3-6", stage: "strategy", order: 6, title: "RSI 策略", file: "C3-6.md", excerpt: "RSI 是最常见的「超买超卖」指标,但很多人用它栽了大跟头——因为不知道 RSI 在趋势市里会「失效」。讲清 RSI 策略的用法和那个致命边界。" },
+  { slug: "C3-7", stage: "strategy", order: 7, title: "均值回归策略", file: "C3-7.md", excerpt: "「涨多了会跌、跌多了会涨」是均值回归策略的朴素直觉。它在震荡市里很有用,但在趋势市里可能是灾难。讲清它的逻辑和那条生死边界。" },
+  { slug: "C3-8", stage: "strategy", order: 8, title: "网格交易策略", file: "C3-8.md", excerpt: "网格交易因「自动高抛低吸、看着像躺赚」而受欢迎,但有一个致命软肋——怕单边行情。讲清网格的逻辑、参数和风险,戳破「躺赚」的幻觉。" },
+  { slug: "C3-9", stage: "strategy", order: 9, title: "马丁格尔策略(风险警示)", file: "C3-9.md", excerpt: "马丁格尔,是所有「策略」里最危险、却最会伪装成「稳赚」的一个。重点不是教你怎么用,而是讲清它为什么是一颗「迟早引爆的炸弹」——风险警示篇,请务必认真读完。" },
+  { slug: "C3-10", stage: "strategy", order: 10, title: "套利策略", file: "C3-10.md", excerpt: "「套利」听起来很美、好像「无风险赚价差」。但真正的套利既不无风险、门槛也不低。讲清套利的原理、门槛和风险,把「无风险套利」这个误解掰正。C3 策略库收尾。" },
 ];
