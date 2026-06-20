@@ -29,6 +29,7 @@ const REGISTRY: Partial<Record<InteractiveKey, ComponentType>> = {
   macd: dynamic(() => import('./macd-demo').then((m) => m.MacdDemo)),
   bollinger: dynamic(() => import('./bollinger-demo').then((m) => m.BollingerDemo)),
   rsi: dynamic(() => import('./rsi-demo').then((m) => m.RsiDemo)),
+  kdj: dynamic(() => import('./kdj-demo').then((m) => m.KdjDemo)),
 }
 
 export function ArticleInteractives({ keys }: { keys: InteractiveKey[] }) {
