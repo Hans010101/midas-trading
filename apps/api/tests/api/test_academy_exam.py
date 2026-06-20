@@ -38,6 +38,47 @@ async def _authed(db: AsyncSession) -> tuple[Any, dict[str, str]]:
     return user, {"Authorization": f"Bearer {token}"}
 
 
+# ===== 题库数据完整性(81 题录入 · 防漏题/错位/越界)=====
+
+_EXPECTED_COUNTS = {
+    "basics": 12,
+    "technical": 12,
+    "chan": 15,
+    "contract": 15,
+    "strategy": 12,
+    "system": 15,
+}
+
+
+def test_exam_bank_module_counts() -> None:
+    assert set(EXAMS.keys()) == set(_EXPECTED_COUNTS)
+    for stage, n in _EXPECTED_COUNTS.items():
+        assert len(EXAMS[stage]) == n, f"{stage} 题数 {len(EXAMS[stage])} != {n}"
+    assert sum(len(qs) for qs in EXAMS.values()) == 81  # noqa: PLR2004
+
+
+def test_exam_bank_question_structure() -> None:
+    """每题:4 选项 · answer_index 0-3 · 题干/解析非空(防录入越界/留空)。"""
+    for stage, questions in EXAMS.items():
+        for i, q in enumerate(questions):
+            assert len(q.options) == 4, f"{stage}#{i} 选项数 {len(q.options)}"  # noqa: PLR2004
+            assert 0 <= q.answer_index < 4, f"{stage}#{i} answer_index {q.answer_index}"  # noqa: PLR2004
+            assert q.stem.strip(), f"{stage}#{i} 题干空"
+            assert q.explanation.strip(), f"{stage}#{i} 解析空"
+            assert all(o.strip() for o in q.options), f"{stage}#{i} 有空选项"
+
+
+def test_exam_bank_answer_distribution_balanced() -> None:
+    """★答案不扎堆某一位(录入源已均匀 A/B/C/D)· 每个下标都有题落点。"""
+    dist = {0: 0, 1: 0, 2: 0, 3: 0}
+    for questions in EXAMS.values():
+        for q in questions:
+            dist[q.answer_index] += 1
+    assert all(c > 0 for c in dist.values()), f"答案分布失衡 {dist}"
+    # 无单一下标占比 > 40%(扎堆守卫)
+    assert max(dist.values()) / 81 < 0.4, f"答案扎堆 {dist}"  # noqa: PLR2004
+
+
 # ===== 纯判分逻辑(无 DB)=====
 
 
