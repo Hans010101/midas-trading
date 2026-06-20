@@ -22,15 +22,40 @@ export function shuffleQuestion(
   question: { options: string[]; answerIndex: number },
   rng: () => number = Math.random,
 ): ShuffledQuestion {
-  const order = question.options.map((_, i) => i)
+  const order = _shuffledOrder(question.options.length, rng)
+  return {
+    options: order.map((i) => question.options[i]),
+    answerIndex: order.indexOf(question.answerIndex),
+  }
+}
+
+export interface ShuffledOptions {
+  /** 洗牌后的选项顺序(展示用) */
+  options: string[]
+  /** order[展示下标] = 原始下标 —— ★结业测验提交时把用户选中的展示下标映射回原序(后端按原序判分) */
+  order: number[]
+}
+
+/**
+ * 洗牌选项 · 用于结业测验(前端不知道正确答案,只需把选中位置映射回原序提交)。
+ * 与 shuffleQuestion 区别:不追踪答案(答案在后端),而是吐 order 映射。
+ */
+export function shuffleOptions(
+  options: string[],
+  rng: () => number = Math.random,
+): ShuffledOptions {
+  const order = _shuffledOrder(options.length, rng)
+  return { options: order.map((i) => options[i]), order }
+}
+
+/** Fisher-Yates 生成 [0..n) 的随机排列。 */
+function _shuffledOrder(n: number, rng: () => number): number[] {
+  const order = Array.from({ length: n }, (_, i) => i)
   for (let i = order.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1))
     const tmp = order[i]
     order[i] = order[j]
     order[j] = tmp
   }
-  return {
-    options: order.map((i) => question.options[i]),
-    answerIndex: order.indexOf(question.answerIndex),
-  }
+  return order
 }

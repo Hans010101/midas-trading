@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { shuffleQuestion } from './quiz-shuffle'
+import { shuffleOptions, shuffleQuestion } from './quiz-shuffle'
 
 const Q = { options: ['正确项', 'B', 'C', 'D'], answerIndex: 0 }
 
@@ -35,5 +35,32 @@ describe('shuffleQuestion · 选项洗牌', () => {
     const s = shuffleQuestion({ options: ['对', '错'], answerIndex: 1 })
     expect(s.options[s.answerIndex]).toBe('错')
     expect(s.options).toHaveLength(2)
+  })
+})
+
+describe('shuffleOptions · 结业测验洗牌(order 映射回原序)', () => {
+  const OPTS = ['原0', '原1', '原2', '原3']
+
+  it('集合不变 + order 长度对', () => {
+    const s = shuffleOptions(OPTS)
+    expect([...s.options].sort()).toEqual([...OPTS].sort())
+    expect(s.order).toHaveLength(4)
+  })
+
+  it('★order[展示下标] = 原始下标:展示选项可经 order 映射回原文本', () => {
+    for (let n = 0; n < 100; n++) {
+      const s = shuffleOptions(OPTS)
+      for (let p = 0; p < s.options.length; p++) {
+        // 用户选展示位置 p → 原始下标 order[p] → 原文本应等于展示文本
+        expect(OPTS[s.order[p]]).toBe(s.options[p])
+      }
+    }
+  })
+
+  it('提交映射:用户选中展示位置 → order 映射出原序下标', () => {
+    const s = shuffleOptions(OPTS, () => 0)
+    const pickedDisplay = 0
+    const originalIndex = s.order[pickedDisplay]
+    expect(OPTS[originalIndex]).toBe(s.options[pickedDisplay])
   })
 })

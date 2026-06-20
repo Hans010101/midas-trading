@@ -13,6 +13,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
 import { AcademySideNav } from '@/components/academy/academy-side-nav'
+import { StageExamEntry } from '@/components/academy/stage-exam-entry'
 import { StageProgress } from '@/components/academy/stage-progress'
 import { TopNav } from '@/components/layout/top-nav'
 import { ACADEMY_ARTICLES, ACADEMY_STAGES } from '@/content/academy/manifest'
@@ -49,6 +50,8 @@ export function StageList() {
                     </p>
                     {/* 本阶学习进度(登录后显示 · 分母=有小测文章数 · B 期刀1.5)*/}
                     <StageProgress stageSlug={slug} className="mt-4 max-w-xs" />
+                    {/* 结业测验入口 + 结业徽章(B 期刀2 · 本刀只发荣誉)*/}
+                    <StageExamEntry stageSlug={slug} className="mt-3" />
                   </header>
 
                   <ul className="space-y-2.5">

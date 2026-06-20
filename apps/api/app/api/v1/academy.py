@@ -18,6 +18,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import CurrentUserDep, OptionalCurrentUserDep
 from app.core.database import get_db
 from app.services.academy.catalog import STAGE_TOTALS, is_valid_slug
+from app.services.academy.exam_results import get_exam_status, record_result
+from app.services.academy.exams import (
+    PASS_RATIO,
+    exam_total,
+    has_exam,
+    pass_line,
+    public_questions,
+    score_exam,
+)
 from app.services.academy.progress import get_progress, mark_complete, unmark_complete
 
 router = APIRouter(prefix="/academy", tags=["academy"])
@@ -103,4 +112,132 @@ async def get_my_progress(user: OptionalCurrentUserDep, db: DbDep) -> ProgressOu
         stage_totals=dict(STAGE_TOTALS),
         total_completed=len(slugs),
         total_articles=_TOTAL_ARTICLES,
+    )
+
+
+# ===== 模块结业测验(刀2)· ★防作弊:答案只在后端,前端拿题不拿答案、提交选项后端判分 =====
+
+
+class ExamQuestionPublic(BaseModel):
+    stem: str
+    options: list[str]  # ★ 不含 answer_index(防作弊)
+
+
+class ExamQuestionsOut(BaseModel):
+    stage: str
+    questions: list[ExamQuestionPublic]
+    total: int
+    pass_line: int   # 及格题数(≥ 即达标)
+    pass_ratio: float
+
+
+class SubmitExamIn(BaseModel):
+    stage: str = Field(min_length=1, max_length=16)
+    # 每题选中的【原始】选项下标(前端洗牌后须映射回原序提交)· 缺答/越界按答错
+    answers: list[int] = Field(default_factory=list)
+
+
+class QuestionResultOut(BaseModel):
+    question_index: int
+    your_answer: int | None
+    correct_answer: int       # 提交后才回传(供复盘)
+    is_correct: bool
+    explanation: str
+
+
+class SubmitExamOut(BaseModel):
+    stage: str
+    score: int
+    total: int
+    pass_line: int
+    passed: bool
+    results: list[QuestionResultOut]
+
+
+class ExamStatusItem(BaseModel):
+    stage: str
+    passed: bool       # 曾达标(任一次)
+    best_score: int
+    total: int
+    attempts: int
+
+
+class ExamResultsOut(BaseModel):
+    results: list[ExamStatusItem]
+
+
+def _require_valid_stage(raw: str) -> str:
+    stage = raw.strip()
+    if not has_exam(stage):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"未知模块或暂无结业测验: {stage}",
+        )
+    return stage
+
+
+@router.get("/exam", response_model=ExamQuestionsOut)
+async def get_exam(stage: Annotated[str, Query(min_length=1, max_length=16)]) -> ExamQuestionsOut:
+    """取某模块结业测验题 · ★只下发题干+选项(无答案)· 公开可读(答题需登录)。"""
+    s = _require_valid_stage(stage)
+    total = exam_total(s)
+    return ExamQuestionsOut(
+        stage=s,
+        questions=[
+            ExamQuestionPublic(stem=q.stem, options=list(q.options))
+            for q in public_questions(s)
+        ],
+        total=total,
+        pass_line=pass_line(total),
+        pass_ratio=PASS_RATIO,
+    )
+
+
+@router.post("/exam/submit", response_model=SubmitExamOut)
+async def submit_exam(
+    payload: SubmitExamIn, user: CurrentUserDep, db: DbDep,
+) -> SubmitExamOut:
+    """提交结业测验 · ★后端用 exams.py 答案重新判分(前端传的分数一律不信)· 记成绩(可重考)。"""
+    s = _require_valid_stage(payload.stage)
+    scored = score_exam(s, payload.answers)
+    await record_result(
+        db, user_id=user.id, stage=s,
+        score=scored.score, total=scored.total, passed=scored.passed,
+    )
+    return SubmitExamOut(
+        stage=s,
+        score=scored.score,
+        total=scored.total,
+        pass_line=scored.pass_line,
+        passed=scored.passed,
+        results=[
+            QuestionResultOut(
+                question_index=r.question_index,
+                your_answer=r.your_answer,
+                correct_answer=r.correct_answer,
+                is_correct=r.is_correct,
+                explanation=r.explanation,
+            )
+            for r in scored.results
+        ],
+    )
+
+
+@router.get("/exam/results", response_model=ExamResultsOut)
+async def get_exam_results(user: OptionalCurrentUserDep, db: DbDep) -> ExamResultsOut:
+    """当前用户各模块结业状态 · 未登录返回空(不 401)。"""
+    if user is None:
+        return ExamResultsOut(results=[])
+    status_list = await get_exam_status(db, user_id=user.id)
+    return ExamResultsOut(
+        results=[
+            ExamStatusItem(
+                stage=s.stage,
+                passed=s.passed,
+                best_score=s.best_score,
+                total=s.total,
+                attempts=s.attempts,
+            )
+            for s in status_list
+        ],
     )

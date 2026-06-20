@@ -9,6 +9,7 @@
 import { ArrowRight, BookOpen } from 'lucide-react'
 import Link from 'next/link'
 
+import { StageGraduatedBadge } from '@/components/academy/stage-graduated-badge'
 import { StageProgress } from '@/components/academy/stage-progress'
 import { TopNav } from '@/components/layout/top-nav'
 import { ACADEMY_ARTICLES, ACADEMY_STAGES } from '@/content/academy/manifest'
@@ -33,7 +34,11 @@ export default function AcademyHomePage() {
                     <span className="rounded-full bg-midas-red/10 px-2.5 py-0.5 font-mono text-xs text-midas-red">
                       {stage.stageLabel}
                     </span>
-                    <span className="text-xs text-muted-foreground/70">共 {count} 篇</span>
+                    <div className="flex items-center gap-2">
+                      {/* 结业徽章(已结业才显 · B 期刀2)*/}
+                      <StageGraduatedBadge stageSlug={stage.slug} />
+                      <span className="text-xs text-muted-foreground/70">共 {count} 篇</span>
+                    </div>
                   </div>
                   <h2 className="mt-3 font-serif text-lg font-bold">{stage.name}</h2>
                   <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">

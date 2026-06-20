@@ -1,4 +1,5 @@
 from app.core.database import Base  # noqa: F401
+from app.models.academy_exam_result import AcademyExamResult  # noqa: F401
 from app.models.academy_progress import AcademyProgress  # noqa: F401
 from app.models.ai_analysis_memory import AIAnalysisMemory  # noqa: F401
 from app.models.ai_usage import AIUsageLog  # noqa: F401
