@@ -43,7 +43,7 @@ from app.services.membership import PLAN_QUOTAS, get_quota_used, resolve_plan
 from app.services.report import store as report_store
 from app.services.report.generate import generate_weekly_report_draft
 from app.services.report.send import send_report
-from app.services.visit_stats import CN_TZ, cn_today, read_redis_day
+from app.services.visit_stats import CN_TZ, cn_today, read_redis_day, read_redis_hours
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -385,6 +385,12 @@ class VisitDailyPoint(BaseModel):
     uv: int
 
 
+class VisitHourlyPoint(BaseModel):
+    hour: int  # 0-23(CST)
+    pv: int
+    uv: int
+
+
 class RegistrationPoint(BaseModel):
     date: str
     count: int
@@ -393,6 +399,7 @@ class RegistrationPoint(BaseModel):
 class VisitStatsOut(BaseModel):
     range_days: int
     daily: list[VisitDailyPoint]  # 近 N 天 PV/UV(含今日实时)
+    hourly: list[VisitHourlyPoint]  # ★当天 24 小时分布(Redis 实时 · 看高峰时段 · 上线后渐满)
     registrations: list[RegistrationPoint]  # 近 N 天每日注册数(user.created_at 回溯)
     today: VisitDailyPoint
     yesterday: VisitDailyPoint
@@ -491,9 +498,16 @@ async def visit_stats(
     ]
     total_reg = (await db.execute(select(func.count()).select_from(User))).scalar() or 0
 
+    # ④ 当天 24 小时分布(Redis 实时 · 上线后渐满 · 历史天不回溯)
+    hours = await read_redis_hours(redis, today)
+    hourly = [
+        VisitHourlyPoint(hour=h, pv=hours[h][0], uv=hours[h][1]) for h in range(24)
+    ]
+
     return VisitStatsOut(
         range_days=days,
         daily=daily,
+        hourly=hourly,
         registrations=registrations,
         today=today_pt,
         yesterday=yest_pt,

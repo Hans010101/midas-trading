@@ -32,9 +32,19 @@ _PV_KEY = "visit:pv:{d}"
 _UV_KEY = "visit:uv:{d}"
 _KEY_TTL = 3 * 24 * 3600  # 3 天 · flush 落库后即可弃
 
+# 当天 24 小时分布(运营看高峰时段)· ★纯 Redis、当天临时、TTL 自动清,不落 PG(不建表/不迁移)。
+# 历史天小时分布无需回溯(看板只看「当天」),TTL 2 天足够(覆盖跨午夜边界)。
+_PV_HOUR_KEY = "visit:pv:{d}:{h}"
+_UV_HOUR_KEY = "visit:uv:{d}:{h}"
+_HOUR_KEY_TTL = 2 * 24 * 3600  # 2 天 · 当天图用完即弃
+
+
+def cn_now() -> datetime:
+    return datetime.now(CN_TZ)
+
 
 def cn_today() -> date_type:
-    return datetime.now(CN_TZ).date()
+    return cn_now().date()
 
 
 def _pv_key(d: date_type) -> str:
@@ -45,19 +55,55 @@ def _uv_key(d: date_type) -> str:
     return _UV_KEY.format(d=d.isoformat())
 
 
-async def record_visit(redis: Redis, visitor_id: str, day: date_type | None = None) -> None:
+def _pv_hour_key(d: date_type, h: int) -> str:
+    return _PV_HOUR_KEY.format(d=d.isoformat(), h=h)
+
+
+def _uv_hour_key(d: date_type, h: int) -> str:
+    return _UV_HOUR_KEY.format(d=d.isoformat(), h=h)
+
+
+async def record_visit(
+    redis: Redis,
+    visitor_id: str,
+    day: date_type | None = None,
+    hour: int | None = None,
+) -> None:
     """记一次页面访问 · 只碰 Redis(PV INCR + UV SADD)· 单次 pipeline 往返。
 
     visitor_id 已由调用方裁剪(≤64 · 匿名随机)。绝不写 PG / 绝不阻塞。
+    ★同时记当天小时分布(visit:pv|uv:{d}:{h})· day/hour 缺省取 CST 当下(测试可显式传)。
     """
-    d = day or cn_today()
+    now = cn_now()
+    d = day or now.date()
+    h = hour if hour is not None else now.hour
     pk, uk = _pv_key(d), _uv_key(d)
+    hpk, huk = _pv_hour_key(d, h), _uv_hour_key(d, h)
     pipe = redis.pipeline()
     pipe.incr(pk)
     pipe.expire(pk, _KEY_TTL)
     pipe.sadd(uk, visitor_id)
     pipe.expire(uk, _KEY_TTL)
+    # 当天小时桶(同一 pipeline · 一次往返)
+    pipe.incr(hpk)
+    pipe.expire(hpk, _HOUR_KEY_TTL)
+    pipe.sadd(huk, visitor_id)
+    pipe.expire(huk, _HOUR_KEY_TTL)
     await pipe.execute()
+
+
+async def read_redis_hours(redis: Redis, day: date_type) -> list[tuple[int, int]]:
+    """读某天 24 小时 (pv, uv) 分布 · 一次 pipeline(24 GET + 24 SCARD)· 缺失小时 →(0, 0)。
+
+    返回 list[24] · 索引 = 小时 0-23(CST)· uv=SCARD(该小时精确去重)。
+    """
+    pipe = redis.pipeline()
+    for h in range(24):
+        pipe.get(_pv_hour_key(day, h))
+        pipe.scard(_uv_hour_key(day, h))
+    raw = await pipe.execute()
+    # raw 顺序:[pv0, uv0, pv1, uv1, ...]
+    return [(int(raw[2 * h] or 0), int(raw[2 * h + 1] or 0)) for h in range(24)]
 
 
 async def read_redis_day(redis: Redis, day: date_type) -> tuple[int, int]:

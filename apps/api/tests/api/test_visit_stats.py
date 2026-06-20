@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis_client import get_redis
 from app.services.auth import issue_session
-from app.services.visit_stats import cn_today
+from app.services.visit_stats import cn_now, cn_today, read_redis_hours, record_visit
 from tests.factories import make_user
 
 
@@ -25,10 +25,13 @@ async def _admin_headers(db: AsyncSession) -> dict[str, str]:
 
 
 async def _clear_today() -> None:
-    """删今日 visit:* key,隔离跨测试计数(key 是全局按天 · 非 per-user)。"""
+    """删今日 visit:* key(天级 + 24 小时级),隔离跨测试计数(key 全局按天 · 非 per-user)。"""
     redis = await get_redis()
     d = cn_today().isoformat()
-    await redis.delete(f"visit:pv:{d}", f"visit:uv:{d}")
+    keys = [f"visit:pv:{d}", f"visit:uv:{d}"]
+    for h in range(24):
+        keys.extend((f"visit:pv:{d}:{h}", f"visit:uv:{d}:{h}"))
+    await redis.delete(*keys)
 
 
 # ===== AdminDep 边界 =====
@@ -126,3 +129,48 @@ def test_track_visit_route_is_post_only():
         if getattr(r, "path", "") == "/track/visit":
             methods |= r.methods  # type: ignore[attr-defined]
     assert methods == {"POST"}
+
+
+# ===== ★ 当天 24 小时分布(情况B 新增小时采集)=====
+
+
+@pytest.mark.asyncio
+async def test_record_visit_writes_hour_bucket():
+    """record_visit 显式 day+hour → read_redis_hours 对应桶 (pv, uv) 精确(同 vid 同小时去重)。"""
+    redis = await get_redis()
+    await _clear_today()
+    d = cn_today()
+    # 10 点:va×2 + vb×1 → pv=3 uv=2(va 去重)· 11 点:vc×1 → pv=1 uv=1
+    for vid in ("va", "vb", "va"):
+        await record_visit(redis, vid, day=d, hour=10)
+    await record_visit(redis, "vc", day=d, hour=11)
+
+    hours = await read_redis_hours(redis, d)
+    assert len(hours) == 24, "★必须 24 个小时点"
+    assert hours[10] == (3, 2), "★10 点 pv=3 uv=2(同小时同 vid 去重)"
+    assert hours[11] == (1, 1)
+    assert hours[0] == (0, 0), "★无访问的小时 → (0,0)"
+    assert hours[23] == (0, 0)
+
+
+@pytest.mark.asyncio
+async def test_dashboard_hourly_24_points(client: AsyncClient, db_session: AsyncSession):
+    """看板返回 hourly:24 点 · 索引=小时 0-23 · 本次访问全落同一 CST 小时桶(分桶口径正确)。"""
+    await _clear_today()
+    headers = await _admin_headers(db_session)
+    for vid in ("va", "vb", "va"):  # pv=3 uv=2
+        rr = await client.post("/api/v1/track/visit", json={"visitor_id": vid})
+        assert rr.status_code == 204
+
+    r = await client.get("/api/v1/admin/visit-stats?days=1", headers=headers)
+    assert r.status_code == 200
+    hourly = r.json()["hourly"]
+    assert len(hourly) == 24
+    assert [h["hour"] for h in hourly] == list(range(24)), "★小时 0-23 顺序"
+    assert sum(h["pv"] for h in hourly) == 3, "★小时 PV 之和 = 总访问"
+    # ★分桶口径:3 次访问全落【同一】CST 小时桶(不依赖具体哪个小时 · 避边界 flake)
+    non_zero = [h for h in hourly if h["pv"] > 0]
+    assert len(non_zero) == 1, "★同一时刻访问应聚到一个小时桶"
+    assert non_zero[0]["pv"] == 3
+    assert non_zero[0]["uv"] == 2  # 同 vid 去重
+    assert non_zero[0]["hour"] == cn_now().hour, "★桶 = 当前 CST 小时(时区对)"
