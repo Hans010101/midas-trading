@@ -16,8 +16,10 @@ import Link from 'next/link'
 import { AcademySideNav } from '@/components/academy/academy-side-nav'
 import { ArticleQuiz } from '@/components/academy/article-quiz'
 import { ArticleRenderer } from '@/components/academy/article-renderer'
+import { ArticleInteractives } from '@/components/academy/interactive/article-interactives'
 import { PracticeCTA } from '@/components/academy/practice-cta'
 import { TopNav } from '@/components/layout/top-nav'
+import { getInteractives } from '@/content/academy/interactives'
 import { getPractice, buildPracticeHref } from '@/content/academy/practice'
 import { getQuiz } from '@/content/academy/quizzes'
 import {
@@ -39,6 +41,7 @@ export default async function AcademyArticlePage({
   const { prev, next } = getAdjacentArticles(slug)
   const quiz = getQuiz(slug)
   const practice = getPractice(slug)
+  const interactives = getInteractives(slug)
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
@@ -83,6 +86,9 @@ export default async function AcademyArticlePage({
 
               {/* 正文(markdown 首行即 # 标题 → ArticleRenderer 的 h1)*/}
               <ArticleRenderer markdown={markdown} />
+
+              {/* D 系列交互演示(无配置 → 不渲染)· 正文后、小测前 */}
+              {interactives && <ArticleInteractives keys={interactives} />}
 
               {/* 随堂小测(无题 → 组件返回 null)· 刀1.5:选项洗牌 + 答完自动标记学完。
                   ★ key=slug:文章切换(soft nav)时强制重挂 → 重新洗牌 + 清空作答 */}
