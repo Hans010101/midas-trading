@@ -11,11 +11,14 @@
  * ★ 纯 UI/布局:MarketSwitcher 点击仍走其原有路由/store 逻辑(只挪位置,行为不变)。
  */
 
+import { Search } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { signOut, useSession } from 'next-auth/react'
+import { useEffect, useState } from 'react'
 
 import { UserAvatar } from '@/components/account/user-avatar'
+import { CommandPalette } from '@/components/layout/command-palette'
 import { MarketSwitcher } from '@/components/layout/market-switcher'
 import {
   DropdownMenu,
@@ -31,6 +34,21 @@ export function TopNav() {
   const { data: session, status } = useSession()
   const { data: me } = useMe() // 头像编号(选了预设则渲染预设图)
   const email = session?.user?.email ?? ''
+  const [paletteOpen, setPaletteOpen] = useState(false)
+
+  // ★全局 Cmd/Ctrl+K → 打开命令面板(preventDefault 挡浏览器默认 · ESC/遮罩/X 关闭)。
+  //   TopNav 挂在所有产品页 → 全局生效;landing 用自己的 nav(不渲染本组件)→ 天然排除(方案 C)。
+  //   唯一全局绑定 —— workbench 旧的 watchlist-column Cmd+K 已拆,不再双绑。
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   return (
     <header className="h-12 shrink-0 border-b border-paper bg-background">
@@ -44,8 +62,21 @@ export function TopNav() {
           <MarketSwitcher />
         </div>
 
-        {/* 右:用户头像下拉(登录态)/ 登录入口(未登录)/ loading 占位 */}
-        <div className="flex items-center">
+        {/* 右:Cmd+K 搜索入口 + 用户头像下拉(登录态)/ 登录入口(未登录)/ loading 占位 */}
+        <div className="flex items-center gap-3">
+          {/* Cmd+K 命令面板入口(搜品种 / 跳功能页)· 移动端只显 🔍 图标 */}
+          <button
+            type="button"
+            onClick={() => setPaletteOpen(true)}
+            aria-label="搜索品种(⌘K)"
+            className="flex shrink-0 items-center gap-2 rounded-md border border-paper bg-surface-subtle/40 px-2.5 py-1 text-muted-foreground transition-colors hover:border-midas-red/30 hover:text-foreground"
+          >
+            <Search className="h-3.5 w-3.5" />
+            <span className="hidden text-sm sm:inline">搜索品种…</span>
+            <kbd className="hidden rounded bg-paper px-1.5 py-0.5 font-mono text-[10px] leading-none text-muted-foreground sm:inline">
+              ⌘K
+            </kbd>
+          </button>
           {status === 'authenticated' && session?.user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -116,6 +147,7 @@ export function TopNav() {
           )}
         </div>
       </div>
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
     </header>
   )
 }

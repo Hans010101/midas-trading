@@ -7,7 +7,7 @@
  * - useWatchlistQuotes:30s 轮询每个标的最新价 + 涨跌幅
  * - @dnd-kit/sortable:拖拽 reorder(乐观更新 + 失败回滚)
  * - 删除按钮 hover 浮现 · 一键删
- * - Cmd/Ctrl+K → SymbolSearchDialog(加自选)
+ * - SymbolSearchDialog(加自选):由 + 按钮 / 空态 CTA 打开(★全局 Cmd/Ctrl+K 已上移 TopNav 命令面板,本列不再绑定)
  * - 空态卡(0005 风格)· 米白卡 + 📋 + 中国红 CTA
  * - 下方保留 AI 决策卡占位(M1)
  */
@@ -28,7 +28,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { GripVertical, Plus, Trash2 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 import { AiDecisionCard } from '@/components/workbench/ai-decision-card'
 import { CurrentPositionCard } from '@/components/workbench/current-position-card'
@@ -72,17 +72,9 @@ export function WatchlistColumn() {
 
   const quotes = useWatchlistQuotes(sortedItems)
 
-  // 全局 Cmd/Ctrl+K → 打开 search dialog
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault()
-        setSearchOpen(true)
-      }
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [])
+  // ★Cmd/Ctrl+K 全局绑定已上移到产品顶栏 TopNav 的全局命令面板(接管统一 · 不再双绑)。
+  //   本列的「加自选」入口保留:+ 按钮 / 空态 CTA 仍打开 SymbolSearchDialog(setSearchOpen)。
+  //   新命令面板的品种项也提供「加自选」次级操作,功能不丢。
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
