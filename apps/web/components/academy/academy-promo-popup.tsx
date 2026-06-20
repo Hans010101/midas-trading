@@ -5,7 +5,9 @@
  *
  * 触发:landing 首访 + 未登录 + 未看过(cookie)→ 短延迟弹一次。
  * 关闭(X / 点遮罩 / ESC,Radix Dialog 全内置)或点 CTA → 写 cookie,14 天不再弹。
- * ★纯前端展示 · 不碰后端/交易/支付/会员 · 响应式 · 暗色走 prefers-color-scheme(设计稿 dark 配色)。
+ * ★纯前端展示 · 不碰后端/交易/支付/会员 · 响应式。
+ * ★暗色策略 = 跟随项目 light-only(全站 .dark 永不挂载 · 见 globals.css 注释 + 训练营版块升级确认):
+ *   弹窗也固定亮色,与全站一致、不割裂(刀5.3 从 5.1 的 prefers-color-scheme 暗色适配简化而来)。
  * ★合规:不含「稳赚 / 暴富 / 保证收益」· 带「教学内容不构成投资建议」。
  *
  * 视觉来源:Design 海报稿(红渐变头 + 徽章 + 衬线大标题 + 金条 + 三数字卡 + 三特性 + 红 CTA)·
@@ -29,6 +31,15 @@ import { cn } from '@/lib/utils'
 
 const GOLD_DEEP = '#B8860B'
 const GOLD_BRIGHT = '#E8C14A'
+
+// 设计稿 light 配色(★项目 light-only · 弹窗固定亮色 · 不随 OS 暗色翻转)
+const CARD_BG = '#FFFFFF'
+const STAT_BG = '#FBF6EA'
+const STAT_BORDER = 'rgba(184,134,11,0.2)'
+const ICON_BG = '#FBE9EC'
+const SUB_TEXT = 'rgba(34,30,26,0.6)' // 数字卡标签 / 暂不按钮
+const BODY_TEXT = 'rgba(34,30,26,0.82)' // 特性正文
+const FINE_TEXT = 'rgba(34,30,26,0.42)' // 免责小字
 
 const STATS = [
   { num: '6', label: '大模块课程' },
@@ -101,7 +112,7 @@ export function AcademyPromoPopup() {
           className={cn(
             // ★照搬 shared DialogContent 的定位+动画类串(proven 居中):slide-in-from-*
             //   设 enter-translate=-50%/-48%,与静态 translate-[-50%] 配套,动画期/后都居中不偏。
-            'promo-poster fixed left-[50%] top-[50%] z-50 w-[380px] max-w-[calc(100vw-32px)]',
+            'fixed left-[50%] top-[50%] z-50 w-[380px] max-w-[calc(100vw-32px)]',
             'translate-x-[-50%] translate-y-[-50%] overflow-hidden rounded-[22px] shadow-2xl',
             'duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out',
             'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
@@ -109,7 +120,7 @@ export function AcademyPromoPopup() {
             'data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%]',
             'data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]',
           )}
-          style={{ background: 'var(--promo-card-bg)' }}
+          style={{ background: CARD_BG }}
         >
           {/* 关闭(白圈 X · Radix Close → onOpenChange 写 cookie)*/}
           <DialogPrimitive.Close
@@ -160,12 +171,12 @@ export function AcademyPromoPopup() {
                 <div
                   key={s.label}
                   className="rounded-[13px] border px-1.5 py-3.5 text-center"
-                  style={{ background: 'var(--promo-stat-bg)', borderColor: 'var(--promo-stat-border)' }}
+                  style={{ background: STAT_BG, borderColor: STAT_BORDER }}
                 >
                   <div className="font-serif text-[26px] font-black leading-none" style={{ color: GOLD_DEEP }}>
                     {s.num}
                   </div>
-                  <div className="mt-1.5 text-[11.5px] font-medium leading-snug" style={{ color: 'var(--promo-sub-text)' }}>
+                  <div className="mt-1.5 text-[11.5px] font-medium leading-snug" style={{ color: SUB_TEXT }}>
                     {s.label}
                   </div>
                 </div>
@@ -178,13 +189,13 @@ export function AcademyPromoPopup() {
                 <div key={i} className="flex items-start gap-3">
                   <span
                     className="mt-px flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px]"
-                    style={{ background: 'var(--promo-icon-bg)' }}
+                    style={{ background: ICON_BG }}
                   >
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
                       {f.path}
                     </svg>
                   </span>
-                  <div className="pt-1 text-[13.5px] leading-normal" style={{ color: 'var(--promo-body-text)' }}>
+                  <div className="pt-1 text-[13.5px] leading-normal" style={{ color: BODY_TEXT }}>
                     {f.text}
                   </div>
                 </div>
@@ -211,39 +222,15 @@ export function AcademyPromoPopup() {
               type="button"
               onClick={close}
               className="mt-2 w-full rounded-lg py-2 text-sm transition-colors hover:opacity-80"
-              style={{ color: 'var(--promo-sub-text)' }}
+              style={{ color: SUB_TEXT }}
             >
               暂不,先逛逛
             </button>
 
-            <p className="mt-3 text-center text-[11px] leading-relaxed" style={{ color: 'var(--promo-fine-text)' }}>
+            <p className="mt-3 text-center text-[11px] leading-relaxed" style={{ color: FINE_TEXT }}>
               训练营为教学内容,仅供学习参考,不构成投资建议。
             </p>
           </div>
-
-          {/* 主题变量(设计 token · 暗色走 prefers-color-scheme · 红头/金条/CTA 两模式同色)*/}
-          <style>{`
-            .promo-poster {
-              --promo-card-bg: #FFFFFF;
-              --promo-stat-bg: #FBF6EA;
-              --promo-stat-border: rgba(184,134,11,.20);
-              --promo-icon-bg: #FBE9EC;
-              --promo-sub-text: rgba(34,30,26,.6);
-              --promo-body-text: rgba(34,30,26,.82);
-              --promo-fine-text: rgba(34,30,26,.42);
-            }
-            @media (prefers-color-scheme: dark) {
-              .promo-poster {
-                --promo-card-bg: #211B18;
-                --promo-stat-bg: rgba(184,134,11,.10);
-                --promo-stat-border: rgba(184,134,11,.28);
-                --promo-icon-bg: rgba(200,16,46,.16);
-                --promo-sub-text: rgba(245,238,228,.62);
-                --promo-body-text: rgba(245,238,228,.9);
-                --promo-fine-text: rgba(245,238,228,.42);
-              }
-            }
-          `}</style>
         </DialogPrimitive.Content>
       </DialogPortal>
     </Dialog>
