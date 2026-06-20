@@ -101,7 +101,7 @@ async def test_send_report_email_attaches_pdf(monkeypatch: pytest.MonkeyPatch):
             return False
 
         async def post(
-            self, _url: str, *, headers: object = None, json: object = None,
+            self, _url: str, *, json: object = None, **_kwargs: object,
         ) -> _FakeResp:
             captured["json"] = json
             return _FakeResp()
