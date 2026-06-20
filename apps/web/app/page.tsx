@@ -36,6 +36,7 @@ import {
 import Image from 'next/image'
 import Link from 'next/link'
 
+import { AcademyPromoPopup } from '@/components/academy/academy-promo-popup'
 import { AcademyEntry } from '@/components/landing/academy-entry'
 import { BotRemote } from '@/components/landing/bot-remote'
 import { ContactUsLink } from '@/components/landing/contact-us-link'
@@ -73,6 +74,9 @@ export default function HomePage() {
       <Membership />
       <BottomCTA />
       <Footer />
+
+      {/* 「答题赢会员」首访弹窗(客户端 · cookie 门控 · 未登录首访弹一次 · B 期刀5)*/}
+      <AcademyPromoPopup />
     </main>
   )
 }
