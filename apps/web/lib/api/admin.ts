@@ -163,6 +163,12 @@ export interface VisitDailyPoint {
   uv: number
 }
 
+export interface VisitHourlyPoint {
+  hour: number // 0-23(CST)
+  pv: number
+  uv: number
+}
+
 export interface RegistrationPoint {
   date: string
   count: number
@@ -171,6 +177,7 @@ export interface RegistrationPoint {
 export interface VisitStats {
   range_days: number
   daily: VisitDailyPoint[]
+  hourly: VisitHourlyPoint[] // ★当天 24 小时分布(Redis 实时 · 上线后渐满)
   registrations: RegistrationPoint[]
   today: VisitDailyPoint
   yesterday: VisitDailyPoint

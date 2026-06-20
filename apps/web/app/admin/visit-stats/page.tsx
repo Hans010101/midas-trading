@@ -14,6 +14,8 @@ import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { useState } from 'react'
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -33,6 +35,10 @@ const GOLD = '#B8860B'
 
 function mmdd(d: string): string {
   return d.length >= 10 ? d.slice(5) : d // yyyy-mm-dd → mm-dd
+}
+
+function hourLabel(h: number): string {
+  return `${String(h).padStart(2, '0')}:00`
 }
 
 function Delta({ today, yest }: { today: number; yest: number }) {
@@ -182,6 +188,36 @@ export default function AdminVisitStatsPage() {
                   <Line type="monotone" dataKey="uv" name="UV" stroke={GOLD} strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
+            </section>
+
+            {/* ★当天 24 小时分布(看高峰时段)*/}
+            <section className="mb-4 rounded-lg border border-paper bg-cream p-4 shadow-sm">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="font-serif text-sm font-bold">当天 24 小时访问分布 · 按时段</h2>
+                <div className="flex gap-3 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="inline-block h-2 w-2 rounded-sm" style={{ background: RED }} />
+                    PV
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="inline-block h-2 w-2 rounded-sm" style={{ background: GOLD }} />
+                    UV
+                  </span>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={d?.hourly ?? []}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F7F6F1" />
+                  <XAxis dataKey="hour" tickFormatter={hourLabel} fontSize={10} tick={{ fill: '#94949C' }} interval={1} />
+                  <YAxis fontSize={10} tick={{ fill: '#94949C' }} allowDecimals={false} width={36} />
+                  <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={(h) => `${hourLabel(Number(h))} (CST)`} />
+                  <Bar dataKey="pv" name="PV" fill={RED} radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="uv" name="UV" fill={GOLD} radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+              <p className="mt-2 text-xs text-muted-foreground/70">
+                按北京时间(CST)0-23 时分桶 · 仅当天 · 数据自本功能上线起采集(今日上线前的时段为 0,次日起完整 24 小时)。
+              </p>
             </section>
 
             {/* 注册增长趋势 */}
