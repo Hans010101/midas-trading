@@ -726,3 +726,25 @@ class DecisionCard(BaseModel):
 3. **链上 / 衍生品 / 舆情 Agent**(等数据源接齐)
 4. **真实价格异动 trigger 主动失效 cache**(M2+ 时机灵敏度需求出现)
 5. **monthly budget 邮件告警 cron job**(M2+ · 现 ¥200 远未触顶,不急)
+
+---
+
+## § 补充(2026-06-20):landing 营销展示块免责移除 · 边界澄清
+
+★**本 ADR 的强制 disclaimer 机制(`§ disclaimer 强制嵌入(API + UI 双层兜底)` · `ValidatorNode` 强制注入
+`DecisionCard.disclaimer = "仅供参考,不构成投资建议"` · API Pydantic 字段不可空 · UI 浅灰底强制显示)针对的是
+产品实际【输出】——AI 决策卡这张真实分析卡片。这套双层兜底完全不变、仍强制、一个没动**:决策卡 / AI 分析
+输出处的免责语照旧 API + UI 双层兜底,ValidatorNode 照旧拦祈使句 + 注入 disclaimer。
+
+补记一次产品决策:官网 landing「虚拟实战」**营销展示块**底部曾有一行免责「⚠ 分析仅供参考,不构成投资建议。
+所有交易均为虚拟资金模拟。」(其代码注释标过「与 0011/0012 红线一致 · 随区搬迁自原 AiChan」,本质是该展示块
+从产品输出处**拷贝**的一行,**并非决策卡 ValidatorNode 注入的那条**)。该行已于
+**commit d69ddf6(2026-06-20 · Hans 明确授权)移除**。
+
+★**关键边界**(务必分清):
+- 【已移除 · 例外】landing 官网「虚拟实战」**营销展示块**那一行免责拷贝 —— 产品决策,有意为之;
+- 【仍强制 · 红线不变】AI 决策卡 / AI 分析 / 策略信号等**产品实际输出**处的 disclaimer(本 ADR 的
+  ValidatorNode + API + UI 双层兜底机制) —— 红线照旧、一个没动。
+
+移除的只是**展示层 / 门面文案的拷贝**,不是决策卡输出的强制 disclaimer。未来 session 若看到 landing 该处
+无免责,**勿误判为红线回归、勿擅自加回**。同步见 CLAUDE.md「视觉系统 § 例外不动」边界澄清 + 0011 § 补充。
