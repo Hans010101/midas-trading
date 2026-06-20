@@ -47,11 +47,13 @@ export function NotificationsConfigSection() {
 
   const [tradeEnabled, setTradeEnabled] = useState(true)
   const [priceEnabled, setPriceEnabled] = useState(true)
+  const [weeklyReportEnabled, setWeeklyReportEnabled] = useState(false)
 
   useEffect(() => {
     if (config) {
       setTradeEnabled(config.trade_alert_enabled)
       setPriceEnabled(config.price_alert_enabled)
+      setWeeklyReportEnabled(config.weekly_report_enabled)
     }
   }, [config])
 
@@ -60,6 +62,7 @@ export function NotificationsConfigSection() {
       await saveMutation.mutateAsync({
         trade_alert_enabled: tradeEnabled,
         price_alert_enabled: priceEnabled,
+        weekly_report_enabled: weeklyReportEnabled,
       })
       toast.success('推送开关已保存')
     } catch (e) {
@@ -90,10 +93,10 @@ export function NotificationsConfigSection() {
         {/* 飞书绑定(ADR 0032 阶段三 · 绑定码 + 解绑)*/}
         <FeishuCard bound={feishuBound} />
 
-        {/* 事件总开关 */}
+        {/* 推送 / 订阅设置 */}
         <div className="rounded-lg border border-paper bg-cream p-5 shadow-sm">
           <h3 className="mb-3 font-serif text-base font-bold text-foreground">
-            事件总开关
+            推送 / 订阅设置
           </h3>
           <div className="mb-3 space-y-2">
             <Toggle
@@ -107,6 +110,12 @@ export function NotificationsConfigSection() {
               hint="自选股 ±5% · 5 分钟同标的去重"
               checked={priceEnabled}
               onChange={setPriceEnabled}
+            />
+            <Toggle
+              label="订阅市场周报"
+              hint="每周一全市场周报发到邮箱(含 PDF)· TG/飞书提示已发邮箱"
+              checked={weeklyReportEnabled}
+              onChange={setWeeklyReportEnabled}
             />
           </div>
           <SaveButton onClick={saveSwitches} pending={saveMutation.isPending}>

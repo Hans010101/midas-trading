@@ -5,8 +5,8 @@
  *
  * ★ admin 内部页 · 用 [id] 动态段(零[id] 红线只约束【公开页】· admin 内部页可用 · 同 /admin/users/[id])。
  * ★ 安全边界在后端 AdminDep(403):普通用户手输 URL → 后端 403 → 降级提示。
- * 功能:看正文 → 编辑 title/content(内容立项前 admin 也能手填专业内容)→ 批准(draft→approved)。
- * ★ 发送是第二刀,本页不做。
+ * 功能:看正文 → 编辑 title/content(内容立项前 admin 也能手填专业内容)→ 批准(draft→approved)
+ * → ★人工发布(approved→sent · 邮件全文+PDF + TG/飞书提示给订阅用户)。
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -21,6 +21,8 @@ import {
   AdminApiError,
   approveAdminReport,
   fetchAdminReport,
+  type ReportSendOut,
+  sendAdminReport,
   updateAdminReport,
 } from '@/lib/api/admin'
 
@@ -73,10 +75,20 @@ export default function AdminReportDetailPage() {
     onSuccess: invalidate,
   })
 
+  const [sendResult, setSendResult] = useState<ReportSendOut | null>(null)
+  const sendMutation = useMutation({
+    mutationFn: () => sendAdminReport(token, reportId),
+    onSuccess: (res) => {
+      setSendResult(res)
+      invalidate()
+    },
+  })
+
   const forbidden = query.error instanceof AdminApiError && query.error.status === 403
   const notFound = query.error instanceof AdminApiError && query.error.status === 404
   const report = query.data
   const isDraft = report?.status === 'draft'
+  const isApproved = report?.status === 'approved'
   const isSent = report?.status === 'sent'
 
   return (
@@ -177,6 +189,16 @@ export default function AdminReportDetailPage() {
                   {approveMutation.isPending ? '批准中…' : '批准报告'}
                 </button>
               )}
+              {isApproved && (
+                <button
+                  type="button"
+                  onClick={() => sendMutation.mutate()}
+                  disabled={sendMutation.isPending}
+                  className="rounded-md bg-gold px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-gold/85 disabled:opacity-50"
+                >
+                  {sendMutation.isPending ? '发送中…' : '发布(发送给订阅用户)'}
+                </button>
+              )}
               {savedHint && <span className="text-xs text-gold">{savedHint}</span>}
               {saveMutation.isError && (
                 <span className="text-xs text-midas-red">
@@ -194,11 +216,30 @@ export default function AdminReportDetailPage() {
                     : '重试'}
                 </span>
               )}
+              {sendMutation.isError && (
+                <span className="text-xs text-midas-red">
+                  发送失败:
+                  {sendMutation.error instanceof AdminApiError
+                    ? sendMutation.error.detail
+                    : '重试'}
+                </span>
+              )}
             </div>
-            {!isDraft && !isSent && (
+            {isApproved && (
               <p className="mt-3 text-xs text-muted-foreground">
-                ★ 已批准 · 发送给订阅用户是第二刀(本期未做)。
+                ★ 已批准 · 点「发布」后给订阅用户发送邮件(全文 + PDF 附件)+ TG/飞书已发邮箱提示,状态转「已发送」。
               </p>
+            )}
+            {sendResult && (
+              <div className="mt-3 rounded-md border border-gold/30 bg-gold/5 px-3 py-2 text-xs text-foreground">
+                ✓ 已发送 · 订阅用户 {sendResult.recipients} 人 · 邮件成功 {sendResult.email_sent}
+                {sendResult.email_failed > 0 && ` / 失败 ${sendResult.email_failed}`} · TG/飞书提示{' '}
+                {sendResult.notify_sent}
+                {sendResult.notify_failed > 0 && ` / 失败 ${sendResult.notify_failed}`}
+              </div>
+            )}
+            {isSent && !sendResult && (
+              <p className="mt-3 text-xs text-muted-foreground">★ 本报告已发送(status=sent)。</p>
             )}
           </div>
         )}
