@@ -47,6 +47,7 @@ export const ACADEMY_ARTICLES: AcademyArticle[] = [
   { slug: "B7", stage: "technical", order: 7, title: "布林带（BOLL）：波动的通道", file: "B7.md", excerpt: "前面学的均线，是一条线。布林带（BOLL，Bollinger Bands）则更进一步——它在均线的基础上，给价格画出一条…" },
   { slug: "B8", stage: "technical", order: 8, title: "布林带的开口与收口", file: "B8.md", excerpt: "上一篇我们知道，布林带的上下轨是按\"中轨 ± 标准差\"画的，而标准差反映波动——所以通道的宽窄，直接对应着市场波动的大小…" },
   { slug: "B9", stage: "technical", order: 9, title: "RSI 指标：超买与超卖", file: "B9.md", excerpt: "前面学的 MACD、布林带，都基于价格的均线和波动。RSI（相对强弱指标，Relative Strength Index…" },
+  { slug: "B10", stage: "technical", order: 10, title: "KDJ 指标:随机指标的三条线", file: "B10.md", excerpt: "KDJ 又叫随机指标(Stochastic Oscillator),用来衡量当前收盘价在最近一段价格区间里的…" },
   { slug: "C1", stage: "chan", order: 1, title: "缠论是什么：一套完整的市场分析体系", file: "C1.md", excerpt: "学到这里，你已经认识了均线、MACD、布林带、RSI 等技术指标。它们大多是\"在价格之上叠加一个计算值\"来辅助判断。而缠…" },
   { slug: "C2", stage: "chan", order: 2, title: "学缠论前：摆正心态（不神化、不迷信）", file: "C2.md", excerpt: "在真正进入分型、笔、中枢这些概念之前，有一篇\"务虚\"但极其重要的内容必须先讲——学缠论的心态。" },
   { slug: "C3", stage: "chan", order: 3, title: "K线的包含关系：缠论的第一步", file: "C3.md", excerpt: "缠论要在 K 线上识别分型、画笔，但原始的 K 线常常杂乱——有些 K 线被相邻 K 线完全\"包住\"，让结构看起来模糊不…" },
