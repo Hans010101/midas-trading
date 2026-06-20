@@ -38,6 +38,9 @@ export interface SubmitExamResponse {
   pass_line: number
   passed: boolean
   results: QuestionResult[]
+  // 刀3:首次达标发 1 周会员 · membership_awarded 仅首次达标 true(重考不重复发)
+  membership_awarded: boolean
+  new_expires_at: string | null // 本次发了会员才有(新会员到期日 ISO)
 }
 
 export interface ExamStatusItem {

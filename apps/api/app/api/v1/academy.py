@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import CurrentUserDep, OptionalCurrentUserDep
 from app.core.database import get_db
 from app.services.academy.catalog import STAGE_TOTALS, is_valid_slug
+from app.services.academy.exam_award import award_membership_if_first_pass
 from app.services.academy.exam_results import get_exam_status, record_result
 from app.services.academy.exams import (
     PASS_RATIO,
@@ -152,6 +153,9 @@ class SubmitExamOut(BaseModel):
     pass_line: int
     passed: bool
     results: list[QuestionResultOut]
+    # 刀3:首次达标发 1 周会员 · membership_awarded=True 仅首次达标(重考不重复发)
+    membership_awarded: bool = False
+    new_expires_at: datetime | None = None  # 本次发了会员才有(新会员到期日)
 
 
 class ExamStatusItem(BaseModel):
@@ -204,6 +208,14 @@ async def submit_exam(
         db, user_id=user.id, stage=s,
         score=scored.score, total=scored.total, passed=scored.passed,
     )
+    # 刀3:达标 → 首次发 1 周会员(★复用 extend_subscription · UNIQUE 原子幂等只发一次)·
+    #   未达标不发;重考已达标不重复发。只碰发会员一处,不碰交易/支付。
+    membership_awarded = False
+    new_expires_at = None
+    if scored.passed:
+        membership_awarded, new_expires_at = await award_membership_if_first_pass(
+            db, user_id=user.id, stage=s,
+        )
     return SubmitExamOut(
         stage=s,
         score=scored.score,
@@ -220,6 +232,8 @@ async def submit_exam(
             )
             for r in scored.results
         ],
+        membership_awarded=membership_awarded,
+        new_expires_at=new_expires_at,
     )
 
 
