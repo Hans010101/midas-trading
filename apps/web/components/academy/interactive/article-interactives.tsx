@@ -24,6 +24,11 @@ const REGISTRY: Partial<Record<InteractiveKey, ComponentType>> = {
   'margin-mode': dynamic(() => import('./margin-mode-demo').then((m) => m.MarginModeDemo)),
   'pnl-exposure': dynamic(() => import('./pnl-exposure-demo').then((m) => m.PnlExposureDemo)),
   'liquidation-process': dynamic(() => import('./liquidation-process-demo').then((m) => m.LiquidationProcessDemo)),
+  // 第三批:技术指标
+  'moving-average': dynamic(() => import('./moving-average-demo').then((m) => m.MovingAverageDemo)),
+  macd: dynamic(() => import('./macd-demo').then((m) => m.MacdDemo)),
+  bollinger: dynamic(() => import('./bollinger-demo').then((m) => m.BollingerDemo)),
+  rsi: dynamic(() => import('./rsi-demo').then((m) => m.RsiDemo)),
 }
 
 export function ArticleInteractives({ keys }: { keys: InteractiveKey[] }) {

@@ -41,6 +41,8 @@ export const IMPLEMENTED_KEYS = [
   'liquidation', 'chan-pivot', 'kline',
   // 第二批:合约与风控
   'funding-rate', 'position-sizing', 'margin-mode', 'pnl-exposure', 'liquidation-process',
+  // 第三批:技术指标(D9-D12;D13 kdj 待 B10「KDJ 指标」文章就位后补)
+  'moving-average', 'macd', 'bollinger', 'rsi',
 ] as const
 
 /** 运行期已知 key 全集(防 as 强转引入的拼写错误;与联合类型同步) */
@@ -64,6 +66,11 @@ export const ACADEMY_INTERACTIVES: Record<string, InteractiveKey[]> = {
   E3: ['margin-mode'],
   E8: ['pnl-exposure'],
   'C2-4': ['liquidation-process'],
+  // 第三批锚文(技术指标 · B 系列;manifest 已核 B2/B5/B7/B9 存在)
+  B2: ['moving-average'],
+  B5: ['macd'],
+  B7: ['bollinger'],
+  B9: ['rsi'],
 }
 
 /** 取某篇要嵌入的交互组件 key 列表(无 → null,不渲染交互区) */
