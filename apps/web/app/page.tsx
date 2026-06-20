@@ -114,6 +114,12 @@ function TopNav() {
           <a href="#lab" className="text-muted-foreground transition-colors hover:text-foreground">
             研究室
           </a>
+          <a href="#academy" className="text-muted-foreground transition-colors hover:text-foreground">
+            训练营
+          </a>
+          <a href="#bot" className="text-muted-foreground transition-colors hover:text-foreground">
+            机器人
+          </a>
           <a href="#membership" className="text-muted-foreground transition-colors hover:text-foreground">
             会员
           </a>
