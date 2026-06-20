@@ -87,6 +87,14 @@
     border-color: hsl(var(--border));
   }
 
+  /* 锚点定位:hash 跳转时目标版块顶部留出舒适边距(固定导航栏 TopNav h-16=64px + 56px 呼吸 = 120px),
+     避免版块顶死/被导航栏遮挡。scroll-behavior:smooth = hash 跳转平滑滚动。
+     ★文档级滚动才受影响;终端(/global·/workbench)走内部 overflow 容器,不受此规则影响。 */
+  html {
+    scroll-padding-top: 7.5rem;
+    scroll-behavior: smooth;
+  }
+
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
