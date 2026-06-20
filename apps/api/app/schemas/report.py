@@ -47,3 +47,15 @@ class ReportUpdateIn(BaseModel):
 
     title: str | None = Field(default=None, min_length=1, max_length=255)
     content: str | None = Field(default=None, min_length=1)
+
+
+class ReportSendOut(BaseModel):
+    """发送广播结果(P3)· admin 点发布后回显投递统计。"""
+
+    report_id: int
+    status: str  # 发送后 = sent
+    recipients: int  # 订阅用户数
+    email_sent: int
+    email_failed: int
+    notify_sent: int  # TG/飞书 实际投递用户数
+    notify_failed: int

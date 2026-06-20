@@ -12,6 +12,7 @@ env:
 
 from __future__ import annotations
 
+import base64
 import logging
 import os
 
@@ -105,3 +106,52 @@ async def send_verification_email(*, to: str, verify_url: str) -> None:
         raise EmailDeliveryError(msg) from e
 
     logger.info("verification email 已发 to=%s", to)
+
+
+async def send_report_email(
+    *,
+    to: str,
+    subject: str,
+    html: str,
+    pdf_bytes: bytes,
+    pdf_filename: str,
+) -> None:
+    """市场周报邮件:HTML 正文 + ★PDF 附件(P3 第二刀)。
+
+    附件走 Resend `attachments=[{filename, content(base64)}]`(★复用 support/ticket 范式 · 图/PDF base64)。
+    无 RESEND_API_KEY(dev)→ 记 warning 跳过实际投递(模拟);失败抛 EmailDeliveryError(广播层逐人 catch)。
+    """
+    api_key = _api_key()
+    if not api_key:
+        logger.warning("RESEND_API_KEY 未配置 · 模拟投递周报 · to=%s · subject=%s", to, subject)
+        return
+
+    body = {
+        "from": _from_addr(),
+        "to": [to],
+        "subject": subject,
+        "html": html,
+        "attachments": [
+            {
+                "filename": pdf_filename,
+                "content": base64.b64encode(pdf_bytes).decode("ascii"),
+            },
+        ],
+    }
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                RESEND_ENDPOINT,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=body,
+            )
+            resp.raise_for_status()
+    except httpx.HTTPError as e:
+        logger.exception("Resend 周报投递失败 to=%s", to)
+        msg = f"Resend 周报投递失败:{e}"
+        raise EmailDeliveryError(msg) from e
+
+    logger.info("report email 已发 to=%s", to)

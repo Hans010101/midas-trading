@@ -23,6 +23,8 @@ class NotificationConfigResponse(BaseModel):
     tg_chat_id: str | None
     trade_alert_enabled: bool
     price_alert_enabled: bool
+    # 市场周报订阅(P3)· 默认 false(选择性订阅)
+    weekly_report_enabled: bool = False
     # 服务端只读 · 给前端展示是否已绑定 Telegram
     has_telegram: bool
     # ADR 0032 阶段三 · 是否已绑定飞书(feishu_open_id 非空)
@@ -47,6 +49,8 @@ class NotificationConfigUpdate(BaseModel):
 
     trade_alert_enabled: bool | None = None
     price_alert_enabled: bool | None = None
+    # 市场周报订阅开关(P3)· None=不动
+    weekly_report_enabled: bool | None = None
     # 0028 N2 · 安静时段(4 个独立字段 · 各自可选 · 跨夜由 start > end 表达)
     quiet_hours_enabled: bool | None = None
     quiet_hours_start: int | None = Field(default=None, ge=0, le=23)
@@ -83,6 +87,7 @@ def serialize_config_response(config) -> NotificationConfigResponse:  # type: ig
         tg_chat_id=config.tg_chat_id,
         trade_alert_enabled=config.trade_alert_enabled,
         price_alert_enabled=config.price_alert_enabled,
+        weekly_report_enabled=config.weekly_report_enabled,
         has_telegram=bool(config.tg_chat_id),
         has_feishu=bool(config.feishu_open_id),
         quiet_hours_enabled=config.quiet_hours_enabled,

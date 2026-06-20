@@ -75,6 +75,9 @@ def _kind_enabled(event: NotificationEvent, config: NotificationConfig) -> bool:
         return config.trade_alert_enabled
     if event.kind == NotificationKind.PRICE_ANOMALY:
         return config.price_alert_enabled
+    if event.kind == NotificationKind.WEEKLY_REPORT:
+        # P3:市场周报订阅开关(weekly_report_enabled 同时也是收件人筛选条件)
+        return config.weekly_report_enabled
     return True
 
 

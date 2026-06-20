@@ -20,6 +20,8 @@ class NotificationKind(StrEnum):
     # #296:永续合约成交 / 强平(独立 kind · 便于日志区分;均 quiet_exempt=True)
     PERP_FILLED = "perp_filled"
     LIQUIDATION = "liquidation"
+    # 市场周报已发邮箱轻提示(P3 第二刀 · 受 weekly_report_enabled 订阅开关控制)
+    WEEKLY_REPORT = "weekly_report"
 
 
 @dataclass(frozen=True)
@@ -118,10 +120,24 @@ class LiquidationEvent:
     currency: str = "USDT"
 
 
+@dataclass(frozen=True)
+class WeeklyReportSentEvent:
+    """市场周报已发送至邮箱的轻提示(P3)· 用户主动订阅(weekly_report_enabled)。
+
+    quiet_exempt=True(每周一次 · 已订阅 · 不受安静时段拦截)· TG/飞书只发提示,全文走邮件。
+    """
+
+    quiet_exempt: ClassVar[bool] = True
+
+    kind: Literal[NotificationKind.WEEKLY_REPORT] = NotificationKind.WEEKLY_REPORT
+    report_title: str = ""
+
+
 NotificationEvent = (
     TradeFilledEvent
     | PriceAnomalyEvent
     | AlertTriggeredEvent
     | PerpFilledEvent
     | LiquidationEvent
+    | WeeklyReportSentEvent
 )

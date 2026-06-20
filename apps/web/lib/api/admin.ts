@@ -322,3 +322,23 @@ export async function generateAdminReport(token: string): Promise<ReportDetail> 
   if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
   return (await r.json()) as ReportDetail
 }
+
+export interface ReportSendOut {
+  report_id: number
+  status: string // sent
+  recipients: number
+  email_sent: number
+  email_failed: number
+  notify_sent: number
+  notify_failed: number
+}
+
+/** ★人工发布:approved 报告 → 邮件(全文+PDF)+ TG/飞书提示给订阅用户 → status=sent。 */
+export async function sendAdminReport(token: string, id: number): Promise<ReportSendOut> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/reports/${id}/send`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as ReportSendOut
+}
