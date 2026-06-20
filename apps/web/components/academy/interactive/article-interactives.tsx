@@ -30,6 +30,16 @@ const REGISTRY: Partial<Record<InteractiveKey, ComponentType>> = {
   bollinger: dynamic(() => import('./bollinger-demo').then((m) => m.BollingerDemo)),
   rsi: dynamic(() => import('./rsi-demo').then((m) => m.RsiDemo)),
   kdj: dynamic(() => import('./kdj-demo').then((m) => m.KdjDemo)),
+  // 第四批:缠论结构
+  'kline-merge': dynamic(() => import('./kline-merge-demo').then((m) => m.KlineMergeDemo)),
+  'fractal-bi': dynamic(() => import('./fractal-bi-demo').then((m) => m.FractalBiDemo)),
+  divergence: dynamic(() => import('./divergence-demo').then((m) => m.DivergenceDemo)),
+  'buy-sell-points': dynamic(() => import('./buy-sell-points-demo').then((m) => m.BuySellPointsDemo)),
+  // 第五批:策略与交易体系
+  'risk-reward': dynamic(() => import('./risk-reward-demo').then((m) => m.RiskRewardDemo)),
+  'trend-range': dynamic(() => import('./trend-range-demo').then((m) => m.TrendRangeDemo)),
+  'grid-trading': dynamic(() => import('./grid-trading-demo').then((m) => m.GridTradingDemo)),
+  martingale: dynamic(() => import('./martingale-demo').then((m) => m.MartingaleDemo)),
 }
 
 export function ArticleInteractives({ keys }: { keys: InteractiveKey[] }) {

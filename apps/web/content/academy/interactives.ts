@@ -43,6 +43,10 @@ export const IMPLEMENTED_KEYS = [
   'funding-rate', 'position-sizing', 'margin-mode', 'pnl-exposure', 'liquidation-process',
   // 第三批:技术指标(D9-D13;D13 kdj 锚 B10)
   'moving-average', 'macd', 'bollinger', 'rsi', 'kdj',
+  // 第四批:缠论结构
+  'kline-merge', 'fractal-bi', 'divergence', 'buy-sell-points',
+  // 第五批:策略与交易体系
+  'risk-reward', 'trend-range', 'grid-trading', 'martingale',
 ] as const
 
 /** 运行期已知 key 全集(防 as 强转引入的拼写错误;与联合类型同步) */
@@ -72,6 +76,16 @@ export const ACADEMY_INTERACTIVES: Record<string, InteractiveKey[]> = {
   B7: ['bollinger'],
   B9: ['rsi'],
   B10: ['kdj'],
+  // —— 第四批:缠论结构(锚 C 系列缠论文)——
+  C3: ['kline-merge'],
+  C5: ['fractal-bi'],
+  'C1-7': ['divergence'],
+  C8: ['buy-sell-points'],
+  // —— 第五批:策略与交易体系(锚最贴主题文;D18 risk-reward/D19 trend-range 在 strategy 阶无精准文,跨 system 阶 F3/F8 替换,见回报)——
+  F3: ['risk-reward'],
+  F8: ['trend-range'],
+  'C3-8': ['grid-trading'],
+  'C3-9': ['martingale'],
 }
 
 /** 取某篇要嵌入的交互组件 key 列表(无 → null,不渲染交互区) */
