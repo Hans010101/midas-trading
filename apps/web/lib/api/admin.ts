@@ -231,3 +231,94 @@ export async function fetchAdminAcademyStats(
   if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
   return (await r.json()) as AcademyStats
 }
+
+// ── 标准化市场周报复核(P2)──────────────────────────────────────────────────
+export interface ReportListItem {
+  id: number
+  title: string
+  status: string // draft | approved | sent
+  period_start: string | null
+  period_end: string | null
+  created_at: string
+}
+
+export interface ReportListOut {
+  items: ReportListItem[]
+  total: number
+}
+
+export interface ReportDetail {
+  id: number
+  title: string
+  content: string
+  status: string
+  period_start: string | null
+  period_end: string | null
+  created_at: string
+  updated_at: string
+  approved_at: string | null
+  sent_at: string | null
+}
+
+export async function fetchAdminReports(
+  token: string,
+  params: { status?: string; limit?: number; offset?: number } = {},
+  signal?: AbortSignal,
+): Promise<ReportListOut> {
+  const qs = new URLSearchParams()
+  if (params.status) qs.set('status', params.status)
+  qs.set('limit', String(params.limit ?? 50))
+  qs.set('offset', String(params.offset ?? 0))
+  const r = await fetch(`${API_BASE}/api/v1/admin/reports?${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as ReportListOut
+}
+
+export async function fetchAdminReport(
+  token: string,
+  id: number,
+  signal?: AbortSignal,
+): Promise<ReportDetail> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/reports/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as ReportDetail
+}
+
+export async function updateAdminReport(
+  token: string,
+  id: number,
+  payload: { title?: string; content?: string },
+): Promise<ReportDetail> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/reports/${id}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as ReportDetail
+}
+
+export async function approveAdminReport(token: string, id: number): Promise<ReportDetail> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/reports/${id}/approve`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as ReportDetail
+}
+
+/** ★手动触发生成一篇草稿(测试用 · 不必等周一 beat)。 */
+export async function generateAdminReport(token: string): Promise<ReportDetail> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/reports/generate`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as ReportDetail
+}

@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import AdminDep
+from app.api.deps import AdminDep, ClickHouseDep
 from app.core.database import get_db
 from app.core.redis_client import get_redis
 from app.models.admin_action_log import AdminActionLog
@@ -30,9 +30,17 @@ from app.models.redeem_code import RedeemCode
 from app.models.session import Session
 from app.models.subscription import Subscription
 from app.models.user import User
+from app.schemas.report import (
+    ReportDetail,
+    ReportListItem,
+    ReportListOut,
+    ReportUpdateIn,
+)
 from app.services.academy.admin_stats import get_academy_stats
 from app.services.growth import extend_subscription, invite_stats
 from app.services.membership import PLAN_QUOTAS, get_quota_used, resolve_plan
+from app.services.report import store as report_store
+from app.services.report.generate import generate_weekly_report_draft
 from app.services.visit_stats import CN_TZ, cn_today, read_redis_day
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -552,3 +560,72 @@ async def academy_stats(
             AcademyDayPoint(date=p.date, count=p.count) for p in s.submission_trend
         ],
     )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 市场周报复核(P2)· 🔴 每端点挂 AdminDep · draft → approved(★发送是第二刀,本刀不做)
+# ════════════════════════════════════════════════════════════════════════════
+@router.get("/reports", response_model=ReportListOut)
+async def list_market_reports(
+    _admin: AdminDep,
+    db: DbDep,
+    status_filter: str | None = Query(
+        None, alias="status", description="按状态筛 draft/approved/sent",
+    ),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> ReportListOut:
+    rows, total = await report_store.list_reports(
+        db, status=status_filter, limit=limit, offset=offset,
+    )
+    return ReportListOut(
+        items=[ReportListItem.model_validate(r) for r in rows],
+        total=total,
+    )
+
+
+@router.get("/reports/{report_id}", response_model=ReportDetail)
+async def get_market_report(report_id: int, _admin: AdminDep, db: DbDep) -> ReportDetail:
+    report = await report_store.get_report(db, report_id)
+    if report is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="报告不存在")
+    return ReportDetail.model_validate(report)
+
+
+@router.put("/reports/{report_id}", response_model=ReportDetail)
+async def update_market_report(
+    report_id: int, payload: ReportUpdateIn, _admin: AdminDep, db: DbDep,
+) -> ReportDetail:
+    """编辑报告 title/content(内容立项前 admin 也能手动填专业内容测试)· 已发送不可改(409)。"""
+    try:
+        report = await report_store.update_report(
+            db, report_id, title=payload.title, content=payload.content,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    if report is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="报告不存在")
+    return ReportDetail.model_validate(report)
+
+
+@router.post("/reports/{report_id}/approve", response_model=ReportDetail)
+async def approve_market_report(report_id: int, admin: AdminDep, db: DbDep) -> ReportDetail:
+    """批准报告(draft → approved · approved_by 取鉴权)· 非 draft 拒(409)。本刀不发送。"""
+    try:
+        report = await report_store.approve_report(db, report_id, admin_id=admin.id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    if report is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="报告不存在")
+    return ReportDetail.model_validate(report)
+
+
+@router.post(
+    "/reports/generate", response_model=ReportDetail, status_code=status.HTTP_201_CREATED,
+)
+async def generate_market_report_now(
+    _admin: AdminDep, db: DbDep, ch: ClickHouseDep,
+) -> ReportDetail:
+    """★手动触发生成一篇周报草稿(测试用 · 不必等周一 beat)· 与 Celery 任务共用同一生成逻辑。"""
+    report = await generate_weekly_report_draft(db, ch)
+    return ReportDetail.model_validate(report)

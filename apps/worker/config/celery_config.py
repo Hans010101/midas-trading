@@ -266,4 +266,12 @@ beat_schedule = {
         "schedule": crontab(minute="15", hour="*/2"),
         "options": {"expires": 3000},
     },
+    # ── 标准化市场周报(P1 第一刀)· 每周一 9:00 CST 生成草稿 → admin 复核 ──────────────
+    "generate-weekly-report": {
+        "task": "tasks.report.generate_weekly_report",
+        # 每周一上午 9:00(timezone Asia/Shanghai)· 生成占位草稿 · expires 3600 防积压
+        # ★本刀只生成 draft 不发送(发送是第二刀)· admin 后台人工复核/编辑/批准
+        "schedule": crontab(hour="9", minute="0", day_of_week="mon"),
+        "options": {"expires": 3600},
+    },
 }

@@ -32,6 +32,7 @@ from tasks import (  # noqa: E402, F401
     perp_funding,
     perp_liquidation,
     price_alerts,
+    report,
     visit_flush,
 )
 

@@ -10,6 +10,7 @@ const ADMIN_TABS = [
   { href: '/admin/redeem-codes', label: '兑换码', exact: false },
   { href: '/admin/visit-stats', label: '访问看板', exact: false },
   { href: '/admin/academy-stats', label: '训练营统计', exact: false },
+  { href: '/admin/reports', label: '市场周报', exact: false },
 ] as const
 
 export function AdminNav() {
