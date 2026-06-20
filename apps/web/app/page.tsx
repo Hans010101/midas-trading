@@ -2,14 +2,15 @@
  * 首页静态官网 · 官网刀1 旅程式重排(看清市场 → 看懂结构 → 验证想法 → 虚拟实战)。
  *
  * 11 板块从上到下:
- *   1. TopNav        · 锚点:市场 / 沙盘 / 研究室 / 会员
+ *   1. TopNav        · 锚点:市场 / 沙盘 / 策略室 / 训练营 / 机器人 / 会员
  *   2. Hero          · 主标保留「四市通览·点石成金」· 副标四市场(加密打头 · 平等叙事)
  *   3. Showcase      · 看清市场(全球页实拍)
  *   4. Markets       · 四市场卡:加密 → 美股 → A股 → 港股(★规格一致 · 不给加密加戏)
  *   5. StructureSandbox · 看懂结构(AI 沙盘助手 · components/landing/)
  *   6. ResearchLab   · 验证想法(策略研究室 · components/landing/)
  *   6.5 AcademyEntry · 交易训练营入口(教学内容 · 同 /lab 触达方式 · components/landing/)
- *   7. VirtualPractice · 虚拟实战(决策卡→一键下单→条件单 · components/landing/)
+ *   7. BotRemote     · 点金 MIDAS · 远程控制(TG/飞书 bot · components/landing/)
+ *   7.5 VirtualPractice · 虚拟实战(决策卡→一键下单→条件单 · components/landing/)
  *   8. ChanAndMore   · 缠论标注 + 其余能力收纳网格
  *   9. Membership    · 会员体系「进阶解锁」接口区(components/landing/)
  *  10. BottomCTA     · 底部行动呼吁
@@ -68,8 +69,8 @@ export default function HomePage() {
       <StructureSandbox />
       <ResearchLab />
       <AcademyEntry />
-      <VirtualPractice />
       <BotRemote />
+      <VirtualPractice />
       <ChanAndMore />
       <Membership />
       <BottomCTA />
@@ -112,7 +113,7 @@ function TopNav() {
             沙盘
           </a>
           <a href="#lab" className="text-muted-foreground transition-colors hover:text-foreground">
-            研究室
+            策略室
           </a>
           <a href="#academy" className="text-muted-foreground transition-colors hover:text-foreground">
             训练营

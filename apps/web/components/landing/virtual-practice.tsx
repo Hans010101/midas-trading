@@ -74,13 +74,6 @@ export function VirtualPractice() {
             </figcaption>
           </figure>
         </div>
-
-        {/* 强制 disclaimer · 与 0011/0012 ADR 红线一致(随区搬迁自原 AiChan) */}
-        <div className="mx-auto mt-8 max-w-3xl rounded-lg border border-paper bg-background px-5 py-3 text-center">
-          <p className="font-mono text-xs text-muted-foreground/80">
-            ⚠ 分析仅供参考,不构成投资建议。所有交易均为虚拟资金模拟。
-          </p>
-        </div>
       </div>
     </section>
   )
