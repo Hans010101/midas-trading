@@ -9,6 +9,7 @@ const ADMIN_TABS = [
   { href: '/admin', label: '用户管理', exact: true },
   { href: '/admin/redeem-codes', label: '兑换码', exact: false },
   { href: '/admin/visit-stats', label: '访问看板', exact: false },
+  { href: '/admin/academy-stats', label: '训练营统计', exact: false },
 ] as const
 
 export function AdminNav() {

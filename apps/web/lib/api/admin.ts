@@ -191,3 +191,43 @@ export async function fetchAdminVisitStats(
   if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
   return (await r.json()) as VisitStats
 }
+
+// ── 训练营「答题赢会员」统计(刀4)──────────────────────────────────────────
+
+export interface AcademyStageStat {
+  stage: string // 阶 slug(前端 map manifest 取中文名)
+  learners: number
+  submissions: number
+  passers: number
+  awards: number
+}
+
+export interface AcademyDayPoint {
+  date: string
+  count: number
+}
+
+export interface AcademyStats {
+  range_days: number
+  learner_count: number
+  total_awards: number
+  membership_days_granted: number // 送出会员天数 = total_awards × 7
+  total_submissions: number
+  pass_rate: number // 0~1
+  by_stage: AcademyStageStat[]
+  award_trend: AcademyDayPoint[]
+  submission_trend: AcademyDayPoint[]
+}
+
+export async function fetchAdminAcademyStats(
+  token: string,
+  days: number,
+  signal?: AbortSignal,
+): Promise<AcademyStats> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/academy-stats?days=${days}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as AcademyStats
+}

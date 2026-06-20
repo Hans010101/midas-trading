@@ -30,6 +30,7 @@ from app.models.redeem_code import RedeemCode
 from app.models.session import Session
 from app.models.subscription import Subscription
 from app.models.user import User
+from app.services.academy.admin_stats import get_academy_stats
 from app.services.growth import extend_subscription, invite_stats
 from app.services.membership import PLAN_QUOTAS, get_quota_used, resolve_plan
 from app.services.visit_stats import CN_TZ, cn_today, read_redis_day
@@ -489,4 +490,65 @@ async def visit_stats(
         cumulative_pv=cumulative_pv,
         cumulative_uv=cumulative_uv,
         total_registrations=int(total_reg),
+    )
+
+
+# ── 训练营「答题赢会员」统计(刀4)· AdminDep · 纯只读聚合 academy 三表 ──────────────
+# 总览(全历史)+ 各模块分布(全历史)+ 发会员/提交每日趋势(近 N 天)· 不碰发放逻辑/交易/支付。
+
+
+class AcademyStageStatOut(BaseModel):
+    stage: str
+    learners: int      # 学完人数(distinct user)
+    submissions: int   # 结业测验提交数
+    passers: int       # 达标人数(distinct user)
+    awards: int        # 发会员人次
+
+
+class AcademyDayPoint(BaseModel):
+    date: str
+    count: int
+
+
+class AcademyStatsOut(BaseModel):
+    range_days: int
+    learner_count: int            # 有学习记录人数
+    total_awards: int             # 总发会员人次
+    membership_days_granted: int  # 送出会员天数 = 总发会员人次 × 7
+    total_submissions: int        # 结业测验总提交
+    pass_rate: float              # 整体通过率(0~1)
+    by_stage: list[AcademyStageStatOut]
+    award_trend: list[AcademyDayPoint]
+    submission_trend: list[AcademyDayPoint]
+
+
+@router.get("/academy-stats", response_model=AcademyStatsOut)
+async def academy_stats(
+    _admin: AdminDep,
+    db: DbDep,
+    days: int = Query(30, ge=1, le=365),
+) -> AcademyStatsOut:
+    """训练营统计取数 · ★AdminDep(403)· 纯只读聚合三表。"""
+    s = await get_academy_stats(db, days=days)
+    return AcademyStatsOut(
+        range_days=s.range_days,
+        learner_count=s.learner_count,
+        total_awards=s.total_awards,
+        membership_days_granted=s.membership_days_granted,
+        total_submissions=s.total_submissions,
+        pass_rate=s.pass_rate,
+        by_stage=[
+            AcademyStageStatOut(
+                stage=x.stage,
+                learners=x.learners,
+                submissions=x.submissions,
+                passers=x.passers,
+                awards=x.awards,
+            )
+            for x in s.by_stage
+        ],
+        award_trend=[AcademyDayPoint(date=p.date, count=p.count) for p in s.award_trend],
+        submission_trend=[
+            AcademyDayPoint(date=p.date, count=p.count) for p in s.submission_trend
+        ],
     )
