@@ -14,9 +14,16 @@ import { type InteractiveKey } from '@/content/academy/interactives'
  * (由 interactives.test.ts 的「只能映射到已实现组件」单测兜底)。
  */
 const REGISTRY: Partial<Record<InteractiveKey, ComponentType>> = {
+  // 第一批
   liquidation: dynamic(() => import('./liquidation-demo').then((m) => m.LiquidationDemo)),
   'chan-pivot': dynamic(() => import('./chan-pivot-demo').then((m) => m.ChanPivotDemo)),
   kline: dynamic(() => import('./kline-anatomy-demo').then((m) => m.KlineAnatomyDemo)),
+  // 第二批:合约与风控
+  'funding-rate': dynamic(() => import('./funding-rate-demo').then((m) => m.FundingRateDemo)),
+  'position-sizing': dynamic(() => import('./position-sizing-demo').then((m) => m.PositionSizingDemo)),
+  'margin-mode': dynamic(() => import('./margin-mode-demo').then((m) => m.MarginModeDemo)),
+  'pnl-exposure': dynamic(() => import('./pnl-exposure-demo').then((m) => m.PnlExposureDemo)),
+  'liquidation-process': dynamic(() => import('./liquidation-process-demo').then((m) => m.LiquidationProcessDemo)),
 }
 
 export function ArticleInteractives({ keys }: { keys: InteractiveKey[] }) {

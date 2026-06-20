@@ -36,7 +36,12 @@ export type InteractiveKey =
   | 'martingale'          // D21 马丁格尔(反面演示)
 
 /** 已实现 key(注册表中已挂组件)· 数据完整性自检用 · 逐批扩展时同步追加 */
-export const IMPLEMENTED_KEYS = ['liquidation', 'chan-pivot', 'kline'] as const
+export const IMPLEMENTED_KEYS = [
+  // 第一批
+  'liquidation', 'chan-pivot', 'kline',
+  // 第二批:合约与风控
+  'funding-rate', 'position-sizing', 'margin-mode', 'pnl-exposure', 'liquidation-process',
+] as const
 
 /** 运行期已知 key 全集(防 as 强转引入的拼写错误;与联合类型同步) */
 export const ALL_KEYS: readonly InteractiveKey[] = [
@@ -49,9 +54,16 @@ export const ALL_KEYS: readonly InteractiveKey[] = [
 
 /** 文章 slug → 要嵌入的交互组件(按数组顺序渲染)· 首批锚文跑通机制后逐篇增量 */
 export const ACADEMY_INTERACTIVES: Record<string, InteractiveKey[]> = {
+  // 第一批锚文
   E4: ['liquidation'],
   C7: ['chan-pivot'],
   A2: ['kline'],
+  // 第二批锚文(合约风控;锚文存在性由落地时核对 manifest,不存在则换同组件的其它配套文)
+  E2: ['funding-rate'],
+  F4: ['position-sizing'],
+  E3: ['margin-mode'],
+  E8: ['pnl-exposure'],
+  'C2-4': ['liquidation-process'],
 }
 
 /** 取某篇要嵌入的交互组件 key 列表(无 → null,不渲染交互区) */
