@@ -40,6 +40,9 @@ dependencies = [
     # 生产 slim 镜像中文渲染需 Dockerfile apt 装 fonts-noto-cjk(否则豆腐块 · 已 docker 实测验)。
     "matplotlib>=3.9.0",
     "mplfinance>=0.12.10b0",
+    # 市场周报 PDF 附件(P3 第二刀)· 中文用 reportlab 自带 CID 字体 STSong-Light(免 bundle 字体 ·
+    # ★无需 Docker apt 装系统字体,区别于 matplotlib 的 fonts-noto-cjk · 纯 Python 零基建改动)。
+    "reportlab>=4.2.0",
 ]
 
 [project.optional-dependencies]
@@ -111,6 +114,7 @@ module = [
     "litellm.*",
     "langgraph.*",
     "mplfinance.*",
+    "reportlab.*",
 ]
 ignore_missing_imports = true
 

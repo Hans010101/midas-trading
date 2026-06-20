@@ -17,6 +17,7 @@ from app.services.notifications.events import (
     PerpFilledEvent,
     PriceAnomalyEvent,
     TradeFilledEvent,
+    WeeklyReportSentEvent,
 )
 
 MARKET_LABEL: dict[str, str] = {"cn": "A 股", "us": "美股", "crypto": "加密", "hk": "港股"}
@@ -67,8 +68,20 @@ def render_telegram(event: NotificationEvent) -> str:
         return _tg_perp_filled(event)
     if isinstance(event, LiquidationEvent):
         return _tg_liquidation(event)
+    if isinstance(event, WeeklyReportSentEvent):
+        return _tg_weekly_report(event)
     msg = f"未知事件类型 {type(event)}"
     raise ValueError(msg)
+
+
+def _tg_weekly_report(event: WeeklyReportSentEvent) -> str:
+    """周报已发邮箱轻提示(不发全文 · 全文走邮件 PDF)。"""
+    title = event.report_title or "市场周报"
+    return (
+        "*点金 Midas · 市场周报*\n\n"
+        f"📊 {title} 已发送至您的邮箱,请查阅(含 PDF 附件)。\n"
+        "如未收到,请检查垃圾箱或在账户设置确认订阅。"
+    )
 
 
 def _fmt_num(n: float) -> str:

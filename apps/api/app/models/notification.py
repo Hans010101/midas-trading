@@ -68,6 +68,11 @@ class NotificationConfig(Base):
     price_alert_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true"),
     )
+    # 市场周报订阅(P3 第二刀)· ★默认 false = 选择性订阅(opt-in · 不给存量用户群发未请求的邮件)·
+    # 同时是收件人筛选条件(广播只发 weekly_report_enabled=true 的用户)。
+    weekly_report_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false"),
+    )
 
     # 0028 N1 · 安静时段(quiet hours)· 在该窗口内吞掉普通告警,
     # 钱相关事件(quiet_exempt=True,如 TradeFilledEvent · 0028 DP10)豁免照常发。

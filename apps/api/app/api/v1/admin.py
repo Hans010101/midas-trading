@@ -34,6 +34,7 @@ from app.schemas.report import (
     ReportDetail,
     ReportListItem,
     ReportListOut,
+    ReportSendOut,
     ReportUpdateIn,
 )
 from app.services.academy.admin_stats import get_academy_stats
@@ -41,6 +42,7 @@ from app.services.growth import extend_subscription, invite_stats
 from app.services.membership import PLAN_QUOTAS, get_quota_used, resolve_plan
 from app.services.report import store as report_store
 from app.services.report.generate import generate_weekly_report_draft
+from app.services.report.send import send_report
 from app.services.visit_stats import CN_TZ, cn_today, read_redis_day
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -629,3 +631,29 @@ async def generate_market_report_now(
     """★手动触发生成一篇周报草稿(测试用 · 不必等周一 beat)· 与 Celery 任务共用同一生成逻辑。"""
     report = await generate_weekly_report_draft(db, ch)
     return ReportDetail.model_validate(report)
+
+
+@router.post("/reports/{report_id}/send", response_model=ReportSendOut)
+async def send_market_report(
+    report_id: int, _admin: AdminDep, db: DbDep,
+) -> ReportSendOut:
+    """★人工发布:approved 报告 → 邮件(全文+PDF)+ TG/飞书提示发给订阅用户 → status=sent。
+
+    ★只 approved 可发(draft/sent → 409)· 不存在 → 404 · ★广播失败逐人隔离(部分失败不整体崩)。
+    早期同步发送(订阅量小)· 量大可平移 Celery(逻辑已在 services/report/send)。
+    """
+    try:
+        result = await send_report(db, report_id)
+    except LookupError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="报告不存在") from e
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return ReportSendOut(
+        report_id=result.report_id,
+        status="sent",
+        recipients=result.recipients,
+        email_sent=result.email_sent,
+        email_failed=result.email_failed,
+        notify_sent=result.notify_sent,
+        notify_failed=result.notify_failed,
+    )

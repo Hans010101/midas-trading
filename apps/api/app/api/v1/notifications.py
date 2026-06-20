@@ -71,6 +71,8 @@ async def update_notification_config(
         config.trade_alert_enabled = payload.trade_alert_enabled
     if payload.price_alert_enabled is not None:
         config.price_alert_enabled = payload.price_alert_enabled
+    if payload.weekly_report_enabled is not None:
+        config.weekly_report_enabled = payload.weekly_report_enabled
 
     # 0028 N2 · quiet_hours 4 字段(各自可选)
     if payload.quiet_hours_enabled is not None:
