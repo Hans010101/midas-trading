@@ -383,7 +383,7 @@ function ChanAndMore() {
             <FeatureCard
               icon={<BellRing className="h-6 w-6 text-midas-red" />}
               title="智能推送"
-              desc="飞书 / Telegram / 邮件 · 价格异动 + 成交提醒 + 自定义阈值"
+              desc="Telegram / 邮件 · 价格异动 + 成交提醒 + 自定义阈值"
             />
             <FeatureCard
               icon={<Target className="h-6 w-6 text-midas-red" />}
