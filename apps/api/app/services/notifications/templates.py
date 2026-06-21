@@ -18,6 +18,7 @@ from app.services.notifications.events import (
     PriceAnomalyEvent,
     TradeFilledEvent,
     WeeklyReportSentEvent,
+    WeeklyReportSkippedEvent,
 )
 
 MARKET_LABEL: dict[str, str] = {"cn": "A 股", "us": "美股", "crypto": "加密", "hk": "港股"}
@@ -70,6 +71,8 @@ def render_telegram(event: NotificationEvent) -> str:
         return _tg_liquidation(event)
     if isinstance(event, WeeklyReportSentEvent):
         return _tg_weekly_report(event)
+    if isinstance(event, WeeklyReportSkippedEvent):
+        return _tg_weekly_skipped(event)
     msg = f"未知事件类型 {type(event)}"
     raise ValueError(msg)
 
@@ -81,6 +84,15 @@ def _tg_weekly_report(event: WeeklyReportSentEvent) -> str:
         "*点金 Midas · 市场周报*\n\n"
         f"📊 {title} 已发送至您的邮箱,请查阅(含 PDF 附件)。\n"
         "如未收到,请检查垃圾箱或在账户设置确认订阅。"
+    )
+
+
+def _tg_weekly_skipped(event: WeeklyReportSkippedEvent) -> str:
+    """周报未上传被跳过 · 运营提醒(只发 admin)。"""
+    return (
+        "*点金 Midas · 周报未发送*\n\n"
+        f"⚠️ 本周(第 {event.week} 周)周报未上传,已跳过周日 21:00 定时发送。\n"
+        "如需补发:补传周报(补救窗口内自动发)或在后台手动发送。"
     )
 
 

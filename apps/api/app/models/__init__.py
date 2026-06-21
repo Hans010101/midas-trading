@@ -37,3 +37,4 @@ from app.models.virtual import (  # noqa: F401
     VirtualPosition,
 )
 from app.models.watchlist import WatchlistItem  # noqa: F401
+from app.models.weekly_dispatch import WeeklyDispatch  # noqa: F401

@@ -400,3 +400,102 @@ export async function deleteAdminMaterial(token: string, id: number): Promise<vo
   })
   if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
 }
+
+// ── 周报全自动发送(weekly-dispatch)· 上传成品 PDF+md → 提取 → 定时/补传发送 ──────
+export interface WeeklyDispatchItem {
+  id: number
+  year: number
+  week: number
+  period_start: string
+  period_end: string
+  title: string
+  status: string // uploaded | sent | skipped
+  uploaded_at: string
+  sent_at: string | null
+}
+
+export interface WeeklyUploadResult {
+  id: number
+  year: number
+  week: number
+  status: string
+  auto_sent: boolean // 是否落入补救窗口、上传即发
+  extracted: Record<string, unknown>
+  missing: string[]
+  email_html: string
+  pdf_filename: string
+}
+
+export interface WeeklyDispatchDetail extends WeeklyDispatchItem {
+  pdf_filename: string
+  extracted: Record<string, unknown>
+  email_html: string
+}
+
+export interface WeeklySendResult {
+  dispatch_id: number
+  year: number
+  week: number
+  recipients: number
+  email_sent: number
+  email_failed: number
+  notify_sent: number
+  notify_failed: number
+  skipped: boolean
+}
+
+export async function fetchWeeklyDispatches(
+  token: string,
+  signal?: AbortSignal,
+): Promise<{ items: WeeklyDispatchItem[] }> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/weekly-dispatch`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as { items: WeeklyDispatchItem[] }
+}
+
+export async function fetchWeeklyDispatch(
+  token: string,
+  id: number,
+  signal?: AbortSignal,
+): Promise<WeeklyDispatchDetail> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/weekly-dispatch/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as WeeklyDispatchDetail
+}
+
+/** 上传成品周报(PDF + md · multipart)→ 解析 + 存 OSS + 补救窗口内可上传即发。 */
+export async function uploadWeeklyDispatch(
+  token: string,
+  pdf: File,
+  md: File,
+): Promise<WeeklyUploadResult> {
+  const form = new FormData()
+  form.append('pdf', pdf)
+  form.append('md', md)
+  const r = await fetch(`${API_BASE}/api/v1/admin/weekly-dispatch/upload`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }, // ★不手设 Content-Type
+    body: form,
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as WeeklyUploadResult
+}
+
+/** 手动立即发送(补救窗口外 / 测试)· 已发幂等跳过。 */
+export async function sendWeeklyDispatchNow(
+  token: string,
+  id: number,
+): Promise<WeeklySendResult> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/weekly-dispatch/${id}/send-now`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as WeeklySendResult
+}

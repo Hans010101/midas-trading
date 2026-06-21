@@ -280,4 +280,10 @@ beat_schedule = {
         "schedule": crontab(hour="4", minute="0"),
         "options": {"expires": 3600},
     },
+    "send-weekly-dispatch": {
+        "task": "tasks.report.send_weekly_dispatch",
+        # ★每周日 21:00 CST(timezone Asia/Shanghai)· 本周有上传则发,无则提醒 admin
+        "schedule": crontab(hour="21", minute="0", day_of_week="sun"),
+        "options": {"expires": 3600},
+    },
 }

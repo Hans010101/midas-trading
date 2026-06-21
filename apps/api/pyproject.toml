@@ -120,6 +120,7 @@ module = [
     "mplfinance.*",
     "reportlab.*",
     "oss2.*",
+    "yaml",
 ]
 ignore_missing_imports = true
 

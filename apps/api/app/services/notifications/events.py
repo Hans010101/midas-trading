@@ -22,6 +22,8 @@ class NotificationKind(StrEnum):
     LIQUIDATION = "liquidation"
     # 市场周报已发邮箱轻提示(P3 第二刀 · 受 weekly_report_enabled 订阅开关控制)
     WEEKLY_REPORT = "weekly_report"
+    # 周报未上传被跳过(运营提醒 · 只发 admin · 不受订阅开关控制)
+    WEEKLY_REPORT_SKIPPED = "weekly_report_skipped"
 
 
 @dataclass(frozen=True)
@@ -133,6 +135,19 @@ class WeeklyReportSentEvent:
     report_title: str = ""
 
 
+@dataclass(frozen=True)
+class WeeklyReportSkippedEvent:
+    """周报未上传被跳过定时发送的运营提醒(只发 admin)· quiet_exempt(运营 ops 告警)。"""
+
+    quiet_exempt: ClassVar[bool] = True
+
+    kind: Literal[NotificationKind.WEEKLY_REPORT_SKIPPED] = (
+        NotificationKind.WEEKLY_REPORT_SKIPPED
+    )
+    year: int = 0
+    week: int = 0
+
+
 NotificationEvent = (
     TradeFilledEvent
     | PriceAnomalyEvent
@@ -140,4 +155,5 @@ NotificationEvent = (
     | PerpFilledEvent
     | LiquidationEvent
     | WeeklyReportSentEvent
+    | WeeklyReportSkippedEvent
 )
