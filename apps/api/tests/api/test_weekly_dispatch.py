@@ -119,25 +119,59 @@ def test_parse_frontmatter_missing_raises():
         )
 
 
-# ===== ★ 补救窗口纯函数 =====
+# ===== ★ 计划 / 取消计划 状态流转 =====
 
 
-@pytest.mark.parametrize(
-    ("now", "year", "week", "status", "expected"),
-    [
-        (datetime(2026, 6, 21, 21, 30, tzinfo=CST), 2026, 25, "uploaded", True),  # 周日21:30 本周未发
-        (datetime(2026, 6, 21, 21, 30, tzinfo=CST), 2026, 25, "sent", False),  # 已发
-        (datetime(2026, 6, 21, 20, 0, tzinfo=CST), 2026, 25, "uploaded", False),  # 21:00前
-        (datetime(2026, 6, 22, 8, 0, tzinfo=CST), 2026, 25, "uploaded", True),  # 周一08:00 本周(跨周)
-        (datetime(2026, 6, 22, 10, 0, tzinfo=CST), 2026, 25, "uploaded", False),  # 周一10:00 窗口后
-        (datetime(2026, 6, 21, 21, 30, tzinfo=CST), 2026, 24, "uploaded", False),  # 非本周
-        (datetime(2026, 6, 17, 12, 0, tzinfo=CST), 2026, 25, "uploaded", False),  # 周三 窗口外
-    ],
-)
-def test_should_auto_send(
-    now: datetime, year: int, week: int, status: str, expected: bool,
+@pytest.mark.asyncio
+async def test_schedule_cancel_transitions(db_session: AsyncSession):
+    user = await make_user(db_session)
+    rec, _ = await wd.create_or_update_dispatch(
+        db_session, pdf_data=b"%PDF", pdf_filename="r.pdf",
+        md_text=MD_SAMPLE, uploaded_by=user.id,
+    )
+    assert rec.status == "uploaded"
+
+    # 计划发送 → scheduled
+    rec = await wd.schedule_dispatch(db_session, rec.id)
+    assert rec is not None
+    assert rec.status == "scheduled"
+
+    # 再计划 → 幂等仍 scheduled
+    rec = await wd.schedule_dispatch(db_session, rec.id)
+    assert rec is not None
+    assert rec.status == "scheduled"
+
+    # 取消计划 → uploaded
+    rec = await wd.cancel_schedule(db_session, rec.id)
+    assert rec is not None
+    assert rec.status == "uploaded"
+
+    # ★非 scheduled 取消 → ValueError
+    with pytest.raises(ValueError, match="已计划"):
+        await wd.cancel_schedule(db_session, rec.id)
+
+
+@pytest.mark.asyncio
+async def test_schedule_does_not_send_or_depend_on_time(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
 ):
-    assert wd.should_auto_send_on_upload(now, year, week, status) is expected
+    """★schedule 纯标记:不发送、不依赖当前时间(任意 now 结果都是 scheduled)。"""
+    sent_calls: list[object] = []
+
+    async def _spy_send(**_k: object) -> None:
+        sent_calls.append(1)
+
+    monkeypatch.setattr("app.services.email.send_report_email", _spy_send)
+    user = await make_user(db_session)
+    rec, _ = await wd.create_or_update_dispatch(
+        db_session, pdf_data=b"%PDF", pdf_filename="r.pdf",
+        md_text=MD_SAMPLE, uploaded_by=user.id,
+    )
+    # schedule 不接收 now、不发送
+    out = await wd.schedule_dispatch(db_session, rec.id)
+    assert out is not None
+    assert out.status == "scheduled"
+    assert sent_calls == [], "★计划发送绝不当场发邮件"
 
 
 # ===== ★ 邮件渲染(含免责红线)=====
@@ -187,32 +221,37 @@ async def test_create_upsert_and_send_idempotent(
     assert result2.skipped is True
 
 
-# ===== ★ run_scheduled_dispatch(定时:有/无/已发)=====
+# ===== ★ run_scheduled_dispatch(定时★只发 scheduled)=====
 
 
 @pytest.mark.asyncio
-async def test_scheduled_dispatch_paths(
+async def test_scheduled_dispatch_only_sends_scheduled(
     db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
 ):
     _mock_broadcast(monkeypatch)
     sun = datetime(2026, 6, 21, 21, 0, tzinfo=CST)  # ISO 周 25
 
-    # 无上传 → skipped_no_upload
+    # 无上传 → no_scheduled(★不发提醒、安静)
     r = await wd.run_scheduled_dispatch(db_session, now=sun)
-    assert r["action"] == "skipped_no_upload"
+    assert r["action"] == "no_scheduled"
 
-    # 上传本周 → 定时发 sent
+    # ★只上传未计划(uploaded)→ 仍 no_scheduled(不发)
     user = await make_user(db_session)
-    await wd.create_or_update_dispatch(
+    rec, _ = await wd.create_or_update_dispatch(
         db_session, pdf_data=b"%PDF", pdf_filename="r.pdf",
         md_text=MD_SAMPLE, uploaded_by=user.id,
     )
     r2 = await wd.run_scheduled_dispatch(db_session, now=sun)
-    assert r2["action"] == "sent"
+    assert r2["action"] == "no_scheduled", "★未点计划发送的不会被定时发"
+
+    # 点计划发送(scheduled)→ 定时发 sent
+    await wd.schedule_dispatch(db_session, rec.id)
+    r3 = await wd.run_scheduled_dispatch(db_session, now=sun)
+    assert r3["action"] == "sent"
 
     # 再跑 → already_sent(幂等)
-    r3 = await wd.run_scheduled_dispatch(db_session, now=sun)
-    assert r3["action"] == "already_sent"
+    r4 = await wd.run_scheduled_dispatch(db_session, now=sun)
+    assert r4["action"] == "already_sent"
 
 
 # ===== ★ AdminDep 403 矩阵 + upload 端点 =====
@@ -220,6 +259,8 @@ async def test_scheduled_dispatch_paths(
 _WD_ENDPOINTS = [
     ("get", "/api/v1/admin/weekly-dispatch"),
     ("get", "/api/v1/admin/weekly-dispatch/1"),
+    ("post", "/api/v1/admin/weekly-dispatch/1/schedule"),
+    ("post", "/api/v1/admin/weekly-dispatch/1/cancel-schedule"),
     ("post", "/api/v1/admin/weekly-dispatch/1/send-now"),
 ]
 
@@ -255,13 +296,8 @@ async def test_wd_upload_normal_403(client: AsyncClient, db_session: AsyncSessio
 
 
 @pytest.mark.asyncio
-async def test_wd_upload_flow(
-    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
-):
-    # 非补救窗口时刻(周三)→ 不自动发,只测解析 + 存储 + 预览
-    monkeypatch.setattr(
-        "app.api.v1.admin.cn_now", lambda: datetime(2026, 6, 17, 12, 0, tzinfo=CST),
-    )
+async def test_wd_upload_then_schedule_then_cancel(client: AsyncClient, db_session: AsyncSession):
+    """端点全链:upload→uploaded · schedule→scheduled · cancel→uploaded(★上传不自动发)。"""
     headers = await _admin_headers(db_session, role="admin")
     r = await client.post(
         "/api/v1/admin/weekly-dispatch/upload", headers=headers,
@@ -273,24 +309,28 @@ async def test_wd_upload_flow(
     assert r.status_code == 201
     body = r.json()
     assert body["week"] == 25
-    assert body["auto_sent"] is False
+    assert body["status"] == "uploaded"  # ★上传只入库,不自动发
     assert body["missing"] == []
     assert "核心结论" in body["email_html"]
+    did = body["id"]
 
-    r = await client.get("/api/v1/admin/weekly-dispatch", headers=headers)
-    assert any(it["week"] == 25 for it in r.json()["items"])
-    r = await client.get(f"/api/v1/admin/weekly-dispatch/{body['id']}", headers=headers)
+    # 计划发送 → scheduled
+    r = await client.post(f"/api/v1/admin/weekly-dispatch/{did}/schedule", headers=headers)
     assert r.status_code == 200
-    assert "email_html" in r.json()
+    assert r.json()["status"] == "scheduled"
+
+    # 取消计划 → uploaded
+    r = await client.post(f"/api/v1/admin/weekly-dispatch/{did}/cancel-schedule", headers=headers)
+    assert r.status_code == 200
+    assert r.json()["status"] == "uploaded"
+
+    # 列表可见
+    r = await client.get("/api/v1/admin/weekly-dispatch", headers=headers)
+    assert any(it["id"] == did for it in r.json()["items"])
 
 
 @pytest.mark.asyncio
-async def test_wd_upload_bad_frontmatter_422(
-    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
-):
-    monkeypatch.setattr(
-        "app.api.v1.admin.cn_now", lambda: datetime(2026, 6, 17, 12, 0, tzinfo=CST),
-    )
+async def test_wd_upload_bad_frontmatter_422(client: AsyncClient, db_session: AsyncSession):
     headers = await _admin_headers(db_session, role="admin")
     r = await client.post(
         "/api/v1/admin/weekly-dispatch/upload", headers=headers,

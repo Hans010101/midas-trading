@@ -9,13 +9,12 @@ from pydantic import BaseModel, ConfigDict
 
 
 class WeeklyUploadOut(BaseModel):
-    """上传响应 · 解析摘要 + 缺失校验 + 邮件预览 + 是否触发上传即发。"""
+    """上传响应 · 解析摘要 + 缺失校验 + 邮件预览(★上传只入库 status=uploaded,不自动发)。"""
 
     id: int
     year: int
     week: int
     status: str
-    auto_sent: bool  # 是否落入补救窗口、上传即发
     extracted: dict[str, Any]  # 提取的结构化数据(导语/结论/强弱/下周关注/missing)
     missing: list[str]  # 缺失的关键模块(供前端高亮)
     email_html: str  # 邮件 HTML 预览

@@ -267,13 +267,8 @@ beat_schedule = {
         "options": {"expires": 3000},
     },
     # ── 标准化市场周报(P1 第一刀)· 每周一 9:00 CST 生成草稿 → admin 复核 ──────────────
-    "generate-weekly-report": {
-        "task": "tasks.report.generate_weekly_report",
-        # 每周一上午 9:00(timezone Asia/Shanghai)· 生成占位草稿 · expires 3600 防积压
-        # ★本刀只生成 draft 不发送(发送是第二刀)· admin 后台人工复核/编辑/批准
-        "schedule": crontab(hour="9", minute="0", day_of_week="mon"),
-        "options": {"expires": 3600},
-    },
+    # ★AI 生成周报 beat 已停用(内容侧改为运营上传成品 weekly_dispatch)· 任务函数 generate_weekly_report
+    #   + generate.py 代码保留不删(未来可能重启用),仅移除此定时条目使其不再触发。
     "cleanup-report-materials": {
         "task": "tasks.report.cleanup_materials",
         # 每天凌晨 4:00 删 7 天前周报素材行(第三刀)· OSS 对象靠桶 lifecycle 自动过期

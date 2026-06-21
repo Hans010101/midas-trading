@@ -31,6 +31,7 @@ from app.models.redeem_code import RedeemCode
 from app.models.session import Session
 from app.models.subscription import Subscription
 from app.models.user import User
+from app.models.weekly_dispatch import WeeklyDispatch
 from app.schemas.report import (
     MaterialListOut,
     MaterialOut,
@@ -60,7 +61,7 @@ from app.services.report.send import send_report
 from app.services.report.weekly_dispatch import UNSUBSCRIBE_URL
 from app.services.report.weekly_email import render_email_html
 from app.services.report.weekly_md import WeeklyMdError
-from app.services.visit_stats import CN_TZ, cn_now, cn_today, read_redis_day, read_redis_hours
+from app.services.visit_stats import CN_TZ, cn_today, read_redis_day, read_redis_hours
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
@@ -773,9 +774,9 @@ async def upload_weekly_dispatch(
     pdf: Annotated[UploadFile, File()],
     md: Annotated[UploadFile, File()],
 ) -> WeeklyUploadOut:
-    """上传成品周报(PDF + md)→ 解析 md → PDF 存 OSS → upsert(year+week 唯一)。
+    """上传成品周报(PDF + md)→ 解析 md → PDF 存 OSS → upsert(status=uploaded)。
 
-    ★frontmatter 错 → 422 · OSS 失败 → 502 · ★补救窗口(周日21:00~周一09:00)内本周 → 上传即发。
+    ★frontmatter 错 → 422 · OSS 失败 → 502 · ★上传只入库 uploaded,不自动发(需人工点计划/立即发送)。
     """
     pdf_data = await pdf.read()
     md_data = await md.read()
@@ -799,22 +800,23 @@ async def upload_weekly_dispatch(
             status_code=status.HTTP_502_BAD_GATEWAY, detail=f"PDF 存储失败:{e}",
         ) from e
 
-    # ★补救窗口:上传即发(发送失败不让上传失败 · 已入库,可手动 send-now)
-    auto_sent = False
-    if wd_service.should_auto_send_on_upload(cn_now(), rec.year, rec.week, rec.status):
-        try:
-            await wd_service.dispatch_and_send(db, year=rec.year, week=rec.week)
-            await db.refresh(rec)
-            auto_sent = True
-        except Exception:  # noqa: BLE001 · 上传成功、发送失败 → 仅 log,admin 可手动重发
-            logger.exception("[weekly] 补救窗口上传即发失败 · %d-W%d", rec.year, rec.week)
-
     email_html = render_email_html(rec.extracted, unsubscribe_url=UNSUBSCRIBE_URL)
     return WeeklyUploadOut(
         id=rec.id, year=rec.year, week=rec.week, status=rec.status,
-        auto_sent=auto_sent, extracted=rec.extracted,
-        missing=rec.extracted.get("missing", []), email_html=email_html,
-        pdf_filename=rec.pdf_filename,
+        extracted=rec.extracted, missing=rec.extracted.get("missing", []),
+        email_html=email_html, pdf_filename=rec.pdf_filename,
+    )
+
+
+def _weekly_detail(rec: WeeklyDispatch) -> WeeklyDispatchDetail:
+    """WeeklyDispatch 行 → 详情(含邮件 HTML 预览)· schedule/cancel/detail 端点共用。"""
+    return WeeklyDispatchDetail(
+        id=rec.id, year=rec.year, week=rec.week,
+        period_start=rec.period_start, period_end=rec.period_end,
+        title=rec.title, status=rec.status, pdf_filename=rec.pdf_filename,
+        uploaded_at=rec.uploaded_at, sent_at=rec.sent_at,
+        extracted=rec.extracted,
+        email_html=render_email_html(rec.extracted, unsubscribe_url=UNSUBSCRIBE_URL),
     )
 
 
@@ -831,21 +833,44 @@ async def get_weekly_dispatch(
     rec = await wd_service.get_dispatch(db, dispatch_id)
     if rec is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="周报投递不存在")
-    return WeeklyDispatchDetail(
-        id=rec.id, year=rec.year, week=rec.week,
-        period_start=rec.period_start, period_end=rec.period_end,
-        title=rec.title, status=rec.status, pdf_filename=rec.pdf_filename,
-        uploaded_at=rec.uploaded_at, sent_at=rec.sent_at,
-        extracted=rec.extracted,
-        email_html=render_email_html(rec.extracted, unsubscribe_url=UNSUBSCRIBE_URL),
-    )
+    return _weekly_detail(rec)
+
+
+@router.post("/weekly-dispatch/{dispatch_id}/schedule", response_model=WeeklyDispatchDetail)
+async def schedule_weekly_dispatch(
+    dispatch_id: int, _admin: AdminDep, db: DbDep,
+) -> WeeklyDispatchDetail:
+    """★「计划发送」(主)· uploaded/scheduled→scheduled · 纯标记不发 · 等周日21:00 · 已sent→409。"""
+    try:
+        rec = await wd_service.schedule_dispatch(db, dispatch_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    if rec is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="周报投递不存在")
+    return _weekly_detail(rec)
+
+
+@router.post(
+    "/weekly-dispatch/{dispatch_id}/cancel-schedule", response_model=WeeklyDispatchDetail,
+)
+async def cancel_weekly_dispatch_schedule(
+    dispatch_id: int, _admin: AdminDep, db: DbDep,
+) -> WeeklyDispatchDetail:
+    """「取消计划」· scheduled → uploaded(21:00前撤回改稿)· 非 scheduled → 409 · 不存在 404。"""
+    try:
+        rec = await wd_service.cancel_schedule(db, dispatch_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    if rec is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="周报投递不存在")
+    return _weekly_detail(rec)
 
 
 @router.post("/weekly-dispatch/{dispatch_id}/send-now", response_model=WeeklySendOut)
 async def send_weekly_dispatch_now(
     dispatch_id: int, _admin: AdminDep, db: DbDep,
 ) -> WeeklySendOut:
-    """★手动立即发送(补救窗口外 / 测试)· 已发幂等跳过 · 不存在 404 · OSS 下载失败 502。"""
+    """★「立即发送」(辅)· 当场发送 · 已发幂等跳过 · 不存在 404 · OSS 下载失败 502。"""
     rec = await wd_service.get_dispatch(db, dispatch_id)
     if rec is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="周报投递不存在")
