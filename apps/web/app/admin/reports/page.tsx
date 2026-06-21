@@ -13,6 +13,7 @@ import { useSession } from 'next-auth/react'
 import { useState } from 'react'
 
 import { AdminNav } from '@/components/admin/admin-nav'
+import { ReportMaterialsPanel } from '@/components/admin/report-materials-panel'
 import { TopNav } from '@/components/layout/top-nav'
 import {
   AdminApiError,
@@ -105,6 +106,9 @@ export default function AdminReportsPage() {
           </div>
         ) : (
           <>
+            {/* 本期素材管理(第三刀)· 上传 md/PDF → 注入本期生成 */}
+            <ReportMaterialsPanel />
+
             {/* 状态筛选 */}
             <div className="mb-4 flex items-center gap-2">
               <span className="text-xs text-muted-foreground">状态</span>
