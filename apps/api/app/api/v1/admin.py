@@ -46,6 +46,7 @@ from app.services.report import materials as report_materials
 from app.services.report import store as report_store
 from app.services.report.generate import current_report_period, generate_weekly_report_draft
 from app.services.report.materials import MaterialExtractError
+from app.services.report.object_store import ObjectStoreError
 from app.services.report.send import send_report
 from app.services.visit_stats import CN_TZ, cn_today, read_redis_day, read_redis_hours
 
@@ -692,9 +693,9 @@ async def upload_report_material(
     db: DbDep,
     file: Annotated[UploadFile, File()],
 ) -> MaterialOut:
-    """admin 上传周报素材(md / PDF · multipart)→ 提取文本存库(标记本期周期)。
+    """admin 上传周报素材(md / PDF · multipart)→ 提取文本存库 + 原始文件存 OSS(标记本期周期)。
 
-    镜像 support 上传范式 · 提取失败 / 不支持类型 → 422 · ★OSS 原始文件上传第三刀-B 接(A 存意向键)。
+    镜像 support 上传范式 · 提取失败 / 不支持 → 422 · ★OSS 上传失败(凭证缺失/网络)→ 502(不静默)。
     """
     data = await file.read()
     if not data:
@@ -716,6 +717,11 @@ async def upload_report_material(
         )
     except MaterialExtractError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
+    except ObjectStoreError as e:
+        # OSS 上传失败(凭证未配 / 网络)· 502 上游存储错误 · 详情已 log(不含凭证)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"素材存储失败:{e}",
+        ) from e
     return MaterialOut.model_validate(material)
 
 

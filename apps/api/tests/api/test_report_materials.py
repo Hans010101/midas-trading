@@ -23,6 +23,21 @@ from app.services.report import generate as gen
 from app.services.report import materials as mat
 from tests.factories import make_user
 
+
+@pytest.fixture(autouse=True)
+def _stub_oss_upload(monkeypatch: pytest.MonkeyPatch) -> None:
+    """★本文件 mock OSS 上传(不测 OSS · 见 test_report_oss.py)· create_material 才不撞真 oss2 无凭证。
+
+    patch materials.py 命名空间里的 upload_material(materials 已 from object_store import,
+    patch object_store.upload_material 不生效)。
+    """
+
+    async def _fake(key: str, _data: bytes) -> str:
+        return key
+
+    monkeypatch.setattr("app.services.report.materials.upload_material", _fake)
+
+
 # ===== helpers =====
 
 
