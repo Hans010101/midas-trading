@@ -2,7 +2,7 @@
 
 🔴 红线:本表只记会员订阅【订单】—— 收的是订阅费,非交易;支付域不碰 virtual_trading/engine。
 external_id 不可猜(secrets · 给 OxaPay 作 order_id + 回调匹配键);凭证不入表。
-表结构沿用刀1(Bcon 时):pay_address 复用存 OxaPay payment_url,gateway_txid 复用存 track_id。
+表结构沿用初版实现(早于现网关):pay_address 存 payment_url,gateway_txid 存 track_id。
 """
 
 from __future__ import annotations

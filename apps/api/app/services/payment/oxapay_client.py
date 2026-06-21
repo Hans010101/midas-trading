@@ -4,7 +4,7 @@
 凭证 settings.oxapay_merchant_api_key 只从 env 读 · 绝不硬编码 / 绝不写进日志 / 不进返回。
 错误信息只带 HTTP 码或异常类名(不带 URL/body,避免泄露凭证或敏感响应)。
 
-与 Bcon 的差异:OxaPay 是【托管收款页】模型 —— 建单返回 payment_url(多链托管页,
+模型:OxaPay 是【托管收款页】模型 —— 建单返回 payment_url(多链托管页,
 用户自行选链/币),不分配单地址、不靠唯一金额尾数区分订单(订单靠 order_id/track_id 绑定)。
 """
 
