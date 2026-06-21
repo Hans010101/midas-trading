@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import uuid as uuid_lib
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -58,33 +58,6 @@ def iso_year_week(d: datetime) -> tuple[int, int]:
     """某时刻的 ISO (year, week)· 周日属当周。"""
     iso = d.isocalendar()
     return iso[0], iso[1]
-
-
-def _window_target_week(now: datetime) -> tuple[int, int] | None:
-    """补救窗口(周日 21:00~周一 09:00 CST)对应的目标周报 (year, week)· 窗口外返回 None。
-
-    ★周日 21:00+:目标=当周(周日所在 ISO 周);周一 <09:00:目标=上个周日所在 ISO 周(= now-1天)。
-    """
-    wd = now.weekday()  # Mon=0 .. Sun=6
-    sunday_hour = 21
-    monday_cutoff_hour = 9
-    if wd == 6 and now.hour >= sunday_hour:
-        sunday = now.date()
-    elif wd == 0 and now.hour < monday_cutoff_hour:
-        sunday = now.date() - timedelta(days=1)
-    else:
-        return None
-    iso = sunday.isocalendar()
-    return iso[0], iso[1]
-
-
-def should_auto_send_on_upload(
-    now: datetime, year: int, week: int, status: str,
-) -> bool:
-    """★上传即发判定(纯函数)· 窗口内 + 本周(目标周)+ status=uploaded → True;否则 False。"""
-    if status != "uploaded":
-        return False
-    return _window_target_week(now) == (year, week)
 
 
 async def _get_by_year_week(
@@ -163,6 +136,41 @@ async def get_dispatch(session: AsyncSession, dispatch_id: int) -> WeeklyDispatc
     return await session.get(WeeklyDispatch, dispatch_id)
 
 
+async def schedule_dispatch(
+    session: AsyncSession, dispatch_id: int,
+) -> WeeklyDispatch | None:
+    """「计划发送」· uploaded/scheduled → scheduled(★纯标记 · 不发送 · 不看时间 · 等周日21:00)。
+
+    不存在 → None(端点 404);已 sent → ValueError(端点 409,已发不能再计划)。
+    """
+    rec = await session.get(WeeklyDispatch, dispatch_id)
+    if rec is None:
+        return None
+    if rec.status == "sent":
+        msg = "已发送的周报不能再计划"
+        raise ValueError(msg)
+    rec.status = "scheduled"  # uploaded / scheduled(幂等)→ scheduled
+    await session.commit()
+    await session.refresh(rec)
+    return rec
+
+
+async def cancel_schedule(
+    session: AsyncSession, dispatch_id: int,
+) -> WeeklyDispatch | None:
+    """「取消计划」· scheduled → uploaded(撤回改稿)· 非 scheduled → ValueError(409)。"""
+    rec = await session.get(WeeklyDispatch, dispatch_id)
+    if rec is None:
+        return None
+    if rec.status != "scheduled":
+        msg = f"仅「已计划」可取消(当前 {rec.status})"
+        raise ValueError(msg)
+    rec.status = "uploaded"
+    await session.commit()
+    await session.refresh(rec)
+    return rec
+
+
 async def dispatch_and_send(
     session: AsyncSession, *, year: int, week: int,
 ) -> WeeklySendResult:
@@ -232,16 +240,11 @@ async def run_scheduled_dispatch(
     """
     year, week = iso_year_week(now)
     rec = await _get_by_year_week(session, year, week)
-    if rec is None:
-        notified = await notify_skip(session, year=year, week=week)
-        return {
-            "action": "skipped_no_upload",
-            "year": year,
-            "week": week,
-            "admins_notified": notified,
-        }
+    # ★只发【已点计划发送】的(status=scheduled)· 无计划 → 安静跳过(运营自行用立即发送补救,不发提醒)
+    if rec is None or rec.status not in {"scheduled", "sent"}:
+        return {"action": "no_scheduled", "year": year, "week": week}
     if rec.status == "sent":
-        return {"action": "already_sent", "year": year, "week": week}
+        return {"action": "already_sent", "year": year, "week": week}  # 幂等
     result = await dispatch_and_send(session, year=year, week=week)
     return {
         "action": "sent",
@@ -253,7 +256,11 @@ async def run_scheduled_dispatch(
 
 
 async def notify_skip(session: AsyncSession, *, year: int, week: int) -> int:
-    """本周未上传 → 提醒 admin(其绑定的 TG/飞书)· 返回触达 admin 数。★失败不抛(提醒非关键)。"""
+    """本周未上传 → 提醒 admin(其绑定的 TG/飞书)· 返回触达 admin 数。★失败不抛(提醒非关键)。
+
+    ★保留代码但 run_scheduled_dispatch 不再调用(运营要安静:没有 scheduled 就不发,也不提醒)·
+    未来要恢复提醒时一行接回即可。
+    """
     admins = (
         await session.execute(select(User.id).where(User.role == "admin"))
     ).scalars().all()
