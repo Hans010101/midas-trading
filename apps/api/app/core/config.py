@@ -71,12 +71,6 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 1024               # 单次响应硬上限
     llm_timeout_seconds: float = 30.0
 
-    # 支付 · Bcon(旧网关 · 保留作回归参照 · order/payment 已不 import · Phase 2a)
-    # ⚠ 敏感:bcon_api_key 只从 env 读 · 绝不进 git/前端/DB/日志 · 空 = 支付未启用。
-    bcon_api_key: str = ""
-    bcon_api_base: str = "https://external-api.bcon.global"
-    bcon_timeout_seconds: float = 15.0
-
     # 阿里云 OSS · 周报素材原始文件归档(第三刀-B · prefix report-materials/ · 桶 lifecycle 7 天)
     # ⚠ 敏感:oss_access_key_id/secret 只从 env 读 · 绝不进 git/前端/DB/日志(脱敏)· 空 = 上传未启用。
     # ★凭证现在 VPS /etc/midas/backup.env,需 Hans 复制到 app 容器 env(/opt/midas/.env)。

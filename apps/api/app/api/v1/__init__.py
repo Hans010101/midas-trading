@@ -64,7 +64,7 @@ router.include_router(quota_router)
 router.include_router(invite_router)
 # 兑换码模块刀1 · 管理员生成/列表 + 用户兑换(开 pro 权益 · source='redeem')
 router.include_router(redeem_router)
-# Phase 2a 刀1 · 会员订阅支付(Bcon USDT/BSC · 建单 + 回调核验开 pro · source='paid')
+# Phase 2a 刀1 · 会员订阅支付(OxaPay USDT 多链 · 建单 + 回调核验开 pro · source='paid')
 # 🔴 红线:支付域不碰 engine(收订阅费非交易)· 凭证只从 env 读
 router.include_router(payment_router)
 # 支付工单 / 退款申请(support 模块 · authed)· 工单存 DB + Resend 通知客服 · 图走附件不落盘
