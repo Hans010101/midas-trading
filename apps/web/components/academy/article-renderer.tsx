@@ -11,8 +11,11 @@
 import Link from 'next/link'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { type PluggableList } from 'unified'
 
 import { glossaryAnchorId, reactChildrenToText } from '@/lib/academy-anchor'
+import { DEFAULT_EXCLUDE_TERMS, type AliasEntry } from '@/lib/glossary-terms'
+import { rehypeGlossaryLinks } from '@/lib/rehype-glossary-links'
 
 const components: Components = {
   // h1 = 文章主标题(md 首行 · 中国红 · 大)
@@ -120,9 +123,19 @@ const components: Components = {
   ),
 }
 
-export function ArticleRenderer({ markdown }: { markdown: string }) {
+export function ArticleRenderer({
+  markdown,
+  glossaryAliases,
+}: {
+  markdown: string
+  glossaryAliases?: AliasEntry[]
+}) {
+  const rehypePlugins: PluggableList =
+    glossaryAliases && glossaryAliases.length > 0
+      ? [[rehypeGlossaryLinks, { sortedAliases: glossaryAliases, exclude: DEFAULT_EXCLUDE_TERMS }]]
+      : []
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={components}>
       {markdown}
     </ReactMarkdown>
   )

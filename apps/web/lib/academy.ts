@@ -20,6 +20,8 @@ import {
   type AcademyStage,
 } from '@/content/academy/manifest'
 
+import { parseGlossaryTerms, buildSortedAliases, type AliasEntry } from './glossary-terms'
+
 const ACADEMY_DIR = join(process.cwd(), 'content', 'academy')
 const ARTICLES_DIR = join(ACADEMY_DIR, 'articles')
 const GLOSSARY_PATH = join(ACADEMY_DIR, 'glossary.md')
@@ -38,6 +40,16 @@ export function getArticleBySlug(slug: string): string | null {
 /** 读词典原始 markdown(词典本身含目录 + 8 大类 + 66 条)。 */
 export function getGlossary(): string {
   return readFileSync(GLOSSARY_PATH, 'utf8')
+}
+
+let _glossaryAliasesCache: AliasEntry[] | null = null
+
+/** 读 content/academy/glossary.md → 派生 别名→id(按长度降序),模块级缓存只解析一次 */
+export function getGlossaryAliases(): AliasEntry[] {
+  if (_glossaryAliasesCache) return _glossaryAliasesCache
+  const md = readFileSync(GLOSSARY_PATH, 'utf8')
+  _glossaryAliasesCache = buildSortedAliases(parseGlossaryTerms(md))
+  return _glossaryAliasesCache
 }
 
 /** 篇目元数据(标题 / 阶 / order / excerpt)· 用于面包屑 / 校验存在。 */

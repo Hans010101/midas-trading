@@ -26,6 +26,7 @@ import {
   getAdjacentArticles,
   getArticleBySlug,
   getArticleMeta,
+  getGlossaryAliases,
   getStage,
 } from '@/lib/academy'
 
@@ -42,6 +43,7 @@ export default async function AcademyArticlePage({
   const quiz = getQuiz(slug)
   const practice = getPractice(slug)
   const interactives = getInteractives(slug)
+  const glossaryAliases = getGlossaryAliases()
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
@@ -85,7 +87,7 @@ export default async function AcademyArticlePage({
               </nav>
 
               {/* 正文(markdown 首行即 # 标题 → ArticleRenderer 的 h1)*/}
-              <ArticleRenderer markdown={markdown} />
+              <ArticleRenderer markdown={markdown} glossaryAliases={glossaryAliases} />
 
               {/* D 系列交互演示(无配置 → 不渲染)· 正文后、小测前 */}
               {interactives && <ArticleInteractives keys={interactives} />}
