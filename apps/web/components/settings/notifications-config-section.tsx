@@ -21,6 +21,7 @@ import {
   useSendTestNotification,
 } from '@/hooks/use-notifications'
 import { useCreateFeishuBindToken, useUnbindFeishu } from '@/hooks/use-feishu'
+import { useMe } from '@/hooks/use-me'
 import { useCreateBindToken, useUnbindTelegram } from '@/hooks/use-telegram'
 import {
   type FeishuBindTokenResult,
@@ -43,6 +44,7 @@ const TZ_OPTIONS: Array<{ value: string; label: string }> = [
 
 export function NotificationsConfigSection() {
   const { data: config, isLoading } = useNotificationConfig()
+  const { data: me } = useMe()
   const saveMutation = useSaveNotificationConfig()
 
   const [tradeEnabled, setTradeEnabled] = useState(true)
@@ -76,6 +78,9 @@ export function NotificationsConfigSection() {
 
   const bound = config?.has_telegram ?? false
   const feishuBound = config?.has_feishu ?? false
+  // 飞书仅对管理员展示(内部小范围继续用)· 普通用户隐藏绑定入口(★代码/端点/字段不删,仅 UI 按角色渲染)·
+  // 已绑定的普通用户不主动解绑、推送照常,只是看不到「绑定入口」。
+  const isAdmin = me?.role === 'admin'
 
   return (
     <section className="mb-10">
@@ -83,15 +88,15 @@ export function NotificationsConfigSection() {
         消息推送
       </h2>
       <p className="mb-4 text-sm text-muted-foreground">
-        绑定 Telegram / 飞书后,成交通知 / 价格异动会推送到对应渠道 · 未绑定只有站内提示
+        绑定 Telegram{isAdmin ? ' / 飞书' : ''}后,成交通知 / 价格异动会推送到对应渠道 · 未绑定只有站内提示
       </p>
 
       <div className="space-y-4">
         {/* Telegram 绑定(G3 · deep link + 二维码 + 解绑 + 重绑提示)*/}
         <TelegramCard bound={bound} />
 
-        {/* 飞书绑定(ADR 0032 阶段三 · 绑定码 + 解绑)*/}
-        <FeishuCard bound={feishuBound} />
+        {/* 飞书绑定(ADR 0032 阶段三)· ★仅管理员可见(内部小范围用)· 代码/端点/字段全保留不删 */}
+        {isAdmin && <FeishuCard bound={feishuBound} />}
 
         {/* 邮件推送/订阅(图标与上方 TG ✈️ / 飞书 🪶 同 emoji 风格)*/}
         <div className="rounded-lg border border-paper bg-cream p-5 shadow-sm">
