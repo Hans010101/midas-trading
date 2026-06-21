@@ -77,6 +77,15 @@ class Settings(BaseSettings):
     bcon_api_base: str = "https://external-api.bcon.global"
     bcon_timeout_seconds: float = 15.0
 
+    # 阿里云 OSS · 周报素材原始文件归档(第三刀-B · prefix report-materials/ · 桶 lifecycle 7 天)
+    # ⚠ 敏感:oss_access_key_id/secret 只从 env 读 · 绝不进 git/前端/DB/日志(脱敏)· 空 = 上传未启用。
+    # ★凭证现在 VPS /etc/midas/backup.env,需 Hans 复制到 app 容器 env(/opt/midas/.env)。
+    oss_access_key_id: str = ""
+    oss_access_key_secret: str = ""
+    # 内网端点(api/worker 容器在阿里云香港可用 · 免公网流量费)· bucket 香港 region
+    oss_endpoint: str = "oss-cn-hongkong-internal.aliyuncs.com"
+    oss_bucket: str = "midas-backup-hk"
+
     # 支付 · OxaPay(现行网关 · 会员订阅收款 · USDT 多链托管页 · Phase 2a)
     # ⚠ 敏感:oxapay_merchant_api_key 只从 env 读 · 绝不进 git/前端/DB/日志 ·
     #    既是建单/查单凭证,又是回调 HMAC-SHA512 验签密钥 · 空 = 支付未启用(回调全拒)。
