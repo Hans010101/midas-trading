@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import uuid as uuid_lib
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -58,6 +58,32 @@ def iso_year_week(d: datetime) -> tuple[int, int]:
     """某时刻的 ISO (year, week)· 周日属当周。"""
     iso = d.isocalendar()
     return iso[0], iso[1]
+
+
+def next_sunday_2100(now: datetime) -> date:
+    """下一个【还没到】的周日 21:00 的日期(CST · 与 beat `0 21 * * sun` 同口径,仅展示用)。
+
+    规则:非周日 → 即将到来的周日;周日且 <21:00 → 今天;周日且 ≥21:00 → 下周日。
+    """
+    sunday_hour = 21
+    days_until_sunday = (6 - now.weekday()) % 7  # Mon=0..Sun=6 · 今天周日 → 0
+    candidate = now.date() + timedelta(days=days_until_sunday)
+    if days_until_sunday == 0 and now.hour >= sunday_hour:
+        candidate = candidate + timedelta(days=7)  # 今天周日但已过 21:00 → 下周日
+    return candidate
+
+
+def format_next_send_label(now: datetime) -> str:
+    """下一个周日 21:00 → 中文「M月D日21:00」(CST)。"""
+    d = next_sunday_2100(now)
+    return f"{d.month}月{d.day}日21:00"
+
+
+def current_next_send_label() -> str:
+    """当前时刻(CST)对应的下一个周日 21:00 标签 · 端点直接用,无需自己取 now。"""
+    from app.services.visit_stats import cn_now  # noqa: PLC0415 · 延迟 import 避免循环
+
+    return format_next_send_label(cn_now())
 
 
 async def _get_by_year_week(

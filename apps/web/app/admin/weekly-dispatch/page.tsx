@@ -29,8 +29,14 @@ import {
 
 const STATUS_LABEL: Record<string, string> = {
   uploaded: '待发送(未计划)',
-  scheduled: '已计划 · 周日21:00发送',
+  scheduled: '已计划', // 实际展示拼上动态日期(见 statusText)· 此为兜底
   sent: '已发送',
+}
+
+/** scheduled 状态拼上「下一个周日 21:00」的具体日期(M月D日21:00 · 后端 CST 算)。 */
+function statusText(status: string, nextSendLabel: string): string {
+  if (status === 'scheduled') return `已计划 · ${nextSendLabel}发送`
+  return STATUS_LABEL[status] ?? status
 }
 
 function strList(v: unknown): string[] {
@@ -89,6 +95,7 @@ export default function AdminWeeklyDispatchPage() {
 
   const forbidden = query.error instanceof AdminApiError && query.error.status === 403
   const items: WeeklyDispatchItem[] = query.data?.items ?? []
+  const nextSendLabel: string = query.data?.next_send_label ?? '周日21:00'
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -114,7 +121,7 @@ export default function AdminWeeklyDispatchPage() {
               <h2 className="mb-2 font-serif text-base font-bold">上传本周成品周报</h2>
               <p className="mb-4 text-xs text-muted-foreground">
                 上传外部做好的两份同步文件:① PDF(精排版作邮件附件)② md(按约定结构,系统提取填邮件正文)。
-                周日 21:00 定时发送给订阅用户;补救窗口(周日21:00~周一09:00)上传即发。
+                上传后到下方点「计划发送」(等下一个周日 21:00 定时发)或「立即发送」(当场发给订阅用户)。
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="text-sm">
@@ -222,7 +229,7 @@ export default function AdminWeeklyDispatchPage() {
                                   : 'text-muted-foreground'
                             }
                           >
-                            {STATUS_LABEL[it.status] ?? it.status}
+                            {statusText(it.status, nextSendLabel)}
                             {it.status === 'sent' && it.sent_at
                               ? ` · ${it.sent_at.slice(5, 16).replace('T', ' ')}`
                               : ''}

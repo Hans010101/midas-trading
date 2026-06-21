@@ -817,13 +817,17 @@ def _weekly_detail(rec: WeeklyDispatch) -> WeeklyDispatchDetail:
         uploaded_at=rec.uploaded_at, sent_at=rec.sent_at,
         extracted=rec.extracted,
         email_html=render_email_html(rec.extracted, unsubscribe_url=UNSUBSCRIBE_URL),
+        next_send_label=wd_service.current_next_send_label(),
     )
 
 
 @router.get("/weekly-dispatch", response_model=WeeklyDispatchList)
 async def list_weekly_dispatches(_admin: AdminDep, db: DbDep) -> WeeklyDispatchList:
     rows = await wd_service.list_dispatches(db)
-    return WeeklyDispatchList(items=[WeeklyDispatchListItem.model_validate(r) for r in rows])
+    return WeeklyDispatchList(
+        items=[WeeklyDispatchListItem.model_validate(r) for r in rows],
+        next_send_label=wd_service.current_next_send_label(),
+    )
 
 
 @router.get("/weekly-dispatch/{dispatch_id}", response_model=WeeklyDispatchDetail)

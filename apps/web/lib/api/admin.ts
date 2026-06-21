@@ -429,6 +429,7 @@ export interface WeeklyDispatchDetail extends WeeklyDispatchItem {
   pdf_filename: string
   extracted: Record<string, unknown>
   email_html: string
+  next_send_label: string // 下一个周日 21:00(「M月D日21:00」· scheduled 展示)
 }
 
 export interface WeeklySendResult {
@@ -446,13 +447,13 @@ export interface WeeklySendResult {
 export async function fetchWeeklyDispatches(
   token: string,
   signal?: AbortSignal,
-): Promise<{ items: WeeklyDispatchItem[] }> {
+): Promise<{ items: WeeklyDispatchItem[]; next_send_label: string }> {
   const r = await fetch(`${API_BASE}/api/v1/admin/weekly-dispatch`, {
     headers: { Authorization: `Bearer ${token}` },
     signal,
   })
   if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
-  return (await r.json()) as { items: WeeklyDispatchItem[] }
+  return (await r.json()) as { items: WeeklyDispatchItem[]; next_send_label: string }
 }
 
 export async function fetchWeeklyDispatch(
