@@ -11,6 +11,7 @@
 - register_method:由 google_sub / password_hash 非空推导(google|password|both)。
 """
 
+import logging
 from datetime import UTC, datetime, timedelta
 from datetime import date as date_type
 from typing import Annotated
@@ -39,18 +40,30 @@ from app.schemas.report import (
     ReportSendOut,
     ReportUpdateIn,
 )
+from app.schemas.weekly_dispatch import (
+    WeeklyDispatchDetail,
+    WeeklyDispatchList,
+    WeeklyDispatchListItem,
+    WeeklySendOut,
+    WeeklyUploadOut,
+)
 from app.services.academy.admin_stats import get_academy_stats
 from app.services.growth import extend_subscription, invite_stats
 from app.services.membership import PLAN_QUOTAS, get_quota_used, resolve_plan
 from app.services.report import materials as report_materials
 from app.services.report import store as report_store
+from app.services.report import weekly_dispatch as wd_service
 from app.services.report.generate import current_report_period, generate_weekly_report_draft
 from app.services.report.materials import MaterialExtractError
 from app.services.report.object_store import ObjectStoreError
 from app.services.report.send import send_report
-from app.services.visit_stats import CN_TZ, cn_today, read_redis_day, read_redis_hours
+from app.services.report.weekly_dispatch import UNSUBSCRIBE_URL
+from app.services.report.weekly_email import render_email_html
+from app.services.report.weekly_md import WeeklyMdError
+from app.services.visit_stats import CN_TZ, cn_now, cn_today, read_redis_day, read_redis_hours
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+logger = logging.getLogger(__name__)
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 
@@ -743,3 +756,108 @@ async def delete_report_material(material_id: int, _admin: AdminDep, db: DbDep) 
     ok = await report_materials.delete_material(db, material_id)
     if not ok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="素材不存在")
+
+
+# 周报投递(全自动发送)· 运营上传成品 PDF+md → 提取 → 定时/补传发送
+_WD_PDF_MAX_MB = 20
+_WD_PDF_MAX_BYTES = _WD_PDF_MAX_MB * 1024 * 1024
+
+
+@router.post(
+    "/weekly-dispatch/upload", response_model=WeeklyUploadOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_weekly_dispatch(
+    admin: AdminDep,
+    db: DbDep,
+    pdf: Annotated[UploadFile, File()],
+    md: Annotated[UploadFile, File()],
+) -> WeeklyUploadOut:
+    """上传成品周报(PDF + md)→ 解析 md → PDF 存 OSS → upsert(year+week 唯一)。
+
+    ★frontmatter 错 → 422 · OSS 失败 → 502 · ★补救窗口(周日21:00~周一09:00)内本周 → 上传即发。
+    """
+    pdf_data = await pdf.read()
+    md_data = await md.read()
+    if not pdf_data or not md_data:
+        raise HTTPException(status_code=422, detail="PDF 与 md 文件都必须上传且非空")
+    if len(pdf_data) > _WD_PDF_MAX_BYTES:
+        raise HTTPException(status_code=422, detail=f"PDF 不得超过 {_WD_PDF_MAX_MB} MB")
+    md_text = md_data.decode("utf-8", errors="replace")
+    try:
+        rec, _extract = await wd_service.create_or_update_dispatch(
+            db,
+            pdf_data=pdf_data,
+            pdf_filename=(pdf.filename or "周报.pdf")[:255],
+            md_text=md_text,
+            uploaded_by=admin.id,
+        )
+    except WeeklyMdError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except ObjectStoreError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"PDF 存储失败:{e}",
+        ) from e
+
+    # ★补救窗口:上传即发(发送失败不让上传失败 · 已入库,可手动 send-now)
+    auto_sent = False
+    if wd_service.should_auto_send_on_upload(cn_now(), rec.year, rec.week, rec.status):
+        try:
+            await wd_service.dispatch_and_send(db, year=rec.year, week=rec.week)
+            await db.refresh(rec)
+            auto_sent = True
+        except Exception:  # noqa: BLE001 · 上传成功、发送失败 → 仅 log,admin 可手动重发
+            logger.exception("[weekly] 补救窗口上传即发失败 · %d-W%d", rec.year, rec.week)
+
+    email_html = render_email_html(rec.extracted, unsubscribe_url=UNSUBSCRIBE_URL)
+    return WeeklyUploadOut(
+        id=rec.id, year=rec.year, week=rec.week, status=rec.status,
+        auto_sent=auto_sent, extracted=rec.extracted,
+        missing=rec.extracted.get("missing", []), email_html=email_html,
+        pdf_filename=rec.pdf_filename,
+    )
+
+
+@router.get("/weekly-dispatch", response_model=WeeklyDispatchList)
+async def list_weekly_dispatches(_admin: AdminDep, db: DbDep) -> WeeklyDispatchList:
+    rows = await wd_service.list_dispatches(db)
+    return WeeklyDispatchList(items=[WeeklyDispatchListItem.model_validate(r) for r in rows])
+
+
+@router.get("/weekly-dispatch/{dispatch_id}", response_model=WeeklyDispatchDetail)
+async def get_weekly_dispatch(
+    dispatch_id: int, _admin: AdminDep, db: DbDep,
+) -> WeeklyDispatchDetail:
+    rec = await wd_service.get_dispatch(db, dispatch_id)
+    if rec is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="周报投递不存在")
+    return WeeklyDispatchDetail(
+        id=rec.id, year=rec.year, week=rec.week,
+        period_start=rec.period_start, period_end=rec.period_end,
+        title=rec.title, status=rec.status, pdf_filename=rec.pdf_filename,
+        uploaded_at=rec.uploaded_at, sent_at=rec.sent_at,
+        extracted=rec.extracted,
+        email_html=render_email_html(rec.extracted, unsubscribe_url=UNSUBSCRIBE_URL),
+    )
+
+
+@router.post("/weekly-dispatch/{dispatch_id}/send-now", response_model=WeeklySendOut)
+async def send_weekly_dispatch_now(
+    dispatch_id: int, _admin: AdminDep, db: DbDep,
+) -> WeeklySendOut:
+    """★手动立即发送(补救窗口外 / 测试)· 已发幂等跳过 · 不存在 404 · OSS 下载失败 502。"""
+    rec = await wd_service.get_dispatch(db, dispatch_id)
+    if rec is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="周报投递不存在")
+    try:
+        result = await wd_service.dispatch_and_send(db, year=rec.year, week=rec.week)
+    except ObjectStoreError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"PDF 下载失败:{e}",
+        ) from e
+    return WeeklySendOut(
+        dispatch_id=result.dispatch_id, year=result.year, week=result.week,
+        recipients=result.recipients, email_sent=result.email_sent,
+        email_failed=result.email_failed, notify_sent=result.notify_sent,
+        notify_failed=result.notify_failed, skipped=result.skipped,
+    )

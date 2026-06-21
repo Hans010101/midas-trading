@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import date
+from typing import Any
 
 from app.core.config import settings
 
@@ -32,13 +33,22 @@ def build_object_key(*, period_start: date | None, uid: str, ext: str) -> str:
     return f"{OSS_PREFIX}/{bucket_day}/{uid}{ext}"
 
 
-def _put_object(key: str, data: bytes) -> None:
-    """同步 oss2 put_object(供 asyncio.to_thread 调)· 凭证从 settings 读 · 内网端点。"""
-    import oss2  # noqa: PLC0415 · 延迟 import(仅真上传路径需要)
+def _bucket() -> Any:
+    """oss2 Bucket(凭证从 settings)· 供 _put_object / _get_object 共用。"""
+    import oss2  # noqa: PLC0415 · 延迟 import(仅真上传/下载路径需要)
 
     auth = oss2.Auth(settings.oss_access_key_id, settings.oss_access_key_secret)
-    bucket = oss2.Bucket(auth, settings.oss_endpoint, settings.oss_bucket)
-    bucket.put_object(key, data)
+    return oss2.Bucket(auth, settings.oss_endpoint, settings.oss_bucket)
+
+
+def _put_object(key: str, data: bytes) -> None:
+    """同步 oss2 put_object(供 asyncio.to_thread 调)· 凭证从 settings 读 · 内网端点。"""
+    _bucket().put_object(key, data)
+
+
+def _get_object(key: str) -> bytes:
+    """同步 oss2 get_object(供 asyncio.to_thread 调)· 返回对象字节。"""
+    return bytes(_bucket().get_object(key).read())
 
 
 async def upload_material(key: str, data: bytes) -> str:
@@ -61,3 +71,19 @@ async def upload_material(key: str, data: bytes) -> str:
         raise ObjectStoreError(msg) from e
     logger.info("[material] OSS 上传成功 key=%s bytes=%d", key, len(data))
     return key
+
+
+async def download_object(key: str) -> bytes:
+    """从 OSS 下载对象字节(周报发送取 PDF 附件)· 凭证缺失/下载失败 → ObjectStoreError(不静默)。"""
+    if not (settings.oss_access_key_id and settings.oss_access_key_secret):
+        logger.error("[material] OSS 凭证未配置 · 无法下载 · key=%s", key)
+        msg = "OSS 凭证未配置,请检查容器 env"
+        raise ObjectStoreError(msg)
+    try:
+        data = await asyncio.to_thread(_get_object, key)
+    except Exception as e:  # noqa: BLE001
+        logger.exception("[material] OSS 下载失败 key=%s", key)
+        msg = f"OSS 下载失败:{e}"
+        raise ObjectStoreError(msg) from e
+    logger.info("[material] OSS 下载成功 key=%s bytes=%d", key, len(data))
+    return data

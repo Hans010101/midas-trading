@@ -82,3 +82,26 @@ def cleanup_materials() -> dict[str, int]:
     deleted = asyncio.run(_cleanup_materials())
     logger.info("[report] 清理过期素材行 · deleted=%d", deleted)
     return {"deleted": deleted}
+
+
+async def _send_weekly_dispatch() -> dict[str, object]:
+    from app.services.report.weekly_dispatch import run_scheduled_dispatch
+    from app.services.visit_stats import cn_now
+
+    engine = create_async_engine(
+        os.environ["DATABASE_URL"], future=True, poolclass=NullPool,
+    )
+    session_maker = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with session_maker() as session:
+            return await run_scheduled_dispatch(session, now=cn_now())
+    finally:
+        await engine.dispose()
+
+
+@shared_task(name="tasks.report.send_weekly_dispatch")
+def send_weekly_dispatch() -> dict[str, object]:
+    """Celery 入口 · 每周日 21:00 CST 定时发送本周成品周报(有上传则发,无则提醒 admin)。"""
+    result = asyncio.run(_send_weekly_dispatch())
+    logger.info("[weekly] 周报定时发送 · %s", result)
+    return result
