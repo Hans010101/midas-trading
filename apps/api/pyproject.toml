@@ -43,6 +43,8 @@ dependencies = [
     # 市场周报 PDF 附件(P3 第二刀)· 中文用 reportlab 自带 CID 字体 STSong-Light(免 bundle 字体 ·
     # ★无需 Docker apt 装系统字体,区别于 matplotlib 的 fonts-noto-cjk · 纯 Python 零基建改动)。
     "reportlab>=4.2.0",
+    # 周报素材 PDF 文本提取(第三刀)· 纯 Python · 零 Docker 改动(md 直读无需库)。
+    "pypdf>=5.0.0",
 ]
 
 [project.optional-dependencies]

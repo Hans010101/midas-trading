@@ -349,3 +349,54 @@ export async function sendAdminReport(token: string, id: number): Promise<Report
   if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
   return (await r.json()) as ReportSendOut
 }
+
+// ── 周报素材(第三刀)· admin 上传 md/PDF → 提取文本注入生成 ──────────────
+export interface ReportMaterial {
+  id: number
+  filename: string
+  content_type: string // md | pdf
+  size: number
+  char_count: number
+  period_start: string | null
+  period_end: string | null
+  created_at: string
+}
+
+export interface ReportMaterialList {
+  items: ReportMaterial[]
+  period_start: string | null
+  period_end: string | null
+}
+
+export async function fetchAdminMaterials(
+  token: string,
+  signal?: AbortSignal,
+): Promise<ReportMaterialList> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/report-materials`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as ReportMaterialList
+}
+
+/** 上传一份素材(md/pdf · multipart)→ 提取文本存库(本期周期)。 */
+export async function uploadAdminMaterial(token: string, file: File): Promise<ReportMaterial> {
+  const form = new FormData()
+  form.append('file', file)
+  const r = await fetch(`${API_BASE}/api/v1/admin/report-materials`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }, // ★不手设 Content-Type,浏览器带 boundary
+    body: form,
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as ReportMaterial
+}
+
+export async function deleteAdminMaterial(token: string, id: number): Promise<void> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/report-materials/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+}

@@ -16,7 +16,7 @@ from datetime import date as date_type
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +31,8 @@ from app.models.session import Session
 from app.models.subscription import Subscription
 from app.models.user import User
 from app.schemas.report import (
+    MaterialListOut,
+    MaterialOut,
     ReportDetail,
     ReportListItem,
     ReportListOut,
@@ -40,8 +42,10 @@ from app.schemas.report import (
 from app.services.academy.admin_stats import get_academy_stats
 from app.services.growth import extend_subscription, invite_stats
 from app.services.membership import PLAN_QUOTAS, get_quota_used, resolve_plan
+from app.services.report import materials as report_materials
 from app.services.report import store as report_store
-from app.services.report.generate import generate_weekly_report_draft
+from app.services.report.generate import current_report_period, generate_weekly_report_draft
+from app.services.report.materials import MaterialExtractError
 from app.services.report.send import send_report
 from app.services.visit_stats import CN_TZ, cn_today, read_redis_day, read_redis_hours
 
@@ -671,3 +675,65 @@ async def send_market_report(
         notify_sent=result.notify_sent,
         notify_failed=result.notify_failed,
     )
+
+
+# 周报素材(第三刀)· admin 上传 md/PDF 外部素材 → 提取文本注入生成
+# ★路径用 /report-materials(非 /reports/materials):后者会被 GET /reports/{report_id} 先匹配,
+#   "materials" 被当 report_id 校验为 int → 422。独立路径避开路由顺序碰撞,更稳。
+_MATERIAL_MAX_MB = 10
+_MATERIAL_MAX_BYTES = _MATERIAL_MAX_MB * 1024 * 1024
+
+
+@router.post(
+    "/report-materials", response_model=MaterialOut, status_code=status.HTTP_201_CREATED,
+)
+async def upload_report_material(
+    admin: AdminDep,
+    db: DbDep,
+    file: Annotated[UploadFile, File()],
+) -> MaterialOut:
+    """admin 上传周报素材(md / PDF · multipart)→ 提取文本存库(标记本期周期)。
+
+    镜像 support 上传范式 · 提取失败 / 不支持类型 → 422 · ★OSS 原始文件上传第三刀-B 接(A 存意向键)。
+    """
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="文件为空")
+    if len(data) > _MATERIAL_MAX_BYTES:
+        raise HTTPException(
+            status_code=422, detail=f"素材文件不得超过 {_MATERIAL_MAX_MB} MB",
+        )
+    period_start, period_end = current_report_period()
+    try:
+        material = await report_materials.create_material(
+            db,
+            filename=file.filename or "material",
+            content_type=file.content_type,
+            data=data,
+            period_start=period_start,
+            period_end=period_end,
+            uploaded_by=admin.id,
+        )
+    except MaterialExtractError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    return MaterialOut.model_validate(material)
+
+
+@router.get("/report-materials", response_model=MaterialListOut)
+async def list_report_materials(_admin: AdminDep, db: DbDep) -> MaterialListOut:
+    """列本期素材(按当前周报周期 · created_at 倒序)。"""
+    period_start, period_end = current_report_period()
+    rows = await report_materials.list_materials(db, period_start=period_start)
+    return MaterialListOut(
+        items=[MaterialOut.model_validate(r) for r in rows],
+        period_start=period_start,
+        period_end=period_end,
+    )
+
+
+@router.delete("/report-materials/{material_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_report_material(material_id: int, _admin: AdminDep, db: DbDep) -> None:
+    """删一份素材(手动)· 不存在 → 404 · OSS 对象靠桶 lifecycle,此处不删 OSS。"""
+    ok = await report_materials.delete_material(db, material_id)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="素材不存在")

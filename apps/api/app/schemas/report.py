@@ -59,3 +59,24 @@ class ReportSendOut(BaseModel):
     email_failed: int
     notify_sent: int  # TG/飞书 实际投递用户数
     notify_failed: int
+
+
+class MaterialOut(BaseModel):
+    """周报素材行(第三刀)· 不返回 extracted_text 全文(列表轻量)。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    filename: str
+    content_type: str  # md | pdf
+    size: int
+    char_count: int
+    period_start: date | None
+    period_end: date | None
+    created_at: datetime
+
+
+class MaterialListOut(BaseModel):
+    items: list[MaterialOut]
+    period_start: date | None  # 本期周期(展示)
+    period_end: date | None
