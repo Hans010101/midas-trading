@@ -418,8 +418,7 @@ export interface WeeklyUploadResult {
   id: number
   year: number
   week: number
-  status: string
-  auto_sent: boolean // 是否落入补救窗口、上传即发
+  status: string // ★上传只入库 uploaded,不自动发
   extracted: Record<string, unknown>
   missing: string[]
   email_html: string
@@ -487,7 +486,33 @@ export async function uploadWeeklyDispatch(
   return (await r.json()) as WeeklyUploadResult
 }
 
-/** 手动立即发送(补救窗口外 / 测试)· 已发幂等跳过。 */
+/** ★「计划发送」(主)· uploaded/scheduled → scheduled · 纯标记,等周日21:00定时发。 */
+export async function scheduleWeeklyDispatch(
+  token: string,
+  id: number,
+): Promise<WeeklyDispatchDetail> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/weekly-dispatch/${id}/schedule`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as WeeklyDispatchDetail
+}
+
+/** 「取消计划」· scheduled → uploaded(21:00前撤回改稿)。 */
+export async function cancelWeeklyDispatchSchedule(
+  token: string,
+  id: number,
+): Promise<WeeklyDispatchDetail> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/weekly-dispatch/${id}/cancel-schedule`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as WeeklyDispatchDetail
+}
+
+/** ★「立即发送」(辅)· 当场发送 · 已发幂等跳过 · ★前端二次确认后才调。 */
 export async function sendWeeklyDispatchNow(
   token: string,
   id: number,
