@@ -274,4 +274,10 @@ beat_schedule = {
         "schedule": crontab(hour="9", minute="0", day_of_week="mon"),
         "options": {"expires": 3600},
     },
+    "cleanup-report-materials": {
+        "task": "tasks.report.cleanup_materials",
+        # 每天凌晨 4:00 删 7 天前周报素材行(第三刀)· OSS 对象靠桶 lifecycle 自动过期
+        "schedule": crontab(hour="4", minute="0"),
+        "options": {"expires": 3600},
+    },
 }

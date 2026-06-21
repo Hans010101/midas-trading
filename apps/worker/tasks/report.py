@@ -22,6 +22,7 @@ from sqlalchemy.pool import NullPool
 
 from app.services.clickhouse_client import ClickHouseClient
 from app.services.report.generate import generate_weekly_report_draft
+from app.services.report.materials import cleanup_expired_materials
 
 logger = logging.getLogger(__name__)
 
@@ -58,3 +59,26 @@ def generate_weekly_report(self):  # type: ignore[no-untyped-def]
     except Exception as e:  # noqa: BLE001
         logger.warning("[report] 周报生成失败,重试 · %s", e)
         raise self.retry(exc=e, countdown=2 ** self.request.retries) from e
+
+
+async def _cleanup_materials() -> int:
+    engine = create_async_engine(
+        os.environ["DATABASE_URL"], future=True, poolclass=NullPool,
+    )
+    session_maker = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with session_maker() as session:
+            return await cleanup_expired_materials(session)
+    finally:
+        await engine.dispose()
+
+
+@shared_task(name="tasks.report.cleanup_materials")
+def cleanup_materials() -> dict[str, int]:
+    """Celery 入口 · 每天删 7 天前的 report_material 行(第三刀)。
+
+    ★只清 DB 行;OSS 对象由桶 lifecycle(report-materials/ 7 天)自动过期 · app 不删 OSS。
+    """
+    deleted = asyncio.run(_cleanup_materials())
+    logger.info("[report] 清理过期素材行 · deleted=%d", deleted)
+    return {"deleted": deleted}

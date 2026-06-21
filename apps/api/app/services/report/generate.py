@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,6 +30,7 @@ from app.services.market_home_config import (
     HK_INDEX_CODES,
     US_INDEX_ORDER,
 )
+from app.services.report.materials import build_materials_text
 
 logger = logging.getLogger(__name__)
 
@@ -98,24 +99,41 @@ def _ensure_disclaimer(text: str) -> str:
     return cleaned
 
 
+def current_report_period(now: datetime | None = None) -> tuple[date, date]:
+    """本期周报周期(period_start, period_end)= 自然周回看 7 天 · 上传素材与生成共用同口径。"""
+    now = now or datetime.now(tz=UTC)
+    period_end = now.date()
+    return period_end - timedelta(days=6), period_end
+
+
 async def generate_weekly_report_draft(
     session: AsyncSession,
     ch: ClickHouseClient,
     *,
     now: datetime | None = None,
+    materials_text: str | None = None,
 ) -> MarketReport:
     """生成一篇市场周报草稿(status=draft)并落库 · 返回新建行。
 
     mock 模式(无 DEEPSEEK_API_KEY)走 ainvoke 的 mock 路径,不烧钱、管道照通。
+    ★素材注入:materials_text 缺省时拉本期素材(截断 + 预算守卫);无素材优雅降级(只用平台数据)。
     """
     now = now or datetime.now(tz=UTC)
-    period_end = now.date()
-    period_start = period_end - timedelta(days=6)  # 自然周回看 7 天
+    period_start, period_end = current_report_period(now)
 
     data_text = await aggregate_market_snapshot(ch)
+    if materials_text is None:
+        materials_text = await build_materials_text(session, period_start=period_start, now=now)
+
+    materials_block = (
+        f"参考素材(运营搜集 · 优先据此并结合行情数据):\n{materials_text}\n\n"
+        if materials_text.strip()
+        else ""
+    )
     user_prompt = (
         f"报告周期:{period_start.isoformat()} ~ {period_end.isoformat()}\n\n"
         f"四市场行情数据:\n{data_text}\n\n"
+        f"{materials_block}"
         "请基于以上数据写一段市场动态概述。"
     )
 
