@@ -37,6 +37,8 @@ class WeeklyDispatchListItem(BaseModel):
 
 class WeeklyDispatchList(BaseModel):
     items: list[WeeklyDispatchListItem]
+    # 下一个周日 21:00 的中文日期(如「6月28日21:00」· CST · scheduled 状态展示用)
+    next_send_label: str
 
 
 class WeeklyDispatchDetail(BaseModel):
@@ -54,6 +56,7 @@ class WeeklyDispatchDetail(BaseModel):
     sent_at: datetime | None
     extracted: dict[str, Any]
     email_html: str
+    next_send_label: str  # 下一个周日 21:00(「M月D日21:00」· scheduled 展示)
 
 
 class WeeklySendOut(BaseModel):

@@ -93,10 +93,11 @@ export function NotificationsConfigSection() {
         {/* 飞书绑定(ADR 0032 阶段三 · 绑定码 + 解绑)*/}
         <FeishuCard bound={feishuBound} />
 
-        {/* 推送 / 订阅设置 */}
+        {/* 邮件推送/订阅(图标与上方 TG ✈️ / 飞书 🪶 同 emoji 风格)*/}
         <div className="rounded-lg border border-paper bg-cream p-5 shadow-sm">
-          <h3 className="mb-3 font-serif text-base font-bold text-foreground">
-            推送 / 订阅设置
+          <h3 className="mb-3 flex items-center gap-2 font-serif text-base font-bold text-foreground">
+            <span className="text-xl" aria-hidden="true">📧</span>
+            邮件推送/订阅
           </h3>
           <div className="mb-3 space-y-2">
             <Toggle

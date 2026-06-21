@@ -6,7 +6,7 @@ upsert + ★发送幂等 · ★run_scheduled_dispatch(有/无/已发)· AdminDep
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
@@ -188,6 +188,32 @@ def test_email_render():
     assert "不构成任何投资建议" in html  # ★免责红线
     assert "https://x/unsub" in html
     assert build_subject(j).startswith("点金 Midas")
+
+
+# ===== ★ next_sunday_2100 纯函数(下一个未过的周日21:00 · CST 边界)=====
+# 2026-06 月历:每周日 = 6/7、6/14、6/21、6/28;6/26 周五、6/27 周六。
+
+
+@pytest.mark.parametrize(
+    ("now", "expected"),
+    [
+        (datetime(2026, 6, 26, 12, 0, tzinfo=CST), date(2026, 6, 28)),  # 周五 → 本周日
+        (datetime(2026, 6, 27, 23, 0, tzinfo=CST), date(2026, 6, 28)),  # 周六 → 次日(本周日)
+        (datetime(2026, 6, 28, 20, 59, tzinfo=CST), date(2026, 6, 28)),  # 周日20:59 → 今天
+        (datetime(2026, 6, 28, 21, 0, tzinfo=CST), date(2026, 7, 5)),  # 周日21:00整 → ★下周日(跨月)
+        (datetime(2026, 6, 28, 21, 1, tzinfo=CST), date(2026, 7, 5)),  # 周日21:01 → 下周日(跨月)
+        (datetime(2026, 6, 22, 9, 0, tzinfo=CST), date(2026, 6, 28)),  # 周一 → 即将到来的周日
+    ],
+)
+def test_next_sunday_2100(now: datetime, expected: date):
+    assert wd.next_sunday_2100(now) == expected
+
+
+def test_format_next_send_label():
+    # 周五 6/26 → 本周日 6/28
+    assert wd.format_next_send_label(datetime(2026, 6, 26, 12, 0, tzinfo=CST)) == "6月28日21:00"
+    # ★跨月:周日 6/28 21:01 → 下周日 7/5
+    assert wd.format_next_send_label(datetime(2026, 6, 28, 21, 1, tzinfo=CST)) == "7月5日21:00"
 
 
 # ===== ★ upsert + 发送幂等 =====
