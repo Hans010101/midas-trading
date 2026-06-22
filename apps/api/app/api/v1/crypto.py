@@ -30,6 +30,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Path, Query, status
+from pydantic import ValidationError
 
 from app.api.deps import ClickHouseDep
 from app.core.redis_client import get_redis
@@ -233,7 +234,19 @@ async def get_boll_scan(
         return BollScanResponse(as_of=None, count=0, items=[])
 
     data = json.loads(raw)
-    items = [BollScanItem(**row) for row in data.get("items", [])]
+    # ★容错:旧/不兼容快照行(部署过渡窗口 · 新增字段缺失)跳过,绝不 500 →
+    #   降级为可解析子集 / 空列表(待下一轮 beat 写新格式快照即自动恢复)。
+    items: list[BollScanItem] = []
+    skipped = 0
+    for row in data.get("items", []):
+        try:
+            items.append(BollScanItem(**row))
+        except ValidationError:  # noqa: PERF203
+            skipped += 1
+    if skipped:
+        logger.warning(
+            "[boll-scan] 跳过 %d 条不兼容快照行(部署过渡?)· 待下一轮 beat 刷新恢复", skipped,
+        )
 
     if bias is not None:
         want = _BIAS_FILTER[bias]
