@@ -168,12 +168,15 @@ class BollScanItem(BaseModel):
     state: str = Field(description="6 口诀状态枚举值(trend_up/range/squeeze/…)")
     state_label: str = Field(description="状态中文口诀(三线齐上·上升结构 等)")
     bias: str = Field(description="结构倾向 · 仅 偏多/偏空/中性(描述非建议)")
-    pct_b: float = Field(description="%B 位置 (close-lower)/(upper-lower)")
+    pct_b: float = Field(description="通道位置 %B = (close-lower)/(upper-lower)")
+    zone_label: str = Field(description="通道位置中文(破上轨/近上轨/近中轨/近下轨/破下轨/中间)")
+    bandwidth: float = Field(description="带宽 = (upper-lower)/mid · 布林衍生(结构数据,无方向)")
     close: float = Field(gt=0)
     mid: float = Field(gt=0, description="布林中轨 MA20")
     upper: float = Field(gt=0, description="布林上轨 +2σ")
     lower: float = Field(gt=0, description="布林下轨 −2σ")
     change_pct_24h: float | None = Field(default=None, description="24h 涨跌% · 缺采集为 None")
+    funding_rate: float | None = Field(default=None, description="最新资金费率 · 缺为 None")
     transition: bool = Field(default=False, description="本轮是否发生状态转换(边沿)")
     transition_from: str | None = Field(
         default=None, description="转换前状态中文(仅 transition=true 时有)",

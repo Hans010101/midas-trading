@@ -33,7 +33,10 @@ from app.services.ai.boll_state import (
     to_snapshot_row,
 )
 from app.services.clickhouse_client import ClickHouseClient
-from app.services.clickhouse_crypto import select_latest_tickers
+from app.services.clickhouse_crypto import (
+    select_latest_funding_rates,
+    select_latest_tickers,
+)
 from tasks.crypto_metrics_ingest import _all_usdt_perp_symbols
 
 logger = logging.getLogger(__name__)
@@ -82,6 +85,13 @@ async def _boll_scan_async() -> dict[str, int]:
             order="DESC", limit=_UNIVERSE_N,
         )
         change_map = {t.symbol.replace("/", ""): t.change_pct_24h for t in universe_tickers}
+        # ★A-2:批量【一次 query】读 universe 最新资金费率(argMax GROUP BY · 读 CH 不去币安)·
+        #   读失败降级空 dict(funding 全 None),带宽/布林快照照常落(吸取 ticker 教训:单点不放大)。
+        try:
+            funding_map = await select_latest_funding_rates(ch._client, symbols=universe)  # noqa: SLF001
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[boll-scan] 批量读资金费率失败 · funding 降级 None: %s", exc)
+            funding_map = {}
 
         for sym in universe:
             klines = await ch.select_kline(
@@ -99,6 +109,7 @@ async def _boll_scan_async() -> dict[str, int]:
             snapshot_rows.append(
                 to_snapshot_row(
                     sym, snap, change_pct_24h=change_map.get(sym),
+                    funding_rate=funding_map.get(sym),
                     # decode_responses=True → redis.get 实为 str|None(stub 误宽成 bytes)
                     transition=is_transition, prev_state=cast("str | None", prev),
                 ),

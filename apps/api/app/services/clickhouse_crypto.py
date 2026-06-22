@@ -494,6 +494,25 @@ async def merge_fear_greed_into_latest_overview(
 # ============================================================================
 
 
+async def select_latest_funding_rates(
+    client: AsyncClient, *, symbols: list[str],
+) -> dict[str, float]:
+    """批量取多 symbol 最新资金费率 · ★一个 query(argMax(rate,ts) GROUP BY symbol)。
+
+    symbol 用 Binance 风格(无斜杠 · 'BTCUSDT')· 跟 crypto_funding_rate 存储一致。
+    返回 {symbol: rate} · 无数据的 symbol 不出现(调用方降级 None)。
+    给做T快照批量取费率用:一次 query 覆盖 150 币,绝不 150 次单查、不去币安。
+    """
+    if not symbols:
+        return {}
+    res = await client.query(
+        "SELECT symbol, argMax(rate, ts) FROM crypto_funding_rate FINAL "
+        "WHERE symbol IN %(syms)s GROUP BY symbol",
+        parameters={"syms": symbols},
+    )
+    return {str(r[0]): float(r[1]) for r in res.result_rows}
+
+
 async def select_futures_metrics_batch(
     client: AsyncClient, *, symbols: list[str],
 ) -> dict[str, dict[str, float]]:

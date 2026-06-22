@@ -33,8 +33,14 @@ def _snapshot_json() -> str:
         zone="lower", close=3500, mid=3600, upper=3720, lower=3480,
     )
     rows = [
-        to_snapshot_row("BTCUSDT", btc, change_pct_24h=5.2, transition=True, prev_state="range"),
-        to_snapshot_row("ETHUSDT", eth, change_pct_24h=-3.1, transition=False, prev_state="trend_down"),
+        to_snapshot_row(
+            "BTCUSDT", btc, change_pct_24h=5.2, funding_rate=0.0091,
+            transition=True, prev_state="range",
+        ),
+        to_snapshot_row(
+            "ETHUSDT", eth, change_pct_24h=-3.1, funding_rate=-0.0042,
+            transition=False, prev_state="trend_down",
+        ),
     ]
     return json.dumps({"as_of": "2026-06-22T08:00:00+00:00", "items": rows}, ensure_ascii=False)
 

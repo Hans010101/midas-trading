@@ -132,11 +132,14 @@ export interface BollScanItem {
   state_label: string // 状态中文口诀
   bias: string // 结构倾向 · 偏多 / 偏空 / 中性
   pct_b: number
+  zone_label: string // 通道位置中文(破上轨/近上轨/近中轨/近下轨/破下轨/中间)· 后端单源
+  bandwidth: number // 带宽 = (upper-lower)/mid · 布林衍生(结构数据,无方向)
   close: number
   mid: number
   upper: number
   lower: number
   change_pct_24h: number | null
+  funding_rate: number | null // 最新资金费率 · 批量读 CH · 缺为 null
   transition: boolean // 本轮是否发生状态转换
   transition_from: string | null // 转换前状态中文(仅 transition=true)
 }
