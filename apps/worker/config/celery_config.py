@@ -247,6 +247,15 @@ beat_schedule = {
         "schedule": crontab(minute="7-59/30"),
         "options": {"expires": 1500},
     },
+    # ── 布林做T扫描器 M1(★影子模式 · 只打日志不发 TG)──────────────────────────────
+    "crypto-boll-scan": {
+        "task": "tasks.crypto.boll_scan",
+        # 15m bar 收盘后 3 分钟扫(:03/:18/:33/:48 · 留 15m 采集写入余量)· 纯读 CH(klines/tickers)
+        # 不打 Binance(无权重冲突)· 状态/冷却进 Redis · 影子模式只 logger.info 本该推送的文案。
+        # expires 600:本轮没及时领走就丢(下个 15m 周期再扫,不堆任务)。
+        "schedule": crontab(minute="3,18,33,48"),
+        "options": {"expires": 600},
+    },
     "crypto-fear-greed-refresh": {
         "task": "tasks.crypto.fear_greed_refresh",
         # alternative.me FGI 每日更新一次 · 每 6 小时一轮即可保证当日值及时合并入 overview

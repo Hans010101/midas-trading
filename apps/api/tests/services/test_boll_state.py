@@ -1,0 +1,114 @@
+"""布林做T状态机 M1 单测:状态分类 + 结构倾向 + ★红线措辞 + ★影子门禁 spy/never。"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
+from app.schemas.market import Kline
+from app.services.ai.boll_state import (
+    _FORBIDDEN_PUSH_WORDS,
+    STRUCTURE_DISCLAIMER,
+    BollState,
+    build_session_message,
+    classify,
+    render_card,
+    validate_shadow_push,
+)
+
+
+def _klines(closes: list[float]) -> list[Kline]:
+    """从收盘价序列造 Kline(boll 只用 close · high/low/open 取 close 邻域 · ts 递增)。"""
+    base = datetime(2026, 6, 22, 0, 0, tzinfo=UTC)
+    out: list[Kline] = []
+    for i, c in enumerate(closes):
+        out.append(
+            Kline(
+                ts=base + timedelta(minutes=15 * i),
+                open=c, high=c * 1.001, low=c * 0.999, close=c, volume=1.0,
+            ),
+        )
+    return out
+
+
+# ── 状态分类 ────────────────────────────────────────────────────────────────
+
+def test_trend_up() -> None:
+    snap = classify(_klines([100 + i * 0.6 for i in range(28)]))
+    assert snap is not None
+    assert snap.state is BollState.TREND_UP
+    assert snap.bias == "偏多"
+
+
+def test_trend_down() -> None:
+    snap = classify(_klines([120 - i * 0.6 for i in range(28)]))
+    assert snap is not None
+    assert snap.state is BollState.TREND_DOWN
+    assert snap.bias == "偏空"
+
+
+def test_range_flat() -> None:
+    # 围绕 100 窄幅震荡 · 中轨走平 + 带宽平稳 → RANGE
+    closes = [100 + (0.5 if i % 2 else -0.5) for i in range(28)]
+    snap = classify(_klines(closes))
+    assert snap is not None
+    assert snap.state is BollState.RANGE
+
+
+def test_squeeze() -> None:
+    # 前 20 根宽幅(±4)→ 后 8 根几乎不动 → 近 20 窗口 std 收缩 → 带宽收口 → SQUEEZE
+    wide = [100 + (4 if i % 2 else -4) for i in range(20)]
+    tight = [100.0] * 8
+    snap = classify(_klines([*wide, *tight]))
+    assert snap is not None
+    assert snap.state is BollState.SQUEEZE
+    assert snap.bias == "中性"
+
+
+def test_insufficient_bars_returns_none() -> None:
+    assert classify(_klines([100.0] * 10)) is None
+
+
+# ── ★红线:措辞无买卖词 ──────────────────────────────────────────────────────
+
+def test_render_card_has_no_trade_words() -> None:
+    snap = classify(_klines([100 + i * 0.6 for i in range(28)]))
+    assert snap is not None
+    card = render_card("BTCUSDT", snap)
+    for word in _FORBIDDEN_PUSH_WORDS:
+        assert word not in card, f"结构卡不得含买卖/预测词:{word}"
+    # 倾向标签只用偏多/偏空/中性
+    assert any(b in card for b in ("偏多", "偏空", "中性"))
+
+
+# ── ★影子门禁 validate_shadow_push:spy(拒)/ never(正常放行)────────────────
+
+def test_gate_rejects_buy_imperative() -> None:
+    bad = f"【BTCUSDT】三线齐上 · 建议买入抄底\n{STRUCTURE_DISCLAIMER}"
+    with pytest.raises(ValueError, match="买卖祈使"):
+        validate_shadow_push(bad)
+
+
+def test_gate_rejects_missing_disclaimer() -> None:
+    with pytest.raises(ValueError, match="免责"):
+        validate_shadow_push("【BTCUSDT】三线齐上·上升结构 · 结构倾向:偏多")
+
+
+def test_gate_rejects_marketing() -> None:
+    bad = f"【BTCUSDT】稳赚不赔的结构\n{STRUCTURE_DISCLAIMER}"
+    with pytest.raises(ValueError, match="营销"):
+        validate_shadow_push(bad)
+
+
+def test_build_session_message_ok() -> None:
+    snaps = [classify(_klines([100 + i * 0.6 for i in range(28)]))]
+    cards = [render_card("BTCUSDT", s) for s in snaps if s is not None]
+    msg = build_session_message(cards)
+    # ★末尾恰好一行免责
+    assert msg.rstrip().endswith(STRUCTURE_DISCLAIMER)
+    assert msg.count(STRUCTURE_DISCLAIMER) == 1
+    # ★正文(末尾免责行之外)无买卖/预测词(免责「非建议」含「建议」属正常,只查正文)
+    body = msg.rstrip()[: -len(STRUCTURE_DISCLAIMER)]
+    for word in _FORBIDDEN_PUSH_WORDS:
+        assert word not in body
