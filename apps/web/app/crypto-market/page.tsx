@@ -23,6 +23,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { BollScanList } from '@/components/crypto/boll-scan-list'
 import { TopNav } from '@/components/layout/top-nav'
 import {
   fetchCryptoOverview,
@@ -77,6 +78,8 @@ export default function CryptoMarketPage() {
   const [sortKey, setSortKey] = useState<SortKey>('chgPct')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [query, setQuery] = useState('')
+  // 榜单切换:涨幅榜(默认 · 现状不变)⇄ 做T信号(读 A-1 快照)· 纯前端状态,不刷整页
+  const [board, setBoard] = useState<'gainers' | 'boll'>('gainers')
 
   const overviewQ = useQuery({
     queryKey: ['crypto-overview'],
@@ -218,10 +221,23 @@ export default function CryptoMarketPage() {
             />
           </div>
 
-          {/* 工具条 */}
+          {/* 工具条:榜单切换器 + (仅涨幅榜)搜索/刷新 */}
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-serif text-base font-bold text-foreground">合约 24H 涨幅榜</h2>
+            {/* ★切换器:合约 24H 涨幅榜 ⇄ 做T信号(默认涨幅榜 · 前端状态,不刷整页)*/}
+            <div className="inline-flex rounded-lg border border-paper bg-surface-card p-0.5">
+              <button type="button" onClick={() => setBoard('gainers')}
+                className={cn('rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                  board === 'gainers' ? 'bg-midas-red text-white shadow-sm' : 'text-muted-foreground hover:text-midas-red')}>
+                合约 24H 涨幅榜
+              </button>
+              <button type="button" onClick={() => setBoard('boll')}
+                className={cn('rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                  board === 'boll' ? 'bg-midas-red text-white shadow-sm' : 'text-muted-foreground hover:text-midas-red')}>
+                做T信号
+              </button>
+            </div>
 
+            {board === 'gainers' && (
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 rounded-md border border-paper bg-surface-card px-3 py-1.5 text-sm">
                 <SearchIcon />
@@ -234,9 +250,11 @@ export default function CryptoMarketPage() {
                 <RefreshIcon />刷新
               </button>
             </div>
+            )}
           </div>
 
-          {/* 榜单表格 */}
+          {/* 榜单表格(★board==='gainers' 守卫包裹 · 涨幅榜原逻辑零改,仅被切换控制显隐)*/}
+          {board === 'gainers' && (
           <div className="overflow-x-auto rounded-lg border border-paper">
             <table className="w-full min-w-[1100px] border-collapse text-sm">
               <thead>
@@ -291,13 +309,19 @@ export default function CryptoMarketPage() {
               </tbody>
             </table>
           </div>
+          )}
 
           {/* 底部一行(榜单显示前 100 · 更多请搜索 · 居中 · 四市场统一)*/}
+          {board === 'gainers' && (
           <p className="mt-4 text-center text-xs text-muted-foreground/70">
             {query.trim()
               ? `命中 ${viewRows.length} 个 · 显示前 ${Math.min(BOARD_SIZE, viewRows.length)}`
               : '榜单显示前 100 · 更多请搜索查询'}
           </p>
+          )}
+
+          {/* ── 做T信号列表(board==='boll' · 读 A-1 /crypto/boll-scan 快照)── */}
+          {board === 'boll' && <BollScanList onSymbolClick={openDetail} />}
         </div>
       </main>
     </div>
