@@ -157,13 +157,18 @@ async def _backfill_many(
             batch = symbols[i : i + _BACKFILL_FETCH_CONCURRENCY]
             for sym, rows, exc in await asyncio.gather(*(_fetch_one(s) for s in batch)):
                 if exc is not None or rows is None:
-                    logger.warning("[backfill_many] %s 失败:%s", sym, exc)
+                    logger.warning("[backfill_many] %s fetch 失败:%s", sym, exc)
                     failed.append(sym)
                     continue
-                # CH 写串行:同一 async 客户端不并发写
-                written_total += await ch.insert_kline(
-                    rows, symbol=sym, market=market, period=period, instrument=instrument,
-                )
+                # CH 写串行:同一 async 客户端不并发写。★insert 失败也只计入 failed、不中断整批 ——
+                # 否则一个币的 insert 异常会炸掉整任务,头部已写、长尾饿死(写入侧饥饿根因)。
+                try:
+                    written_total += await ch.insert_kline(
+                        rows, symbol=sym, market=market, period=period, instrument=instrument,
+                    )
+                except Exception as exc:  # noqa: BLE001 — 单币 insert 失败不中断长尾
+                    logger.warning("[backfill_many] %s insert 失败:%s", sym, exc)
+                    failed.append(sym)
     finally:
         await source.close()
         await ch.close()
