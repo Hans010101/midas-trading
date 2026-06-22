@@ -123,3 +123,32 @@ export function fetchFuturesMetricsBatch(
     signal,
   )
 }
+
+// ── 布林做T结构信号(做T A-2)· 只读 A-1 的 /crypto/boll-scan 快照 ────────────────
+// 字段对齐后端 schemas.crypto.BollScanItem / BollScanResponse · 全是结构描述,无买卖语义。
+export interface BollScanItem {
+  symbol: string // Binance 风格 'BTCUSDT'
+  state: string // 6 口诀枚举值
+  state_label: string // 状态中文口诀
+  bias: string // 结构倾向 · 偏多 / 偏空 / 中性
+  pct_b: number
+  close: number
+  mid: number
+  upper: number
+  lower: number
+  change_pct_24h: number | null
+  transition: boolean // 本轮是否发生状态转换
+  transition_from: string | null // 转换前状态中文(仅 transition=true)
+}
+
+export interface BollScanResponse {
+  as_of: string | null // 快照时间 · null = 暂无快照
+  count: number
+  disclaimer: string // 免责口径(红线 · 页面底部展示)
+  items: BollScanItem[]
+}
+
+/** 布林做T信号列表 · 只读 A-1 快照(无快照返空列表 + as_of=null,不报错)。 */
+export function fetchBollScan(signal?: AbortSignal): Promise<BollScanResponse> {
+  return getJson<BollScanResponse>('/api/v1/crypto/boll-scan', signal)
+}
