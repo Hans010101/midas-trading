@@ -60,6 +60,23 @@ _TOP_30_PERP: tuple[str, ...] = (
 )
 
 
+# 非加密永续黑名单(基础名 · 不含 /USDT 后缀)· Binance fapi 近年上的美股/ETF/贵金属/商品代币化永续。
+# ★MVP 临时兜底、注定不完美会过时;真正防未来新增非加密的主力是【规则层】(USDT 本位 + 排交割 _ +
+#   排非 USDT 计价)· 见 _all_usdt_perp_symbols。★产品已确认为【加密】、绝不排除:
+#   MET / AGT / RE / MEGA / S / H / W(故不在本集合内)· 极小概率同名冲突时以加密币优先。
+_NON_CRYPTO_EXCLUDE: frozenset[str] = frozenset({
+    # 美股 / ETF
+    "SPCX", "SKHYNIX", "SOXL", "SNDK", "INTC", "QQQ", "MSTR", "EWY", "CRCL", "MU",
+    "MRVL", "SPY", "NVDA", "AMD", "TSLA", "SAMSUNG", "QCOM", "COIN", "MSFT", "AAPL",
+    "GOOGL", "META", "NFLX", "AVGO", "ORCL", "CRM", "ADBE", "CSCO", "JPM", "BRKB",
+    "COST", "WMT", "DIS", "BABA", "UBER", "LLY", "RIVN", "ZM", "EBAY", "IWM",
+    "EWZ", "XLE", "DKNG", "BX", "HOOD", "RKLB", "IREN", "NBIS", "CRWV", "MARA",
+    "RDDT", "PLTR", "SOFI", "HIMS", "GME", "AAOI", "ARM", "TSM",
+    # 贵金属 / 商品
+    "XAU", "XAG", "PAXG", "XAUT", "XPT", "XPD", "CL", "NATGAS", "COPPER",
+})
+
+
 # ============================================================================
 # CH async client helper · 每 task 自己建/关 · Celery 不共享 lifespan
 # ============================================================================
@@ -80,32 +97,37 @@ async def _get_ch_client() -> Any:
 
 
 async def _all_usdt_perp_symbols(ch: Any) -> list[str]:
-    """全量取 Binance USDT 本位永续合约 · 返回 Binance 风格(无斜杠)。
+    """全量取 Binance USDT 本位【纯加密】永续合约 · 按最新成交额降序 · 返回 Binance 风格(无斜杠)。
 
-    ADR-0018:采集层全量覆盖(~527 个 USDT 永续),展示层任意排序/筛选解耦——
-    不再用「成交额 top100」截断(否则跌幅榜 / 按资金费率·OI 排序时,需要的币
-    不在 top100 里 → 无数据)。
+    ADR-0018:采集层全量覆盖,展示层任意排序/筛选解耦——不截断(funding/OI/多空比全市场采;
+    15m kline 由调用方 [:N] 取 Top N)。冷启动(ticker 表空)回退 _TOP_30_PERP 种子,名单永不为空。
 
-    数据来自 ticker_24h_scan 已落库的 crypto_ticker_24h(全市场 perp,~600+)·
-    只取 quote=USDT(ccxt 风格以 '/USDT' 结尾)· 仍按成交额降序返回(只影响采集
-    顺序、不截断,热门币先采)。冷启动(ticker 表还空)时回退 _TOP_30_PERP 种子,
-    名单永不为空。crypto_ticker_24h 里 symbol 是 ccxt 风格 'BTC/USDT',这里转成
-    Binance 风格 'BTCUSDT'(futures 端点要求)。
+    ★去重 + 纯加密(fix/perp-universe-dedup-crypto-only):
+      · 去重 = GROUP BY symbol(1 symbol 1 行)· 不依赖 ReplacingMergeTree FINAL(后台 merge 异步、
+        运行时常没去净 → 旧版 [:150] 被同币多 ts 快照吃满、distinct 仅 54 的根因)。
+      · 纯加密 = 规则层(USDT 本位 + 排交割 `_` + 排 /USDC 等非 USDT 计价)为主力 +
+        _NON_CRYPTO_EXCLUDE 黑名单兜当下(Binance fapi 近年上的美股/ETF/贵金属/商品代币化永续)。
+    crypto_ticker_24h symbol 为 ccxt 'BTC/USDT',这里转 Binance 风格 'BTCUSDT'(futures 端点要求)。
     """
     try:
         result = await ch.query(
             """
-            SELECT symbol FROM (
-                SELECT symbol, quote_volume_24h,
-                       ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY ts DESC) AS rn
-                FROM crypto_ticker_24h FINAL
-                WHERE instrument = 'perp' AND endsWith(symbol, '/USDT')
-            )
-            WHERE rn = 1
-            ORDER BY quote_volume_24h DESC
+            SELECT symbol
+            FROM crypto_ticker_24h
+            WHERE instrument = 'perp'
+              AND endsWith(symbol, '/USDT')      -- 仅 USDT 本位(排 /USDC 等重复对)
+              AND position(symbol, '_') = 0      -- 排交割合约(如 BTCUSDT_260626)
+            GROUP BY symbol                       -- ★真去重:1 symbol 1 行(不依赖 FINAL 异步 merge)
+            ORDER BY argMax(quote_volume_24h, ts) DESC  -- 每币取最新成交额降序
             """,
         )
-        symbols = [str(r[0]).replace("/", "") for r in result.result_rows]
+        # ★黑名单(美股/ETF/贵金属/商品)在此过滤:基础名(去 /USDT)比对 · 全在调用方 [:N] 截断之前,
+        #   保证取满 N 个有效加密永续。规则层(上面 WHERE)是防未来新增非加密的主力,黑名单只兜当下。
+        symbols = [
+            str(r[0]).replace("/", "")
+            for r in result.result_rows
+            if str(r[0]).split("/", 1)[0] not in _NON_CRYPTO_EXCLUDE
+        ]
     except Exception as exc:  # noqa: BLE001
         logger.warning("[crypto] 全量取 USDT 永续名单失败 · 回退 _TOP_30_PERP 种子:%s", exc)
         return list(_TOP_30_PERP)
