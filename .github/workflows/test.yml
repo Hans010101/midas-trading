@@ -9,10 +9,12 @@ on:
     branches: [main, 'feat/**', 'fix/**']
     paths:
       - 'apps/api/**'
+      - 'apps/worker/**'   # ★worker 改动也跑测试闸(原只含 apps/api,worker-only 改动会静默跳过 CI)
       - '.github/workflows/test.yml'
   pull_request:
     paths:
       - 'apps/api/**'
+      - 'apps/worker/**'
   workflow_dispatch:
 
 concurrency:

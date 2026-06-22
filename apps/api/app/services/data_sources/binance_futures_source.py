@@ -50,6 +50,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# fapi 分钟权重上限 2400/IP · 达此阈值(75%)WARNING 告警(平时 DEBUG 不刷屏 · _get_json 全维度共用)。
+_FAPI_WEIGHT_WARN = 1800
+
 # Binance Futures fapi 期间映射(跟 spot 一致)
 _FAPI_INTERVAL: dict[Period, str] = {
     "1m": "1m",
@@ -148,6 +151,15 @@ class BinanceFuturesSource(BaseDataSource):
                 symbol=symbol_for_error,
                 upstream="binance-futures",
             )
+
+        # ★权重埋点:Binance 每响应回 X-MBX-USED-WEIGHT-1M(当前 IP 本分钟已用权重 · 上限 2400)·
+        #   让生产真实占用可观测;近上限才 WARNING(平时 DEBUG · _get_json 全维度共用,免刷屏)。
+        used_weight = resp.headers.get("x-mbx-used-weight-1m")
+        if used_weight:
+            if used_weight.isdigit() and int(used_weight) >= _FAPI_WEIGHT_WARN:
+                logger.warning("fapi used-weight-1m=%s 接近 2400/min 上限", used_weight)
+            else:
+                logger.debug("fapi used-weight-1m=%s", used_weight)
 
         try:
             return resp.json()

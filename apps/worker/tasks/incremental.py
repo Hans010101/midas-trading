@@ -15,11 +15,14 @@ from typing import Any
 
 from celery import shared_task
 
+from app.services.clickhouse_client import ClickHouseClient
 from app.services.data_sources.exceptions import DataSourceError
 from app.services.hk_pool import HK_POOL_META, HK_POOL_SYMBOLS
 
-# 复用 data_ingest 里的核心异步函数 _backfill_one(本质就是"拉 + 写"幂等操作)
-from tasks.data_ingest import _backfill_one
+# 复用 data_ingest 的核心异步函数:_backfill_one(单标的)/ _backfill_many(批量·复用单一客户端)·
+# _all_usdt_perp_symbols 取全市场 USDT 永续(已按 quote_volume_24h 降序)→ 切片即成交额 Top N。
+from tasks.crypto_metrics_ingest import _all_usdt_perp_symbols
+from tasks.data_ingest import _backfill_many, _backfill_one
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +34,12 @@ _HK_POOL_LIMIT = 300
 # 拉够画图根数(≥ chart 的 150)· crypto=perp(对齐主体)· us/cn=spot · 范围适度(~11 只,别 big batch)。
 _WARM_LIMIT = 200
 _WARM_CRYPTO = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"]
-# 加密 15m 已收盘 K线:首采 200 根(15m×200≈50h · ≥ chart 150)· 常态去重幂等多拉不重复写
-_CRYPTO_15M_LIMIT = 200
+# 加密 15m 已收盘 K线 Top-N 采集:
+#   _CRYPTO_15M_TOPN = 成交额 Top N 永续(_all_usdt_perp_symbols 已按 quote_volume_24h 降序,切片即得)
+#   _CRYPTO_15M_LIMIT = 每币 100 根(★fapi klines limit≤100 权重=1)· 15m×100≈25h · 幂等去重 ·
+#     新币随每 5min 滚动窗口逐步补足图深(漏跑/新上榜自愈)。
+_CRYPTO_15M_TOPN = 150
+_CRYPTO_15M_LIMIT = 100
 _WARM_US = [("AAPL", "Apple"), ("NVDA", "NVIDIA"), ("TSLA", "Tesla")]
 _WARM_CN = [("600519", "贵州茅台"), ("000001", "平安银行"), ("300750", "宁德时代")]
 
@@ -161,27 +168,30 @@ def warm_popular_klines(self: Any) -> dict[str, int]:  # noqa: ARG001
     max_retries=0,
 )
 def update_crypto_15m(self: Any) -> dict[str, int]:  # noqa: ARG001
-    """加密主流 5 币 15m【已收盘】K线采集(方案 C)· 每 5 分钟跑(15m 根 15min 收一次 · 冗余覆盖)。
+    """加密【成交额 Top N】永续 15m 已收盘 K线采集 · 每 5 分钟跑(15m 根 15min 收一次 · 冗余覆盖)。
 
-    ★只写已收盘根(_backfill_one drop_unclosed=True 丢当前未收盘根)→ 契合 insert_kline 同 ts
+    名单 = _all_usdt_perp_symbols()(已按 quote_volume_24h 降序)取前 _CRYPTO_15M_TOPN → 走批量
+    _backfill_many(单一 source+CH 复用)· 只写已收盘根(drop_unclosed=True)· insert_kline 同 ts
     跳过、永不重写,绕开普通 MergeTree 无法重写当前根的拦路虎。当前实时价由行情卡的 perp ticker
     承载(非本任务)· 本任务只给 K线图提供已定盘的 15m 形态。
-    单币失败不中断整批(记 warning + 计数)· sleep 错峰防限流 · 整体不 retry(下个 beat 补)。
+    单币失败不中断整批(_backfill_many 内记 warning + 收集失败名单)· 整体不 retry(下个 beat 补)。
+    ★warm_popular_klines 仍用原 5 币清单(缓存预热),与本任务解耦,本刀不扩它。
     """
-    ok = 0
-    fail = 0
-    for sym in _WARM_CRYPTO:
+    async def _run() -> tuple[int, list[str]]:
+        ch = await ClickHouseClient.create()
         try:
-            asyncio.run(
-                _backfill_one(
-                    sym, "crypto", sym, "15m", _CRYPTO_15M_LIMIT,
-                    instrument="perp", drop_unclosed=True,
-                ),
-            )
-            ok += 1
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("update_crypto_15m %s 失败:%s", sym, exc)
-            fail += 1
-        time.sleep(0.3)  # 错峰防限流
-    logger.info("[crypto-15m] ok=%d fail=%d", ok, fail)
-    return {"ok": ok, "fail": fail}
+            symbols = (await _all_usdt_perp_symbols(ch))[:_CRYPTO_15M_TOPN]
+        finally:
+            await ch.close()
+        return await _backfill_many(
+            symbols, "crypto", "15m",
+            limit=_CRYPTO_15M_LIMIT, instrument="perp", drop_unclosed=True,
+        )
+
+    written, failed = asyncio.run(_run())
+    logger.info(
+        "[crypto-15m] topn=%d written=%d failed=%d", _CRYPTO_15M_TOPN, written, len(failed),
+    )
+    if failed:
+        logger.warning("[crypto-15m] 失败 %d 币:%s", len(failed), ", ".join(failed[:20]))
+    return {"written": written, "failed": len(failed)}

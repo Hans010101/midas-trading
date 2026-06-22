@@ -115,6 +115,45 @@ async def _backfill_one(
         await ch.close()
 
 
+async def _backfill_many(
+    symbols: list[str],
+    market: Market,
+    period: Period,
+    *,
+    limit: int,
+    instrument: str = "perp",
+    drop_unclosed: bool = False,
+) -> tuple[int, list[str]]:
+    """批量回填(crypto USDT-M 永续 · 15m Top-N 采集用)。
+
+    ★复用单一客户端:函数内只建 1 个 BinanceFuturesSource + 1 个 ClickHouseClient,在符号
+    循环里复用 —— 避免 _backfill_one 每币新建 source/CH 连接的低效(Top-N 几十~上百币时显著)。
+    单币失败记 warning 不中断整批;每币间 sleep 0.25s 错峰防限流;insert_kline 同 ts 跳过(幂等)。
+    返回 (写入总根数, 失败 symbol 列表)。_backfill_one 保留不动(其它周期/市场仍在用)。
+    """
+    ch = await ClickHouseClient.create()
+    source = BinanceFuturesSource()
+    written_total = 0
+    failed: list[str] = []
+    try:
+        for sym in symbols:
+            try:
+                rows = await source.fetch_kline(sym, period, limit=limit)
+                if drop_unclosed:  # 方案 C:只写已收盘根
+                    rows = drop_unclosed_klines(rows, period)
+                written_total += await ch.insert_kline(
+                    rows, symbol=sym, market=market, period=period, instrument=instrument,
+                )
+            except Exception as exc:  # noqa: BLE001 — 单币失败不中断整批
+                logger.warning("[backfill_many] %s 失败:%s", sym, exc)
+                failed.append(sym)
+            await asyncio.sleep(0.25)  # 错峰防限流
+    finally:
+        await source.close()
+        await ch.close()
+    return written_total, failed
+
+
 @shared_task(
     bind=True,
     name="tasks.data_ingest.backfill_kline",

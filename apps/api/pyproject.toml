@@ -99,7 +99,9 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.mypy]
-python_version = "3.11"
+# 3.12(运行时实为 3.13)· 原 3.11 已过时,且 numpy 最新 stub 用 PEP 695 `type` 语句(需 ≥3.12),
+# mypy 按 3.11 解析会在 numpy stub 报 syntax 错、连累 app/ 检查中断(CI numpy 漂移坑)。
+python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
 
