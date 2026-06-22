@@ -19,7 +19,7 @@ import ccxt.async_support as ccxt_async
 from celery import shared_task
 
 from app.core.logging import configure_logging
-from app.schemas.market import Market, Period, SymbolMeta
+from app.schemas.market import Kline, Market, Period, SymbolMeta
 from app.services.clickhouse_client import ClickHouseClient, drop_unclosed_klines
 from app.services.data_sources.binance_futures_source import BinanceFuturesSource
 from app.services.data_sources.cn_source import AKShareCnSource
@@ -115,6 +115,11 @@ async def _backfill_one(
         await ch.close()
 
 
+# 批量回填的并发度:每批并发 N 个 Binance fetch(klines 权重=1,N 个=N 权重,对 2400/min 上限无压力)。
+# ★只并发慢的 Binance 往返;CH 写入仍串行(clickhouse-connect 单 async 客户端并发写不安全)。
+_BACKFILL_FETCH_CONCURRENCY = 8
+
+
 async def _backfill_many(
     symbols: list[str],
     market: Market,
@@ -126,28 +131,39 @@ async def _backfill_many(
 ) -> tuple[int, list[str]]:
     """批量回填(crypto USDT-M 永续 · 15m Top-N 采集用)。
 
-    ★复用单一客户端:函数内只建 1 个 BinanceFuturesSource + 1 个 ClickHouseClient,在符号
-    循环里复用 —— 避免 _backfill_one 每币新建 source/CH 连接的低效(Top-N 几十~上百币时显著)。
-    单币失败记 warning 不中断整批;每币间 sleep 0.25s 错峰防限流;insert_kline 同 ts 跳过(幂等)。
+    ★复用单一客户端:函数内只建 1 个 BinanceFuturesSource + 1 个 ClickHouseClient 全程复用。
+    ★有界并发(fix/worker-15m-starvation):每批并发 _BACKFILL_FETCH_CONCURRENCY 个 Binance fetch,
+    批内 CH 写入串行(单客户端并发写不安全)· 去掉原 per-币 sleep(0.25)空转 —— 150 币从 ~77s 压到
+    ~10-15s,使任务能在 worker 拥塞窗口内跑完(原 77s 长任务在 concurrency=2 被 568 币慢任务挤到
+    expires=280 而长尾不入库)。单币失败记 warning 不中断;insert_kline 同 ts 跳过(幂等)。
     返回 (写入总根数, 失败 symbol 列表)。_backfill_one 保留不动(其它周期/市场仍在用)。
     """
     ch = await ClickHouseClient.create()
     source = BinanceFuturesSource()
     written_total = 0
     failed: list[str] = []
+
+    async def _fetch_one(sym: str) -> tuple[str, list[Kline] | None, Exception | None]:
+        try:
+            rows = await source.fetch_kline(sym, period, limit=limit)
+            if drop_unclosed:  # 方案 C:只写已收盘根
+                rows = drop_unclosed_klines(rows, period)
+        except Exception as exc:  # noqa: BLE001 — 单币失败不中断整批
+            return sym, None, exc
+        return sym, rows, None
+
     try:
-        for sym in symbols:
-            try:
-                rows = await source.fetch_kline(sym, period, limit=limit)
-                if drop_unclosed:  # 方案 C:只写已收盘根
-                    rows = drop_unclosed_klines(rows, period)
+        for i in range(0, len(symbols), _BACKFILL_FETCH_CONCURRENCY):
+            batch = symbols[i : i + _BACKFILL_FETCH_CONCURRENCY]
+            for sym, rows, exc in await asyncio.gather(*(_fetch_one(s) for s in batch)):
+                if exc is not None or rows is None:
+                    logger.warning("[backfill_many] %s 失败:%s", sym, exc)
+                    failed.append(sym)
+                    continue
+                # CH 写串行:同一 async 客户端不并发写
                 written_total += await ch.insert_kline(
                     rows, symbol=sym, market=market, period=period, instrument=instrument,
                 )
-            except Exception as exc:  # noqa: BLE001 — 单币失败不中断整批
-                logger.warning("[backfill_many] %s 失败:%s", sym, exc)
-                failed.append(sym)
-            await asyncio.sleep(0.25)  # 错峰防限流
     finally:
         await source.close()
         await ch.close()
