@@ -353,7 +353,24 @@ class BinanceFuturesSource(BaseDataSource):
             if not isinstance(data, list):
                 # 单 symbol 时 Binance 返单对象 · 包装成数组
                 data = [data]
-            results = [_parse_ticker_row(r, instrument="perp") for r in data]
+            # ★单行解析失败跳过 + warn,绝不让某币缺字段炸掉整轮 fetch。
+            #   原列表推导「全有或全无」:一行抛 KeyError → 整个 fetch_ticker_24h raise →
+            #   _ticker_24h_scan_async 在 insert 之前崩 → crypto_ticker_24h(唯一写者)永不更新
+            #   → universe / 涨跌榜 冻结在上一好轮。同 _backfill_many / _merge_long_short 韧性范式。
+            results: list[Ticker24h] = []
+            skipped = 0
+            for r in data:
+                try:
+                    results.append(_parse_ticker_row(r, instrument="perp"))
+                except Exception as exc:  # noqa: BLE001
+                    skipped += 1
+                    sym = r.get("symbol", "?") if isinstance(r, dict) else "?"
+                    logger.warning("[binance-futures] ticker 行跳过 symbol=%s · %s", sym, exc)
+            if skipped:
+                logger.warning(
+                    "[binance-futures] ticker_24h 跳过 %d 行(字段缺失/格式异常)· 入 %d 行",
+                    skipped, len(results),
+                )
             if symbols:
                 wanted = set(symbols)
                 results = [t for t in results if _to_binance_symbol(t.symbol) in wanted]
@@ -606,19 +623,25 @@ def _parse_ticker_row(row: dict[str, Any], *, instrument: Literal["spot", "perp"
     """ticker/24hr 返回字典 · perp 字段示例:
     {symbol: BTCUSDT, lastPrice, priceChangePercent, highPrice, lowPrice,
      volume, quoteVolume, count}
+
+    ★容错(fix/ticker-scan-quotevolume-keyerror · 同 _parse_funding_row 范式):
+      · 量字段(volume / quoteVolume · schema ge=0)缺失 → 默认 0:某币偶发缺 quoteVolume
+        时以 0 量入库(成交额排序自然垫底、不进 Top-N),绝不 KeyError 炸整轮 fetch。
+      · 价字段(lastPrice / highPrice / lowPrice · schema gt=0)+ symbol 仍硬取:缺失 = 该行
+        非有效 ticker(默认 0 会撞 gt=0 校验)→ 抛错由 fetch_ticker_24h 单行 try 跳过+warn。
     """
-    binance_symbol = row["symbol"]  # "BTCUSDT"
+    binance_symbol = row["symbol"]  # "BTCUSDT" · 无 symbol = 非 ticker 行 → 上层跳过
     ccxt_symbol = _to_ccxt_symbol(binance_symbol)  # "BTC/USDT"
     return Ticker24h(
         symbol=ccxt_symbol,
         instrument=instrument,
         ts=datetime.now(tz=UTC),  # ticker 是当下快照 · 用本地拉取时间
         last_price=float(row["lastPrice"]),
-        change_pct_24h=float(row["priceChangePercent"]),
+        change_pct_24h=float(row.get("priceChangePercent") or 0),
         high_24h=float(row["highPrice"]),
         low_24h=float(row["lowPrice"]),
-        volume_24h=float(row["volume"]),
-        quote_volume_24h=float(row["quoteVolume"]),
+        volume_24h=float(row.get("volume") or 0),
+        quote_volume_24h=float(row.get("quoteVolume") or 0),
         count_24h=int(row.get("count", 0)),
     )
 
