@@ -15,13 +15,14 @@ from typing import Any
 
 from celery import shared_task
 
-from app.services.clickhouse_client import ClickHouseClient
 from app.services.data_sources.exceptions import DataSourceError
 from app.services.hk_pool import HK_POOL_META, HK_POOL_SYMBOLS
 
 # 复用 data_ingest 的核心异步函数:_backfill_one(单标的)/ _backfill_many(批量·复用单一客户端)·
 # _all_usdt_perp_symbols 取全市场 USDT 永续(已按 quote_volume_24h 降序)→ 切片即成交额 Top N。
-from tasks.crypto_metrics_ingest import _all_usdt_perp_symbols
+# ★_get_ch_client = 裸 clickhouse-connect 客户端(有 .query)· _all_usdt_perp_symbols 内部用 ch.query;
+#   ClickHouseClient 封装类无 .query → AttributeError 静默回退 30 种子 · 故须传裸客户端。
+from tasks.crypto_metrics_ingest import _all_usdt_perp_symbols, _get_ch_client
 from tasks.data_ingest import _backfill_many, _backfill_one
 
 logger = logging.getLogger(__name__)
@@ -177,20 +178,24 @@ def update_crypto_15m(self: Any) -> dict[str, int]:  # noqa: ARG001
     单币失败不中断整批(_backfill_many 内记 warning + 收集失败名单)· 整体不 retry(下个 beat 补)。
     ★warm_popular_klines 仍用原 5 币清单(缓存预热),与本任务解耦,本刀不扩它。
     """
-    async def _run() -> tuple[int, list[str]]:
-        ch = await ClickHouseClient.create()
+    async def _run() -> tuple[int, int, list[str]]:
+        # ★裸 clickhouse-connect 客户端(有 .query)· 同 funding/OI · 不能传 ClickHouseClient 封装类
+        #   (无 .query → AttributeError → 静默回退 30 种子 → 长尾 120 币永不入库 · 本刀根因)。
+        ch = await _get_ch_client()
         try:
             symbols = (await _all_usdt_perp_symbols(ch))[:_CRYPTO_15M_TOPN]
         finally:
             await ch.close()
-        return await _backfill_many(
+        written, failed = await _backfill_many(
             symbols, "crypto", "15m",
             limit=_CRYPTO_15M_LIMIT, instrument="perp", drop_unclosed=True,
         )
+        return len(symbols), written, failed
 
-    written, failed = asyncio.run(_run())
+    # ★打实际 universe 数(非常量 _CRYPTO_15M_TOPN)→ 若再回退种子,日志立现 universe=30 可立即发现。
+    universe, written, failed = asyncio.run(_run())
     logger.info(
-        "[crypto-15m] topn=%d written=%d failed=%d", _CRYPTO_15M_TOPN, written, len(failed),
+        "[crypto-15m] universe=%d written=%d failed=%d", universe, written, len(failed),
     )
     if failed:
         logger.warning("[crypto-15m] 失败 %d 币:%s", len(failed), ", ".join(failed[:20]))
