@@ -110,9 +110,10 @@ services:
 
   worker:
     restart: always
-    # Dockerfile 默认 --concurrency=4 · 4 prefork × 重库(akshare/ccxt/langchain/
-    # yfinance/langgraph)每进程 ~300M · 4 × 300M = 1.2G 远超 512M · 一启动就
-    # OOM(exit 137)· 0015 ADR · 降到 --concurrency=2 + 提到 1G · M1 流量绰绰有余
+    # 0015 ADR 曾因 512M 内存降到 --concurrency=2 + 1G(防 4×~300M OOM)。
+    # ★fix/worker-15m-concurrency:crypto 采集扩量后(15m 150币 + funding/OI/long_short/depth 各 568币)
+    #   2 进程被 568 币慢任务占满 → 15m 长尾饥饿。VPS 充足(总 7.1G / 可用 3.4G / swap 4G,worker 用 731M)
+    #   → 提到 --concurrency=4 + 2G(4 × ~365M ≈ 1.46G < 2G,安全),多 2 进程让 15m 等任务在慢任务占用时仍跑完。
     command:
       - celery
       - -A
@@ -120,7 +121,7 @@ services:
       - worker
       - --beat
       - --loglevel=info
-      - --concurrency=2
+      - --concurrency=4
     environment:
       DEBUG: "false"
     logging:
@@ -131,7 +132,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 2G
 
   # P1-4b 方案戊:vibe-worker 资源限额。
   # ★ P1-4b-1 实测 RSS ~64.5MiB @ concurrency=1 → 768M 严重高估;调到 256M(留 ~4x 余量,
