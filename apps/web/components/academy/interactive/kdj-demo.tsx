@@ -22,7 +22,8 @@ const linePts = (vals: number[]) => vals.map((v, i) => `${ix(i).toFixed(1)},${vy
 export function KdjDemo() {
   const [trend, setTrend] = useState(0.7)
   const { points, golden, death, bluntRun, bluntZone, jOut } = useMemo(() => {
-    const closes = Array.from({ length: N }, (_, i) => 100 + trend * i + 4 * Math.sin(i * 0.5))
+    // 趋势斜率 ×4:真实强趋势更陡,让强趋势档自然算出 J 冲出 0~100(K/D/J 公式未改,只是更典型的强趋势输入)
+    const closes = Array.from({ length: N }, (_, i) => 100 + trend * i * 4 + 4 * Math.sin(i * 0.5))
     const highs = closes.map((c, i) => c + 1.5 + Math.abs(2 * Math.sin(i * 0.8)))
     const lows = closes.map((c, i) => c - 1.5 - Math.abs(2 * Math.sin(i * 0.8)))
     const pts = computeKdj(highs, lows, closes, PER)
