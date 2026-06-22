@@ -62,7 +62,10 @@ _STATE_LABEL: dict[BollState, str] = {
     BollState.BREAKDOWN: "带宽开口·向下",
 }
 
-_ZONE_LABEL = {"upper": "近上轨", "mid": "近中轨", "lower": "近下轨", "middle": "中间"}
+_ZONE_LABEL = {
+    "over_upper": "破上轨", "upper": "近上轨", "mid": "近中轨",
+    "lower": "近下轨", "over_lower": "破下轨", "middle": "中间",
+}
 
 
 @dataclass(frozen=True)
@@ -81,8 +84,13 @@ class BollSnapshot:
 
 
 def _zone(pct_b: float) -> str:
+    # ★越界优先判定:%B>1 收盘超上轨(破上轨)· %B<0 收盘跌穿下轨(破下轨)· 同改 TG 影子 + 接口
+    if pct_b > 1.0:
+        return "over_upper"
     if pct_b > _PCTB_HIGH:
         return "upper"
+    if pct_b < 0.0:
+        return "over_lower"
     if pct_b < _PCTB_LOW:
         return "lower"
     if _PCTB_MID_LO <= pct_b <= _PCTB_MID_HI:
@@ -174,13 +182,15 @@ def to_snapshot_row(
     snap: BollSnapshot,
     *,
     change_pct_24h: float | None,
+    funding_rate: float | None,
     transition: bool,
     prev_state: str | None,
 ) -> dict[str, Any]:
-    """单币结构快照行(做T A-1 列表数据源 · ★复用 snap 不重算 · 纯描述、无买卖措辞)。
+    """单币结构快照行(做T A-1/A-2 列表数据源 · ★复用 snap 不重算 · 纯描述、无买卖措辞)。
 
     键与 schemas.crypto.BollScanItem 字段一一对应(extra=forbid)。transition_from 仅在
-    发生状态转换且有合法 prev 时给中文口诀,否则 None。
+    发生状态转换且有合法 prev 时给中文口诀,否则 None。bandwidth/zone_label 全是布林衍生
+    (零成本);funding_rate 由调用方批量读 CH 传入(无数据 None)。
     """
     transition_from: str | None = None
     if transition and prev_state:
@@ -194,11 +204,14 @@ def to_snapshot_row(
         "state_label": _STATE_LABEL[snap.state],
         "bias": snap.bias,
         "pct_b": snap.pct_b,
+        "zone_label": _ZONE_LABEL[snap.zone],  # 通道位置中文(破上轨/近上轨/…)· 后端单源
+        "bandwidth": snap.bandwidth,  # (upper-lower)/mid · 布林衍生零成本
         "close": snap.close,
         "mid": snap.mid,
         "upper": snap.upper,
         "lower": snap.lower,
         "change_pct_24h": change_pct_24h,
+        "funding_rate": funding_rate,  # 批量读 crypto_funding_rate · 无数据 None
         "transition": transition,
         "transition_from": transition_from,
     }

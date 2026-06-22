@@ -9,8 +9,10 @@ import pytest
 from app.schemas.market import Kline
 from app.services.ai.boll_state import (
     _FORBIDDEN_PUSH_WORDS,
+    _ZONE_LABEL,
     STRUCTURE_DISCLAIMER,
     BollState,
+    _zone,
     build_session_message,
     classify,
     render_card,
@@ -107,14 +109,21 @@ def test_gate_rejects_marketing() -> None:
 def test_snapshot_row_keys_and_no_trade_words() -> None:
     snap = classify(_klines([100 + i * 0.6 for i in range(28)]))
     assert snap is not None
-    row = to_snapshot_row("BTCUSDT", snap, change_pct_24h=5.0, transition=True, prev_state="range")
-    # ★键集合与 schemas.crypto.BollScanItem 字段一一对应(extra=forbid)
+    row = to_snapshot_row(
+        "BTCUSDT", snap, change_pct_24h=5.0, funding_rate=0.0001,
+        transition=True, prev_state="range",
+    )
+    # ★键集合与 schemas.crypto.BollScanItem 字段一一对应(extra=forbid · A-2 加 zone_label/bandwidth/funding_rate)
     assert set(row) == {
-        "symbol", "state", "state_label", "bias", "pct_b", "close",
-        "mid", "upper", "lower", "change_pct_24h", "transition", "transition_from",
+        "symbol", "state", "state_label", "bias", "pct_b", "zone_label", "bandwidth",
+        "close", "mid", "upper", "lower", "change_pct_24h", "funding_rate",
+        "transition", "transition_from",
     }
     assert row["transition_from"] == "三线走平·震荡结构"  # prev=range 的中文口诀
     assert row["bias"] in ("偏多", "偏空", "中性")
+    assert row["funding_rate"] == 0.0001
+    assert isinstance(row["bandwidth"], float)
+    assert row["zone_label"] in ("破上轨", "近上轨", "近中轨", "近下轨", "破下轨", "中间")
     blob = f"{row}"
     for word in _FORBIDDEN_PUSH_WORDS:
         assert word not in blob, f"快照行不得含买卖/预测词:{word}"
@@ -123,10 +132,25 @@ def test_snapshot_row_keys_and_no_trade_words() -> None:
 def test_snapshot_row_no_transition_from_when_stable() -> None:
     snap = classify(_klines([100 + i * 0.6 for i in range(28)]))
     assert snap is not None
-    row = to_snapshot_row("BTCUSDT", snap, change_pct_24h=None, transition=False, prev_state="trend_up")
+    row = to_snapshot_row(
+        "BTCUSDT", snap, change_pct_24h=None, funding_rate=None,
+        transition=False, prev_state="trend_up",
+    )
     assert row["transition"] is False
     assert row["transition_from"] is None
     assert row["change_pct_24h"] is None
+    assert row["funding_rate"] is None  # 无 funding 数据 → 降级 None(不崩)
+
+
+def test_zone_overshoot_labels() -> None:
+    # ★越界标注(P2):%B>1 破上轨 · %B<0 破下轨 · 同改 TG 影子 + 接口快照(单源 _zone)
+    assert _zone(1.2) == "over_upper"
+    assert _zone(-0.1) == "over_lower"
+    assert _zone(0.9) == "upper"
+    assert _zone(0.1) == "lower"
+    assert _zone(0.5) == "mid"
+    assert _ZONE_LABEL["over_upper"] == "破上轨"
+    assert _ZONE_LABEL["over_lower"] == "破下轨"
 
 
 def test_build_session_message_ok() -> None:

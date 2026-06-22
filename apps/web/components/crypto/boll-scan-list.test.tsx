@@ -22,9 +22,11 @@ describe('biasTone · 结构倾向配色复用涨跌色偏好', () => {
   })
 })
 
-describe('pctbZone · %B 位置标注(对齐后端阈值)', () => {
-  it('>0.8 近上轨', () => expect(pctbZone(0.85)).toBe('近上轨'))
-  it('<0.2 近下轨', () => expect(pctbZone(0.12)).toBe('近下轨'))
+describe('pctbZone · 通道位置标注(6 值 · 对齐后端 _zone)', () => {
+  it('>1 破上轨(越界)', () => expect(pctbZone(1.2)).toBe('破上轨'))
+  it('0.8~1 近上轨', () => expect(pctbZone(0.85)).toBe('近上轨'))
+  it('<0 破下轨(越界)', () => expect(pctbZone(-0.1)).toBe('破下轨'))
+  it('0~0.2 近下轨', () => expect(pctbZone(0.12)).toBe('近下轨'))
   it('0.4~0.6 近中轨', () => expect(pctbZone(0.5)).toBe('近中轨'))
   it('其余 中间', () => expect(pctbZone(0.3)).toBe('中间'))
 })

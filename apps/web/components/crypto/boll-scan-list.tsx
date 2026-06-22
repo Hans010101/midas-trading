@@ -22,9 +22,12 @@ function fmtPct(n: number | null): string {
   if (n == null) return '—'
   return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`
 }
-// %B 位置标注 · 本地从 pct_b 派生(对齐后端 boll_state 阈值 0.8 / 0.2 / 0.4~0.6)· 导出供单测
+// %B 位置标注【兜底】· 正常用后端 zone_label(单源)· 仅旧快照缺 zone_label 时本地派生。
+// 6 值对齐后端 boll_state._zone(破上轨 %B>1 / 破下轨 %B<0 / 近上下轨 / 近中轨 / 中间)。
 export function pctbZone(b: number): string {
+  if (b > 1) return '破上轨'
   if (b > 0.8) return '近上轨'
+  if (b < 0) return '破下轨'
   if (b < 0.2) return '近下轨'
   if (b >= 0.4 && b <= 0.6) return '近中轨'
   return '中间'
@@ -56,9 +59,11 @@ export function BollScanList({
 
   const items = useMemo(() => {
     const all = q.data?.items ?? []
-    return all.filter(
+    const filtered = all.filter(
       (it) => (bias === 'all' || it.bias === bias) && (!onlyTransition || it.transition),
     )
+    // ★P3:本轮转换(刚出现的信号)置顶 · 稳定排序保留后端原有次序(transition 内部不乱)
+    return [...filtered].sort((a, b) => Number(b.transition) - Number(a.transition))
   }, [q.data, bias, onlyTransition])
 
   // 免责优先用接口返回值(红线口径由后端锁死)· 兜底常量防接口异常时丢免责
@@ -105,7 +110,7 @@ export function BollScanList({
 
       {/* 表格 */}
       <div className="overflow-x-auto rounded-lg border border-paper">
-        <table className="w-full min-w-[900px] border-collapse text-sm">
+        <table className="w-full min-w-[1100px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-paper bg-surface-card text-xs text-muted-foreground">
               <th className="w-12 px-3 py-2 text-center font-medium">#</th>
@@ -113,7 +118,9 @@ export function BollScanList({
               <th className="px-3 py-2 text-right font-medium">最新价</th>
               <th className="px-3 py-2 text-left font-medium">布林状态</th>
               <th className="px-3 py-2 text-center font-medium">结构倾向</th>
-              <th className="px-3 py-2 text-right font-medium" title="%B = (收盘−下轨)/(上轨−下轨)">%B</th>
+              <th className="px-3 py-2 text-right font-medium" title="%B = (收盘−下轨)/(上轨−下轨) · 收盘在布林通道内的位置">通道位置</th>
+              <th className="px-3 py-2 text-right font-medium" title="带宽 = (上轨−下轨)/中轨 · 越小越收口">带宽</th>
+              <th className="px-3 py-2 text-right font-medium" title="最新资金费率 · 正=多头付空头">资金费率</th>
               <th className="px-3 py-2 text-left font-medium">状态转换</th>
               <th className="px-3 py-2 text-right font-medium">24H 涨跌%</th>
               <th className="w-8" />
@@ -147,8 +154,27 @@ export function BollScanList({
                   <td className="px-3 py-2.5 text-right font-mono">
                     {it.pct_b.toFixed(2)}
                     <span className="ml-1 text-[11px] text-muted-foreground/60">
-                      {pctbZone(it.pct_b)}
+                      {it.zone_label ?? pctbZone(it.pct_b)}
                     </span>
+                  </td>
+                  {/* 带宽:纯结构数据(无涨跌方向)→ 中性色 */}
+                  <td className="px-3 py-2.5 text-right font-mono text-muted-foreground/80">
+                    {(it.bandwidth * 100).toFixed(2)}%
+                  </td>
+                  {/* ★资金费率:正费率涨色 / 负费率跌色(复用 text-up/down 涨跌色偏好,不写死)· null → — */}
+                  <td
+                    className={cn(
+                      'px-3 py-2.5 text-right font-mono',
+                      it.funding_rate == null
+                        ? 'text-muted-foreground/40'
+                        : it.funding_rate >= 0
+                          ? 'text-up'
+                          : 'text-down',
+                    )}
+                  >
+                    {it.funding_rate == null
+                      ? '—'
+                      : `${it.funding_rate >= 0 ? '+' : ''}${(it.funding_rate * 100).toFixed(4)}%`}
                   </td>
                   <td className="px-3 py-2.5 text-left text-xs">
                     {it.transition && it.transition_from ? (
@@ -194,7 +220,7 @@ export function BollScanList({
 function StateRow({ text }: { text: string }) {
   return (
     <tr>
-      <td colSpan={9} className="px-3 py-10 text-center text-sm text-muted-foreground/60">
+      <td colSpan={11} className="px-3 py-10 text-center text-sm text-muted-foreground/60">
         {text}
       </td>
     </tr>
