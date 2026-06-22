@@ -99,3 +99,20 @@ async def test_filter_transition_true(client: AsyncClient, monkeypatch: object) 
     assert it["transition"] is True
     # transition_from = prev_state "range" 的中文口诀
     assert it["transition_from"] == "三线走平·震荡结构"
+
+
+async def test_stale_snapshot_does_not_500(client: AsyncClient, monkeypatch: object) -> None:
+    # ★部署过渡窗口:旧格式快照(A-1 · 无 zone_label/bandwidth)→ 跳过坏行,返回 200 空列表,绝不 500
+    old_row = {
+        "symbol": "BTCUSDT", "state": "range", "state_label": "三线走平·震荡结构",
+        "bias": "中性", "pct_b": 0.5, "close": 68500, "mid": 67000,
+        "upper": 69000, "lower": 65000, "change_pct_24h": 2.1,
+        "transition": False, "transition_from": None,
+    }
+    stale = json.dumps({"as_of": "2026-06-22T10:00:00+00:00", "count": 1, "items": [old_row]})
+    _patch_redis(monkeypatch, stale)
+    resp = await client.get("/api/v1/crypto/boll-scan")
+    assert resp.status_code == 200  # ★不 500
+    body = resp.json()
+    assert body["count"] == 0  # 旧行被跳过(待下一轮 beat 刷新)
+    assert "不构成投资建议" in body["disclaimer"]
