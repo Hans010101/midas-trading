@@ -24,6 +24,7 @@ Celery 任务 M2-A-9 准备 · 见 apps/worker/tasks/crypto_metrics_ingest.py)�
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
@@ -31,9 +32,12 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, HTTPException, Path, Query, status
 
 from app.api.deps import ClickHouseDep
+from app.core.redis_client import get_redis
 from app.schemas.crypto import (
     BasisPoint,
     BasisSeriesResponse,
+    BollScanItem,
+    BollScanResponse,
     CryptoOverviewResponse,
     FearGreedResponse,
     FundingRateResponse,
@@ -196,6 +200,57 @@ async def get_tickers_24h(
     return Tickers24hResponse(
         instrument=instrument, sort_by=sort_by, order=order, items=items,
     )
+
+
+# ============================================================================
+# 2.6 · GET /boll-scan · 布林做T结构信号列表(做T A-1 · 只读 Redis 快照)
+# ============================================================================
+
+_BOLL_SNAPSHOT_KEY = "boll:snapshot:latest"  # ★须与 worker tasks/boll_scan._SNAPSHOT_KEY 一致
+_BIAS_FILTER = {"long": "偏多", "short": "偏空", "neutral": "中性"}
+
+
+@router.get(
+    "/boll-scan",
+    response_model=BollScanResponse,
+    summary="布林做T结构信号列表(只读快照 · 结构描述非建议)",
+    description=(
+        "读 M1 boll_scan 每轮落的全量结构快照(Redis · ★只读不触发计算、不下单、不写任何东西)· "
+        "返回各币布林结构状态 + 倾向(偏多/偏空/中性 · 描述非建议)。无快照(未落首份 / TTL 过期)"
+        "返回空列表 + as_of=null(不报错)。bias=long/short/neutral 筛选 · transition=true 仅看本轮"
+        "转换 · 顶层 disclaimer 供前端展示免责。"
+    ),
+)
+async def get_boll_scan(
+    bias: Annotated[Literal["long", "short", "neutral"] | None, Query()] = None,
+    transition: Annotated[bool | None, Query()] = None,
+    sort: Annotated[Literal["transition", "change", "bias"], Query()] = "transition",
+) -> BollScanResponse:
+    redis = await get_redis()
+    raw = await redis.get(_BOLL_SNAPSHOT_KEY)
+    if not raw:
+        # M1 还没落第一份 / 快照 TTL 过期 → 空列表(前端显示「暂无信号」· 不报错)
+        return BollScanResponse(as_of=None, count=0, items=[])
+
+    data = json.loads(raw)
+    items = [BollScanItem(**row) for row in data.get("items", [])]
+
+    if bias is not None:
+        want = _BIAS_FILTER[bias]
+        items = [it for it in items if it.bias == want]
+    if transition is not None:
+        items = [it for it in items if it.transition is transition]
+
+    if sort == "transition":
+        # 本轮转换的排前 · 组内按 24h 涨跌幅绝对值大→小(波动大优先看)
+        items.sort(key=lambda it: (not it.transition, -abs(it.change_pct_24h or 0.0)))
+    elif sort == "change":
+        items.sort(key=lambda it: -(it.change_pct_24h or 0.0))
+    else:  # bias:偏多 → 中性 → 偏空
+        rank = {"偏多": 0, "中性": 1, "偏空": 2}
+        items.sort(key=lambda it: rank.get(it.bias, 1))
+
+    return BollScanResponse(as_of=data.get("as_of"), count=len(items), items=items)
 
 
 # ============================================================================

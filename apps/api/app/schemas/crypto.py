@@ -155,6 +155,45 @@ class Tickers24hResponse(BaseModel):
     items: list[Ticker24h]
 
 
+# ── 布林做T结构信号(做T功能 A-1)· 只读 boll:snapshot:latest 快照 ──────────────
+# ★全是结构描述 · bias 仅 偏多/偏空/中性 · 绝无买卖祈使词 · 响应顶层带免责(锁死红线)。
+
+
+class BollScanItem(BaseModel):
+    """单币布林结构信号(纯描述 · 复用 M1 boll_state 计算 · 不预测、不建议)。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    symbol: str = Field(min_length=1, description="Binance 风格 'BTCUSDT'(无斜杠)")
+    state: str = Field(description="6 口诀状态枚举值(trend_up/range/squeeze/…)")
+    state_label: str = Field(description="状态中文口诀(三线齐上·上升结构 等)")
+    bias: str = Field(description="结构倾向 · 仅 偏多/偏空/中性(描述非建议)")
+    pct_b: float = Field(description="%B 位置 (close-lower)/(upper-lower)")
+    close: float = Field(gt=0)
+    mid: float = Field(gt=0, description="布林中轨 MA20")
+    upper: float = Field(gt=0, description="布林上轨 +2σ")
+    lower: float = Field(gt=0, description="布林下轨 −2σ")
+    change_pct_24h: float | None = Field(default=None, description="24h 涨跌% · 缺采集为 None")
+    transition: bool = Field(default=False, description="本轮是否发生状态转换(边沿)")
+    transition_from: str | None = Field(
+        default=None, description="转换前状态中文(仅 transition=true 时有)",
+    )
+
+
+class BollScanResponse(BaseModel):
+    """`/api/v1/crypto/boll-scan` 响应 · 做T结构信号列表(只读快照 · 无快照返空列表)。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    as_of: AwareDatetime | None = Field(default=None, description="快照时间 · None=暂无快照")
+    count: int = Field(ge=0, description="筛选后条数")
+    disclaimer: str = Field(
+        default="结构描述非建议 · 仅供参考,不构成投资建议",
+        description="免责口径(供前端展示 · 锁死红线)",
+    )
+    items: list[BollScanItem]
+
+
 class FuturesMetricItem(BaseModel):
     """榜单级合约指标单条 · 字段缺采集时为 None(前端显示「—」· 不造假)。"""
 
