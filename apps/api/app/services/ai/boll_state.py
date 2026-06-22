@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass
+from typing import Any
 
 from app.schemas.market import Kline
 from app.services.ai.strategy_signals import _BOLL_K, _BOLL_PERIOD, _boll_series
@@ -161,6 +162,46 @@ def render_card(symbol: str, snap: BollSnapshot) -> str:
         f"  %B={snap.pct_b:.2f}({_ZONE_LABEL[snap.zone]}) · "
         f"现价 {snap.close:g} | 中轨 {snap.mid:g} | 上 {snap.upper:g} / 下 {snap.lower:g}"
     )
+
+
+def state_label(state: BollState) -> str:
+    """状态枚举 → 中文口诀(供快照 / 做T接口复用 _STATE_LABEL)。"""
+    return _STATE_LABEL[state]
+
+
+def to_snapshot_row(
+    symbol: str,
+    snap: BollSnapshot,
+    *,
+    change_pct_24h: float | None,
+    transition: bool,
+    prev_state: str | None,
+) -> dict[str, Any]:
+    """单币结构快照行(做T A-1 列表数据源 · ★复用 snap 不重算 · 纯描述、无买卖措辞)。
+
+    键与 schemas.crypto.BollScanItem 字段一一对应(extra=forbid)。transition_from 仅在
+    发生状态转换且有合法 prev 时给中文口诀,否则 None。
+    """
+    transition_from: str | None = None
+    if transition and prev_state:
+        try:
+            transition_from = _STATE_LABEL[BollState(prev_state)]
+        except ValueError:
+            transition_from = None
+    return {
+        "symbol": symbol,
+        "state": snap.state.value,
+        "state_label": _STATE_LABEL[snap.state],
+        "bias": snap.bias,
+        "pct_b": snap.pct_b,
+        "close": snap.close,
+        "mid": snap.mid,
+        "upper": snap.upper,
+        "lower": snap.lower,
+        "change_pct_24h": change_pct_24h,
+        "transition": transition,
+        "transition_from": transition_from,
+    }
 
 
 def validate_shadow_push(text: str) -> str:

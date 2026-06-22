@@ -17,13 +17,21 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
+from datetime import UTC, datetime
+from typing import Any, cast
 
 from celery import shared_task
 from redis import asyncio as aioredis
 
-from app.services.ai.boll_state import build_session_message, classify, render_card
+from app.services.ai.boll_state import (
+    build_session_message,
+    classify,
+    render_card,
+    to_snapshot_row,
+)
 from app.services.clickhouse_client import ClickHouseClient
 from app.services.clickhouse_crypto import select_latest_tickers
 from tasks.crypto_metrics_ingest import _all_usdt_perp_symbols
@@ -35,6 +43,8 @@ _POOL_N = 40               # 涨跌榜各取前 40(涨幅 + 跌幅)作推送筛�
 _LOOKBACK_BARS = 30        # select_kline 取最近 30 根(布林 20 预热 + 斜率/带宽回看余量)
 _STATE_TTL = 24 * 3600     # Redis 状态滚动窗口 ~24h(TTL 自动清)
 _COOLDOWN_SEC = 4 * 3600   # 每标的推送冷却 4h(冷却窗口内再转换也不重复推)
+_SNAPSHOT_KEY = "boll:snapshot:latest"  # ★做T A-1 全量快照(独立 key · 不和边沿状态 key 冲突)
+_SNAPSHOT_TTL = 30 * 60                 # 30min 防陈旧(每 15min 刷一次 · 留两轮余量)
 
 
 def _state_key(sym: str) -> str:
@@ -52,6 +62,7 @@ async def _boll_scan_async() -> dict[str, int]:
     )
     ch = await ClickHouseClient.create()
     candidates: list[str] = []
+    snapshot_rows: list[dict[str, Any]] = []  # ★A-1:全量结构快照(每币一行 · 复用 snap)
     universe_n = 0
     transitions = 0
     try:
@@ -65,6 +76,12 @@ async def _boll_scan_async() -> dict[str, int]:
             ch._client, instrument="perp", sort_by="change_pct_24h", order="ASC", limit=_POOL_N,  # noqa: SLF001
         )
         pool = {t.symbol.replace("/", "") for t in [*gainers, *losers]}
+        # ★A-1:全量 universe 的 24h 涨跌(给快照行用 · 加法,不改上面 pool/edge 口径)
+        universe_tickers = await select_latest_tickers(
+            ch._client, instrument="perp", sort_by="quote_volume_24h",  # noqa: SLF001
+            order="DESC", limit=_UNIVERSE_N,
+        )
+        change_map = {t.symbol.replace("/", ""): t.change_pct_24h for t in universe_tickers}
 
         for sym in universe:
             klines = await ch.select_kline(
@@ -76,6 +93,16 @@ async def _boll_scan_async() -> dict[str, int]:
             prev = await redis.get(_state_key(sym))
             # 状态滚动窗口(Redis · 不写 CH)· 每轮刷新当前状态
             await redis.set(_state_key(sym), snap.state.value, ex=_STATE_TTL)
+            # ★A-1:每个有效币收一行全量快照(复用 snap · 不重算)· 含本轮是否转换。
+            #   仅落数据,不参与下面任何边沿/推送/冷却判断 —— M1 逻辑完全不动。
+            is_transition = prev is not None and prev != snap.state.value
+            snapshot_rows.append(
+                to_snapshot_row(
+                    sym, snap, change_pct_24h=change_map.get(sym),
+                    # decode_responses=True → redis.get 实为 str|None(stub 误宽成 bytes)
+                    transition=is_transition, prev_state=cast("str | None", prev),
+                ),
+            )
             # 边沿检测:仅【状态发生转换】进候选(无 prev = 冷启动基线,不推)
             if prev is None or prev == snap.state.value:
                 continue
@@ -100,7 +127,22 @@ async def _boll_scan_async() -> dict[str, int]:
                 "[boll-scan-shadow] 本轮无「转换∩涨跌榜∩非冷却」候选(转换 %d 个)· 不推送",
                 transitions,
             )
-        return {"universe": universe_n, "transitions": transitions, "candidates": len(candidates)}
+
+        # ★A-1:落全量结构快照供做T列表接口读 · 独立 key + TTL · ★写失败不影响主流程
+        #   (吸取 ticker 教训:单点异常不放大)· 不写 CH、不发 TG、不下单。
+        try:
+            payload = json.dumps(
+                {"as_of": datetime.now(tz=UTC).isoformat(), "items": snapshot_rows},
+                ensure_ascii=False,
+            )
+            await redis.set(_SNAPSHOT_KEY, payload, ex=_SNAPSHOT_TTL)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[boll-scan] 落全量快照失败(不影响主流程): %s", exc)
+
+        return {
+            "universe": universe_n, "transitions": transitions,
+            "candidates": len(candidates), "snapshot": len(snapshot_rows),
+        }
     finally:
         await ch.close()
         await redis.aclose()

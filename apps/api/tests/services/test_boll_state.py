@@ -14,6 +14,7 @@ from app.services.ai.boll_state import (
     build_session_message,
     classify,
     render_card,
+    to_snapshot_row,
     validate_shadow_push,
 )
 
@@ -99,6 +100,33 @@ def test_gate_rejects_marketing() -> None:
     bad = f"【BTCUSDT】稳赚不赔的结构\n{STRUCTURE_DISCLAIMER}"
     with pytest.raises(ValueError, match="营销"):
         validate_shadow_push(bad)
+
+
+# ── 做T A-1 快照行 to_snapshot_row ────────────────────────────────────────────
+
+def test_snapshot_row_keys_and_no_trade_words() -> None:
+    snap = classify(_klines([100 + i * 0.6 for i in range(28)]))
+    assert snap is not None
+    row = to_snapshot_row("BTCUSDT", snap, change_pct_24h=5.0, transition=True, prev_state="range")
+    # ★键集合与 schemas.crypto.BollScanItem 字段一一对应(extra=forbid)
+    assert set(row) == {
+        "symbol", "state", "state_label", "bias", "pct_b", "close",
+        "mid", "upper", "lower", "change_pct_24h", "transition", "transition_from",
+    }
+    assert row["transition_from"] == "三线走平·震荡结构"  # prev=range 的中文口诀
+    assert row["bias"] in ("偏多", "偏空", "中性")
+    blob = f"{row}"
+    for word in _FORBIDDEN_PUSH_WORDS:
+        assert word not in blob, f"快照行不得含买卖/预测词:{word}"
+
+
+def test_snapshot_row_no_transition_from_when_stable() -> None:
+    snap = classify(_klines([100 + i * 0.6 for i in range(28)]))
+    assert snap is not None
+    row = to_snapshot_row("BTCUSDT", snap, change_pct_24h=None, transition=False, prev_state="trend_up")
+    assert row["transition"] is False
+    assert row["transition_from"] is None
+    assert row["change_pct_24h"] is None
 
 
 def test_build_session_message_ok() -> None:
