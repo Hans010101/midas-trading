@@ -57,6 +57,9 @@ export function RiskRewardDemo() {
           ? <>当前胜率 {Math.round(w * 100)}% ≥ 保本胜率 {Math.round(be * 100)}% → 长期<strong className="font-semibold">正期望</strong>(每笔约 +{ev.toFixed(2)}R)。高盈亏比把保本胜率压低了。</>
           : <>当前胜率 {Math.round(w * 100)}% ＜ 保本胜率 {Math.round(be * 100)}% → 长期<strong className="font-semibold">负期望</strong>(每笔约 {ev.toFixed(2)}R)。光有盈亏比、胜率不够也亏。</>}
       </div>
+      <p className="mt-1.5 text-[11px] leading-relaxed text-foreground/50">
+        配色:<span className="font-medium text-success">绿 = 正期望</span> · <span className="font-medium text-midas-red">红 = 负期望</span>(盈亏维度)。注:K线/指标篇用「涨红跌绿」表示价格方向,此处按盈亏好坏用绿/红,是两个维度。
+      </p>
       <p className="mt-2 text-xs leading-relaxed text-foreground/60">
         <strong className="text-foreground/80">盈亏比 = 止盈距离 / 止损距离</strong>;期望(以止损=1R 计)= 胜率×盈亏比 − 败率。<strong className="text-foreground/80">保本胜率 = 1/(1+盈亏比)</strong>。盈亏比本身不保证盈利,要和胜率、执行一起看。
       </p>
