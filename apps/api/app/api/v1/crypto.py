@@ -39,6 +39,7 @@ from app.schemas.crypto import (
     BasisSeriesResponse,
     BollScanItem,
     BollScanResponse,
+    BollStructureResponse,
     CryptoOverviewResponse,
     FearGreedResponse,
     FundingRateResponse,
@@ -51,10 +52,13 @@ from app.schemas.crypto import (
     OpenInterestResponse,
     Tickers24hResponse,
 )
+from app.services.ai.boll_state import classify, to_snapshot_row
+from app.services.clickhouse_client import ClickHouseClient
 from app.services.clickhouse_crypto import (
     select_fear_greed_series,
     select_funding_rates,
     select_futures_metrics_batch,
+    select_latest_funding_rates,
     select_latest_overview,
     select_latest_premium_index,
     select_latest_tickers,
@@ -264,6 +268,90 @@ async def get_boll_scan(
         items.sort(key=lambda it: rank.get(it.bias, 1))
 
     return BollScanResponse(as_of=data.get("as_of"), count=len(items), items=items)
+
+
+# ============================================================================
+# 2.7 · GET /boll-structure/{symbol} · 单币布林做T结构(做T B-1)
+# ============================================================================
+
+_BOLL_STRUCT_LOOKBACK = 30  # select_kline 取最近 30 根 15m(布林 20 预热 + 斜率/带宽回看余量)
+
+
+@router.get(
+    "/boll-structure/{symbol}",
+    response_model=BollStructureResponse,
+    summary="单币布林做T结构(只读 · 结构描述非建议)",
+    description=(
+        "给定 symbol 返回当前布林 6 态结构(状态/倾向/通道位置/三轨/转换)· 给详情页做T结构模块用。"
+        "★Top150 命中 A-1 快照(零重算)· 长尾按需现算 15m 布林 · 数据不足/非加密优雅降级"
+        "(available=false · 不报错)· 结构口径与 A-1 列表 / TG 影子同源。倾向仅偏多/偏空/中性。"
+    ),
+)
+async def get_boll_structure(
+    ch: ClickHouseDep,
+    symbol: Annotated[str, Path(min_length=3, examples=["BTCUSDT"])],
+) -> BollStructureResponse:
+    sym = symbol.strip().upper().replace("/", "")  # Binance 风格无斜杠 · 与快照 / kline 表对齐
+    # ① 优先复用 A-1 全量快照(Top150 命中即【零重算】· 与列表/TG 同一份结构)
+    redis = await get_redis()
+    raw = await redis.get(_BOLL_SNAPSHOT_KEY)
+    if raw:
+        data = json.loads(raw)
+        for row in data.get("items", []):
+            if row.get("symbol") == sym:
+                try:
+                    item = BollScanItem(**row)
+                except ValidationError:
+                    break  # 旧/不兼容快照行 → 落到现算兜底(同 boll-scan 端点容错纪律)
+                return BollStructureResponse(
+                    symbol=sym, available=True, source="snapshot",
+                    as_of=data.get("as_of"), item=item,
+                )
+    # ② 长尾兜底:快照未覆盖的币 → 按需现算一次(复用同一 classify · 不依赖快照)
+    return await _compute_boll_structure(ch, sym)
+
+
+async def _compute_boll_structure(ch: ClickHouseClient, sym: str) -> BollStructureResponse:
+    """长尾币按需现算布林结构 · ★复用 boll_state.classify(与 A-1 列表 / TG 影子同源)·
+    只读 CH(15m kline + ticker + funding)· 数据不足/失败优雅降级 available=false,绝不崩。
+    """
+    try:
+        klines = await ch.select_kline(
+            symbol=sym, market="crypto", period="15m",
+            limit=_BOLL_STRUCT_LOOKBACK, instrument="perp",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[boll-structure] %s 取 15m kline 失败: %s", sym, exc)
+        klines = []
+    snap = classify(klines)  # 不足 24 根 / 数据问题 → None
+    if snap is None:
+        return BollStructureResponse(symbol=sym, available=False, source="none")
+    # 24h 涨跌 / 资金费率:失败降级 None,绝不阻断结构主体(带宽/布林照常)
+    change_pct: float | None = None
+    funding: float | None = None
+    base, quote = _split_symbol(sym)
+    ccxt_sym = f"{base}/{quote}" if quote else sym
+    try:
+        tk = (await select_tickers_by_symbols(
+            ch._client, instrument="perp", symbols=[ccxt_sym],  # noqa: SLF001
+        )).get(ccxt_sym)
+        change_pct = tk.change_pct_24h if tk else None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[boll-structure] %s ticker 取失败: %s", sym, exc)
+    try:
+        funding = (await select_latest_funding_rates(
+            ch._client, symbols=[sym],  # noqa: SLF001
+        )).get(sym)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[boll-structure] %s funding 取失败: %s", sym, exc)
+    row = to_snapshot_row(
+        sym, snap, change_pct_24h=change_pct, funding_rate=funding,
+        transition=False, prev_state=None,  # ★现算无边沿跟踪 · transition 恒 False
+    )
+    return BollStructureResponse(
+        symbol=sym, available=True, source="computed",
+        as_of=datetime.now(tz=UTC), item=BollScanItem(**row),
+    )
 
 
 # ============================================================================

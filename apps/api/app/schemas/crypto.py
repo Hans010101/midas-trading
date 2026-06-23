@@ -197,6 +197,32 @@ class BollScanResponse(BaseModel):
     items: list[BollScanItem]
 
 
+class BollStructureResponse(BaseModel):
+    """`/api/v1/crypto/boll-structure/{symbol}` 响应 · 单币布林做T结构(做T B-1)。
+
+    数据来源:Top150 命中 A-1 快照(零重算)· 长尾按需现算 · 无数据/数据不足优雅降级
+    (available=False · 不报错)。结构口径与 A-1 列表 / TG 影子同源(boll_state.classify)。
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    symbol: str = Field(min_length=1, description="Binance 风格 'BTCUSDT'(无斜杠)")
+    available: bool = Field(description="是否有结构数据(False=无数据/不足20根/非加密 · 不报错)")
+    source: Literal["snapshot", "computed", "none"] = Field(
+        description="数据来源:snapshot=复用 A-1 快照 · computed=按需现算 · none=不可用",
+    )
+    layer: str = Field(
+        default="布林结构",
+        description="★层级标注 · 这是【布林结构层面】的描述(区别于 AI 决策卡综合研判)",
+    )
+    as_of: AwareDatetime | None = Field(default=None, description="结构时间 · None=不可用")
+    item: BollScanItem | None = Field(default=None, description="结构数据 · 不可用时 None")
+    disclaimer: str = Field(
+        default="结构描述非建议 · 仅供参考,不构成投资建议",
+        description="免责口径(锁死红线)",
+    )
+
+
 class FuturesMetricItem(BaseModel):
     """榜单级合约指标单条 · 字段缺采集时为 None(前端显示「—」· 不造假)。"""
 
