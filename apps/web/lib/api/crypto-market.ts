@@ -155,3 +155,25 @@ export interface BollScanResponse {
 export function fetchBollScan(signal?: AbortSignal): Promise<BollScanResponse> {
   return getJson<BollScanResponse>('/api/v1/crypto/boll-scan', signal)
 }
+
+// ── 单币布林做T结构(做T B-1/B-2)· 字段对齐后端 schemas.crypto.BollStructureResponse ──
+export interface BollStructureResponse {
+  symbol: string // Binance 风格 'BTCUSDT'
+  available: boolean // false = 无数据/不足/非加密(优雅降级,不报错)
+  source: 'snapshot' | 'computed' | 'none' // 快照复用 / 按需现算 / 不可用
+  layer: string // ★层级标注 = "布林结构"(区别 AI 决策卡综合研判)
+  as_of: string | null
+  item: BollScanItem | null // 结构数据 · 不可用时 null
+  disclaimer: string
+}
+
+/** 单币布林做T结构 · 读 B-1 接口(Top150 命中快照 / 长尾现算 / 数据不足 available=false 不报错)。 */
+export function fetchBollStructure(
+  binanceSymbol: string,
+  signal?: AbortSignal,
+): Promise<BollStructureResponse> {
+  return getJson<BollStructureResponse>(
+    `/api/v1/crypto/boll-structure/${encodeURIComponent(binanceSymbol)}`,
+    signal,
+  )
+}
