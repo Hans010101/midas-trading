@@ -24,6 +24,7 @@ import { CryptoHeader, PREVIEW_PERIODS } from '@/components/crypto-preview/crypt
 import { CryptoMainChart } from '@/components/crypto-preview/crypto-main-chart'
 import { CryptoPerpOrders } from '@/components/crypto-preview/crypto-perp-orders'
 import { DimensionSection } from '@/components/crypto-preview/dimension-section'
+import { DotTStructureSection } from '@/components/crypto-preview/dot-t-structure-section'
 import { PerpOrderGuidance } from '@/components/crypto-preview/perp-order-guidance'
 import { StrategyChecklist } from '@/components/crypto-preview/strategy-checklist'
 import { readDisplayPrefs } from '@/lib/display-prefs'
@@ -82,6 +83,8 @@ export function CryptoDetail() {
         {/* 左主区 */}
         <div className="flex-1 space-y-4">
           <CryptoMainChart symbol={klineSymbol} period={period} />
+          {/* 做T结构模块(B-2 · 受 dott 控制显隐 · 默认关)· 紧贴主图 = 描述其布林通道 */}
+          <DotTStructureSection futuresSymbol={futuresSymbol} />
           <DimensionSection futuresSymbol={futuresSymbol} />
         </div>
 
