@@ -25,6 +25,7 @@ import { KlineChart } from '@/components/chart/kline-chart'
 import { StrategyOverlay } from '@/components/chart/strategy-overlay'
 import { StrategyPanel } from '@/components/chart/strategy-panel'
 import type { StrategyKind } from '@/lib/api/strategy'
+import { readDisplayPrefs } from '@/lib/display-prefs'
 import { cn } from '@/lib/utils'
 import type { IndicatorName } from '@/lib/store/workbench-store'
 import type { Period } from '@midas/shared'
@@ -55,12 +56,15 @@ interface CryptoMainChartProps {
 
 export function CryptoMainChart({ symbol, period }: CryptoMainChartProps) {
   const [chart, setChart] = useState<Chart | null>(null)
-  const [chanEnabled, setChanEnabled] = useState(true)
-  const [bollEnabled, setBollEnabled] = useState(true)
-  const [macdEnabled, setMacdEnabled] = useState(true)
-  // 形态A 策略信号(默认开 · 详情页加载即标注买卖信号 · Pro 门控由后端 locked 空壳 + 前端遮罩处理)
+  // ★刀2:指标开关初值读 display_prefs(同步 lazy init · 客户端渲染无 SSR mismatch · 无闪烁)·
+  //   临时拨开关只 setState、★不回写 cookie(偏好默认值只在设置页改)。
+  const [chanEnabled, setChanEnabled] = useState(() => readDisplayPrefs().indicators.chan)
+  const [bollEnabled, setBollEnabled] = useState(() => readDisplayPrefs().indicators.boll)
+  const [macdEnabled, setMacdEnabled] = useState(() => readDisplayPrefs().indicators.macd)
+  // 形态A 策略信号 = 做T(dott)层 · 初值读 dott 偏好 · ★Pro 门控独立(后端 locked 空壳 +
+  // 前端遮罩处理)· 偏好只设「默认开关初值」,非 Pro 即使 dott=true 门控仍挡,偏好不绕过权限。
   const [strategy, setStrategy] = useState<StrategyKind>('ma_cross')
-  const [strategyEnabled, setStrategyEnabled] = useState(true)
+  const [strategyEnabled, setStrategyEnabled] = useState(() => readDisplayPrefs().indicators.dott)
 
   // useMemo 稳定引用 · 否则每次 render 新对象会让 KlineChart 反复重建指标
   const indicators = useMemo<Record<IndicatorName, boolean>>(

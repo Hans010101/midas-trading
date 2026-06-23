@@ -20,12 +20,13 @@ import { useMemo, useState } from 'react'
 import { TopNav } from '@/components/layout/top-nav'
 import { ConditionalOrdersList } from '@/components/trading/conditional-orders-list'
 import { CryptoAiCard } from '@/components/crypto-preview/crypto-ai-card'
-import { CryptoHeader } from '@/components/crypto-preview/crypto-header'
+import { CryptoHeader, PREVIEW_PERIODS } from '@/components/crypto-preview/crypto-header'
 import { CryptoMainChart } from '@/components/crypto-preview/crypto-main-chart'
 import { CryptoPerpOrders } from '@/components/crypto-preview/crypto-perp-orders'
 import { DimensionSection } from '@/components/crypto-preview/dimension-section'
 import { PerpOrderGuidance } from '@/components/crypto-preview/perp-order-guidance'
 import { StrategyChecklist } from '@/components/crypto-preview/strategy-checklist'
+import { readDisplayPrefs } from '@/lib/display-prefs'
 import type { Period } from '@midas/shared'
 
 // 常见 quote · 用于把 Binance 风格 'BEATUSDT' 切回 ccxt 风格 'BEAT/USDT'
@@ -57,8 +58,13 @@ export function CryptoDetail() {
     () => deriveSymbols(searchParams.get('symbol')),
     [searchParams],
   )
-  // 默认周期 1h(全市场详情页统一 · 15m/1h/1d 可切 · K线/缠论/AI卡跟随)
-  const [period, setPeriod] = useState<Period>('1h')
+  // ★刀2:默认周期初值读 display_prefs.period(★同步 lazy init · 在首个 kline query 之前读到,
+  //   避免先按 1h 拉一次再切的【双拉】)· cookie 值非法 / 不在可切集合 → 回退 '1h'。
+  //   临时切周期只 setPeriod、★不回写 cookie(偏好默认值只在设置页改)。
+  const [period, setPeriod] = useState<Period>(() => {
+    const p = readDisplayPrefs().period
+    return (PREVIEW_PERIODS as readonly string[]).includes(p) ? (p as Period) : '1h'
+  })
 
   return (
     <main className="min-h-screen bg-background text-foreground">
