@@ -3,9 +3,12 @@
 /**
  * 详情页默认显示偏好(指标偏好系统 · 方案② · 刀1)· 设置页 section。
  *
- * 4 个指标图层开关(布林/缠论/MACD/做T)+ 默认周期(15m/1h/1d)· 初值读 display_prefs cookie,
+ * 3 个指标图层开关(布林/缠论/MACD)+ 默认周期(15m/1h/1d)· 初值读 display_prefs cookie,
  * 改动即写 cookie(纯前端 · 按浏览器保存 · 和涨跌色一致预期)。
- * ★刀1 只【存】偏好;详情页【刀2】才读它生效(本刀不碰详情页)。
+ * ★刀1 只【存】偏好;详情页【刀2】才读它生效。
+ * ★做T重构(B-2):原「做T结构」开关已移除 —— 做T 已并入主图「AI 策略信号」面板的「布林做T」标签
+ *   (常显 · 不再受开关控制)· display_prefs.indicators.dott 字段保留(crypto 策略信号默认开关读它),
+ *   但此处不再暴露 toggle。
  */
 
 import { useEffect, useState } from 'react'
@@ -20,11 +23,12 @@ import {
 
 type IndicatorKey = keyof DisplayPrefs['indicators']
 
+// ★做T重构(B-2):'dott' 不再出现在此列表(toggle 已移除)· 做T 改走主图策略面板「布林做T」标签常显。
+//   dott 字段仍在 DisplayPrefs(crypto 策略信号默认开关读它),只是设置页不暴露开关。
 const INDICATORS: { key: IndicatorKey; label: string; note?: string }[] = [
   { key: 'boll', label: '布林带' },
   { key: 'chan', label: '缠论标注' },
   { key: 'macd', label: 'MACD' },
-  { key: 'dott', label: '做T结构', note: '控制详情页是否显示做T结构模块' },
 ]
 
 const PERIODS = ['15m', '1h', '1d']
