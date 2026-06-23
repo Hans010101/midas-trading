@@ -16,8 +16,9 @@ import { useKline } from '@/hooks/use-kline'
 import { cn } from '@/lib/utils'
 import type { Period } from '@midas/shared'
 
-// 主图周期 · kline 存储支持的子集(无 4h)
-export const PREVIEW_PERIODS: Period[] = ['15m', '1h', '1d']
+// 主图周期 · 刀2 加 5m/1w(prod kline 端点回源已验:各 200 根全深度 · 5m 16h / 1w 2022→今)·
+// 15m/1h/1d 有预采集、5m/1w 走 cache-aside 回源 · 无 4h。
+export const PREVIEW_PERIODS: Period[] = ['5m', '15m', '1h', '1d', '1w']
 
 interface CryptoHeaderProps {
   /** ccxt 风格 'BTC/USDT' */
