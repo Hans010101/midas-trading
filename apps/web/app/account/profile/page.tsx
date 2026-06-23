@@ -9,12 +9,14 @@
 
 import { BotOrderPresetSection } from '@/components/settings/bot-order-preset-section'
 import { ColorPrefSection } from '@/components/settings/color-pref-section'
+import { DetailPrefsSection } from '@/components/settings/detail-prefs-section'
 
 export default function PreferencesPage() {
   return (
     <div>
       <h1 className="mb-6 font-serif text-2xl font-bold text-foreground">偏好设置</h1>
       <ColorPrefSection />
+      <DetailPrefsSection />
       <BotOrderPresetSection />
     </div>
   )
