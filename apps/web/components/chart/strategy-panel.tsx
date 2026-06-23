@@ -5,23 +5,30 @@
  *
  * 一处统一组件,三套主图(工作台 / 现货详情 / 合约详情)共用:
  * - 策略信号总开关(默认关 · 不干扰现有缠论/指标)
- * - 3 个策略选择(均线金叉 / RSI 反弹 / 布林均值回归)· 选中高亮
+ * - 多个策略选择(均线金叉 / RSI 反弹 / 布林均值回归 / …)· 选中高亮
  * - AI 推荐徽章(调 /strategy-recommend · 纯规则 · 显示「推荐 XX + 理由」)
  * - 当前是否触发提示(调 /strategy-signals · current_triggered / 最近信号)
+ * - ★布林做T(仅 crypto · 做T B-2 重构):标签排里一个「布林做T」标签 · 点击展开看单币布林 6 态
+ *   结构(读 B-1 /crypto/boll-structure)· 【布林结构层】客观描述 · 区别 AI 决策卡综合研判(化解
+ *   两块手表)· 免费(不门控)· 常显(crypto 面板恒展开 · 不受策略信号开关控制)· 倾向只偏多/偏空/中性。
  *
  * ★ 全 props 驱动 · 信号点的实际标注在 <StrategyOverlay>(同 strategy/enabled 状态由父组件管理)。
  * ★ 红线:纯展示 · 不下单 / 不自动交易。
  */
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 import { ProLock } from '@/components/account/pro-lock'
+import { biasTone } from '@/components/crypto/boll-scan-list'
 import { useStrategyRecommend, useStrategySignals } from '@/hooks/use-strategy'
+import type { BollStructureResponse } from '@/lib/api/crypto-market'
+import { fetchBollStructure } from '@/lib/api/crypto-market'
 import type { Instrument, StrategyKind, StrategySignal } from '@/lib/api/strategy'
 import { useUiStore } from '@/lib/store/ui-store-provider'
 import { availableStrategies, effectiveOrder } from '@/lib/strategy-order'
 import { cn } from '@/lib/utils'
 import type { Market, Period } from '@midas/shared'
+import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 
 const STRATEGY_LABELS: Record<StrategyKind, string> = {
   ma_cross: '均线金叉',
@@ -61,6 +68,11 @@ function fmtLevels(levels: Record<string, number>): string {
     .map(([k, v]) => `${k} ${fmtLevelVal(v)}`)
     .join(' · ')
 }
+// 布林做T 三轨/现价(智能小数 · ≥1 两位 · <1 四位)· 无货币符(键已表意「上/中/下」)
+function fmtN(n: number): string {
+  if (n >= 1) return n.toLocaleString('en-US', { maximumFractionDigits: 2 })
+  return n.toFixed(4)
+}
 
 interface Props {
   symbol: string
@@ -87,6 +99,19 @@ export function StrategyPanel({
   const signals = useStrategySignals({ symbol, market, period, strategy, instrument, enabled })
   const storedOrder = useUiStore((s) => s.strategyOrder)
   const setOrder = useUiStore((s) => s.setStrategyOrder)
+
+  // ★布林做T(做T B-2 重构)· 仅 crypto · 标签排里一个「布林做T」标签,点开看布林结构(读 B-1)。
+  //   view 切「做T结构 / 策略信号」· crypto 默认进做T(常显)· 非 crypto 恒为策略(无做T 标签)。
+  const isCrypto = market === 'crypto'
+  const [view, setView] = useState<'dott' | 'strategy'>(isCrypto ? 'dott' : 'strategy')
+  const bollSymbol = symbol.replace('/', '') // ccxt 'BTC/USDT' → Binance 'BTCUSDT'(B-1 接口契约)
+  const bollStructure = useQuery({
+    queryKey: ['boll-structure', bollSymbol],
+    queryFn: ({ signal }) => fetchBollStructure(bollSymbol, signal),
+    enabled: isCrypto && view === 'dott', // 仅 crypto + 做T 视图才取数
+    retry: 0,
+    staleTime: 60_000,
+  })
 
   const rec = recommend.data
   const sig = signals.data
@@ -135,10 +160,25 @@ export function StrategyPanel({
         </button>
       </div>
 
-      {enabled && (
+      {/* ★crypto 恒展开(常显做T)· 非 crypto 维持原行为(仅 enabled 时展开)*/}
+      {(enabled || isCrypto) && (
         <div className="mt-3 space-y-2">
-          {/* 策略选择 */}
+          {/* 标签排:布林做T(仅 crypto)+ 策略选择 */}
           <div className="flex flex-wrap items-center gap-2">
+            {isCrypto && (
+              <button
+                type="button"
+                onClick={() => setView('dott')}
+                className={cn(
+                  'rounded-md border px-3 py-1 text-xs transition-colors',
+                  view === 'dott'
+                    ? 'border-midas-red bg-midas-red-glow text-midas-red'
+                    : 'border-paper text-muted-foreground hover:border-midas-red/40 hover:text-foreground',
+                )}
+              >
+                布林做T
+              </button>
+            )}
             {order.map((k, idx) => {
               const isRecommended = rec?.recommended_strategy === k
               return (
@@ -154,10 +194,13 @@ export function StrategyPanel({
                   </button>
                   <button
                     type="button"
-                    onClick={() => onStrategyChange(k)}
+                    onClick={() => {
+                      setView('strategy')
+                      onStrategyChange(k)
+                    }}
                     className={cn(
                       'relative rounded-md border px-3 py-1 text-xs transition-colors',
-                      strategy === k
+                      view === 'strategy' && strategy === k
                         ? 'border-midas-red bg-midas-red-glow text-midas-red'
                         : 'border-paper text-muted-foreground hover:border-midas-red/40 hover:text-foreground',
                     )}
@@ -181,6 +224,12 @@ export function StrategyPanel({
             })}
           </div>
 
+          {/* 内容区 · 做T 视图 → 布林结构(免费 · 无门控)· 策略视图 → 信号(Pro 门控)·
+              crypto 未开策略信号时选中策略 → 提示开开关(★做T 仍照常显示,不受开关影响)*/}
+          {view === 'dott' ? (
+            <DottStructureView query={bollStructure} />
+          ) : enabled ? (
+          <>
           {/* AI 推荐理由 */}
           {rec && (
             <p className="text-[11px] text-gold/90">
@@ -245,6 +294,61 @@ export function StrategyPanel({
             </details>
           )}
           </>
+          )}
+          </>
+          ) : (
+            <p className="rounded-md border border-paper bg-background/50 px-2.5 py-1.5 text-[11px] text-muted-foreground/70">
+              开启上方「策略信号」开关 · 在 K 线标注买卖点 + 复盘历史信号
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * 布林做T结构视图(做T B-2 重构 · 原 DotTStructureSection 内容搬入此 tab)。
+ * ★层级标注「布林结构」(化解两块手表 · 区别 AI 决策卡综合研判)· 倾向复用 biasTone 涨跌色 ·
+ *   倾向只偏多/偏空/中性 · 纯展示不下单 · ★免责已移除(依赖全站统一提示)。免费层(不门控)。
+ */
+function DottStructureView({ query }: { query: UseQueryResult<BollStructureResponse> }) {
+  const it = query.isSuccess && query.data.available ? query.data.item : null
+  return (
+    <div className="rounded-md border border-paper bg-background/50 px-2.5 py-2">
+      {query.isPending && <p className="text-[11px] text-muted-foreground/60">载入中…</p>}
+      {query.isError && (
+        <p className="text-[11px] text-muted-foreground/60">暂时无法读取做T结构</p>
+      )}
+      {query.isSuccess && !query.data.available && (
+        <p className="text-[11px] text-muted-foreground/60">该币暂无做T结构数据</p>
+      )}
+      {it && (
+        <div className="space-y-1.5 text-sm">
+          {/* ★布林结构:倾向(层级标注 + 涨跌色偏好 · 区别于 AI 决策卡综合研判)*/}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-muted-foreground">布林结构:</span>
+            <span className={cn('font-bold', biasTone(it.bias))}>{it.bias}</span>
+            <span className="text-xs text-muted-foreground/70">· {it.state_label}</span>
+            {it.transition && it.transition_from && (
+              <span className="rounded bg-midas-red-glow/50 px-1.5 py-0.5 text-[10px] font-medium text-midas-red">
+                刚转换
+              </span>
+            )}
+          </div>
+          {/* 通道位置 %B + zone */}
+          <div className="text-xs text-muted-foreground/80">
+            通道位置 %B={it.pct_b.toFixed(2)}（{it.zone_label}）
+          </div>
+          {/* 布林三轨 + 现价 */}
+          <div className="font-mono text-xs text-muted-foreground/80">
+            上 {fmtN(it.upper)} / 中 {fmtN(it.mid)} / 下 {fmtN(it.lower)} · 现价 {fmtN(it.close)}
+          </div>
+          {/* 状态转换路径 */}
+          {it.transition && it.transition_from && (
+            <div className="text-xs text-muted-foreground/60">
+              转换:{it.transition_from} → {it.state_label}
+            </div>
           )}
         </div>
       )}
