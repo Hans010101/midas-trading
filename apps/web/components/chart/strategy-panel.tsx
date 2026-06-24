@@ -39,6 +39,11 @@ const STRATEGY_LABELS: Record<StrategyKind, string> = {
   extreme: '合约极端',
 }
 
+// ★布林做T 作为标签序列里的一个特殊 token(非 StrategyKind · 独立布林结构 view)· 仅 crypto 出现。
+const DOTT_TAB = 'dott' as const
+type TabKey = StrategyKind | typeof DOTT_TAB
+const DOTT_LABEL = '布林做T'
+
 // 价格符号(按市场)· cn ¥ / hk HK$ / us·crypto $
 function priceSym(market: Market): string {
   return market === 'cn' ? '¥' : market === 'hk' ? 'HK$' : '$'
@@ -99,6 +104,8 @@ export function StrategyPanel({
   const signals = useStrategySignals({ symbol, market, period, strategy, instrument, enabled })
   const storedOrder = useUiStore((s) => s.strategyOrder)
   const setOrder = useUiStore((s) => s.setStrategyOrder)
+  const dottTabPos = useUiStore((s) => s.dottTabPos)
+  const setDottTabPos = useUiStore((s) => s.setDottTabPos)
 
   // ★布林做T(做T B-2 重构)· 仅 crypto · 标签排里一个「布林做T」标签,点开看布林结构(读 B-1)。
   //   view 切「做T结构 / 策略信号」· crypto 默认进做T(常显)· 非 crypto 恒为策略(无做T 标签)。
@@ -116,6 +123,12 @@ export function StrategyPanel({
   const rec = recommend.data
   const sig = signals.data
   const order = effectiveOrder(storedOrder, availableStrategies(market, instrument))
+  // ★统一标签序列:把「布林做T」(dott)作为一个 token 插进策略序列 → 和策略标签一样能左右调 + 持久化。
+  //   非 crypto 无 dott → tabs 就是 order(行为字节级不变)。dottTabPos 越界夹到末尾。
+  const dottPos = Math.min(Math.max(dottTabPos, 0), order.length)
+  const tabs: TabKey[] = isCrypto
+    ? [...order.slice(0, dottPos), DOTT_TAB, ...order.slice(dottPos)]
+    : order
 
   // 选中策略在当前市场不可用(如从 crypto perp 选着「合约极端」切到现货)→ 回退首个可用,
   // 避免「选中态无对应按钮 + 拉取空信号」。order 内容变化才触发(join 当稳定依赖)。
@@ -127,14 +140,17 @@ export function StrategyPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderKey, strategy, onStrategyChange])
 
-  // 左右移:与相邻项交换 · 写回 ui-store(全页持久化)。端点处 dir 越界则不动。
-  function moveStrategy(k: StrategyKind, dir: -1 | 1): void {
-    const i = order.indexOf(k)
+  // 左右移(统一序列 · 含布林做T)· 与相邻项交换。dott 移动 → 写 dottTabPos;策略相对序变 → 写 strategyOrder。
+  //   两者都持久化(ui-store)· 端点越界则不动。i = 在 tabs(统一序列)里的下标。
+  function moveTab(i: number, dir: -1 | 1): void {
     const j = i + dir
-    if (j < 0 || j >= order.length) return
-    const next = [...order]
+    if (j < 0 || j >= tabs.length) return
+    const next = [...tabs]
     ;[next[i], next[j]] = [next[j], next[i]]
-    setOrder(next)
+    const newDottPos = next.indexOf(DOTT_TAB)
+    const newOrder = next.filter((k): k is StrategyKind => k !== DOTT_TAB)
+    setOrder(newOrder)
+    if (isCrypto && newDottPos !== dottPos) setDottTabPos(newDottPos)
   }
 
   return (
@@ -163,31 +179,20 @@ export function StrategyPanel({
       {/* ★crypto 恒展开(常显做T)· 非 crypto 维持原行为(仅 enabled 时展开)*/}
       {(enabled || isCrypto) && (
         <div className="mt-3 space-y-2">
-          {/* 标签排:布林做T(仅 crypto)+ 策略选择 */}
+          {/* 标签排:统一序列(布林做T[仅 crypto] + 策略)· 每项都有 ◀▶ 左右调 → 滑动体验一致 ·
+              布林做T 也纳入 reorder(★修复:不再是序列外固定项)· 点 dott→结构视图 / 点策略→信号视图 */}
           <div className="flex flex-wrap items-center gap-2">
-            {isCrypto && (
-              <button
-                type="button"
-                onClick={() => setView('dott')}
-                className={cn(
-                  'rounded-md border px-3 py-1 text-xs transition-colors',
-                  view === 'dott'
-                    ? 'border-midas-red bg-midas-red-glow text-midas-red'
-                    : 'border-paper text-muted-foreground hover:border-midas-red/40 hover:text-foreground',
-                )}
-              >
-                布林做T
-              </button>
-            )}
-            {order.map((k, idx) => {
-              const isRecommended = rec?.recommended_strategy === k
+            {tabs.map((k, idx) => {
+              const label = k === DOTT_TAB ? DOTT_LABEL : STRATEGY_LABELS[k]
+              const active = k === DOTT_TAB ? view === 'dott' : view === 'strategy' && strategy === k
+              const isRecommended = k !== DOTT_TAB && rec?.recommended_strategy === k
               return (
                 <div key={k} className="flex items-center gap-0.5">
                   <button
                     type="button"
-                    aria-label={`${STRATEGY_LABELS[k]} 左移`}
+                    aria-label={`${label} 左移`}
                     disabled={idx === 0}
-                    onClick={() => moveStrategy(k, -1)}
+                    onClick={() => moveTab(idx, -1)}
                     className="px-1 text-[11px] text-muted-foreground/50 transition-colors hover:text-midas-red disabled:opacity-25"
                   >
                     ◀
@@ -195,26 +200,28 @@ export function StrategyPanel({
                   <button
                     type="button"
                     onClick={() => {
-                      setView('strategy')
-                      onStrategyChange(k)
+                      if (k === DOTT_TAB) {
+                        setView('dott')
+                      } else {
+                        setView('strategy')
+                        onStrategyChange(k)
+                      }
                     }}
                     className={cn(
                       'relative rounded-md border px-3 py-1 text-xs transition-colors',
-                      view === 'strategy' && strategy === k
+                      active
                         ? 'border-midas-red bg-midas-red-glow text-midas-red'
                         : 'border-paper text-muted-foreground hover:border-midas-red/40 hover:text-foreground',
                     )}
                   >
-                    {STRATEGY_LABELS[k]}
-                    {isRecommended && (
-                      <span className="ml-1 text-[10px] text-gold">★荐</span>
-                    )}
+                    {label}
+                    {isRecommended && <span className="ml-1 text-[10px] text-gold">★荐</span>}
                   </button>
                   <button
                     type="button"
-                    aria-label={`${STRATEGY_LABELS[k]} 右移`}
-                    disabled={idx === order.length - 1}
-                    onClick={() => moveStrategy(k, 1)}
+                    aria-label={`${label} 右移`}
+                    disabled={idx === tabs.length - 1}
+                    onClick={() => moveTab(idx, 1)}
                     className="px-1 text-[11px] text-muted-foreground/50 transition-colors hover:text-midas-red disabled:opacity-25"
                   >
                     ▶

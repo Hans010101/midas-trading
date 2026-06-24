@@ -21,12 +21,16 @@ export interface UiState {
   /** AI 策略信号显示顺序(用户左右调 · 全页持久化 · 放 ui-store 因其 root 全局 rehydrate,
    *  workbench-store 仅 /workbench rehydrate · detail 页会丢)。 */
   strategyOrder: StrategyKind[]
+  /** 「布林做T」标签在策略标签序列里的位置(仅 crypto · 0=首位 · 与 strategyOrder 一样可左右调 + 持久化)。
+   *  做T 是独立 view(布林结构)非 StrategyKind,故位置单存一个 index,渲染时插进 strategyOrder。 */
+  dottTabPos: number
 }
 
 export interface UiActions {
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
   setStrategyOrder: (order: StrategyKind[]) => void
+  setDottTabPos: (pos: number) => void
 }
 
 export type UiStore = UiState & UiActions
@@ -41,6 +45,7 @@ export const createUiStore = () =>
       immer((set) => ({
         sidebarOpen: true,
         strategyOrder: [...DEFAULT_STRATEGY_ORDER],
+        dottTabPos: 0, // 布林做T 默认首位
         toggleSidebar: () =>
           set((state) => {
             state.sidebarOpen = !state.sidebarOpen
@@ -52,6 +57,10 @@ export const createUiStore = () =>
         setStrategyOrder: (order) =>
           set((state) => {
             state.strategyOrder = order
+          }),
+        setDottTabPos: (pos) =>
+          set((state) => {
+            state.dottTabPos = pos
           }),
       })),
       {
