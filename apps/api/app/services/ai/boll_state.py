@@ -299,3 +299,28 @@ def build_session_message(cards: list[str]) -> str:
         parts.append(card)
     parts.append(sep)  # 末尾分隔线收尾(★不再加重复声明行 · 声明在转换行)
     return validate_shadow_push("\n".join(parts))
+
+
+# 详情页深链(转换合并简版列表 SYMBOL 超链接 · Telegram Markdown [text](url))·
+# ★体系1 boll_digest 另有同值常量,本模块独立定义(boll_state 是基座 · 不反向依赖体系1)。
+DETAIL_URL = "https://midastrade.asia/crypto-preview"
+
+
+def build_transition_digest(pushed: list[tuple[str, BollSnapshot, str]]) -> str:
+    """≥2 个转换合并为【一条】简版列表(做T M2-3b · 体系2)· 经门禁后返回。
+
+    每行:emoji(方向 📈/📉/➖ · ★不用 🟢🔴 红绿)+ SYMBOL 超链接 + 转{倾向} + 结构转换路径
+    (transition_from → 当前状态)+ %B 通道位置。单个转换不走这里(走方案B 完整卡)。
+    倾向只偏多/偏空/中性 · 转换方向用结构语言(状态口诀)· 无买卖词 · 末尾「· 仅供参考」过门禁。
+    pushed 每项 = (symbol, snap, transition_from 中文口诀)· 由 worker 在 M2-1 筛选后传入(不重算)。
+    """
+    lines = [f"📊 布林做T · 转换提醒({len(pushed)}个)"]
+    for sym, snap, transition_from in pushed:
+        emoji = "📈" if snap.bias == "偏多" else "📉" if snap.bias == "偏空" else "➖"
+        url = f"{DETAIL_URL}?symbol={sym}"
+        lines.append(
+            f"{emoji} [{sym}]({url})｜转{snap.bias} · "
+            f"{transition_from} → {_STATE_LABEL[snap.state]} · %B={snap.pct_b:.2f}",
+        )
+    lines.append(PUSH_DISCLAIMER)  # 末尾唯一「· 仅供参考」
+    return validate_shadow_push("\n".join(lines))

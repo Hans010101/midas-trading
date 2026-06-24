@@ -10,11 +10,13 @@ from app.schemas.market import Kline
 from app.services.ai.boll_state import (
     _FORBIDDEN_PUSH_WORDS,
     _ZONE_LABEL,
+    DETAIL_URL,
     STRUCTURE_DISCLAIMER,
     BollSnapshot,
     BollState,
     _zone,
     build_session_message,
+    build_transition_digest,
     classify,
     push_strength,
     render_card,
@@ -262,3 +264,59 @@ def test_build_session_message_plan_b() -> None:
     body = msg.replace("仅供参考", "").replace("结构描述非建议", "")
     for word in _FORBIDDEN_PUSH_WORDS:
         assert word not in body
+
+
+# ── 做T M2-3b · 转换合并简版列表 build_transition_digest(≥2 转换 → 一条)──────────
+
+def _psnap(bias: str, state: BollState, pct_b: float) -> BollSnapshot:
+    return BollSnapshot(
+        state=state, bias=bias, pct_b=pct_b, bandwidth=0.04, zone=_zone(pct_b),
+        close=100.0, mid=100.0, upper=102.0, lower=98.0,
+    )
+
+
+def test_transition_digest_merges_multiple() -> None:
+    pushed = [
+        ("BTCUSDT", _psnap("偏多", BollState.BREAKOUT_UP, 0.9), "三线走平·震荡结构"),
+        ("ADAUSDT", _psnap("偏空", BollState.BREAKDOWN, 0.1), "三线走平·震荡结构"),
+        ("WLFIUSDT", _psnap("中性", BollState.SQUEEZE, 0.5), "三线齐上·上升结构"),
+    ]
+    msg = build_transition_digest(pushed)
+    # ★合并成一条 · 头含个数
+    assert msg.startswith("📊 布林做T · 转换提醒(3个)")
+    # ★方向 emoji 📈/📉/➖(非红绿)· 每币一行
+    assert "📈 [BTCUSDT]" in msg
+    assert "📉 [ADAUSDT]" in msg
+    assert "➖ [WLFIUSDT]" in msg
+    # ★超链接 Markdown 指向详情页
+    assert f"[BTCUSDT]({DETAIL_URL}?symbol=BTCUSDT)" in msg
+    # ★转{倾向}(只偏多/偏空/中性)+ 结构转换路径 + %B
+    assert "转偏多" in msg
+    assert "三线走平·震荡结构 → 带宽开口·向上" in msg
+    assert "%B=0.90" in msg
+
+
+def test_transition_digest_disclaimer_and_no_trade_words() -> None:
+    pushed = [
+        ("BTCUSDT", _psnap("偏多", BollState.TREND_UP, 0.8), "三线走平·震荡结构"),
+        ("ETHUSDT", _psnap("偏空", BollState.TREND_DOWN, 0.2), "带宽开口·向上"),
+    ]
+    msg = build_transition_digest(pushed)
+    # ★末尾唯一「· 仅供参考」过门禁
+    assert msg.rstrip().endswith("· 仅供参考")
+    # ★正文(剔合规声明)无买卖/预测词(转换方向用结构口诀,非买卖词)
+    body = msg.replace("仅供参考", "").replace("结构描述非建议", "")
+    for word in _FORBIDDEN_PUSH_WORDS:
+        assert word not in body
+
+
+def test_transition_digest_single_card_still_plan_b() -> None:
+    # 对照:单个转换不走 digest · 走方案B 完整卡(build_session_message · 多行三轨)
+    card = render_card(
+        "BTCUSDT", _psnap("偏多", BollState.BREAKOUT_UP, 0.9),
+        transition_from="三线走平·震荡结构",
+    )
+    msg = build_session_message([card])
+    assert msg.startswith("📊 布林做T信号 · 15m永续")  # 方案B 头(非合并头)
+    assert "转换提醒" not in msg  # 不是简版合并
+    assert "· 仅供参考" in msg

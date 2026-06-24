@@ -30,6 +30,7 @@ from app.services.ai.boll_state import (
     BollSnapshot,
     BollState,
     build_session_message,
+    build_transition_digest,
     classify,
     render_card,
     select_for_push,
@@ -57,6 +58,9 @@ _SNAPSHOT_TTL = 30 * 60                 # 30min 防陈旧(每 15min 刷一次 ·
 _BATCH_MAX = 5             # 每轮批量上限:转换多时按「信号强度 |%B−0.5|」降序最多取 5 个
 _DAILY_MAX = 30            # 每日全局上限:极端行情整天最多 30 条(M2-2 有订阅后细化到用户级)
 _DAILY_TTL = 26 * 3600     # 每日计数 key TTL(日界 key 自然换 · 给跨日 buffer)
+# ★M2-3b 转换合并:≥2 转换合并成一条简版列表 · 一条最多 _MERGE_MAX 个(超出分多条 · 防超长)·
+#   当前 _BATCH_MAX=5 < _MERGE_MAX 故恒不分批,纯防未来调大批量。
+_MERGE_MAX = 10
 
 
 def _state_key(sym: str) -> str:
@@ -155,19 +159,27 @@ async def _boll_scan_async() -> dict[str, int]:
         batch_n = min(after_filter, _BATCH_MAX)                    # 批量上限截断后的个数
         pushed = select_for_push(cand, batch_max=_BATCH_MAX, daily_remaining=remaining)
         if pushed:
-            cards = [render_card(s, snp, transition_from=tf) for s, snp, tf in pushed]
-            # ★build_session_message 内含 validate_shadow_push 门禁(末尾唯一免责 + 买卖黑名单)
-            msg = build_session_message(cards)
+            # ★M2-3b 合并规则(只在 M2-1 筛选输出后加 · 不碰频率控制):
+            #   1 个 → 方案B 完整卡(信息全)· ≥2 个 → 简版合并列表一条(超 _MERGE_MAX 分多条)
+            if len(pushed) == 1:
+                s0, snp0, tf0 = pushed[0]
+                msgs = [build_session_message([render_card(s0, snp0, transition_from=tf0)])]
+            else:
+                msgs = [
+                    build_transition_digest(pushed[i : i + _MERGE_MAX])
+                    for i in range(0, len(pushed), _MERGE_MAX)
+                ]
             # ★冷却 + 每日计数:只对【实际影子推送的】生效(被上限截掉的不冷却 → 下轮仍可竞争)
             for s, _snp, _tf in pushed:
                 await redis.set(_cooldown_key(s), "1", ex=_COOLDOWN_SEC)
             await redis.incrby(_daily_key(), len(pushed))
             await redis.expire(_daily_key(), _DAILY_TTL)
-            # ★影子模式:只打日志,★绝不调 TG 发送 helper(M2-3 才接 telegram.send_event)
-            logger.info(
-                "[boll-scan-shadow] 影子推送文案(★不真发 · %d 标的):\n%s",
-                len(pushed), msg,
-            )
+            # ★影子模式:只打日志,★绝不调 TG 发送 helper(真发 M2-5)
+            for msg in msgs:
+                logger.info(
+                    "[boll-scan-shadow] 影子推送文案(★不真发 · 本轮 %d 转换):\n%s",
+                    len(pushed), msg,
+                )
         # ★频率漏斗(每轮都打 · 方便验证频率落到合理范围:冷却/批量/每日是否生效)
         logger.info(
             "[boll-scan-throttle] 转换 %d → 候选(涨跌榜∩非冷却) %d → 批量上限取 %d "
