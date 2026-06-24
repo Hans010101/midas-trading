@@ -25,8 +25,9 @@ class NotificationConfigResponse(BaseModel):
     price_alert_enabled: bool
     # 市场周报订阅(P3)· 默认 false(选择性订阅)
     weekly_report_enabled: bool = False
-    # 做T信号 TG 通知订阅(做T M2-2)· Pro 专属 · 默认 false(opt-in)
-    dott_alert_enabled: bool = False
+    # 做T信号订阅 · M2-4 拆两体系(都 Pro 专属 · 默认 false)· 旧 dott_alert_enabled 废弃不再暴露
+    dott_digest_enabled: bool = False      # 体系1 · 每小时定时全景(M2-3a)
+    dott_transition_enabled: bool = False  # 体系2 · 行情转换(M2-3b)
     # 服务端只读 · 给前端展示是否已绑定 Telegram
     has_telegram: bool
     # ADR 0032 阶段三 · 是否已绑定飞书(feishu_open_id 非空)
@@ -53,8 +54,9 @@ class NotificationConfigUpdate(BaseModel):
     price_alert_enabled: bool | None = None
     # 市场周报订阅开关(P3)· None=不动
     weekly_report_enabled: bool | None = None
-    # 做T信号 TG 通知开关(做T M2-2 · ★Pro 专属 · 设 true 需 Pro · 端点层 gate)· None=不动
-    dott_alert_enabled: bool | None = None
+    # 做T信号 TG 通知开关 · M2-4 拆两体系(★Pro 专属 · 设 true 需 Pro · 端点层 gate)· None=不动
+    dott_digest_enabled: bool | None = None       # 体系1 · 定时全景
+    dott_transition_enabled: bool | None = None   # 体系2 · 行情转换
     # 0028 N2 · 安静时段(4 个独立字段 · 各自可选 · 跨夜由 start > end 表达)
     quiet_hours_enabled: bool | None = None
     quiet_hours_start: int | None = Field(default=None, ge=0, le=23)
@@ -92,7 +94,8 @@ def serialize_config_response(config) -> NotificationConfigResponse:  # type: ig
         trade_alert_enabled=config.trade_alert_enabled,
         price_alert_enabled=config.price_alert_enabled,
         weekly_report_enabled=config.weekly_report_enabled,
-        dott_alert_enabled=config.dott_alert_enabled,
+        dott_digest_enabled=config.dott_digest_enabled,
+        dott_transition_enabled=config.dott_transition_enabled,
         has_telegram=bool(config.tg_chat_id),
         has_feishu=bool(config.feishu_open_id),
         quiet_hours_enabled=config.quiet_hours_enabled,

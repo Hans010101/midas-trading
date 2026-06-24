@@ -283,27 +283,30 @@ async def test_put_config_rejects_invalid_quiet_hours(
     assert config is None
 
 
-# ── 做T M2-2 · 做T信号 TG 通知开关(★Pro 专属 · 默认 false · 后端二道 gate)──────────
+# ── 做T M2-4 · 做T信号拆两体系开关(★两字段都 Pro 双层 gate · 默认 false · 后端二道 gate)──────────
 
 @pytest.mark.asyncio
-async def test_dott_alert_default_false(
+async def test_dott_split_default_false(
     client: AsyncClient, db_session: AsyncSession,
 ):
-    # ★默认 false(opt-in · 不给存量用户群发)
+    # ★两体系开关都默认 false(opt-in · 不给存量用户群发)· 旧 dott_alert_enabled 不再暴露
     user = await make_user(db_session)
     await db_session.commit()
     r = await client.get(
         "/api/v1/notifications/config", headers=await _auth(user, db_session),
     )
     assert r.status_code == 200
-    assert r.json()["dott_alert_enabled"] is False
+    body = r.json()
+    assert body["dott_digest_enabled"] is False
+    assert body["dott_transition_enabled"] is False
+    assert "dott_alert_enabled" not in body  # 旧字段废弃 · API 不再暴露
 
 
 @pytest.mark.asyncio
-async def test_dott_alert_pro_can_enable(
+async def test_dott_split_pro_can_enable_each(
     client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
 ):
-    # Pro 用户设 true → 200 · 落库 true
+    # Pro 用户分别开两体系 → 200 · 落库 true(各自独立)
     monkeypatch.setattr(
         "app.api.v1.notifications.resolve_plan", AsyncMock(return_value="pro"),
     )
@@ -311,23 +314,28 @@ async def test_dott_alert_pro_can_enable(
     await db_session.commit()
     r = await client.put(
         "/api/v1/notifications/config",
-        json={"dott_alert_enabled": True},
+        json={"dott_digest_enabled": True, "dott_transition_enabled": True},
         headers=await _auth(user, db_session),
     )
     assert r.status_code == 200
-    assert r.json()["dott_alert_enabled"] is True
+    body = r.json()
+    assert body["dott_digest_enabled"] is True
+    assert body["dott_transition_enabled"] is True
     config = await db_session.scalar(
         select(NotificationConfig).where(NotificationConfig.user_id == user.id),
     )
     assert config is not None
-    assert config.dott_alert_enabled is True
+    assert config.dott_digest_enabled is True
+    assert config.dott_transition_enabled is True
 
 
 @pytest.mark.asyncio
-async def test_dott_alert_non_pro_enable_rejected(
+@pytest.mark.parametrize("field", ["dott_digest_enabled", "dott_transition_enabled"])
+async def test_dott_split_non_pro_enable_rejected(
+    field: str,
     client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
 ):
-    # ★非 Pro 设 true → 403(后端二道 gate · 防 F12 绕前端禁用)· DB 不写入
+    # ★两字段【都】保留 M2-2 的 Pro 二道 gate:非 Pro 设任一为 true → 403 · DB 不写入(防 F12)
     monkeypatch.setattr(
         "app.api.v1.notifications.resolve_plan", AsyncMock(return_value="free"),
     )
@@ -335,7 +343,7 @@ async def test_dott_alert_non_pro_enable_rejected(
     await db_session.commit()
     r = await client.put(
         "/api/v1/notifications/config",
-        json={"dott_alert_enabled": True},
+        json={field: True},
         headers=await _auth(user, db_session),
     )
     assert r.status_code == 403
@@ -343,14 +351,15 @@ async def test_dott_alert_non_pro_enable_rejected(
     config = await db_session.scalar(
         select(NotificationConfig).where(NotificationConfig.user_id == user.id),
     )
-    assert config is None or config.dott_alert_enabled is False
+    if config is not None:
+        assert getattr(config, field) is False
 
 
 @pytest.mark.asyncio
-async def test_dott_alert_non_pro_can_disable(
+async def test_dott_split_non_pro_can_disable(
     client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
 ):
-    # 非 Pro 设 false(退订)允许 · gate 只拦「开启」
+    # 非 Pro 设 false(退订)允许 · gate 只拦「开启」(两字段同)
     monkeypatch.setattr(
         "app.api.v1.notifications.resolve_plan", AsyncMock(return_value="free"),
     )
@@ -358,8 +367,10 @@ async def test_dott_alert_non_pro_can_disable(
     await db_session.commit()
     r = await client.put(
         "/api/v1/notifications/config",
-        json={"dott_alert_enabled": False},
+        json={"dott_digest_enabled": False, "dott_transition_enabled": False},
         headers=await _auth(user, db_session),
     )
     assert r.status_code == 200
-    assert r.json()["dott_alert_enabled"] is False
+    body = r.json()
+    assert body["dott_digest_enabled"] is False
+    assert body["dott_transition_enabled"] is False
