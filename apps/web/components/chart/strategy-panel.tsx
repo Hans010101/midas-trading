@@ -10,7 +10,8 @@
  * - 当前是否触发提示(调 /strategy-signals · current_triggered / 最近信号)
  * - ★布林做T(仅 crypto · 做T B-2 重构):标签排里一个「布林做T」标签 · 点击展开看单币布林 6 态
  *   结构(读 B-1 /crypto/boll-structure)· 【布林结构层】客观描述 · 区别 AI 决策卡综合研判(化解
- *   两块手表)· 免费(不门控)· 常显(crypto 面板恒展开 · 不受策略信号开关控制)· 倾向只偏多/偏空/中性。
+ *   两块手表)· ★Pro 门控(非 Pro 显 ProLock · 同策略信号/AI卡 · 纯前端门控同 strategy-checklist)·
+ *   常显(crypto 面板恒展开 · 标签可见可排序 · 仅内容遮罩)· 倾向只偏多/偏空/中性。
  *
  * ★ 全 props 驱动 · 信号点的实际标注在 <StrategyOverlay>(同 strategy/enabled 状态由父组件管理)。
  * ★ 红线:纯展示 · 不下单 / 不自动交易。
@@ -20,6 +21,7 @@ import { useEffect, useState } from 'react'
 
 import { ProLock } from '@/components/account/pro-lock'
 import { biasTone } from '@/components/crypto/boll-scan-list'
+import { useQuota } from '@/hooks/use-quota'
 import { useStrategyRecommend, useStrategySignals } from '@/hooks/use-strategy'
 import type { BollStructureResponse } from '@/lib/api/crypto-market'
 import { fetchBollStructure } from '@/lib/api/crypto-market'
@@ -111,11 +113,15 @@ export function StrategyPanel({
   //   view 切「做T结构 / 策略信号」· crypto 默认进做T(常显)· 非 crypto 恒为策略(无做T 标签)。
   const isCrypto = market === 'crypto'
   const [view, setView] = useState<'dott' | 'strategy'>(isCrypto ? 'dott' : 'strategy')
+  // ★布林做T Pro 门控(纯前端 · 对齐 strategy-checklist「公开输入 + 前端门控」范式):
+  //   非 Pro → 结构内容显 ProLock(标签仍在序列、仍可排序)· 不取数(不把 Pro 内容拉到非 Pro 客户端)。
+  const { data: quota } = useQuota()
+  const isProMember = quota?.plan === 'pro'
   const bollSymbol = symbol.replace('/', '') // ccxt 'BTC/USDT' → Binance 'BTCUSDT'(B-1 接口契约)
   const bollStructure = useQuery({
     queryKey: ['boll-structure', bollSymbol],
     queryFn: ({ signal }) => fetchBollStructure(bollSymbol, signal),
-    enabled: isCrypto && view === 'dott', // 仅 crypto + 做T 视图才取数
+    enabled: isCrypto && view === 'dott' && isProMember, // 仅 crypto + 做T 视图 + Pro 才取数
     retry: 0,
     staleTime: 60_000,
   })
@@ -231,10 +237,14 @@ export function StrategyPanel({
             })}
           </div>
 
-          {/* 内容区 · 做T 视图 → 布林结构(免费 · 无门控)· 策略视图 → 信号(Pro 门控)·
-              crypto 未开策略信号时选中策略 → 提示开开关(★做T 仍照常显示,不受开关影响)*/}
+          {/* 内容区 · 做T 视图 → 布林结构(★Pro 门控:非 Pro 显 ProLock · 同策略信号/AI卡)·
+              策略视图 → 信号(Pro 门控)· crypto 未开策略信号时选中策略 → 提示开开关 */}
           {view === 'dott' ? (
-            <DottStructureView query={bollStructure} />
+            isProMember ? (
+              <DottStructureView query={bollStructure} />
+            ) : (
+              <ProLock title="布林做T结构" />
+            )
           ) : enabled ? (
           <>
           {/* AI 推荐理由 */}
