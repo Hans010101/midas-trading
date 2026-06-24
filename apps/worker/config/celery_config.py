@@ -256,6 +256,14 @@ beat_schedule = {
         "schedule": crontab(minute="3,18,33,48"),
         "options": {"expires": 600},
     },
+    "crypto-boll-hourly-digest": {
+        "task": "tasks.crypto.boll_hourly_digest",
+        # 做T 体系1(M2-3a · ★影子)· 每小时整点读 A-1 快照 → 分偏多/中性/偏空三组 → 每组前 5(按 %B)
+        # → 组装图1 分组全景(SYMBOL 超链接)· 只 logger.info,绝不真发 TG(真发 M2-5)。
+        # 夜间安静时段任务内跳过 · expires 600 整点附近没领走就丢(下个整点再来)。
+        "schedule": crontab(minute="0"),
+        "options": {"expires": 600},
+    },
     "crypto-fear-greed-refresh": {
         "task": "tasks.crypto.fear_greed_refresh",
         # alternative.me FGI 每日更新一次 · 每 6 小时一轮即可保证当日值及时合并入 overview
