@@ -27,9 +27,13 @@ from celery import shared_task
 from redis import asyncio as aioredis
 
 from app.services.ai.boll_state import (
+    BollSnapshot,
+    BollState,
     build_session_message,
     classify,
     render_card,
+    select_for_push,
+    state_label,
     to_snapshot_row,
 )
 from app.services.clickhouse_client import ClickHouseClient
@@ -45,9 +49,14 @@ _UNIVERSE_N = 150          # 扫描标的 = 成交额 Top 150 纯加密永续(�
 _POOL_N = 40               # 涨跌榜各取前 40(涨幅 + 跌幅)作推送筛选池(降噪)
 _LOOKBACK_BARS = 30        # select_kline 取最近 30 根(布林 20 预热 + 斜率/带宽回看余量)
 _STATE_TTL = 24 * 3600     # Redis 状态滚动窗口 ~24h(TTL 自动清)
-_COOLDOWN_SEC = 4 * 3600   # 每标的推送冷却 4h(冷却窗口内再转换也不重复推)
+_COOLDOWN_SEC = 4 * 3600   # 每标的推送冷却 4h(冷却窗口内再转换也不重复推 · 数小时级防同币刷屏)
 _SNAPSHOT_KEY = "boll:snapshot:latest"  # ★做T A-1 全量快照(独立 key · 不和边沿状态 key 冲突)
 _SNAPSHOT_TTL = 30 * 60                 # 30min 防陈旧(每 15min 刷一次 · 留两轮余量)
+
+# ── M2-1 频率控制(防刷屏 · 参数可调 · 仍影子)─────────────────────────────────
+_BATCH_MAX = 5             # 每轮批量上限:转换多时按「信号强度 |%B−0.5|」降序最多取 5 个
+_DAILY_MAX = 30            # 每日全局上限:极端行情整天最多 30 条(M2-2 有订阅后细化到用户级)
+_DAILY_TTL = 26 * 3600     # 每日计数 key TTL(日界 key 自然换 · 给跨日 buffer)
 
 
 def _state_key(sym: str) -> str:
@@ -58,13 +67,27 @@ def _cooldown_key(sym: str) -> str:
     return f"boll:cooldown:{sym}"
 
 
+def _daily_key() -> str:
+    # 全局每日影子推送计数(UTC 日界 · 日期戳 key 自然换天)
+    return f"boll:daily:{datetime.now(tz=UTC):%Y%m%d}"
+
+
+def _prev_label(prev: str) -> str:
+    # 转换前状态 → 中文口诀(prev 由本任务自写 · 异常兜底返原值,绝不让一币崩掉整轮)
+    try:
+        return state_label(BollState(prev))
+    except ValueError:
+        return prev
+
+
 async def _boll_scan_async() -> dict[str, int]:
     redis = aioredis.from_url(
         os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
         decode_responses=True,
     )
     ch = await ClickHouseClient.create()
-    candidates: list[str] = []
+    # 候选(已过【转换∩涨跌榜∩非冷却】)· (symbol, snap, 转换前口诀)· ★冷却/渲卡延后到批量+每日上限后
+    cand: list[tuple[str, BollSnapshot, str]] = []
     snapshot_rows: list[dict[str, Any]] = []  # ★A-1:全量结构快照(每币一行 · 复用 snap)
     universe_n = 0
     transitions = 0
@@ -120,24 +143,37 @@ async def _boll_scan_async() -> dict[str, int]:
             transitions += 1
             if sym not in pool:                          # 降噪:只推涨跌榜前列
                 continue
-            if await redis.get(_cooldown_key(sym)):      # 每标的冷却
+            if await redis.get(_cooldown_key(sym)):      # 每标的冷却(M2-1 冷却时长仍 4h)
                 continue
-            candidates.append(render_card(sym, snap))
-            await redis.set(_cooldown_key(sym), "1", ex=_COOLDOWN_SEC)
+            # ★只收集(不设冷却/不渲卡)· 冷却只对【上限后实际推送的】设,被截断的不冷却 → 下轮仍可竞争
+            cand.append((sym, snap, _prev_label(cast("str", prev))))
 
-        if candidates:
-            # ★build_session_message 内含 validate_shadow_push 门禁(免责 + 买卖黑名单)
-            msg = build_session_message(candidates)
-            # ★影子模式:只打日志,绝不调 TG 发送 helper(M2 接 telegram.send_event)
+        # ── M2-1 频率控制:批量上限(按信号强度取最强)+ 每日上限(全局)──────────────
+        after_filter = len(cand)                                   # 过【转换∩涨跌榜∩非冷却】后
+        daily_count = int(await redis.get(_daily_key()) or 0)
+        remaining = max(0, _DAILY_MAX - daily_count)               # 今日全局剩余配额
+        batch_n = min(after_filter, _BATCH_MAX)                    # 批量上限截断后的个数
+        pushed = select_for_push(cand, batch_max=_BATCH_MAX, daily_remaining=remaining)
+        if pushed:
+            cards = [render_card(s, snp, transition_from=tf) for s, snp, tf in pushed]
+            # ★build_session_message 内含 validate_shadow_push 门禁(末尾唯一免责 + 买卖黑名单)
+            msg = build_session_message(cards)
+            # ★冷却 + 每日计数:只对【实际影子推送的】生效(被上限截掉的不冷却 → 下轮仍可竞争)
+            for s, _snp, _tf in pushed:
+                await redis.set(_cooldown_key(s), "1", ex=_COOLDOWN_SEC)
+            await redis.incrby(_daily_key(), len(pushed))
+            await redis.expire(_daily_key(), _DAILY_TTL)
+            # ★影子模式:只打日志,★绝不调 TG 发送 helper(M2-3 才接 telegram.send_event)
             logger.info(
-                "[boll-scan-shadow] 本轮推送文案(影子·不真发 · %d 标的):\n%s",
-                len(candidates), msg,
+                "[boll-scan-shadow] 影子推送文案(★不真发 · %d 标的):\n%s",
+                len(pushed), msg,
             )
-        else:
-            logger.info(
-                "[boll-scan-shadow] 本轮无「转换∩涨跌榜∩非冷却」候选(转换 %d 个)· 不推送",
-                transitions,
-            )
+        # ★频率漏斗(每轮都打 · 方便验证频率落到合理范围:冷却/批量/每日是否生效)
+        logger.info(
+            "[boll-scan-throttle] 转换 %d → 候选(涨跌榜∩非冷却) %d → 批量上限取 %d "
+            "→ 每日剩余 %d → 本轮影子推送 %d 条",
+            transitions, after_filter, batch_n, remaining, len(pushed),
+        )
 
         # ★A-1:落全量结构快照供做T列表接口读 · 独立 key + TTL · ★写失败不影响主流程
         #   (吸取 ticker 教训:单点异常不放大)· 不写 CH、不发 TG、不下单。
@@ -152,7 +188,9 @@ async def _boll_scan_async() -> dict[str, int]:
 
         return {
             "universe": universe_n, "transitions": transitions,
-            "candidates": len(candidates), "snapshot": len(snapshot_rows),
+            "after_filter": after_filter,        # 过【转换∩涨跌榜∩非冷却】
+            "pushed": len(pushed),               # 批量+每日上限后实际影子推送
+            "snapshot": len(snapshot_rows),
         }
     finally:
         await ch.close()
