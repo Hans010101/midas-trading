@@ -14,6 +14,8 @@ export interface NotificationConfig {
   price_alert_enabled: boolean
   // P3 · 市场周报订阅(默认 false · 选择性订阅)
   weekly_report_enabled: boolean
+  // 做T M2-2 · 做T信号 TG 通知订阅(Pro 专属 · 默认 false · opt-in)
+  dott_alert_enabled: boolean
   has_telegram: boolean
   // ADR 0032 阶段三 · 是否已绑定飞书
   has_feishu: boolean
@@ -31,6 +33,8 @@ export interface NotificationConfigUpdate {
   price_alert_enabled?: boolean
   // P3 · 市场周报订阅开关(undefined = 不动)
   weekly_report_enabled?: boolean
+  // 做T M2-2 · 做T信号 TG 通知开关(★Pro 专属 · 后端二道 gate · undefined = 不动)
+  dott_alert_enabled?: boolean
   // 0028 N2 · 4 字段各自可选(undefined = 不动,后端 None 语义)
   quiet_hours_enabled?: boolean
   quiet_hours_start?: number

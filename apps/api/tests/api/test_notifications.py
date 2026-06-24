@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -279,3 +281,85 @@ async def test_put_config_rejects_invalid_quiet_hours(
         select(NotificationConfig).where(NotificationConfig.user_id == user.id),
     )
     assert config is None
+
+
+# ── 做T M2-2 · 做T信号 TG 通知开关(★Pro 专属 · 默认 false · 后端二道 gate)──────────
+
+@pytest.mark.asyncio
+async def test_dott_alert_default_false(
+    client: AsyncClient, db_session: AsyncSession,
+):
+    # ★默认 false(opt-in · 不给存量用户群发)
+    user = await make_user(db_session)
+    await db_session.commit()
+    r = await client.get(
+        "/api/v1/notifications/config", headers=await _auth(user, db_session),
+    )
+    assert r.status_code == 200
+    assert r.json()["dott_alert_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_dott_alert_pro_can_enable(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+):
+    # Pro 用户设 true → 200 · 落库 true
+    monkeypatch.setattr(
+        "app.api.v1.notifications.resolve_plan", AsyncMock(return_value="pro"),
+    )
+    user = await make_user(db_session)
+    await db_session.commit()
+    r = await client.put(
+        "/api/v1/notifications/config",
+        json={"dott_alert_enabled": True},
+        headers=await _auth(user, db_session),
+    )
+    assert r.status_code == 200
+    assert r.json()["dott_alert_enabled"] is True
+    config = await db_session.scalar(
+        select(NotificationConfig).where(NotificationConfig.user_id == user.id),
+    )
+    assert config is not None
+    assert config.dott_alert_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_dott_alert_non_pro_enable_rejected(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+):
+    # ★非 Pro 设 true → 403(后端二道 gate · 防 F12 绕前端禁用)· DB 不写入
+    monkeypatch.setattr(
+        "app.api.v1.notifications.resolve_plan", AsyncMock(return_value="free"),
+    )
+    user = await make_user(db_session)
+    await db_session.commit()
+    r = await client.put(
+        "/api/v1/notifications/config",
+        json={"dott_alert_enabled": True},
+        headers=await _auth(user, db_session),
+    )
+    assert r.status_code == 403
+    assert "Pro" in r.json()["detail"]
+    config = await db_session.scalar(
+        select(NotificationConfig).where(NotificationConfig.user_id == user.id),
+    )
+    assert config is None or config.dott_alert_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_dott_alert_non_pro_can_disable(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch,
+):
+    # 非 Pro 设 false(退订)允许 · gate 只拦「开启」
+    monkeypatch.setattr(
+        "app.api.v1.notifications.resolve_plan", AsyncMock(return_value="free"),
+    )
+    user = await make_user(db_session)
+    await db_session.commit()
+    r = await client.put(
+        "/api/v1/notifications/config",
+        json={"dott_alert_enabled": False},
+        headers=await _auth(user, db_session),
+    )
+    assert r.status_code == 200
+    assert r.json()["dott_alert_enabled"] is False

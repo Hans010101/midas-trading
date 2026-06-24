@@ -23,6 +23,7 @@ from app.schemas.notifications import (
     default_config_response,
     serialize_config_response,
 )
+from app.services.membership import resolve_plan
 from app.services.notifications.dispatcher import get_config, send_test
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,15 @@ async def update_notification_config(
         config.price_alert_enabled = payload.price_alert_enabled
     if payload.weekly_report_enabled is not None:
         config.weekly_report_enabled = payload.weekly_report_enabled
+    # 做T信号 TG 通知(做T M2-2)· ★Pro 专属:设 true 需 Pro(后端二道 gate · 防 F12 绕前端禁用)·
+    #   设 false(退订)任何人都允许 · 仅「开启」拦非 Pro。
+    if payload.dott_alert_enabled is not None:
+        if payload.dott_alert_enabled and await resolve_plan(db, current_user.id) != "pro":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="做T信号 TG 通知为 Pro 会员专属 · 请先开通 Pro",
+            )
+        config.dott_alert_enabled = payload.dott_alert_enabled
 
     # 0028 N2 · quiet_hours 4 字段(各自可选)
     if payload.quiet_hours_enabled is not None:
