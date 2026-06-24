@@ -73,6 +73,12 @@ class NotificationConfig(Base):
     weekly_report_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false"),
     )
+    # 做T信号 TG 通知订阅(做T M2-2)· ★Pro 专属 · 默认 false(opt-in · 不给存量用户群发)·
+    # 同时是 M2-3 真发的收件人筛选条件(广播只发 dott_alert_enabled=true + 已绑 TG + Pro 的用户)·
+    # ★本刀(M2-2)只建订阅开关,不真发(真发 M2-3 接 boll_scan 广播 · 影子门仍在)。
+    dott_alert_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false"),
+    )
 
     # 0028 N1 · 安静时段(quiet hours)· 在该窗口内吞掉普通告警,
     # 钱相关事件(quiet_exempt=True,如 TradeFilledEvent · 0028 DP10)豁免照常发。

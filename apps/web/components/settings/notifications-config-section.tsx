@@ -9,7 +9,8 @@
  */
 
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, Copy, Loader2 } from 'lucide-react'
+import { Check, Copy, Loader2, Lock } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { QRCodeSVG } from 'qrcode.react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -22,6 +23,7 @@ import {
 } from '@/hooks/use-notifications'
 import { useCreateFeishuBindToken, useUnbindFeishu } from '@/hooks/use-feishu'
 import { useMe } from '@/hooks/use-me'
+import { useQuota } from '@/hooks/use-quota'
 import { useCreateBindToken, useUnbindTelegram } from '@/hooks/use-telegram'
 import {
   type FeishuBindTokenResult,
@@ -129,10 +131,127 @@ export function NotificationsConfigSection() {
           </SaveButton>
         </div>
 
+        {/* 做T M2-2 · 做T信号 TG 通知(★Pro 专属订阅开关 · 默认关 opt-in · 本刀只订阅不真发)*/}
+        <DottAlertCard config={config ?? null} bound={bound} />
+
         {/* 0028 N2 · 安静时段配置(在该窗口内吞普通告警 · 紧急豁免照发)*/}
         <QuietHoursCard config={config ?? null} />
       </div>
     </section>
+  )
+}
+
+// ===== 做T信号 TG 通知卡(做T M2-2 · ★Pro 专属订阅开关 · 默认关 opt-in · 本刀只订阅不真发)=====
+
+function DottAlertCard({
+  config,
+  bound,
+}: {
+  config: NotificationConfig | null
+  bound: boolean
+}) {
+  const { data: quota } = useQuota()
+  const isPro = quota?.plan === 'pro'
+  const router = useRouter()
+  const saveMutation = useSaveNotificationConfig()
+  const [enabled, setEnabled] = useState(false)
+
+  useEffect(() => {
+    if (config) setEnabled(config.dott_alert_enabled)
+  }, [config])
+
+  async function handleToggle(next: boolean) {
+    setEnabled(next) // 乐观
+    try {
+      // ★只发 dott_alert_enabled 一个字段(局部更新)· 存 DB notification_config(非 cookie)
+      await saveMutation.mutateAsync({ dott_alert_enabled: next })
+      toast.success(next ? '已开启做T信号推送' : '已关闭做T信号推送')
+    } catch (e) {
+      setEnabled(!next) // 失败回滚(★后端非 Pro 设 true 会 403,这里回滚 + 提示)
+      toast.error(e instanceof Error ? e.message : '保存失败')
+    }
+  }
+
+  return (
+    <DottAlertView
+      isPro={isPro}
+      bound={bound}
+      enabled={enabled}
+      pending={saveMutation.isPending}
+      onToggle={handleToggle}
+      onUpgrade={() => router.push('/account/membership')}
+    />
+  )
+}
+
+/**
+ * 做T信号卡【纯展示】(props 驱动 · 无 hooks)· 登录墙页用 renderToString 钉死 Pro/非 Pro 两态。
+ * 非 Pro:开关禁用 + 「Pro 专属」徽章 + 「开通 Pro」引导;Pro:可开关(未绑 TG 提示先绑定)。
+ */
+export function DottAlertView({
+  isPro,
+  bound,
+  enabled,
+  pending,
+  onToggle,
+  onUpgrade,
+}: {
+  isPro: boolean
+  bound: boolean
+  enabled: boolean
+  pending: boolean
+  onToggle: (next: boolean) => void
+  onUpgrade: () => void
+}) {
+  return (
+    <div className="rounded-lg border border-paper bg-cream p-5 shadow-sm">
+      <h3 className="mb-1 flex items-center gap-2 font-serif text-base font-bold text-foreground">
+        <span className="text-xl" aria-hidden="true">📈</span>
+        做T信号推送
+        <span className="rounded border border-gold bg-gold/[0.08] px-1.5 py-0.5 font-mono text-[10px] text-gold">
+          Pro 专属
+        </span>
+      </h3>
+      <p className="mb-3 text-xs text-muted-foreground">
+        开启后,布林做T 结构信号(15m 永续)推送到你绑定的 Telegram · 仅供参考,不构成投资建议
+      </p>
+
+      {isPro ? (
+        <>
+          <Toggle
+            label="做T信号 TG 通知"
+            hint={
+              bound
+                ? '做T 结构转换信号推到你的 Telegram'
+                : '⚠ 需先绑定 Telegram(上方)才会真正收到推送'
+            }
+            checked={enabled}
+            onChange={onToggle}
+          />
+          {pending && (
+            <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
+              <Loader2 className="h-3 w-3 animate-spin" /> 保存中…
+            </p>
+          )}
+        </>
+      ) : (
+        // 非 Pro:开关禁用 + Pro 标签 + 点击引导开通(★前端第一道门 · 后端 PUT 是第二道)
+        <button
+          type="button"
+          onClick={onUpgrade}
+          className="flex w-full items-center justify-between gap-3 rounded-md border border-dashed border-gold/50 bg-background px-3 py-2 text-left transition-colors hover:bg-gold/[0.04]"
+        >
+          <div className="flex items-center gap-2">
+            <Lock className="h-4 w-4 shrink-0 text-gold" aria-hidden="true" />
+            <div>
+              <div className="text-sm text-foreground">做T信号 TG 通知</div>
+              <div className="text-xs text-muted-foreground/70">Pro 会员专属 · 点此开通后可订阅</div>
+            </div>
+          </div>
+          <span className="shrink-0 font-medium text-midas-red">开通 Pro</span>
+        </button>
+      )}
+    </div>
   )
 }
 
