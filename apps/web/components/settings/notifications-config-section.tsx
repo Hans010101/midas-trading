@@ -154,20 +154,30 @@ function DottAlertCard({
   const isPro = quota?.plan === 'pro'
   const router = useRouter()
   const saveMutation = useSaveNotificationConfig()
-  const [enabled, setEnabled] = useState(false)
+  // M2-4 拆两体系:定时全景(digest)/ 行情转换(transition)· 各自独立开关
+  const [digest, setDigest] = useState(false)
+  const [transition, setTransition] = useState(false)
 
   useEffect(() => {
-    if (config) setEnabled(config.dott_alert_enabled)
+    if (config) {
+      setDigest(config.dott_digest_enabled)
+      setTransition(config.dott_transition_enabled)
+    }
   }, [config])
 
-  async function handleToggle(next: boolean) {
-    setEnabled(next) // 乐观
+  // 通用:乐观切换 + 只发该字段(局部更新 · 存 DB notification_config 非 cookie)+ 失败回滚
+  async function toggleField(
+    field: 'dott_digest_enabled' | 'dott_transition_enabled',
+    next: boolean,
+    setLocal: (v: boolean) => void,
+    label: string,
+  ) {
+    setLocal(next)
     try {
-      // ★只发 dott_alert_enabled 一个字段(局部更新)· 存 DB notification_config(非 cookie)
-      await saveMutation.mutateAsync({ dott_alert_enabled: next })
-      toast.success(next ? '已开启做T信号推送' : '已关闭做T信号推送')
+      await saveMutation.mutateAsync({ [field]: next })
+      toast.success(next ? `已开启${label}` : `已关闭${label}`)
     } catch (e) {
-      setEnabled(!next) // 失败回滚(★后端非 Pro 设 true 会 403,这里回滚 + 提示)
+      setLocal(!next) // ★后端非 Pro 设 true → 403,回滚 + 提示(Pro 双层 gate 第二道)
       toast.error(e instanceof Error ? e.message : '保存失败')
     }
   }
@@ -176,9 +186,13 @@ function DottAlertCard({
     <DottAlertView
       isPro={isPro}
       bound={bound}
-      enabled={enabled}
+      digestEnabled={digest}
+      transitionEnabled={transition}
       pending={saveMutation.isPending}
-      onToggle={handleToggle}
+      onToggleDigest={(next) => toggleField('dott_digest_enabled', next, setDigest, '做T定时全景')}
+      onToggleTransition={(next) =>
+        toggleField('dott_transition_enabled', next, setTransition, '做T行情转换')
+      }
       onUpgrade={() => router.push('/account/membership')}
     />
   )
@@ -186,21 +200,26 @@ function DottAlertCard({
 
 /**
  * 做T信号卡【纯展示】(props 驱动 · 无 hooks)· 登录墙页用 renderToString 钉死 Pro/非 Pro 两态。
- * 非 Pro:开关禁用 + 「Pro 专属」徽章 + 「开通 Pro」引导;Pro:可开关(未绑 TG 提示先绑定)。
+ * M2-4:「做T信号」分组(Pro 专属),组内两个开关 —— 做T定时全景(体系1)/ 做T行情转换(体系2)。
+ * 非 Pro:两开关禁用 + 「Pro 专属」徽章 + 「开通 Pro」引导;Pro:两开关可操作(未绑 TG 提示先绑定)。
  */
 export function DottAlertView({
   isPro,
   bound,
-  enabled,
+  digestEnabled,
+  transitionEnabled,
   pending,
-  onToggle,
+  onToggleDigest,
+  onToggleTransition,
   onUpgrade,
 }: {
   isPro: boolean
   bound: boolean
-  enabled: boolean
+  digestEnabled: boolean
+  transitionEnabled: boolean
   pending: boolean
-  onToggle: (next: boolean) => void
+  onToggleDigest: (next: boolean) => void
+  onToggleTransition: (next: boolean) => void
   onUpgrade: () => void
 }) {
   return (
@@ -213,29 +232,32 @@ export function DottAlertView({
         </span>
       </h3>
       <p className="mb-3 text-xs text-muted-foreground">
-        开启后,布林做T 结构信号(15m 永续)推送到你绑定的 Telegram · 仅供参考,不构成投资建议
+        布林做T 信号(加密永续)推送到你绑定的 Telegram · 仅供参考,不构成投资建议
+        {isPro && !bound ? ' · ⚠ 需先绑定 Telegram(上方)才会真正收到' : ''}
       </p>
 
       {isPro ? (
-        <>
+        <div className="space-y-2">
           <Toggle
-            label="做T信号 TG 通知"
-            hint={
-              bound
-                ? '做T 结构转换信号推到你的 Telegram'
-                : '⚠ 需先绑定 Telegram(上方)才会真正收到推送'
-            }
-            checked={enabled}
-            onChange={onToggle}
+            label="做T定时全景"
+            hint="每小时推送多空分类概览(偏多/中性/偏空各前 5)"
+            checked={digestEnabled}
+            onChange={onToggleDigest}
+          />
+          <Toggle
+            label="做T行情转换"
+            hint="布林结构发生转换时推送(状态转换提醒)"
+            checked={transitionEnabled}
+            onChange={onToggleTransition}
           />
           {pending && (
-            <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
+            <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
               <Loader2 className="h-3 w-3 animate-spin" /> 保存中…
             </p>
           )}
-        </>
+        </div>
       ) : (
-        // 非 Pro:开关禁用 + Pro 标签 + 点击引导开通(★前端第一道门 · 后端 PUT 是第二道)
+        // 非 Pro:两开关禁用 + Pro 标签 + 点击引导开通(★前端第一道门 · 后端 PUT 是第二道)
         <button
           type="button"
           onClick={onUpgrade}
@@ -244,7 +266,7 @@ export function DottAlertView({
           <div className="flex items-center gap-2">
             <Lock className="h-4 w-4 shrink-0 text-gold" aria-hidden="true" />
             <div>
-              <div className="text-sm text-foreground">做T信号 TG 通知</div>
+              <div className="text-sm text-foreground">做T定时全景 / 做T行情转换</div>
               <div className="text-xs text-muted-foreground/70">Pro 会员专属 · 点此开通后可订阅</div>
             </div>
           </div>

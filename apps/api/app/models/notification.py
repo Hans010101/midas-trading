@@ -73,10 +73,17 @@ class NotificationConfig(Base):
     weekly_report_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false"),
     )
-    # 做T信号 TG 通知订阅(做T M2-2)· ★Pro 专属 · 默认 false(opt-in · 不给存量用户群发)·
-    # 同时是 M2-3 真发的收件人筛选条件(广播只发 dott_alert_enabled=true + 已绑 TG + Pro 的用户)·
-    # ★本刀(M2-2)只建订阅开关,不真发(真发 M2-3 接 boll_scan 广播 · 影子门仍在)。
+    # 做T信号 TG 通知订阅 · M2-4 拆两体系(都 Pro 专属 · 默认 false · M2-5 真发收件人筛选)。
+    # ★dott_alert_enabled(M2-2 旧单开关)已【废弃】· 保留列不删(避数据/迁移风险)· 代码不再读写。
     dott_alert_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false"),
+    )
+    # 体系1 · 每小时定时全景(M2-3a)订阅开关
+    dott_digest_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false"),
+    )
+    # 体系2 · 行情转换(M2-3b)订阅开关
+    dott_transition_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false"),
     )
 
