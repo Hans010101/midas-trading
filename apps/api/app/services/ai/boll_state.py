@@ -163,13 +163,46 @@ def classify(klines: list[Kline]) -> BollSnapshot | None:
     )
 
 
-def render_card(symbol: str, snap: BollSnapshot) -> str:
-    """单 symbol 结构卡(★不含免责、不含买卖词 · 免责由 build_session_message 末尾统一加)。"""
-    return (
-        f"【{symbol}】{_STATE_LABEL[snap.state]} · 结构倾向:{snap.bias}\n"
-        f"  %B={snap.pct_b:.2f}({_ZONE_LABEL[snap.zone]}) · "
-        f"现价 {snap.close:g} | 中轨 {snap.mid:g} | 上 {snap.upper:g} / 下 {snap.lower:g}"
-    )
+def render_card(symbol: str, snap: BollSnapshot, transition_from: str | None = None) -> str:
+    """单 symbol 结构卡(定稿方案B · ★不含整批末尾免责、不含买卖词)。
+
+    方案B 多行格式:倾向 / 状态 / 通道位置 / 现价 / 轨道 /(有转换时)状态转换行末缀「· 仅供参考」。
+    transition_from 给「转换前状态中文口诀」时,追加「状态转换:X → Y · 仅供参考」(免责缀在转换行,
+    不占独立行);为 None(无转换)则省略该行。整批末尾的唯一免责由 build_session_message 统一加。
+    """
+    lines = [
+        f"{symbol}｜结构倾向:{snap.bias}",
+        f"状态:{_STATE_LABEL[snap.state]}",
+        f"通道位置:{_ZONE_LABEL[snap.zone]}(%B={snap.pct_b:.2f})",
+        f"现价 {snap.close:g}",
+        f"轨道 上 {snap.upper:g} / 中 {snap.mid:g} / 下 {snap.lower:g}",
+    ]
+    if transition_from:
+        lines.append(f"状态转换:{transition_from} → {_STATE_LABEL[snap.state]} · 仅供参考")
+    return "\n".join(lines)
+
+
+def push_strength(snap: BollSnapshot) -> float:
+    """推送排序「信号强度」= |%B − 0.5|(离中轨越远 = 破轨越显著 = 越优先推)· 纯描述派生,无方向判断。
+
+    %B=0.5 在中轨 → 强度 0;近轨 ±0.3;破轨(%B>1 或 <0)→ >0.5。转换多时按此降序取最强若干。
+    """
+    return abs(snap.pct_b - 0.5)
+
+
+def select_for_push(
+    cands: list[tuple[str, BollSnapshot, str]],
+    *,
+    batch_max: int,
+    daily_remaining: int,
+) -> list[tuple[str, BollSnapshot, str]]:
+    """频率控制纯逻辑(可单测 · 无 Redis/IO):按信号强度降序,先批量上限、再每日剩余上限,取最强子集。
+
+    cands 是【已过冷却 + 涨跌榜】前置筛选的候选(Redis 留 worker)· 每项 (symbol, snap, 转换前口诀)。
+    返回「本轮该影子推送」子集(≤ min(batch_max, daily_remaining))· daily_remaining≤0 → 空。
+    """
+    ranked = sorted(cands, key=lambda c: push_strength(c[1]), reverse=True)
+    return ranked[: max(0, min(batch_max, daily_remaining))]
 
 
 def state_label(state: BollState) -> str:
@@ -247,7 +280,17 @@ def validate_shadow_push(text: str) -> str:
 
 
 def build_session_message(cards: list[str]) -> str:
-    """合并多张结构卡为【一条】会话级消息 + 末尾唯一免责 · 经 validate_shadow_push 门禁后返回。"""
-    header = "📊 布林结构扫描(15m · 加密永续)"
-    parts = [header, *cards, STRUCTURE_DISCLAIMER]
+    """合并多张结构卡为【一条】会话消息(定稿方案B)· 头 + 分隔线分卡 + 末尾唯一免责 · 经门禁后返回。
+
+    方案B:头「📊 布林做T信号 · 15m永续」→ 每卡前后用分隔线 → 末尾唯一 STRUCTURE_DISCLAIMER。
+    末尾免责行(整批一行)仍由 validate_shadow_push 强制校验,门禁逻辑零改。
+    """
+    header = "📊 布林做T信号 · 15m永续"
+    sep = "————————"
+    parts = [header]
+    for card in cards:
+        parts.append(sep)
+        parts.append(card)
+    parts.append(sep)
+    parts.append(STRUCTURE_DISCLAIMER)
     return validate_shadow_push("\n".join(parts))

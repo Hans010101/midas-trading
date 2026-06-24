@@ -11,14 +11,26 @@ from app.services.ai.boll_state import (
     _FORBIDDEN_PUSH_WORDS,
     _ZONE_LABEL,
     STRUCTURE_DISCLAIMER,
+    BollSnapshot,
     BollState,
     _zone,
     build_session_message,
     classify,
+    push_strength,
     render_card,
+    select_for_push,
+    state_label,
     to_snapshot_row,
     validate_shadow_push,
 )
+
+
+def _snap(pct_b: float, *, state: BollState = BollState.RANGE) -> BollSnapshot:
+    """造任意 %B 的结构快照(M2-1 频率/文案测用 · 价位字段占位,只关心 pct_b/state)。"""
+    return BollSnapshot(
+        state=state, bias="中性", pct_b=pct_b, bandwidth=0.04, zone=_zone(pct_b),
+        close=100.0, mid=100.0, upper=102.0, lower=98.0,
+    )
 
 
 def _klines(closes: list[float]) -> list[Kline]:
@@ -161,6 +173,73 @@ def test_build_session_message_ok() -> None:
     assert msg.rstrip().endswith(STRUCTURE_DISCLAIMER)
     assert msg.count(STRUCTURE_DISCLAIMER) == 1
     # ★正文(末尾免责行之外)无买卖/预测词(免责「非建议」含「建议」属正常,只查正文)
+    body = msg.rstrip()[: -len(STRUCTURE_DISCLAIMER)]
+    for word in _FORBIDDEN_PUSH_WORDS:
+        assert word not in body
+
+
+# ── M2-1 频率控制(推送强度排序 + 批量上限 + 每日上限)──────────────────────────
+
+def test_push_strength_ranks_by_channel_extremity() -> None:
+    # |%B−0.5| 越大(越破轨)强度越高:破上轨 1.2 > 近上轨 0.85 > 中轨 0.5
+    assert push_strength(_snap(1.2)) > push_strength(_snap(0.85))
+    assert push_strength(_snap(0.85)) > push_strength(_snap(0.5))
+    # 破下轨与破上轨对称(都远离中轨 → 强)
+    assert push_strength(_snap(-0.1)) == pytest.approx(push_strength(_snap(1.1)))
+
+
+def test_select_for_push_batch_cap_takes_strongest() -> None:
+    # 6 个候选、批量上限 3 → 取 |%B−0.5| 最强的 3 个(破轨的优先)
+    cands = [(f"C{i}USDT", _snap(p), "三线走平·震荡结构")
+             for i, p in enumerate([0.5, 0.55, 0.95, 1.3, 0.1, 0.45])]
+    out = select_for_push(cands, batch_max=3, daily_remaining=99)
+    assert len(out) == 3
+    picked = {c[0] for c in out}
+    # 最强三个:%B=1.3(0.8)、0.95(0.45)、0.1(0.4)
+    assert picked == {"C3USDT", "C2USDT", "C4USDT"}
+
+
+def test_select_for_push_daily_cap_limits() -> None:
+    cands = [(f"C{i}USDT", _snap(0.9), "x") for i in range(5)]
+    # 每日剩余 2 < 批量 5 → 只取 2(每日上限收紧)
+    assert len(select_for_push(cands, batch_max=5, daily_remaining=2)) == 2
+    # 每日剩余 0 → 一条都不推
+    assert select_for_push(cands, batch_max=5, daily_remaining=0) == []
+    # 候选少于两个上限 → 全推
+    assert len(select_for_push(cands[:1], batch_max=5, daily_remaining=9)) == 1
+
+
+# ── M2-1 定稿方案B 文案 ───────────────────────────────────────────────────────
+
+def test_render_card_plan_b_format() -> None:
+    snap = _snap(0.88, state=BollState.BREAKOUT_UP)
+    # 无转换:含 倾向/状态/通道位置/现价/轨道,★无「状态转换」「仅供参考」行
+    card = render_card("BTCUSDT", snap)
+    for k in ("结构倾向:", "状态:", "通道位置:", "现价 ", "轨道 "):
+        assert k in card
+    assert "状态转换" not in card
+    # 有转换:追加「状态转换:X → Y · 仅供参考」(免责缀转换行 · 不占独立行)
+    card2 = render_card("BTCUSDT", snap, transition_from="三线走平·震荡结构")
+    assert "状态转换:三线走平·震荡结构 → " in card2
+    assert card2.rstrip().endswith("· 仅供参考")
+    # ★措辞红线:无买卖/预测词
+    for word in _FORBIDDEN_PUSH_WORDS:
+        assert word not in card2
+
+
+def test_build_session_message_plan_b() -> None:
+    cards = [
+        render_card("BTCUSDT", _snap(0.9, state=BollState.BREAKOUT_UP),
+                    transition_from=state_label(BollState.RANGE)),
+        render_card("ETHUSDT", _snap(0.1, state=BollState.BREAKDOWN),
+                    transition_from=state_label(BollState.RANGE)),
+    ]
+    msg = build_session_message(cards)
+    assert msg.startswith("📊 布林做T信号 · 15m永续")   # 方案B 头
+    assert "————————" in msg                           # 分隔线
+    assert msg.rstrip().endswith(STRUCTURE_DISCLAIMER)  # ★门禁:末尾唯一免责
+    assert msg.count(STRUCTURE_DISCLAIMER) == 1
+    # 正文(免责行外)无买卖/预测词(「仅供参考」不在黑名单)
     body = msg.rstrip()[: -len(STRUCTURE_DISCLAIMER)]
     for word in _FORBIDDEN_PUSH_WORDS:
         assert word not in body
