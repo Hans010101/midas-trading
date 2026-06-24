@@ -31,8 +31,11 @@ _PCTB_MID_LO, _PCTB_MID_HI = 0.4, 0.6  # 近中轨区间
 # classify 所需最少根数:布林预热 period + 斜率/带宽回看
 _MIN_BARS = _BOLL_PERIOD + _SLOPE_LOOKBACK
 
-# ★推送免责(整批末尾唯一一行)· 锁死红线
-STRUCTURE_DISCLAIMER = "· 结构描述非建议"
+# ★推送声明:精简后声明由转换行「· 仅供参考」承载;STRUCTURE_DISCLAIMER 兼容保留(仍是合规声明之一)。
+PUSH_DISCLAIMER = "· 仅供参考"          # 方案B 转换行末缀(精简后的主声明)
+STRUCTURE_DISCLAIMER = "· 结构描述非建议"  # 兼容保留 · 仍被门禁认可为合规声明
+# ★合规声明集(裸短语 · 匹配不依赖「· 」前缀)· 文案含其一 = 有声明;★完全无 → 门禁一票否决(不改松)。
+_COMPLIANT_DISCLAIMERS: tuple[str, ...] = ("仅供参考", "结构描述非建议")
 
 # ★买卖祈使 / 预测词黑名单(推送正文出现任一 → validate_shadow_push 一票否决)
 _FORBIDDEN_PUSH_WORDS: tuple[str, ...] = (
@@ -251,27 +254,29 @@ def to_snapshot_row(
 
 
 def validate_shadow_push(text: str) -> str:
-    """★影子推送文案门禁(M1 新建 · 比现有 validate_advisory 更严):
+    """★影子推送文案门禁(比 validate_advisory 更严):
 
     ① 复用 scrub_marketing 清营销话术 + has_marketing_violation 兜底拒;
-    ② 正文(末尾免责行之外)出现买卖祈使/预测黑名单词 → 一票否决(raise);
-    ③ 末尾必须恰好一行 STRUCTURE_DISCLAIMER。
+    ② ★必须含至少一个【合规声明】(仅供参考 / 结构描述非建议)· 完全无声明 → 一票否决(门禁不失效);
+    ③ 正文(剔除合规声明短语后)出现买卖祈使/预测黑名单词 → 一票否决。
     通过则返回清洗后的文案;否则 raise ValueError(绝不放行)。
+
+    ★精简说明:末尾不再强制固定免责行,声明改由转换行「· 仅供参考」承载 —— 门禁从「末尾匹配固定串」
+    放宽为「含合规声明之一」,但【无任何声明仍拒】(②),拦截作用不变,绝不松到「无声明也能过」。
     """
     raw = text.rstrip()
     # ① 营销违规(稳赚/保证收益…)→ 一票否决(★原文检测 · 推送绝不静默改写)
     if has_marketing_violation(raw):
         msg = "推送文案含营销违规话术"
         raise ValueError(msg)
-    # ② 末尾必须恰好一行免责
-    if not raw.endswith(STRUCTURE_DISCLAIMER):
-        msg = "推送文案末尾必须是免责行"
+    # ② ★必须含合规声明 · 否则一票否决(无声明文案绝不放行 —— 门禁的拦截本质)
+    if not any(d in raw for d in _COMPLIANT_DISCLAIMERS):
+        msg = "推送文案缺合规免责声明(需含 仅供参考 / 结构描述非建议)"
         raise ValueError(msg)
-    body = raw[: -len(STRUCTURE_DISCLAIMER)]
-    if STRUCTURE_DISCLAIMER in body:
-        msg = "免责行只能出现一次(末尾)"
-        raise ValueError(msg)
-    # ③ 买卖祈使/预测黑名单 → 一票否决(★检正文 · 免责行「非建议」不误伤)
+    # ③ 买卖祈使/预测黑名单 → 一票否决(★剔除合规声明短语后再检,免「结构描述非建议」的「建议」误伤)
+    body = raw
+    for disc in _COMPLIANT_DISCLAIMERS:
+        body = body.replace(disc, "")
     for word in _FORBIDDEN_PUSH_WORDS:
         if word in body:
             msg = f"推送正文含买卖祈使/预测词:{word}"
@@ -280,10 +285,11 @@ def validate_shadow_push(text: str) -> str:
 
 
 def build_session_message(cards: list[str]) -> str:
-    """合并多张结构卡为【一条】会话消息(定稿方案B)· 头 + 分隔线分卡 + 末尾唯一免责 · 经门禁后返回。
+    """合并多张结构卡为【一条】会话消息(定稿方案B)· 头 + 分隔线分卡 · 经门禁后返回。
 
-    方案B:头「📊 布林做T信号 · 15m永续」→ 每卡前后用分隔线 → 末尾唯一 STRUCTURE_DISCLAIMER。
-    末尾免责行(整批一行)仍由 validate_shadow_push 强制校验,门禁逻辑零改。
+    方案B:头「📊 布林做T信号 · 15m永续」→ 每卡前后用分隔线。★声明精简:不再加末尾重复的
+    STRUCTURE_DISCLAIMER 行,声明由各卡转换行末缀的「· 仅供参考」承载;validate_shadow_push 仍强制
+    校验「含合规声明」(无声明则拒)。推送卡均带转换行(候选都是转换),故必含「仅供参考」过门禁。
     """
     header = "📊 布林做T信号 · 15m永续"
     sep = "————————"
@@ -291,6 +297,5 @@ def build_session_message(cards: list[str]) -> str:
     for card in cards:
         parts.append(sep)
         parts.append(card)
-    parts.append(sep)
-    parts.append(STRUCTURE_DISCLAIMER)
+    parts.append(sep)  # 末尾分隔线收尾(★不再加重复声明行 · 声明在转换行)
     return validate_shadow_push("\n".join(parts))

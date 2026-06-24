@@ -100,14 +100,30 @@ def test_render_card_has_no_trade_words() -> None:
 # ── ★影子门禁 validate_shadow_push:spy(拒)/ never(正常放行)────────────────
 
 def test_gate_rejects_buy_imperative() -> None:
+    # ★含合规声明(结构描述非建议)但正文有买卖词 → 仍一票否决(剔声明后「建议/买入」仍在)
     bad = f"【BTCUSDT】三线齐上 · 建议买入抄底\n{STRUCTURE_DISCLAIMER}"
     with pytest.raises(ValueError, match="买卖祈使"):
         validate_shadow_push(bad)
 
 
 def test_gate_rejects_missing_disclaimer() -> None:
-    with pytest.raises(ValueError, match="免责"):
+    # ★【门禁没改松铁证】完全无任何合规声明(无「仅供参考」也无「结构描述非建议」)→ 一票否决
+    with pytest.raises(ValueError, match="声明"):
         validate_shadow_push("【BTCUSDT】三线齐上·上升结构 · 结构倾向:偏多")
+
+
+def test_gate_accepts_juyongcankao() -> None:
+    # ★精简后:含「仅供参考」即视为有合规声明 → 通过(不再要求末尾固定「结构描述非建议」行)
+    ok = "BTCUSDT｜结构倾向:偏多\n状态转换:三线走平·震荡结构 → 带宽开口·向上 · 仅供参考"
+    out = validate_shadow_push(ok)
+    assert "仅供参考" in out
+    assert "结构描述非建议" not in out  # ★末尾不再有重复声明行
+
+
+def test_gate_still_accepts_legacy_structure_disclaimer() -> None:
+    # 兼容:旧的「结构描述非建议」仍被认可为合规声明(不破历史文案)
+    ok = f"【BTCUSDT】三线齐上·上升结构\n{STRUCTURE_DISCLAIMER}"
+    assert "结构描述非建议" in validate_shadow_push(ok)
 
 
 def test_gate_rejects_marketing() -> None:
@@ -166,14 +182,16 @@ def test_zone_overshoot_labels() -> None:
 
 
 def test_build_session_message_ok() -> None:
+    # 推送卡都带转换行(候选都是转换)→ 含「仅供参考」声明
     snaps = [classify(_klines([100 + i * 0.6 for i in range(28)]))]
-    cards = [render_card("BTCUSDT", s) for s in snaps if s is not None]
+    cards = [render_card("BTCUSDT", s, transition_from="三线走平·震荡结构")
+             for s in snaps if s is not None]
     msg = build_session_message(cards)
-    # ★末尾恰好一行免责
-    assert msg.rstrip().endswith(STRUCTURE_DISCLAIMER)
-    assert msg.count(STRUCTURE_DISCLAIMER) == 1
-    # ★正文(末尾免责行之外)无买卖/预测词(免责「非建议」含「建议」属正常,只查正文)
-    body = msg.rstrip()[: -len(STRUCTURE_DISCLAIMER)]
+    # ★精简后:声明在转换行「仅供参考」· 末尾不再有重复的「结构描述非建议」行
+    assert "仅供参考" in msg
+    assert STRUCTURE_DISCLAIMER not in msg
+    # ★正文(剔除合规声明短语后)无买卖/预测词
+    body = msg.replace("仅供参考", "").replace("结构描述非建议", "")
     for word in _FORBIDDEN_PUSH_WORDS:
         assert word not in body
 
@@ -237,9 +255,10 @@ def test_build_session_message_plan_b() -> None:
     msg = build_session_message(cards)
     assert msg.startswith("📊 布林做T信号 · 15m永续")   # 方案B 头
     assert "————————" in msg                           # 分隔线
-    assert msg.rstrip().endswith(STRUCTURE_DISCLAIMER)  # ★门禁:末尾唯一免责
-    assert msg.count(STRUCTURE_DISCLAIMER) == 1
-    # 正文(免责行外)无买卖/预测词(「仅供参考」不在黑名单)
-    body = msg.rstrip()[: -len(STRUCTURE_DISCLAIMER)]
+    # ★精简后:声明在转换行「仅供参考」(每卡一处)· ★末尾无重复的「结构描述非建议」行
+    assert "· 仅供参考" in msg
+    assert STRUCTURE_DISCLAIMER not in msg
+    # 正文(剔除合规声明短语后)无买卖/预测词
+    body = msg.replace("仅供参考", "").replace("结构描述非建议", "")
     for word in _FORBIDDEN_PUSH_WORDS:
         assert word not in body
