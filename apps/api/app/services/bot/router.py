@@ -41,6 +41,10 @@ from app.services.bot.query import (
 from app.services.bot.renderers.telegram import render_for_telegram
 from app.services.bot.replies import InboundMessage, ReplyModel
 from app.services.bot.session import clear_session, get_session, set_session
+from app.services.notifications.telegram_bind import (
+    COIN_PARAM_PREFIX,
+    parse_start_command,
+)
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -268,6 +272,15 @@ async def _handle_text(
             return [replies.build_kline_ask()]
         # [持仓]/[自选]/[下单]/[菜单] 复用现有 inline 处理器(reply-kb 点击=文本,故在此转发)
         return [await _handle_button(db, redis, ch, channel, uid, target)]
+
+    # 做T 行情卡深链:/start coin_<SYM> → 直接出该币行情卡(复用 _quote_or_lite · market 固定 crypto)·
+    # ★必须在主菜单 /start 分支前(否则 /start coin_X 落到主菜单)· coin_ 为空则不拦,落主菜单不报错。
+    start_param = parse_start_command(body)
+    if start_param and start_param.startswith(COIN_PARAM_PREFIX):
+        sym = start_param[len(COIN_PARAM_PREFIX) :].strip().upper()
+        if sym:
+            await clear_session(redis, channel, uid)
+            return [await _quote_or_lite(ch, "crypto", sym)]
 
     # /menu 或裸 /start → 主菜单
     if body in {"/menu", "/start"} or body.startswith("/start@"):

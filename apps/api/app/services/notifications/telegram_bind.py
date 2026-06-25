@@ -76,6 +76,21 @@ def deep_link(token: str) -> str | None:
     return f"https://t.me/{username}?start={token}"
 
 
+COIN_PARAM_PREFIX = "coin_"  # 做T 行情卡深链 start param 前缀 · handle_start / router 共用
+
+
+def coin_deep_link(symbol: str) -> str | None:
+    """做T 推送交易对深链 · 点开即向 bot 发 `/start coin_<SYM>` → router 出该币行情卡。
+
+    仿 deep_link():bot 用户名未配 → 返回 None(调用方回退网页详情页 URL · 链接不坏)。
+    symbol 统一大写无斜杠(BTCUSDT)· start param 字符集 [A-Za-z0-9_] 满足。
+    """
+    username = settings.tg_bot_username.strip()
+    if not username:
+        return None
+    return f"https://t.me/{username}?start={COIN_PARAM_PREFIX}{symbol.strip().upper()}"
+
+
 # ── 一次性绑定 token(Redis)─────────────────────────────────────────
 
 
@@ -145,6 +160,10 @@ async def handle_start(
     """
     token = parse_start_command(text)
     if token is None:
+        return StartResult(kind="ignored")
+    # 做T 行情卡深链 `/start coin_<SYM>`:不是绑定 token → 放行(ignored)给 router 出行情卡 ·
+    # ★不消耗/不校验绑定 token,现有绑定逻辑完全不变(只是 coin_ 前缀提前分流)。
+    if token.startswith(COIN_PARAM_PREFIX):
         return StartResult(kind="ignored")
 
     user_id_str = await peek_bind_token(redis, token)
