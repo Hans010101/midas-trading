@@ -7,8 +7,10 @@ import pytest
 from app.services.x_marketing.compliance import validate_tweet
 from app.services.x_marketing.tweet_gen import (
     TweetContext,
+    append_tags,
     build_system_prompt,
     build_user_prompt,
+    coin_tag,
 )
 
 # 合规范例(开头币种+结构 · 中间技术 · 结尾免责 · 含 24h涨跌幅【事实】· 无预测/买卖/收益)
@@ -85,6 +87,63 @@ def test_predictive_breakout_still_blocked(bad: str) -> None:
     r = validate_tweet(bad)
     assert not r.passed
     assert any("预测未来" in x for x in r.reasons)
+
+
+def test_hedge_statement_not_blocked() -> None:
+    # ★放宽:做空/做多 的【陈述市场状态】放行(做空情绪/空头动能/做多仓位)
+    for t in (
+        "$BTC 偏空,空头动能强、做空情绪升温,价格运行于下轨。仅供参考,不构成投资建议。",
+        "$ETH 中性,多空力量均衡、做多仓位略增。以上为现状。仅供参考,不构成投资建议。",
+    ):
+        assert validate_tweet(t).passed, (t, validate_tweet(t).reasons)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "$BTC 偏空,建议做空。仅供参考,不构成投资建议。",
+        "$ETH 偏空,可以做空,做空机会来了。仅供参考,不构成投资建议。",
+        "$SOL 偏多,适合做多入场。仅供参考,不构成投资建议。",
+    ],
+)
+def test_hedge_action_still_blocked(bad: str) -> None:
+    # ★放宽不漏放:引导动作(建议做空/做空机会/适合做多)仍拦
+    r = validate_tweet(bad)
+    assert not r.passed
+    assert any("做空/做多" in x or "买卖引导" in x for x in r.reasons)
+
+
+def test_price_reached_statement_not_blocked() -> None:
+    # ★放宽:已发生/当前的 跌至/涨至 放行(已跌至/回落至/运行至)
+    for t in (
+        "$SIREN 偏空,已跌至下轨附近,空头动能强。仅供参考,不构成投资建议。",
+        "$BTC 偏多,价格回落至中轨后企稳。以上为现状。仅供参考,不构成投资建议。",
+    ):
+        assert validate_tweet(t).passed, (t, validate_tweet(t).reasons)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "$ETH 偏空,或跌至 2500。仅供参考,不构成投资建议。",
+        "$BTC 偏多,有望涨至 7 万。仅供参考,不构成投资建议。",
+    ],
+)
+def test_price_target_still_blocked(bad: str) -> None:
+    # ★放宽不漏放:预测/目标的 跌至/涨至(或跌至/有望涨至)仍拦
+    r = validate_tweet(bad)
+    assert not r.passed
+    assert any("涨至/跌至" in x or "预测未来" in x for x in r.reasons)
+
+
+def test_tags_appended_and_pass_gate() -> None:
+    # ★标签:#币种(去USDT)+ #点金Midas · 末尾拼接 · 不触发门禁
+    base = "$BTC 当前偏多,三线齐上,近上轨。以上为现状。仅供参考,不构成投资建议。"
+    tagged = append_tags(base, "BTCUSDT")
+    assert tagged.endswith("#BTC #点金Midas")
+    assert coin_tag("ETHUSDT") == "#ETH"
+    assert coin_tag("SIRENUSDT") == "#SIREN"
+    assert validate_tweet(tagged).passed, validate_tweet(tagged).reasons  # 标签不触发门禁
 
 
 def test_profit_promise_blocked() -> None:

@@ -20,9 +20,15 @@ from app.services.ai.validator import has_marketing_violation
 # ① 买卖引导黑名单(超集 boll_state._FORBIDDEN_PUSH_WORDS · X 再加运营常见诱导词)
 _ACTION_WORDS: tuple[str, ...] = (
     "建议", "买入", "卖出", "买进", "卖掉", "抄底", "逃顶", "目标价", "目标位",
-    "止损", "止盈", "做多", "做空", "加仓", "减仓", "建仓", "清仓", "梭哈", "满仓",
+    "止损", "止盈", "加仓", "减仓", "建仓", "清仓", "梭哈", "满仓",
     "重仓", "上车", "布局", "吸纳", "可关注", "入场", "进场", "离场", "埋伏", "潜伏",
     "buy", "sell", "long", "short",
+)
+# ★做空/做多 默认拦(引导:建议做空/现在做空/做空机会),仅【陈述市场状态】白名单放行(剥掉后无残留即过)·
+#   空头/多头 本就不拦(空头情绪/多头动能 天然过)· 只需处理含「做空/做多」的状态短语。
+_HEDGE_STATE_ALLOW: tuple[str, ...] = (
+    "做空情绪", "做空仓位", "做空力量", "做空动能", "做空盘",
+    "做多情绪", "做多仓位", "做多力量", "做多动能", "做多盘",
 )
 
 # ② ★预测未来走势黑名单(X 专属严控)· 只拦【预测性复合词 / 未来时态】· 不含裸"涨/跌"(见 docstring)
@@ -30,9 +36,14 @@ _ACTION_WORDS: tuple[str, ...] = (
 #     改由下方 _PREDICTION_RES 正则只拦【未来/方向语境】的突破(即将突破/将突破/突破在即…)。
 _PREDICTION_WORDS: tuple[str, ...] = (
     "暴涨", "暴跌", "大涨", "大跌", "将涨", "将跌", "会涨", "会跌", "要涨", "要跌",
-    "看涨", "看跌", "续涨", "续跌", "补涨", "涨到", "跌到", "涨至", "跌至", "上看", "下看",
+    "看涨", "看跌", "续涨", "续跌", "补涨", "涨到", "跌到", "上看", "下看",
     "拉升", "冲高", "冲顶", "探底", "启动", "翻倍", "新高", "新低",
     "即将", "将要", "将会", "有望", "料将", "预计", "后市", "下一步", "未来", "接下来",
+)
+# ★涨至/跌至 默认拦(预测/目标:将跌至/有望涨至),仅【已发生/当前】白名单放行(剥掉后无残留即过)。
+_PRICE_REACHED_ALLOW: tuple[str, ...] = (
+    "已跌至", "已涨至", "回落至", "回升至", "运行至",
+    "现跌至", "现涨至", "下探至", "上探至", "回踩至",
 )
 
 # ②b ★突破/破位【预测性】语境正则(陈述「无突破/未突破/突破信号」放行 · 只拦未来/在即/可期):
@@ -96,6 +107,20 @@ def validate_tweet(text: str) -> TweetGateResult:
     pred += [m.group(0) for rgx in _PREDICTION_RES if (m := rgx.search(body))]  # 突破/破位 预测语境
     if pred:
         reasons.append(f"预测未来走势词:{'/'.join(pred)}")
+
+    # ★做空/做多:剥陈述白名单(做空情绪/做空动能…)后仍残留裸词 → 引导(建议做空/做空机会)→ 拦
+    hedge_body = body
+    for ph in _HEDGE_STATE_ALLOW:
+        hedge_body = hedge_body.replace(ph, "")
+    if hits := _hits(hedge_body, ("做空", "做多")):
+        reasons.append(f"买卖引导词(做空/做多·非陈述):{'/'.join(hits)}")
+    # ★涨至/跌至:剥掉已发生白名单(已跌至/回落至…)后仍残留裸 涨至/跌至 → 预测/目标(将跌至/跌至XX)→ 拦
+    price_body = body
+    for ph in _PRICE_REACHED_ALLOW:
+        price_body = price_body.replace(ph, "")
+    if hits := _hits(price_body, ("涨至", "跌至")):
+        reasons.append(f"预测未来走势词(涨至/跌至·非陈述):{'/'.join(hits)}")
+
     if hits := _hits(body, _PROFIT_WORDS):
         reasons.append(f"收益承诺词:{'/'.join(hits)}")
     if len(raw) > _MAX_LEN:

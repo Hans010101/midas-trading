@@ -39,7 +39,9 @@ _SYSTEM = (
     "1. 倾向只能用『偏多/偏空/中性』及通俗版『偏强/偏弱/震荡』,禁『看涨/将涨/突破在即』等预测词;\n"
     "2. 禁止任何买卖引导(买入/卖出/建议/抄底/止损/加仓/布局/上车…)、目标价、收益承诺;\n"
     "3. 禁止未来时态(即将/将会/有望/预计/后市…),只陈述此刻;可如实报 24h 涨跌幅(事实)但不据此预测;\n"
-    "4. 整体语言通俗易懂(大白话部分用日常话),中文,300–480 字,结尾必须带免责。"
+    "4. ★用词偏好(从源头用最中性的说法):空头/多头动能强(而非『做空情绪浓』)、处于低位/运行于下轨"
+    "(而非『已跌至低位』)、近上轨/上轨上方(而非『突破』);少碰边界词;\n"
+    "5. 不要自己加话题标签 #(由系统统一拼接);整体通俗易懂,中文,300–480 字,结尾必须带免责。"
 )
 
 
@@ -68,6 +70,20 @@ def build_user_prompt(ctx: TweetContext) -> str:
         lines.append(f"资金费率:{ctx.funding_rate * 100:+.4f}%")
     lines.append("\n据以上【当前事实】写一条合规技术分析推文(遵守 system 全部规则)。")
     return "\n".join(lines)
+
+
+_BRAND_TAG = "#点金Midas"
+
+
+def coin_tag(symbol: str) -> str:
+    """币种标签:symbol 去 USDT/USD 后缀 + 大写 → #BTC / #ETH / #SIREN。"""
+    base = symbol.upper().removesuffix("USDT").removesuffix("USD") or symbol.upper()
+    return f"#{base}"
+
+
+def append_tags(text: str, symbol: str) -> str:
+    """末尾拼接 #币种 + #点金Midas(★代码侧 · 不依赖 AI · 标签纯标识不含违规词,不触发门禁)。"""
+    return f"{text.rstrip()}\n{coin_tag(symbol)} {_BRAND_TAG}"
 
 
 async def generate_tweet_text(ctx: TweetContext) -> LLMResponse:

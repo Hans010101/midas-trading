@@ -18,15 +18,23 @@ from app.services.ai.validator import has_marketing_violation
 # ════════ 门禁(内联 · = x_marketing/compliance.py validate_tweet)════════
 _ACTION_WORDS: tuple[str, ...] = (
     "建议", "买入", "卖出", "买进", "卖掉", "抄底", "逃顶", "目标价", "目标位",
-    "止损", "止盈", "做多", "做空", "加仓", "减仓", "建仓", "清仓", "梭哈", "满仓",
+    "止损", "止盈", "加仓", "减仓", "建仓", "清仓", "梭哈", "满仓",
     "重仓", "上车", "布局", "吸纳", "可关注", "入场", "进场", "离场", "埋伏", "潜伏",
     "buy", "sell", "long", "short",
 )
+_HEDGE_STATE_ALLOW: tuple[str, ...] = (
+    "做空情绪", "做空仓位", "做空力量", "做空动能", "做空盘",
+    "做多情绪", "做多仓位", "做多力量", "做多动能", "做多盘",
+)
 _PREDICTION_WORDS: tuple[str, ...] = (
     "暴涨", "暴跌", "大涨", "大跌", "将涨", "将跌", "会涨", "会跌", "要涨", "要跌",
-    "看涨", "看跌", "续涨", "续跌", "补涨", "涨到", "跌到", "涨至", "跌至", "上看", "下看",
+    "看涨", "看跌", "续涨", "续跌", "补涨", "涨到", "跌到", "上看", "下看",
     "拉升", "冲高", "冲顶", "探底", "启动", "翻倍", "新高", "新低",
     "即将", "将要", "将会", "有望", "料将", "预计", "后市", "下一步", "未来", "接下来",
+)
+_PRICE_REACHED_ALLOW: tuple[str, ...] = (
+    "已跌至", "已涨至", "回落至", "回升至", "运行至",
+    "现跌至", "现涨至", "下探至", "上探至", "回踩至",
 )
 # 突破/破位 只拦【预测性】语境(陈述「无突破/未突破/突破信号」放行)· = compliance._PREDICTION_RES
 _PREDICTION_RES: tuple[re.Pattern[str], ...] = (
@@ -65,6 +73,16 @@ def validate_tweet(text: str) -> tuple[bool, list[str]]:
     pred += [m.group(0) for rgx in _PREDICTION_RES if (m := rgx.search(body))]
     if pred:
         reasons.append(f"预测未来走势词:{'/'.join(pred)}")
+    hedge_body = body
+    for ph in _HEDGE_STATE_ALLOW:
+        hedge_body = hedge_body.replace(ph, "")
+    if hits := _hits(hedge_body, ("做空", "做多")):
+        reasons.append(f"买卖引导词(做空/做多·非陈述):{'/'.join(hits)}")
+    price_body = body
+    for ph in _PRICE_REACHED_ALLOW:
+        price_body = price_body.replace(ph, "")
+    if hits := _hits(price_body, ("涨至", "跌至")):
+        reasons.append(f"预测未来走势词(涨至/跌至·非陈述):{'/'.join(hits)}")
     if hits := _hits(body, _PROFIT_WORDS):
         reasons.append(f"收益承诺词:{'/'.join(hits)}")
     if len(raw) > _MAX_LEN:
@@ -85,7 +103,9 @@ _SYSTEM = (
     "1. 倾向只能用『偏多/偏空/中性』及通俗版『偏强/偏弱/震荡』,禁『看涨/将涨/突破在即』等预测词;\n"
     "2. 禁止任何买卖引导(买入/卖出/建议/抄底/止损/加仓/布局/上车…)、目标价、收益承诺;\n"
     "3. 禁止未来时态(即将/将会/有望/预计/后市…),只陈述此刻;可如实报 24h 涨跌幅(事实)但不据此预测;\n"
-    "4. 整体语言通俗易懂(大白话部分用日常话),中文,300–480 字,结尾必须带免责。"
+    "4. ★用词偏好(从源头用最中性的说法):空头/多头动能强(而非『做空情绪浓』)、处于低位/运行于下轨"
+    "(而非『已跌至低位』)、近上轨/上轨上方(而非『突破』);少碰边界词;\n"
+    "5. 不要自己加话题标签 #(由系统统一拼接);整体通俗易懂,中文,300–480 字,结尾必须带免责。"
 )
 
 
@@ -114,6 +134,15 @@ def build_user_prompt(c: Ctx) -> str:
     )
 
 
+_BRAND_TAG = "#点金Midas"
+
+
+def append_tags(text: str, symbol: str) -> str:
+    """末尾拼接 #币种 + #点金Midas(代码侧 · 不依赖 AI · 标签纯标识不触发门禁)。"""
+    base = symbol.upper().removesuffix("USDT").removesuffix("USD") or symbol.upper()
+    return f"{text.rstrip()}\n#{base} {_BRAND_TAG}"
+
+
 # 形态数据(mock · 重点是真 DeepSeek 生成 + 真门禁;3 种倾向各一)
 _CTX = [
     Ctx("BTCUSDT", 61744.1, 3.2, "偏多", "三线齐上·上升结构", "近上轨", 0.92, 0.0001),
@@ -127,11 +156,12 @@ async def main() -> None:
     print(f"LLM 模式:{mode}\n" + "=" * 70)
     for c in _CTX:
         resp = await ainvoke(build_user_prompt(c), system=_SYSTEM)
-        passed, reasons = validate_tweet(resp.content)
+        tweet = append_tags(resp.content, c.symbol)  # ★拼标签后再过门禁(印的=将发的)
+        passed, reasons = validate_tweet(tweet)
         verdict = "✅ 通过" if passed else f"❌ 否决 · {' | '.join(reasons)}"
         src = "mock" if resp.is_mock else "DeepSeek"
         print(f"\n── {c.symbol}({c.bias} · {c.state_label})  [{src}]")
-        print(f"  推文:{resp.content}")
+        print(f"  推文:{tweet}")
         print(f"  门禁:{verdict}")
 
 
