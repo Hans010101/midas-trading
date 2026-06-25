@@ -54,11 +54,34 @@ def _abs_change(item: dict[str, Any]) -> float:
     return abs(float(item.get("change_pct_24h") or 0.0))
 
 
+# ── M2-3c 方案B:bias 分类 + %B 位置一致性过滤 · 阈值常量(可调)─────────────────
+#   bias(均线形态)和 %B(价格位置)都指向同一边才进偏多/偏空;打架(方向明确但位置不符)归中性,
+#   避免「偏空组出现 %B=0.53」这种方向/位置标签打架(如三线齐跌回抽到中轨)。
+_PCTB_LONG = 0.6   # 偏多组要求 %B > 此(价格也在通道偏上)
+_PCTB_SHORT = 0.4  # 偏空组要求 %B < 此(价格也在通道偏下)
+
+
+def _digest_group(item: dict[str, Any]) -> str:
+    """该币进哪组(偏多/偏空/中性)· 方案B = bias 方向 ∧ %B 位置一致。
+
+    偏多:bias=偏多 且 %B>0.6 · 偏空:bias=偏空 且 %B<0.4 · 其余(含 bias=中性、方向与位置打架的
+    过渡态如「偏空但 %B≥0.4」)→ 中性。★只改全景分组用法,不改 bias 怎么算(bias 仍 boll_state 判定)。
+    """
+    bias = item.get("bias")
+    pct_b = float(item["pct_b"])
+    if bias == "偏多" and pct_b > _PCTB_LONG:
+        return "偏多"
+    if bias == "偏空" and pct_b < _PCTB_SHORT:
+        return "偏空"
+    return "中性"
+
+
 def build_hourly_digest(items: list[dict[str, Any]], *, as_of_label: str) -> str | None:
     """快照 items → 图1 分组全景消息(经 validate_shadow_push)· 无任何可分组候选 → None(不推)。
 
-    分组排序:偏多按 %B 高→低(最破上轨最强)· 偏空按 %B 低→高(最破下轨最强)· 中性按 |24h涨跌| 高→低
-    (中性 %B 居中,用活跃度作次级)· 每组取前 5 · 不足按实际 · 空组省略。
+    ★M2-3c 方案B 分组:bias 方向 ∧ %B 位置一致才进偏多/偏空(_digest_group),打架归中性 ——
+    偏多组 %B 都 >0.6、偏空组 %B 都 <0.4(组内自洽,不再「偏空组冒 %B=0.53」)。
+    排序:偏多 %B 高→低 · 偏空 %B 低→高 · 中性 |24h涨跌| 高→低 · 每组前 5 · 不足按实际 · 空组省略。
     """
     groups: list[tuple[str, str, Any]] = [
         ("📈 偏多", "偏多", lambda it: -float(it["pct_b"])),
@@ -67,13 +90,13 @@ def build_hourly_digest(items: list[dict[str, Any]], *, as_of_label: str) -> str
     ]
     lines = [f"📊 做T扫描 · {as_of_label}"]
     shown = False
-    for title, bias, keyfn in groups:
-        members = [it for it in items if it.get("bias") == bias]
+    for title, group, keyfn in groups:
+        members = [it for it in items if _digest_group(it) == group]  # ★方案B:bias ∧ %B 一致
         if not members:
             continue  # 空组省略
         shown = True
         top = sorted(members, key=keyfn)[:_TOP_N]
-        lines.append(f"{title}({len(members)})")  # N = 该倾向全量数 · 下列前 5
+        lines.append(f"{title}({len(members)})")  # N = 过滤后该组实际数 · 下列前 5
         lines.extend(_coin_line(it) for it in top)
     if not shown:
         return None  # 全组皆空(无快照 / 无有效结构)→ 不推

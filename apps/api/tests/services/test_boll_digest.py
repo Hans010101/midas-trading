@@ -24,14 +24,14 @@ def _item(sym: str, bias: str, pct_b: float, *, change: float | None = 1.0) -> d
 
 
 def test_groups_and_top5_by_pctb() -> None:
-    # 偏多 7 个(按 %B 高→低取前5)· 偏空 2 个(按 %B 低→高)· 中性 1 个
-    items = [_item(f"L{i}USDT", "偏多", 0.5 + i * 0.1) for i in range(7)]  # %B 0.5..1.1
+    # 偏多 7 个(★%B 都 >0.6 全合格 · 按 %B 高→低取前5)· 偏空 2 个(%B 都 <0.4 · 低→高)· 中性 1 个
+    items = [_item(f"L{i}USDT", "偏多", 0.65 + i * 0.1) for i in range(7)]  # %B 0.65..1.25
     items += [_item("S1USDT", "偏空", 0.05), _item("S2USDT", "偏空", -0.1)]
     items += [_item("N1USDT", "中性", 0.5, change=3.0)]
     msg = build_hourly_digest(items, as_of_label="14:00")
     assert msg is not None
     assert msg.startswith("📊 做T扫描 · 14:00")
-    # 三组标题(方向 emoji · 非红绿)+ 全量计数
+    # 三组标题(方向 emoji · 非红绿)+ 过滤后实际数
     assert "📈 偏多(7)" in msg
     assert "📉 偏空(2)" in msg
     assert "➖ 中性(1)" in msg
@@ -42,6 +42,32 @@ def test_groups_and_top5_by_pctb() -> None:
     assert "L1USDT" not in msg
     # ★偏空按 %B 低→高:S2(-0.1)在 S1(0.05)之前
     assert msg.index("S2USDT") < msg.index("S1USDT")
+
+
+def test_pctb_consistency_filter_resolves_conflict() -> None:
+    # ★M2-3c 方案B:方向(bias)与位置(%B)打架的归中性,偏多组 %B 都 >0.6 / 偏空组 %B 都 <0.4
+    items = [
+        _item("SKYAIUSDT", "偏空", 0.53),  # ★三线齐跌但 %B=0.53(回抽中轨)→ 不进偏空 → 中性
+        _item("CONFUSDT", "偏多", 0.50),   # bias偏多但 %B=0.5(位置不够上)→ 不进偏多 → 中性
+        _item("REALSUSDT", "偏空", 0.12),  # bias偏空 + %B<0.4 → 偏空(自洽)
+        _item("REALLUSDT", "偏多", 0.88),  # bias偏多 + %B>0.6 → 偏多(自洽)
+        _item("MIDUSDT", "中性", 0.5),     # bias中性 → 中性
+    ]
+    msg = build_hourly_digest(items, as_of_label="15:00")
+    assert msg is not None
+    # ★打架的两个进中性,不进方向组
+    assert "📈 偏多(1)" in msg   # 只 REALL
+    assert "📉 偏空(1)" in msg   # 只 REALS
+    assert "➖ 中性(3)" in msg   # SKYAI + CONF + MID
+    # ★偏空组里不再出现 %B=0.53(SKYAI 在中性段,不在偏空段)
+    short_idx = msg.index("📉 偏空")
+    short_section = msg[short_idx:]
+    assert "SKYAIUSDT" not in short_section  # SKYAI 不在偏空组
+    assert "REALSUSDT" in short_section       # 真偏空在
+    # 偏多组(到中性段为止)只含 REALL · 不含 CONF
+    long_section = msg[msg.index("📈 偏多") : msg.index("➖ 中性")]
+    assert "REALLUSDT" in long_section
+    assert "CONFUSDT" not in long_section
 
 
 def test_hyperlink_format() -> None:
