@@ -34,6 +34,9 @@ _MIN_BARS = _BOLL_PERIOD + _SLOPE_LOOKBACK
 # ★推送声明:精简后声明由转换行「· 仅供参考」承载;STRUCTURE_DISCLAIMER 兼容保留(仍是合规声明之一)。
 PUSH_DISCLAIMER = "· 仅供参考"          # 方案B 转换行末缀(精简后的主声明)
 STRUCTURE_DISCLAIMER = "· 结构描述非建议"  # 兼容保留 · 仍被门禁认可为合规声明
+# 详情页深链(Telegram Markdown [text](url))· 做T 三种消息统一:单卡 render_card / 合并列表
+# build_transition_digest / 全景 boll_digest(后者另有同值常量)· 点 SYMBOL 一一对应进详情。
+DETAIL_URL = "https://midastrade.asia/crypto-preview"
 # ★合规声明集(裸短语 · 匹配不依赖「· 」前缀)· 文案含其一 = 有声明;★完全无 → 门禁一票否决(不改松)。
 _COMPLIANT_DISCLAIMERS: tuple[str, ...] = ("仅供参考", "结构描述非建议")
 
@@ -174,7 +177,8 @@ def render_card(symbol: str, snap: BollSnapshot, transition_from: str | None = N
     不占独立行);为 None(无转换)则省略该行。整批末尾的唯一免责由 build_session_message 统一加。
     """
     lines = [
-        f"{symbol}｜结构倾向:{snap.bias}",
+        # ★SYMBOL 超链接进详情(与全景 / 合并列表一致 · 一一对应)· 只给标的加链接,其余文案不动
+        f"[{symbol}]({DETAIL_URL}?symbol={symbol})｜结构倾向:{snap.bias}",
         f"状态:{_STATE_LABEL[snap.state]}",
         f"通道位置:{_ZONE_LABEL[snap.zone]}(%B={snap.pct_b:.2f})",
         f"现价 {snap.close:g}",
@@ -299,11 +303,6 @@ def build_session_message(cards: list[str]) -> str:
         parts.append(card)
     parts.append(sep)  # 末尾分隔线收尾(★不再加重复声明行 · 声明在转换行)
     return validate_shadow_push("\n".join(parts))
-
-
-# 详情页深链(转换合并简版列表 SYMBOL 超链接 · Telegram Markdown [text](url))·
-# ★体系1 boll_digest 另有同值常量,本模块独立定义(boll_state 是基座 · 不反向依赖体系1)。
-DETAIL_URL = "https://midastrade.asia/crypto-preview"
 
 
 def build_transition_digest(pushed: list[tuple[str, BollSnapshot, str]]) -> str:

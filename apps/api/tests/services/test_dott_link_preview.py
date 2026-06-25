@@ -74,6 +74,24 @@ async def test_send_event_dott_transition_disables_preview(monkeypatch: pytest.M
 
 
 @pytest.mark.asyncio
+async def test_real_dott_digest_event_disables_preview(monkeypatch: pytest.MonkeyPatch) -> None:
+    # ★问题1 回归锁死:用 worker 实际走的工厂造【真实】DottDigestEvent(全景)· 经 send_event
+    #   → disable_preview=True(证明全景关预览不是 bug · 截图带卡纯属部署时序:旧全景早于 PR#43 上线)
+    from app.services.notifications.dott_push import _make_dott_event
+
+    seen: dict = {}
+
+    async def fake_send(*_a: object, disable_preview: bool = False, **_k: object) -> None:
+        seen["disable_preview"] = disable_preview
+
+    monkeypatch.setattr(tg_adapter.telegram_client, "send", fake_send)
+    monkeypatch.setattr(tg_adapter, "render_telegram", lambda _e: "全景文案")
+    event = _make_dott_event(NotificationKind.DOTT_DIGEST, "全景文案")
+    await tg_adapter.send_event("chat", event)
+    assert seen["disable_preview"] is True
+
+
+@pytest.mark.asyncio
 async def test_send_event_other_kinds_keep_preview(monkeypatch: pytest.MonkeyPatch) -> None:
     # ★其他推送(价格异动/成交/告警/周报)→ disable_preview=False · 预览行为一字不动
     for kind in (
