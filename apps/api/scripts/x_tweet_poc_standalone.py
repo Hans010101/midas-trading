@@ -1,7 +1,7 @@
 """X 推文真 DeepSeek 验证 · ★自包含版(不依赖 app.services.x_marketing,可在生产 api 容器直接跑)。
 
 x_marketing 模块只在分支、没进生产容器(跑 main)→ 原 x_tweet_poc.py import 报 ModuleNotFound。
-本脚本把【门禁 / prompt / 形态数据】全内联(= 分支 x_marketing 逻辑逐字拷贝),只 import 容器 main 已有的
+本脚本把【门禁 / prompt / 形态数据】全内联(= 分支 x_marketing 逻辑逐字拷贝),只 import 容器 main 有的
 ai.llm(ainvoke/is_mock_mode · 真 DeepSeek)+ ai.validator(has_marketing_violation)→ 真生成 + 真门禁,
 ★不往容器塞模块、跑完即净、不碰 main/部署。运行命令见任务回复(git show → docker cp → exec)。
 """
@@ -41,7 +41,7 @@ def _hits(text: str, words: tuple[str, ...]) -> list[str]:
 
 
 def validate_tweet(text: str) -> tuple[bool, list[str]]:
-    """= compliance.validate_tweet · 返回 (passed, reasons)。营销+声明查原文,其余查剥声明后 body。"""
+    """= compliance.validate_tweet · 返回 (passed, reasons)。营销/声明查原文,其余查剥声明 body。"""
     raw = (text or "").strip()
     reasons: list[str] = []
     if not raw:
