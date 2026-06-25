@@ -27,12 +27,15 @@ async def send(
     *,
     parse_mode: str = "Markdown",
     reply_markup: dict[str, Any] | None = None,
+    disable_preview: bool = False,
     timeout: float = 5.0,
     client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
     """POST text 到 TG Bot API · 失败抛 TelegramApiError。
 
     reply_markup 传入 inline_keyboard(G3 按钮界面)· None = 纯文本(G1/G2 行为不变)。
+    disable_preview=True → 关底部网页预览大卡(★只抑制预览卡 · 正文 [text](url) 内联链接仍可点);
+    默认 False = TG 原生预览行为不变(成交/价格/告警/周报等其他推送不受影响)。
     """
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload: dict[str, Any] = {
@@ -40,6 +43,8 @@ async def send(
         "text": text,
         "parse_mode": parse_mode,
     }
+    if disable_preview:
+        payload["disable_web_page_preview"] = True
     if reply_markup is not None:
         payload["reply_markup"] = reply_markup
 

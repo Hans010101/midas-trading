@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from app.core.config import settings
 from app.services.notifications import telegram as telegram_client
+from app.services.notifications.events import NotificationKind
 from app.services.notifications.templates import (
     render_telegram,
     render_telegram_test,
@@ -24,6 +25,14 @@ if TYPE_CHECKING:
 
 CHANNEL = "telegram"
 
+# 做T 推送(体系1 全景 / 体系2 转换)发送时关底部网页预览大卡:消息含官网超链接,TG 会自动抓
+# 首页生成一个多余的「点金 Midas 官网」预览卡。★只关预览卡 · 正文 [SYMBOL](详情页) 内联链接仍可点
+# (一一对应进详情)。其他推送(成交/价格异动/告警/周报)不在此集合 → 预览行为一字不动。
+_NO_PREVIEW_KINDS = frozenset({
+    NotificationKind.DOTT_DIGEST,
+    NotificationKind.DOTT_TRANSITION,
+})
+
 
 async def send_event(
     chat_id: str,
@@ -31,10 +40,15 @@ async def send_event(
     *,
     client: httpx.AsyncClient | None = None,
 ) -> None:
-    """渲染事件 → 经统一 bot 发到 chat_id。token 来自全局 settings.tg_bot_token。"""
+    """渲染事件 → 经统一 bot 发到 chat_id。token 来自全局 settings.tg_bot_token。
+
+    ★做T 推送(_NO_PREVIEW_KINDS)关底部网页预览大卡;其他事件预览行为不变。
+    """
     text = render_telegram(event)
     await telegram_client.send(
-        settings.tg_bot_token, chat_id, text, client=client,
+        settings.tg_bot_token, chat_id, text,
+        disable_preview=event.kind in _NO_PREVIEW_KINDS,
+        client=client,
     )
 
 
