@@ -78,6 +78,12 @@ def _kind_enabled(event: NotificationEvent, config: NotificationConfig) -> bool:
     if event.kind == NotificationKind.WEEKLY_REPORT:
         # P3:市场周报订阅开关(weekly_report_enabled 同时也是收件人筛选条件)
         return config.weekly_report_enabled
+    if event.kind == NotificationKind.DOTT_DIGEST:
+        # 做T M2-5:体系1 定时全景订阅开关(dott_digest_enabled · 也是收件人筛选条件)
+        return config.dott_digest_enabled
+    if event.kind == NotificationKind.DOTT_TRANSITION:
+        # 做T M2-5:体系2 行情转换订阅开关(dott_transition_enabled · 也是收件人筛选条件)
+        return config.dott_transition_enabled
     if event.kind == NotificationKind.WEEKLY_REPORT_SKIPPED:
         # 运营 ops 提醒(只发 admin · 不受订阅开关控制 · 恒发)
         return True

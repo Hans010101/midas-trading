@@ -25,7 +25,10 @@ from typing import Any, cast
 
 from celery import shared_task
 from redis import asyncio as aioredis
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
+from app.core.config import settings
 from app.services.ai.boll_state import (
     BollSnapshot,
     BollState,
@@ -42,6 +45,8 @@ from app.services.clickhouse_crypto import (
     select_latest_funding_rates,
     select_latest_tickers,
 )
+from app.services.notifications.dott_push import broadcast_dott
+from app.services.notifications.events import NotificationKind
 from tasks.crypto_metrics_ingest import _all_usdt_perp_symbols
 
 logger = logging.getLogger(__name__)
@@ -169,17 +174,29 @@ async def _boll_scan_async() -> dict[str, int]:
                     build_transition_digest(pushed[i : i + _MERGE_MAX])
                     for i in range(0, len(pushed), _MERGE_MAX)
                 ]
-            # ★冷却 + 每日计数:只对【实际影子推送的】生效(被上限截掉的不冷却 → 下轮仍可竞争)
+            # ★冷却 + 每日计数:只对【实际推送的】生效(被上限截掉的不冷却 → 下轮仍可竞争)
             for s, _snp, _tf in pushed:
                 await redis.set(_cooldown_key(s), "1", ex=_COOLDOWN_SEC)
             await redis.incrby(_daily_key(), len(pushed))
             await redis.expire(_daily_key(), _DAILY_TTL)
-            # ★影子模式:只打日志,★绝不调 TG 发送 helper(真发 M2-5)
-            for msg in msgs:
+            # ★总闸开 → 真发广播(订阅 dott_transition + 绑 TG + Pro · 安静时段在 dispatch)· 关 → 影子
+            if settings.dott_push_live:
+                engine = create_async_engine(os.environ["DATABASE_URL"], poolclass=NullPool)
+                try:
+                    async with async_sessionmaker(engine, expire_on_commit=False)() as db:
+                        res = await broadcast_dott(db, msgs, kind=NotificationKind.DOTT_TRANSITION)
+                finally:
+                    await engine.dispose()
                 logger.info(
-                    "[boll-scan-shadow] 影子推送文案(★不真发 · 本轮 %d 转换):\n%s",
-                    len(pushed), msg,
+                    "[boll-scan-live] 真发 · %d 转换 → 订阅 %d → 成功 %d 失败 %d 跳过非Pro %d",
+                    len(pushed), res.subscribers, res.sent, res.failed, res.skipped_non_pro,
                 )
+            else:
+                for msg in msgs:
+                    logger.info(
+                        "[boll-scan-shadow] 影子推送文案(★不真发 · 本轮 %d 转换):\n%s",
+                        len(pushed), msg,
+                    )
         # ★频率漏斗(每轮都打 · 方便验证频率落到合理范围:冷却/批量/每日是否生效)
         logger.info(
             "[boll-scan-throttle] 转换 %d → 候选(涨跌榜∩非冷却) %d → 批量上限取 %d "
