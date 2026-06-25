@@ -62,6 +62,7 @@ from app.services.report.weekly_dispatch import UNSUBSCRIBE_URL
 from app.services.report.weekly_email import render_email_html
 from app.services.report.weekly_md import WeeklyMdError
 from app.services.visit_stats import CN_TZ, cn_today, read_redis_day, read_redis_hours
+from app.services.x_marketing.generate import enqueue_daily_generation
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
@@ -889,4 +890,29 @@ async def send_weekly_dispatch_now(
         recipients=result.recipients, email_sent=result.email_sent,
         email_failed=result.email_failed, notify_sent=result.notify_sent,
         notify_failed=result.notify_failed, skipped=result.skipped,
+    )
+
+
+# ── X 营销每日推文(阶段4a · PR-2)· admin 触发生成(异步)──────────────────────
+
+
+class XTweetGenerateOut(BaseModel):
+    """触发生成响应。"""
+
+    status: str = Field(description="enqueued = 已入队 · worker 异步生成")
+    message: str
+
+
+@router.post(
+    "/x-tweets/generate",
+    summary="触发生成今日推文(异步 · 选币→DeepSeek→门禁→存待发 · 不发 X)",
+)
+async def generate_x_tweets(admin: AdminDep) -> XTweetGenerateOut:
+    """admin 点「生成今日推文」· enqueue worker 异步生成(DeepSeek 慢,不阻塞 HTTP)。
+
+    生成结果存 x_tweet(status=draft 待发 · ★门禁不过也存,后台可见但 4b 不发)· 本端点零 X 调用。
+    """
+    enqueue_daily_generation(admin.id)
+    return XTweetGenerateOut(
+        status="enqueued", message="已触发生成 · 约数十秒后在列表查看(异步)",
     )
