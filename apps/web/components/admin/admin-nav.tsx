@@ -13,6 +13,7 @@ const ADMIN_TABS = [
   // 「市场周报」(AI 生成链路 /admin/reports)入口已下掉(改用「周报发送」运营上传)·
   // 页面文件 + 后端端点保留不删,仅去导航入口(降低误删风险,未来可重启用)。
   { href: '/admin/weekly-dispatch', label: '周报发送', exact: false },
+  { href: '/admin/x-tweets', label: '每日推文', exact: false },
 ] as const
 
 export function AdminNav() {

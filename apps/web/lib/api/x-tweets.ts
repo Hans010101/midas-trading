@@ -1,0 +1,57 @@
+/**
+ * X 营销 · 每日推文后台 API client(阶段4a · PR-3)。
+ *
+ * GET  /api/v1/admin/x-tweets            → 今日推文列表(24h · 含门禁结果)
+ * GET  /api/v1/admin/x-tweets/{id}       → 单条详情
+ * POST /api/v1/admin/x-tweets/generate   → 触发生成(异步 · Celery)
+ *
+ * 🔴 全 admin 端点(后端 AdminDep 403 强制)· fetch 透传 session token。
+ * ★ 止于展示 + 触发生成 · 不发 X(发布=4b)· 截图字段 image_path 现阶段为 null(PR-4 填)。
+ */
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+
+export interface XTweetItem {
+  id: number
+  symbol: string
+  bias: string
+  tweet_text: string
+  compliance_passed: boolean
+  compliance_reason: string | null
+  status: string
+  image_path: string | null
+  created_at: string
+}
+
+export interface XTweetListOut {
+  items: XTweetItem[]
+  total: number
+}
+
+export interface XTweetGenerateOut {
+  status: string
+  message: string
+}
+
+function _authHeaders(token?: string): HeadersInit | undefined {
+  return token ? { Authorization: `Bearer ${token}` } : undefined
+}
+
+export async function fetchXTweets(token: string, signal?: AbortSignal): Promise<XTweetListOut> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/x-tweets`, {
+    headers: _authHeaders(token),
+    signal,
+  })
+  if (!r.ok) throw new Error(`x-tweets list HTTP ${r.status}`)
+  return (await r.json()) as XTweetListOut
+}
+
+/** 触发生成今日推文(异步 · 后端 enqueue Celery,约数十秒后列表刷新可见)。 */
+export async function generateXTweets(token: string): Promise<XTweetGenerateOut> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/x-tweets/generate`, {
+    method: 'POST',
+    headers: _authHeaders(token),
+  })
+  if (!r.ok) throw new Error(`x-tweets generate HTTP ${r.status}`)
+  return (await r.json()) as XTweetGenerateOut
+}

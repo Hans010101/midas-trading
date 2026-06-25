@@ -62,6 +62,11 @@ async def list_recent(
     return list(rows.scalars().all())
 
 
+async def get_tweet(session: AsyncSession, tweet_id: int) -> XTweet | None:
+    """按 id 取单条推文(后台详情)· 不存在返 None。"""
+    return await session.get(XTweet, tweet_id)
+
+
 async def cleanup_expired(
     session: AsyncSession, *, now: datetime | None = None,
 ) -> list[str]:
