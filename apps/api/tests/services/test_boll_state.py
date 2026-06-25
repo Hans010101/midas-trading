@@ -247,6 +247,21 @@ def test_render_card_plan_b_format() -> None:
         assert word not in card2
 
 
+def test_render_card_symbol_hyperlink() -> None:
+    # ★问题2 修复:单卡(方案B)SYMBOL 改超链接 [SYMBOL](详情页?symbol=SYMBOL)· 与全景/合并列表一致
+    snap = _snap(0.88, state=BollState.BREAKOUT_UP)
+    card = render_card("OPNUSDT", snap)
+    assert f"[OPNUSDT]({DETAIL_URL}?symbol=OPNUSDT)｜结构倾向:" in card
+    # 单转换走 build_session_message([render_card(...)])(worker 对 1 个转换的路径)· 链接随之带入整条
+    msg = build_session_message(
+        [render_card("OPNUSDT", snap, transition_from=state_label(BollState.RANGE))],
+    )
+    assert f"[OPNUSDT]({DETAIL_URL}?symbol=OPNUSDT)" in msg
+    # ★其余文案不动:状态/通道位置/现价/轨道 仍在
+    for k in ("结构倾向:", "状态:", "通道位置:", "现价 ", "轨道 "):
+        assert k in msg
+
+
 def test_build_session_message_plan_b() -> None:
     cards = [
         render_card("BTCUSDT", _snap(0.9, state=BollState.BREAKOUT_UP),
