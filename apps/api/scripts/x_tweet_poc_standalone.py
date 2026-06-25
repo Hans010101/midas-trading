@@ -9,6 +9,7 @@ ai.llm(ainvoke/is_mock_mode · 真 DeepSeek)+ ai.validator(has_marketing_violati
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass
 
 from app.services.ai.llm import ainvoke, is_mock_mode
@@ -24,8 +25,13 @@ _ACTION_WORDS: tuple[str, ...] = (
 _PREDICTION_WORDS: tuple[str, ...] = (
     "暴涨", "暴跌", "大涨", "大跌", "将涨", "将跌", "会涨", "会跌", "要涨", "要跌",
     "看涨", "看跌", "续涨", "续跌", "补涨", "涨到", "跌到", "涨至", "跌至", "上看", "下看",
-    "突破", "破位", "拉升", "冲高", "冲顶", "探底", "启动", "翻倍", "新高", "新低",
+    "拉升", "冲高", "冲顶", "探底", "启动", "翻倍", "新高", "新低",
     "即将", "将要", "将会", "有望", "料将", "预计", "后市", "下一步", "未来", "接下来",
+)
+# 突破/破位 只拦【预测性】语境(陈述「无突破/未突破/突破信号」放行)· = compliance._PREDICTION_RES
+_PREDICTION_RES: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(即将|将要|将会|将|有望|预计|料将|快要|很快|马上|或将|势必|会)(突破|破位)"),
+    re.compile(r"(突破|破位)(在即|可期)"),
 )
 _PROFIT_WORDS: tuple[str, ...] = (
     "翻倍", "稳赚", "保本", "收益率", "回报率", "躺赚", "财富自由", "一夜暴富", "百倍", "十倍",
@@ -55,8 +61,10 @@ def validate_tweet(text: str) -> tuple[bool, list[str]]:
         body = body.replace(disc, "")
     if hits := _hits(body, _ACTION_WORDS):
         reasons.append(f"买卖引导词:{'/'.join(hits)}")
-    if hits := _hits(body, _PREDICTION_WORDS):
-        reasons.append(f"预测未来走势词:{'/'.join(hits)}")
+    pred = _hits(body, _PREDICTION_WORDS)
+    pred += [m.group(0) for rgx in _PREDICTION_RES if (m := rgx.search(body))]
+    if pred:
+        reasons.append(f"预测未来走势词:{'/'.join(pred)}")
     if hits := _hits(body, _PROFIT_WORDS):
         reasons.append(f"收益承诺词:{'/'.join(hits)}")
     if len(raw) > _MAX_LEN:
@@ -68,13 +76,16 @@ def validate_tweet(text: str) -> tuple[bool, list[str]]:
 _SYSTEM = (
     "你是加密永续技术分析编辑,为点金 Midas 写中文 X(推特)帖。"
     "你【只】客观描述给定的【当前】技术结构事实,绝不预测未来、不给操作建议。\n"
-    "硬性规则(违者作废):\n"
-    "1. 倾向只能用『偏多/偏空/中性』三档(对齐布林口径),不得用『看涨/将涨/突破在即』等预测词;\n"
+    "★推文分三层(让普通人和懂行的都看得懂):\n"
+    "  ① 开头一句【大白话结论】:普通人秒懂的当前状态,例如『BTC 短期偏强、价格高位运行』"
+    "『ETH 横盘震荡、方向不明』『SIREN 持续走弱』(偏强/偏弱/震荡 = 偏多/偏空/中性 的通俗说法);\n"
+    "  ② 中间【专业技术分析】:布林 / MACD / 缠论 / %B 等(给懂行的人,术语该留则留);\n"
+    "  ③ 结尾免责:『仅供参考,不构成投资建议』。\n"
+    "硬性规则(违者作废 · ★大白话开头和专业部分【一样严】):\n"
+    "1. 倾向只能用『偏多/偏空/中性』及通俗版『偏强/偏弱/震荡』,禁『看涨/将涨/突破在即』等预测词;\n"
     "2. 禁止任何买卖引导(买入/卖出/建议/抄底/止损/加仓/布局/上车…)、目标价、收益承诺;\n"
-    "3. 禁止未来时态主导(即将/将会/有望/预计/后市…),只陈述此刻结构;\n"
-    "4. 可如实报 24h 涨跌幅(事实),但不得据此预测后续涨跌;\n"
-    "5. 结尾必须附一句免责:『仅供参考,不构成投资建议』;\n"
-    "6. 简洁专业,中文,280–460 字,开头点币种+核心结构,中间技术要点,结尾免责。"
+    "3. 禁止未来时态(即将/将会/有望/预计/后市…),只陈述此刻;可如实报 24h 涨跌幅(事实)但不据此预测;\n"
+    "4. 整体语言通俗易懂(大白话部分用日常话),中文,300–480 字,结尾必须带免责。"
 )
 
 

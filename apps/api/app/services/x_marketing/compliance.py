@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from app.services.ai.validator import has_marketing_violation
@@ -25,11 +26,20 @@ _ACTION_WORDS: tuple[str, ...] = (
 )
 
 # ② ★预测未来走势黑名单(X 专属严控)· 只拦【预测性复合词 / 未来时态】· 不含裸"涨/跌"(见 docstring)
+#   ★「突破/破位」不放进裸词表(陈述句「无突破/未突破/突破信号」是事实状态,不该拦)·
+#     改由下方 _PREDICTION_RES 正则只拦【未来/方向语境】的突破(即将突破/将突破/突破在即…)。
 _PREDICTION_WORDS: tuple[str, ...] = (
     "暴涨", "暴跌", "大涨", "大跌", "将涨", "将跌", "会涨", "会跌", "要涨", "要跌",
     "看涨", "看跌", "续涨", "续跌", "补涨", "涨到", "跌到", "涨至", "跌至", "上看", "下看",
-    "突破", "破位", "拉升", "冲高", "冲顶", "探底", "启动", "翻倍", "新高", "新低",
+    "拉升", "冲高", "冲顶", "探底", "启动", "翻倍", "新高", "新低",
     "即将", "将要", "将会", "有望", "料将", "预计", "后市", "下一步", "未来", "接下来",
+)
+
+# ②b ★突破/破位【预测性】语境正则(陈述「无突破/未突破/突破信号」放行 · 只拦未来/在即/可期):
+#    未来标记 + 突破/破位(即将突破/将破位/有望突破…),或 突破/破位 + 在即/可期(突破在即…)。
+_PREDICTION_RES: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(即将|将要|将会|将|有望|预计|料将|快要|很快|马上|或将|势必|会)(突破|破位)"),
+    re.compile(r"(突破|破位)(在即|可期)"),
 )
 
 # ③ 收益承诺(has_marketing_violation 覆盖稳赚/保证收益;这里补 X 常见诱导)
@@ -82,8 +92,10 @@ def validate_tweet(text: str) -> TweetGateResult:
         body = body.replace(disc, "")
     if hits := _hits(body, _ACTION_WORDS):
         reasons.append(f"买卖引导词:{'/'.join(hits)}")
-    if hits := _hits(body, _PREDICTION_WORDS):
-        reasons.append(f"预测未来走势词:{'/'.join(hits)}")
+    pred = _hits(body, _PREDICTION_WORDS)
+    pred += [m.group(0) for rgx in _PREDICTION_RES if (m := rgx.search(body))]  # 突破/破位 预测语境
+    if pred:
+        reasons.append(f"预测未来走势词:{'/'.join(pred)}")
     if hits := _hits(body, _PROFIT_WORDS):
         reasons.append(f"收益承诺词:{'/'.join(hits)}")
     if len(raw) > _MAX_LEN:

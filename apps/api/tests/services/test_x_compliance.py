@@ -61,6 +61,32 @@ def test_prediction_words_blocked(bad: str) -> None:
     assert any("预测未来" in x for x in r.reasons)
 
 
+def test_breakout_statement_not_blocked() -> None:
+    # ★门禁微调:陈述性「无突破/未突破/突破信号」是当前事实 · 不该被预测词误杀(ETHUSDT 翻车修复)
+    for t in (
+        "$ETH 当前结构中性,三线走平,暂无突破信号,价格近中轨。仅供参考,不构成投资建议。",
+        "$BTC 偏多,价格运行于上轨上方,目前未突破前高区间。以上为现状。仅供参考,不构成投资建议。",
+        "$SOL 偏空,带宽收口,尚未现突破。仅供参考,不构成投资建议。",
+    ):
+        r = validate_tweet(t)
+        assert r.passed, (t, r.reasons)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "$ETH 偏多,即将突破前高。仅供参考,不构成投资建议。",
+        "$BTC 偏多,向上突破在即。仅供参考,不构成投资建议。",
+        "$SOL 偏多,有望突破上方阻力。仅供参考,不构成投资建议。",
+    ],
+)
+def test_predictive_breakout_still_blocked(bad: str) -> None:
+    # ★放宽不能漏放:未来/在即语境的突破仍一票否决
+    r = validate_tweet(bad)
+    assert not r.passed
+    assert any("预测未来" in x for x in r.reasons)
+
+
 def test_profit_promise_blocked() -> None:
     r = validate_tweet("$DOGE 偏多,持有有望翻倍,躺赚。仅供参考,不构成投资建议。")
     assert not r.passed
