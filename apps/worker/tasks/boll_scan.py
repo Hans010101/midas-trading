@@ -179,7 +179,7 @@ async def _boll_scan_async() -> dict[str, int]:
                 await redis.set(_cooldown_key(s), "1", ex=_COOLDOWN_SEC)
             await redis.incrby(_daily_key(), len(pushed))
             await redis.expire(_daily_key(), _DAILY_TTL)
-            # ★总闸开 → 真发广播(订阅 dott_transition + 绑 TG + Pro · 安静时段在 dispatch)· 关 → 影子
+            # ★总闸开 → 真发广播(订阅 dott_transition + 绑 TG + Pro · 安静时段 dispatch)· 关 → 影子
             if settings.dott_push_live:
                 engine = create_async_engine(os.environ["DATABASE_URL"], poolclass=NullPool)
                 try:
