@@ -9,8 +9,13 @@ ai.llm(ainvoke/is_mock_mode · 真 DeepSeek)+ ai.validator(has_marketing_violati
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 import re
 from dataclasses import dataclass
+from typing import Any
+
+from redis import asyncio as aioredis
 
 from app.services.ai.llm import ainvoke, is_mock_mode
 from app.services.ai.validator import has_marketing_violation
@@ -143,26 +148,82 @@ def append_tags(text: str, symbol: str) -> str:
     return f"{text.rstrip()}\n#{base} {_BRAND_TAG}"
 
 
-# 形态数据(mock · 重点是真 DeepSeek 生成 + 真门禁;3 种倾向各一)
-_CTX = [
+# 回退 mock(★只在读不到 boll 快照时用 · 覆盖三倾向 · 保证脚本任何环境能跑出批量逻辑)
+_FALLBACK: list[Ctx] = [
     Ctx("BTCUSDT", 61744.1, 3.2, "偏多", "三线齐上·上升结构", "近上轨", 0.92, 0.0001),
+    Ctx("SOLUSDT", 142.5, 5.1, "偏多", "带宽开口·向上", "破上轨", 1.04, 0.0002),
     Ctx("ETHUSDT", 2980.5, -2.1, "中性", "三线走平·震荡结构", "近中轨", 0.48, -0.00005),
-    Ctx("SIRENUSDT", 0.0362, -8.4, "偏空", "带宽开口·向下", "破下轨", 0.0, 0.0003),
+    Ctx("SIRENUSDT", 0.0362, -8.4, "偏空", "带宽开口·向下", "破下轨", -0.05, 0.0003),
+    Ctx("XYZUSDT", 1.23, -6.7, "偏空", "三线齐跌·下降结构", "近下轨", 0.06, 0.0004),
 ]
+_SNAPSHOT_KEY = "boll:snapshot:latest"  # 做T A-1 快照(worker 落 · 本脚本只读挑币)
+
+
+def _to_ctx(row: dict[str, Any]) -> Ctx:
+    """boll 快照行 → Ctx(price=close · None 容错为 0.0 · 只作生成素材)。"""
+    return Ctx(
+        symbol=str(row["symbol"]),
+        price=float(row.get("close") or 0.0),
+        change_pct_24h=float(row.get("change_pct_24h") or 0.0),
+        bias=str(row.get("bias") or "中性"),
+        state_label=str(row.get("state_label") or "—"),
+        zone_label=str(row.get("zone_label") or "—"),
+        pct_b=float(row.get("pct_b") or 0.5),
+        funding_rate=float(row.get("funding_rate") or 0.0),
+    )
+
+
+async def _pick_coins() -> list[Ctx]:
+    """从 boll 快照按 bias 挑代表性币:★强偏空 5(最该压测)+ 强偏多 5 + 中性 4 = 最多 14。
+
+    读不到快照(本地无 Redis / worker 没落)→ 回退 _FALLBACK(批量逻辑照样验)。
+    """
+    try:
+        redis = aioredis.from_url(
+            os.environ.get("REDIS_URL", "redis://localhost:6379/0"), decode_responses=True,
+        )
+        raw = await redis.get(_SNAPSHOT_KEY)
+        await redis.aclose()
+    except Exception as exc:  # noqa: BLE001 · 读不到就回退,不让脚本崩
+        print(f"(读 boll 快照失败 · 回退内置 mock:{exc})")
+        return _FALLBACK
+    items: list[dict[str, Any]] = json.loads(raw).get("items", []) if raw else []
+    if not items:
+        print("(boll 快照为空 · 回退内置 mock)")
+        return _FALLBACK
+
+    def _of(bias: str) -> list[dict[str, Any]]:
+        return [x for x in items if x.get("bias") == bias]
+
+    shorts = sorted(_of("偏空"), key=lambda x: x.get("pct_b", 0.5))[:5]          # %B 低在前 = 最空
+    longs = sorted(_of("偏多"), key=lambda x: -x.get("pct_b", 0.5))[:5]          # %B 高在前 = 最多
+    neutral = sorted(_of("中性"), key=lambda x: abs(x.get("pct_b", 0.5) - 0.5))[:4]
+    return [_to_ctx(x) for x in (*shorts, *longs, *neutral)]  # ★偏空在前(最该看)
 
 
 async def main() -> None:
     mode = "MOCK(★容器没读到 DEEPSEEK_API_KEY!)" if is_mock_mode() else "真 DeepSeek"
-    print(f"LLM 模式:{mode}\n" + "=" * 70)
-    for c in _CTX:
+    coins = await _pick_coins()
+    print(f"LLM 模式:{mode} · 批量 {len(coins)} 条(偏空优先)\n" + "=" * 70)
+    passed_n = 0
+    rejects: list[str] = []
+    for c in coins:
         resp = await ainvoke(build_user_prompt(c), system=_SYSTEM)
         tweet = append_tags(resp.content, c.symbol)  # ★拼标签后再过门禁(印的=将发的)
         passed, reasons = validate_tweet(tweet)
-        verdict = "✅ 通过" if passed else f"❌ 否决 · {' | '.join(reasons)}"
         src = "mock" if resp.is_mock else "DeepSeek"
         print(f"\n── {c.symbol}({c.bias} · {c.state_label})  [{src}]")
         print(f"  推文:{tweet}")
-        print(f"  门禁:{verdict}")
+        if passed:
+            passed_n += 1
+            print("  门禁:✅ 通过")
+        else:
+            rejects.append(f"{c.symbol}({c.bias}):{' | '.join(reasons)}")
+            print(f"  门禁:❌ 否决 · {' | '.join(reasons)}")
+    print("\n" + "=" * 70)
+    print(f"汇总:共 {len(coins)} 条 · 通过 {passed_n} · 否决 {len(coins) - passed_n}")
+    for r in rejects:
+        print(f"  ❌ {r}")
 
 
 if __name__ == "__main__":
