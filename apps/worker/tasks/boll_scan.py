@@ -174,11 +174,9 @@ async def _boll_scan_async() -> dict[str, int]:
                     build_transition_digest(pushed[i : i + _MERGE_MAX])
                     for i in range(0, len(pushed), _MERGE_MAX)
                 ]
-            # ★冷却 + 每日计数:只对【实际推送的】生效(被上限截掉的不冷却 → 下轮仍可竞争)
+            # ★冷却:只对【实际推送的】生效(被上限截掉的不冷却 → 下轮仍可竞争)· 真发/影子都设(降噪)
             for s, _snp, _tf in pushed:
                 await redis.set(_cooldown_key(s), "1", ex=_COOLDOWN_SEC)
-            await redis.incrby(_daily_key(), len(pushed))
-            await redis.expire(_daily_key(), _DAILY_TTL)
             # ★总闸开 → 真发广播(订阅 dott_transition + 绑 TG + Pro · 安静时段 dispatch)· 关 → 影子
             if settings.dott_push_live:
                 engine = create_async_engine(os.environ["DATABASE_URL"], poolclass=NullPool)
@@ -187,6 +185,11 @@ async def _boll_scan_async() -> dict[str, int]:
                         res = await broadcast_dott(db, msgs, kind=NotificationKind.DOTT_TRANSITION)
                 finally:
                     await engine.dispose()
+                # ★每日配额【只在真发且有订阅者时】消耗:影子不污染、0 订阅不空耗 → 无人订阅时不会卡 0;
+                #   date-stamped _daily_key 按 UTC 日自然重置(次日恢复)。计数只反映真发到真实收件人。
+                if res.subscribers > 0:
+                    await redis.incrby(_daily_key(), len(pushed))
+                    await redis.expire(_daily_key(), _DAILY_TTL)
                 logger.info(
                     "[boll-scan-live] 真发 · %d 转换 → 订阅 %d → 成功 %d 失败 %d 跳过非Pro %d",
                     len(pushed), res.subscribers, res.sent, res.failed, res.skipped_non_pro,
@@ -197,10 +200,11 @@ async def _boll_scan_async() -> dict[str, int]:
                         "[boll-scan-shadow] 影子推送文案(★不真发 · 本轮 %d 转换):\n%s",
                         len(pushed), msg,
                     )
-        # ★频率漏斗(每轮都打 · 方便验证频率落到合理范围:冷却/批量/每日是否生效)
+        # ★频率漏斗(每轮都打 · 方便验证频率落到合理范围:冷却/批量/每日是否生效)·
+        #   字样中性「选中推送」:真发/影子由上方 [boll-scan-live]/[boll-scan-shadow] 行区分,本行不再写"影子"。
         logger.info(
             "[boll-scan-throttle] 转换 %d → 候选(涨跌榜∩非冷却) %d → 批量上限取 %d "
-            "→ 每日剩余 %d → 本轮影子推送 %d 条",
+            "→ 每日剩余 %d → 本轮选中推送 %d 条",
             transitions, after_filter, batch_n, remaining, len(pushed),
         )
 
