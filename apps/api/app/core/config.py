@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     # Telegram 统一 bot(0024 v2 · M1-G G1)· 与旧 per-user bot 并存,G2 才切换派发。
     # ⚠ tg_bot_token 敏感:只从 env 读 · 绝不进 git/前端/DB · 空 = 统一 bot 未启用。
     tg_bot_token: str = ""
+    # ★做T 推送总闸(M2-5)· ★默认 False = 仍影子(只 logger 不真发)· 服务器设 DOTT_PUSH_LIVE=true
+    #   才真发 TG 给订阅用户 —— 真发的「刹车」:紧急一键关停回影子,不用回滚代码。
+    dott_push_live: bool = False
     # bot 用户名(拼 t.me deep link)· D9 待定 · 可空(前端 G3 补)。
     tg_bot_username: str = ""
     # 公网 API base · 拼 webhook URL · prod = https://api.midastrade.asia · 非 secret。

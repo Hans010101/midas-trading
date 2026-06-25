@@ -12,6 +12,8 @@ from decimal import Decimal
 from app.core.formatting import format_price_number
 from app.services.notifications.events import (
     AlertTriggeredEvent,
+    DottDigestEvent,
+    DottTransitionEvent,
     LiquidationEvent,
     NotificationEvent,
     PerpFilledEvent,
@@ -73,6 +75,9 @@ def render_telegram(event: NotificationEvent) -> str:
         return _tg_weekly_report(event)
     if isinstance(event, WeeklyReportSkippedEvent):
         return _tg_weekly_skipped(event)
+    # 做T 推送(M2-5)· 文案已由 boll_digest / boll_scan 组装好(经 validate_shadow_push)· 原样发
+    if isinstance(event, DottDigestEvent | DottTransitionEvent):
+        return event.message
     msg = f"未知事件类型 {type(event)}"
     raise ValueError(msg)
 

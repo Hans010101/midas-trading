@@ -24,6 +24,9 @@ class NotificationKind(StrEnum):
     WEEKLY_REPORT = "weekly_report"
     # 周报未上传被跳过(运营提醒 · 只发 admin · 不受订阅开关控制)
     WEEKLY_REPORT_SKIPPED = "weekly_report_skipped"
+    # 做T 推送(M2-5 真发)· 体系1 定时全景 / 体系2 行情转换 · 各受对应订阅开关 + 用户安静时段控制
+    DOTT_DIGEST = "dott_digest"          # 体系1 · 每小时定时全景(受 dott_digest_enabled)
+    DOTT_TRANSITION = "dott_transition"  # 体系2 · 行情转换(受 dott_transition_enabled)
 
 
 @dataclass(frozen=True)
@@ -148,6 +151,34 @@ class WeeklyReportSkippedEvent:
     week: int = 0
 
 
+@dataclass(frozen=True)
+class DottDigestEvent:
+    """做T 体系1 定时全景(M2-5 真发)· 文案已由 boll_digest 组装好(经 validate_shadow_push)。
+
+    ★quiet_exempt=False:受【用户自己的】安静时段拦截(半夜不打扰 · dispatch 按 config.quiet_hours)。
+    message 是整条全景文本(直接发 · render_telegram 原样返回)· 不在此重新渲染。
+    """
+
+    quiet_exempt: ClassVar[bool] = False
+
+    kind: Literal[NotificationKind.DOTT_DIGEST] = NotificationKind.DOTT_DIGEST
+    message: str = ""
+
+
+@dataclass(frozen=True)
+class DottTransitionEvent:
+    """做T 体系2 行情转换(M2-5 真发)· 文案已由 boll_scan 组装好(方案B 卡 / 简版合并 · 经门禁)。
+
+    ★quiet_exempt=False:体系2 也受用户安静时段拦截(Hans 拍板 · 半夜不打扰,紧急信号天亮整点也能看)。
+    message 是整条转换文本(直接发)· 不在此重新渲染。
+    """
+
+    quiet_exempt: ClassVar[bool] = False
+
+    kind: Literal[NotificationKind.DOTT_TRANSITION] = NotificationKind.DOTT_TRANSITION
+    message: str = ""
+
+
 NotificationEvent = (
     TradeFilledEvent
     | PriceAnomalyEvent
@@ -156,4 +187,6 @@ NotificationEvent = (
     | LiquidationEvent
     | WeeklyReportSentEvent
     | WeeklyReportSkippedEvent
+    | DottDigestEvent
+    | DottTransitionEvent
 )

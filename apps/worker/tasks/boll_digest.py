@@ -20,8 +20,13 @@ from zoneinfo import ZoneInfo
 
 from celery import shared_task
 from redis import asyncio as aioredis
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
+from app.core.config import settings
 from app.services.ai.boll_digest import build_hourly_digest, is_global_quiet_hour
+from app.services.notifications.dott_push import broadcast_dott
+from app.services.notifications.events import NotificationKind
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +41,9 @@ async def _digest_async() -> dict[str, Any]:
     )
     try:
         now = datetime.now(tz=UTC)
-        # ★全局安静时段(夜间 23–06)跳过 —— M2-3a 全局统一;M2-5 真发再按用户级 quiet_hours
-        if is_global_quiet_hour(now):
-            logger.info("[boll-hourly-digest] 安静时段(夜间)· 跳过本轮")
+        # ★安静时段:真发按【每用户】quiet_hours(dispatch 内过滤)· 影子保持 M2-3a 全局白天时段。
+        if not settings.dott_push_live and is_global_quiet_hour(now):
+            logger.info("[boll-hourly-digest] 安静时段(夜间)· 跳过本轮(影子)")
             return {"action": "quiet_skip"}
         raw = await redis.get(_SNAPSHOT_KEY)
         if not raw:
@@ -47,16 +52,27 @@ async def _digest_async() -> dict[str, Any]:
         payload = json.loads(raw)
         items: list[dict[str, Any]] = payload.get("items", [])
         as_of_label = datetime.now(tz=ZoneInfo(_CN_TZ)).strftime("%H:%M")
+        # ★文案组装不变(M2-3a/c 分类过滤 · 内置 validate_shadow_push)
         msg = build_hourly_digest(items, as_of_label=as_of_label)
         if msg is None:
             logger.info(
                 "[boll-hourly-digest] 快照无可分组候选 · 不推(snapshot %d 条)", len(items),
             )
             return {"action": "empty", "snapshot": len(items)}
-        # ★影子模式:只打日志,★绝不调 TG 发送 helper(真发 M2-5 才接 dispatch / 订阅广播)
-        logger.info(
-            "[boll-hourly-digest-shadow] 全景文案(★影子不真发):\n%s", msg,
-        )
+        # ★总闸开 → 真发广播(订阅 dott_digest + 绑 TG + Pro · 安静时段在 dispatch);关 → 影子日志。
+        if settings.dott_push_live:
+            engine = create_async_engine(os.environ["DATABASE_URL"], poolclass=NullPool)
+            try:
+                async with async_sessionmaker(engine, expire_on_commit=False)() as db:
+                    res = await broadcast_dott(db, [msg], kind=NotificationKind.DOTT_DIGEST)
+            finally:
+                await engine.dispose()
+            logger.info(
+                "[boll-hourly-digest-live] 真发 · 订阅 %d → 发成功 %d 失败 %d 跳过非Pro %d",
+                res.subscribers, res.sent, res.failed, res.skipped_non_pro,
+            )
+            return {"action": "live_sent", "snapshot": len(items), "sent": res.sent}
+        logger.info("[boll-hourly-digest-shadow] 全景文案(★影子不真发):\n%s", msg)
         return {"action": "shadow_logged", "snapshot": len(items)}
     finally:
         await redis.aclose()
