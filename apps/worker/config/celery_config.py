@@ -298,4 +298,10 @@ beat_schedule = {
         "schedule": crontab(hour="21", minute="0", day_of_week="sun"),
         "options": {"expires": 3600},
     },
+    # ── X 营销每日推文(阶段4a · PR-1)· 每小时删 24h 前的 x_tweet 行 + 删截图文件 ──
+    "cleanup-x-tweets": {
+        "task": "tasks.x_tweets.cleanup_expired",
+        "schedule": crontab(minute="0"),  # 每小时整点
+        "options": {"expires": 1800},
+    },
 }

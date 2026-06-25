@@ -38,3 +38,4 @@ from app.models.virtual import (  # noqa: F401
 )
 from app.models.watchlist import WatchlistItem  # noqa: F401
 from app.models.weekly_dispatch import WeeklyDispatch  # noqa: F401
+from app.models.x_tweet import XTweet  # noqa: F401
