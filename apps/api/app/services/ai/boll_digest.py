@@ -16,8 +16,9 @@ from zoneinfo import ZoneInfo
 
 from app.services.ai.boll_state import PUSH_DISCLAIMER, validate_shadow_push
 from app.services.notifications.quiet import _hour_in_quiet_window
+from app.services.notifications.telegram_bind import coin_deep_link
 
-# 详情页深链(SYMBOL 超链接目标 · Telegram Markdown [text](url))
+# 详情页深链网页回退(SYMBOL 超链接目标 · bot username 未配时用 · Telegram Markdown [text](url))
 DETAIL_URL = "https://midastrade.asia/crypto-preview"
 _TOP_N = 5  # 每组取前 N(按 %B 极端程度)
 
@@ -40,7 +41,8 @@ def _change_str(change_pct_24h: float | None) -> str:
 def _coin_line(item: dict[str, Any]) -> str:
     """单币一行:[SYMBOL](详情页)｜状态 · 通道位置(%B) · 24h涨跌(★超链接 Markdown · 无买卖词)。"""
     sym = item["symbol"]
-    url = f"{DETAIL_URL}?symbol={sym}"
+    # ★配了 bot username → TG 内深链(点开弹行情卡);未配 → 回退网页详情页
+    url = coin_deep_link(sym) or f"{DETAIL_URL}?symbol={sym}"
     pct_b = float(item["pct_b"])
     chg = _change_str(item.get("change_pct_24h"))
     return (

@@ -19,6 +19,7 @@ from typing import Any
 from app.schemas.market import Kline
 from app.services.ai.strategy_signals import _BOLL_K, _BOLL_PERIOD, _boll_series
 from app.services.ai.validator import has_marketing_violation, scrub_marketing
+from app.services.notifications.telegram_bind import coin_deep_link
 
 # ── 派生维度阈值(常量便于调)──────────────────────────────────────────────
 _SLOPE_LOOKBACK = 4          # 中轨斜率 / 带宽收放回看根数
@@ -176,9 +177,11 @@ def render_card(symbol: str, snap: BollSnapshot, transition_from: str | None = N
     transition_from 给「转换前状态中文口诀」时,追加「状态转换:X → Y · 仅供参考」(免责缀在转换行,
     不占独立行);为 None(无转换)则省略该行。整批末尾的唯一免责由 build_session_message 统一加。
     """
+    # ★SYMBOL 超链接:配了 bot username → TG 内深链(点开弹该币行情卡);未配 → 回退网页详情页 ·
+    #   只给标的加链接,其余文案不动(与全景 / 合并列表一致)。
+    url = coin_deep_link(symbol) or f"{DETAIL_URL}?symbol={symbol}"
     lines = [
-        # ★SYMBOL 超链接进详情(与全景 / 合并列表一致 · 一一对应)· 只给标的加链接,其余文案不动
-        f"[{symbol}]({DETAIL_URL}?symbol={symbol})｜结构倾向:{snap.bias}",
+        f"[{symbol}]({url})｜结构倾向:{snap.bias}",
         f"状态:{_STATE_LABEL[snap.state]}",
         f"通道位置:{_ZONE_LABEL[snap.zone]}(%B={snap.pct_b:.2f})",
         f"现价 {snap.close:g}",
@@ -316,7 +319,7 @@ def build_transition_digest(pushed: list[tuple[str, BollSnapshot, str]]) -> str:
     lines = [f"📊 布林做T · 转换提醒({len(pushed)}个)"]
     for sym, snap, transition_from in pushed:
         emoji = "📈" if snap.bias == "偏多" else "📉" if snap.bias == "偏空" else "➖"
-        url = f"{DETAIL_URL}?symbol={sym}"
+        url = coin_deep_link(sym) or f"{DETAIL_URL}?symbol={sym}"
         lines.append(
             f"{emoji} [{sym}]({url})｜转{snap.bias} · "
             f"{transition_from} → {_STATE_LABEL[snap.state]} · %B={snap.pct_b:.2f}",
