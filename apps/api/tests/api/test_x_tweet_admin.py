@@ -11,9 +11,11 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.auth import issue_session
+from app.services.x_marketing.store import create_tweet
 from tests.factories import make_user
 
 _EP = "/api/v1/admin/x-tweets/generate"
+_LIST = "/api/v1/admin/x-tweets"
 
 
 async def _authed_headers(db: AsyncSession, *, role: str = "user") -> dict[str, str]:
@@ -51,3 +53,49 @@ async def test_generate_admin_enqueues(
     assert r.status_code == 200
     assert r.json()["status"] == "enqueued"
     assert len(calls) == 1  # ★确实 enqueue 了一次
+
+
+# ── 列表 / 详情(403 矩阵 + happy)─────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_list_unauthenticated_401(client: AsyncClient) -> None:
+    r = await client.get(_LIST)
+    assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_list_normal_user_403(client: AsyncClient, db_session: AsyncSession) -> None:
+    headers = await _authed_headers(db_session, role="user")
+    r = await client.get(_LIST, headers=headers)
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_list_admin_returns_items(client: AsyncClient, db_session: AsyncSession) -> None:
+    # ★门禁过/不过都列出(不过的带 reason · passed=false)
+    await create_tweet(
+        db_session, symbol="BTCUSDT", bias="偏多", tweet_text="好推文",
+        compliance_passed=True,
+    )
+    await create_tweet(
+        db_session, symbol="ETHUSDT", bias="偏空", tweet_text="坏推文",
+        compliance_passed=False, compliance_reason="预测词",
+    )
+    headers = await _authed_headers(db_session, role="admin")
+    r = await client.get(_LIST, headers=headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 2
+    eth = next(i for i in body["items"] if i["symbol"] == "ETHUSDT")
+    assert eth["compliance_passed"] is False
+    assert eth["compliance_reason"] == "预测词"
+    assert eth["status"] == "draft"
+    assert eth["image_path"] is None  # ★截图 PR-4 才有
+
+
+@pytest.mark.asyncio
+async def test_detail_404_missing(client: AsyncClient, db_session: AsyncSession) -> None:
+    headers = await _authed_headers(db_session, role="admin")
+    r = await client.get(f"{_LIST}/999999", headers=headers)
+    assert r.status_code == 404
