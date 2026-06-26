@@ -20,6 +20,7 @@ from app.models.perp import (  # noqa: F401
     VirtualPerpOrder,
     VirtualPerpPosition,
 )
+from app.models.platform_dispatch import PlatformDispatch  # noqa: F401
 from app.models.report_material import ReportMaterial  # noqa: F401
 from app.models.session import Session as AuthSession  # noqa: F401
 from app.models.support_ticket import SupportTicket  # noqa: F401
@@ -36,7 +37,6 @@ from app.models.virtual import (  # noqa: F401
     VirtualOrder,
     VirtualPosition,
 )
-from app.models.platform_dispatch import PlatformDispatch  # noqa: F401
 from app.models.watchlist import WatchlistItem  # noqa: F401
 from app.models.weekly_dispatch import WeeklyDispatch  # noqa: F401
 from app.models.x_tweet import XTweet  # noqa: F401
