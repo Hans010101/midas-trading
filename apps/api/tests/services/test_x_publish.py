@@ -1,7 +1,7 @@
 """X 营销发布层(发布层 PR-1)单测:dispatch store / rate_limit / run_publish。
 
 store/run = DB 测(midas_test · CI)· rate = FakeRedis 纯逻辑。
-覆盖:幂等 upsert(reset-to-pending)· 频率守卫(日额/间隔)· run_publish stub 成功 + ★门禁双保险。
+覆盖:幂等 upsert(reset-to-pending)· 频率守卫(日额/间隔)· run_publish 成功(mock 传输)+ ★门禁双保险。
 """
 
 from __future__ import annotations
@@ -114,16 +114,23 @@ async def test_rate_record_post_increments() -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_publish_stub_success(db_session, monkeypatch) -> None:  # noqa: ANN001
+async def test_run_publish_success(db_session, monkeypatch) -> None:  # noqa: ANN001
     # 币安 adapter enabled 需 key → 给个测试 key
     monkeypatch.setattr("app.core.config.settings.binance_square_openapi_key", "test-key")
+    # ★PR-2:adapter 已是真 API → mock 传输层 _post_content(不打真 binance · 不依赖网络)
+    from app.services.x_marketing.publish import binance_square as bs
+
+    async def fake_post(text: str) -> dict[str, Any]:  # noqa: ARG001
+        return {"code": "000000", "success": True, "data": {"id": "p1"}}
+
+    monkeypatch.setattr(bs, "_post_content", fake_post)
     tweet = await _mk_tweet(db_session, passed=True)
     d = await upsert_pending(db_session, tweet_id=tweet.id, platform="binance_square", dispatched_by=None)
     result = await run_publish(db_session, _FakeRedis(), d.id)
-    assert result["status"] == "success"  # stub 假成功
+    assert result["status"] == "success"
     got = await get_dispatch(db_session, tweet.id, "binance_square")
     assert got.status == "success"
-    assert got.platform_post_id == "stub-pending-pr2"  # stub 占位
+    assert got.platform_post_id == "p1"  # 真 adapter 从响应 data.id 提取
 
 
 @pytest.mark.asyncio
