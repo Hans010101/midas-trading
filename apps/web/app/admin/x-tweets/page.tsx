@@ -19,6 +19,7 @@ import {
   fetchXTweetImage,
   fetchXTweets,
   generateXTweets,
+  publishXTweet,
   type XTweetItem,
 } from '@/lib/api/x-tweets'
 
@@ -75,7 +76,78 @@ function XTweetImage({ id, hasImage, token }: { id: number; hasImage: boolean; t
   return <img src={url} alt="K线主图截图" className="w-full rounded-md border border-paper" />
 }
 
-function TweetCard({ t, token }: { t: XTweetItem; token: string }) {
+/** 发布行(★仅门禁通过的推文显)· 每平台一个状态/按钮 · admin 单次显式点 → 异步发。 */
+function PublishRow({
+  t,
+  token,
+  onChange,
+}: {
+  t: XTweetItem
+  token: string
+  onChange: () => void
+}) {
+  const [err, setErr] = useState('')
+  const mut = useMutation({
+    mutationFn: (platform: string) => publishXTweet(token, t.id, platform),
+    onSuccess: () => {
+      setErr('')
+      onChange() // 异步发布 pending → 稍后补刷一次拿 success/failed
+      setTimeout(onChange, 8000)
+    },
+    onError: (e: Error) => setErr(e.message),
+  })
+  const binance = t.dispatches.find((d) => d.platform === 'binance_square')
+  const sending = mut.isPending || binance?.status === 'pending'
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-paper pt-2">
+      <span className="text-xs text-muted-foreground">发布到:</span>
+      {binance?.status === 'success' ? (
+        <span className="rounded bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+          ✓ 币安广场
+          {binance.url && (
+            <a href={binance.url} target="_blank" rel="noopener noreferrer" className="ml-1 underline">
+              查看
+            </a>
+          )}
+        </span>
+      ) : sending ? (
+        <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+          币安广场 发布中…
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => mut.mutate('binance_square')}
+          className="rounded-md bg-gold px-2.5 py-1 text-xs font-medium text-white hover:bg-gold/85"
+        >
+          {binance?.status === 'failed' ? '重试币安广场' : '发布到币安广场'}
+        </button>
+      )}
+      {/* X:等 X API · 槽位占着,禁用 */}
+      <span
+        className="cursor-not-allowed rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground/60"
+        title="待接入 X API"
+      >
+        X(待接入)
+      </span>
+      {binance?.status === 'failed' && binance.error && (
+        <span className="w-full text-xs text-red-600">币安失败:{binance.error}</span>
+      )}
+      {err && <span className="w-full text-xs text-red-600">{err}</span>}
+    </div>
+  )
+}
+
+function TweetCard({
+  t,
+  token,
+  onChange,
+}: {
+  t: XTweetItem
+  token: string
+  onChange: () => void
+}) {
   return (
     <div className="rounded-lg border border-paper bg-cream p-4 shadow-sm">
       <div className="mb-2 flex items-center gap-2">
@@ -106,6 +178,8 @@ function TweetCard({ t, token }: { t: XTweetItem; token: string }) {
           <span className="w-full text-xs text-red-600">原因:{t.compliance_reason}</span>
         )}
       </div>
+      {/* ★发布行:仅门禁通过的可发(不过的上面已标「不可发」)· admin 单次显式点 */}
+      {t.compliance_passed && <PublishRow t={t} token={token} onChange={onChange} />}
     </div>
   )
 }
@@ -175,7 +249,7 @@ export default function AdminXTweetsPage() {
                 刷新
               </button>
               <span className="ml-auto text-xs text-muted-foreground">
-                共 {items.length} 条 · 门禁通过 {passed} 条 · 仅显最近 24h
+                共 {items.length} 条 · 门禁通过 {passed} 条 · 仅显最近 72h
               </span>
             </div>
 
@@ -194,7 +268,7 @@ export default function AdminXTweetsPage() {
             ) : (
               <div className="space-y-3">
                 {items.map((t) => (
-                  <TweetCard key={t.id} t={t} token={token} />
+                  <TweetCard key={t.id} t={t} token={token} onChange={invalidate} />
                 ))}
               </div>
             )}

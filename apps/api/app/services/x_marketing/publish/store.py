@@ -30,6 +30,16 @@ async def list_dispatches(session: AsyncSession, tweet_id: int) -> list[Platform
     return list((await session.execute(stmt)).scalars().all())
 
 
+async def list_dispatches_for_tweets(
+    session: AsyncSession, tweet_ids: list[int],
+) -> list[PlatformDispatch]:
+    """批量列多条推文的发布记录(★一次查避 N+1 · 列表页用)· 空入参返空。"""
+    if not tweet_ids:
+        return []
+    stmt = select(PlatformDispatch).where(PlatformDispatch.tweet_id.in_(tweet_ids))
+    return list((await session.execute(stmt)).scalars().all())
+
+
 async def upsert_pending(
     session: AsyncSession, *, tweet_id: int, platform: str, dispatched_by: UUID | None,
 ) -> PlatformDispatch:
