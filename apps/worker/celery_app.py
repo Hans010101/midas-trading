@@ -36,6 +36,7 @@ from tasks import (  # noqa: E402, F401
     price_alerts,
     report,
     visit_flush,
+    x_publish,
     x_tweets,
 )
 

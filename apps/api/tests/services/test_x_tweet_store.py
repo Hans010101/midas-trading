@@ -8,7 +8,9 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import select
 
+from app.models.platform_dispatch import PlatformDispatch
 from app.models.x_tweet import XTweet
 from app.services.x_marketing.store import (
     cleanup_expired,
@@ -71,7 +73,7 @@ async def test_cleanup_deletes_old_and_returns_image_paths(db_session) -> None: 
     now = datetime(2026, 6, 25, 12, 0, tzinfo=UTC)
     db_session.add_all([
         XTweet(symbol="OLDUSDT", bias="偏空", tweet_text="老", compliance_passed=True,
-               image_path="/vol/x-shots/old.png", created_at=now - timedelta(hours=25)),
+               image_path="/vol/x-shots/old.png", created_at=now - timedelta(hours=73)),
         XTweet(symbol="NEWUSDT", bias="偏多", tweet_text="新", compliance_passed=True,
                created_at=now - timedelta(hours=1)),
     ])
@@ -79,4 +81,24 @@ async def test_cleanup_deletes_old_and_returns_image_paths(db_session) -> None: 
     paths = await cleanup_expired(db_session, now=now)
     assert paths == ["/vol/x-shots/old.png"]  # ★返回旧行图路径给 worker 删文件
     remaining = await list_recent(db_session, now=now)
-    assert [r.symbol for r in remaining] == ["NEWUSDT"]  # 旧的删了,新的留
+    assert [r.symbol for r in remaining] == ["NEWUSDT"]  # 旧的(>72h)删了,新的留
+
+
+@pytest.mark.asyncio
+async def test_cleanup_skips_published(db_session) -> None:  # noqa: ANN001
+    # ★发布层 PR-1:有 platform_dispatch 台账的推文(已发布)豁免 72h 清理(留审计)
+    now = datetime(2026, 6, 25, 12, 0, tzinfo=UTC)
+    pub = XTweet(symbol="PUBUSDT", bias="偏多", tweet_text="已发", compliance_passed=True,
+                 image_path="/vol/x-shots/pub.png", created_at=now - timedelta(hours=100))
+    plain = XTweet(symbol="OLDUSDT", bias="偏空", tweet_text="没发", compliance_passed=True,
+                   created_at=now - timedelta(hours=100))
+    db_session.add_all([pub, plain])
+    await db_session.commit()
+    db_session.add(PlatformDispatch(tweet_id=pub.id, platform="binance_square", status="success"))
+    await db_session.commit()
+
+    paths = await cleanup_expired(db_session, now=now)
+    assert paths == []  # 没发的没图;已发的豁免不删 → 无图路径返回
+    survivors = (await db_session.execute(select(XTweet.symbol))).scalars().all()
+    assert "PUBUSDT" in survivors  # ★已发布的留着(审计)
+    assert "OLDUSDT" not in survivors  # 没发的(>72h 无 dispatch)被清

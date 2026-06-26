@@ -66,6 +66,10 @@ from app.services.report.weekly_email import render_email_html
 from app.services.report.weekly_md import WeeklyMdError
 from app.services.visit_stats import CN_TZ, cn_today, read_redis_day, read_redis_hours
 from app.services.x_marketing.generate import enqueue_daily_generation
+from app.services.x_marketing.publish.dispatch import enqueue_publish
+from app.services.x_marketing.publish.rate_limit import check_rate
+from app.services.x_marketing.publish.registry import get_adapter
+from app.services.x_marketing.publish.store import get_dispatch, upsert_pending
 from app.services.x_marketing.store import get_tweet, list_recent
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -975,4 +979,70 @@ async def get_x_tweet_image(tweet_id: int, _admin: AdminDep, db: DbDep) -> FileR
     return FileResponse(
         row.image_path, media_type="image/png",
         headers={"Cache-Control": "private, max-age=600"},
+    )
+
+
+# ── X 营销发布层(发布层 PR-1)· admin 显式发布到平台 ─────────────────────────
+
+
+class PublishIn(BaseModel):
+    """发布请求体。"""
+
+    platform: str = Field(description="平台标识 · binance_square / x(目前仅 binance_square 可发)")
+
+
+class PublishOut(BaseModel):
+    dispatch_id: int
+    platform: str
+    status: str
+    message: str
+
+
+@router.post(
+    "/x-tweets/{tweet_id}/publish",
+    summary="发布推文到平台(★admin 单次显式触发 · 只发门禁通过 · 幂等防重 · 频率守卫)",
+)
+async def publish_x_tweet(
+    tweet_id: int, payload: PublishIn, admin: AdminDep, db: DbDep,
+) -> PublishOut:
+    """★红线:发布永远 admin 显式单次点击(无自动/定时/批量)· 异步 enqueue worker 发。
+
+    硬校验(任一不过即拒,绝不发):① 平台 adapter 存在且就绪 ② 门禁通过 ③ 未重复发 ④ 频率没超。
+    """
+    adapter = get_adapter(payload.platform)
+    if adapter is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"不支持或暂未接入的平台:{payload.platform}",
+        )
+    if not adapter.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{payload.platform} 未配置 API Key,无法发布",
+        )
+    tweet = await get_tweet(db, tweet_id)
+    if tweet is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="推文不存在或已过期")
+    if not tweet.compliance_passed:  # ★只发门禁通过的(防 F12 绕过)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="该推文门禁未通过,不可发布",
+        )
+    existing = await get_dispatch(db, tweet_id, payload.platform)
+    if existing is not None and existing.status == "success":  # ★幂等防重复发
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"已发布到 {payload.platform},不重复发",
+        )
+    redis = await get_redis()  # ★频率守卫(防风控)
+    ok, reason = await check_rate(redis, payload.platform)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=reason)
+
+    dispatch = await upsert_pending(
+        db, tweet_id=tweet_id, platform=payload.platform, dispatched_by=admin.id,
+    )
+    enqueue_publish(dispatch.id)  # ★异步发布(真 API 慢 · worker 跑)
+    return PublishOut(
+        dispatch_id=dispatch.id, platform=payload.platform, status="pending",
+        message="已提交发布 · 稍后查看状态",
     )

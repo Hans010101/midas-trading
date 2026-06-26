@@ -1,7 +1,7 @@
-"""x_tweet 数据访问(阶段4a · PR-1)· create / list_recent(24h)/ cleanup_expired(删行+返图路径)。
+"""x_tweet 数据访问(阶段4a · PR-1 · 发布层 PR-1 清理改 72h)· create / list_recent / cleanup。
 
-★24h 临时:列表只显 24h 内;清理删 created_at 超 24h 的行,并把这些行的 image_path 返回给
-worker 任务去删截图文件(本服务只管 DB,文件删除在有卷访问的 worker 侧 · 见 tasks/x_tweets.py)。
+★72h 临时:列表只显 72h 内;清理删 created_at 超 72h 的行 + 返 image_path 给 worker 删截图。
+★发布层 PR-1:已发布(有 platform_dispatch 台账)的推文【豁免清理】—— 外部帖子永久,留它发了啥的审计。
 """
 
 from __future__ import annotations
@@ -12,12 +12,13 @@ from uuid import UUID
 
 from sqlalchemy import delete, select
 
+from app.models.platform_dispatch import PlatformDispatch
 from app.models.x_tweet import XTweet
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-RETENTION_HOURS = 24  # ★24h 临时存储窗口
+RETENTION_HOURS = 72  # ★72h 临时存储窗口(发布层 PR-1 从 24h 放宽)
 
 
 async def create_tweet(
@@ -82,16 +83,20 @@ async def set_image_path(
 async def cleanup_expired(
     session: AsyncSession, *, now: datetime | None = None,
 ) -> list[str]:
-    """删 created_at 超 24h 的行 · 返回这些行的 image_path(非空)给调用方删截图文件。
+    """删 created_at 超 72h 的行 · 返回这些行的 image_path(非空)给调用方删截图文件。
 
     ★先收 image_path 再删行(删后查不到)· 返回的路径由 worker 任务 os.remove(本服务不碰文件系统)。
+    ★发布层 PR-1:已发布(有 platform_dispatch 台账)的推文【豁免】—— notin_ 子查询排除,留审计。
     """
     now = now or datetime.now(tz=UTC)
     before = now - timedelta(hours=RETENTION_HOURS)
+    # 有任何 dispatch 记录的 tweet_id = 已发布 → 排除出清理(台账永久,推文+截图也跟着留)
+    published = select(PlatformDispatch.tweet_id).distinct().scalar_subquery()
+    expired = (XTweet.created_at < before, XTweet.id.notin_(published))
     paths_stmt = select(XTweet.image_path).where(
-        XTweet.created_at < before, XTweet.image_path.isnot(None),
+        *expired, XTweet.image_path.isnot(None),
     )
     paths = [p for p in (await session.execute(paths_stmt)).scalars().all() if p]
-    await session.execute(delete(XTweet).where(XTweet.created_at < before))
+    await session.execute(delete(XTweet).where(*expired))
     await session.commit()
     return paths
