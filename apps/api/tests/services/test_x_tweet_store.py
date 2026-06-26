@@ -1,4 +1,4 @@
-"""x_tweet 数据层(阶段4a · PR-1)单测:create(门禁不过也存)/ list_recent(24h)/ cleanup(删行+返图路径)。
+"""x_tweet 数据层单测:create(门禁不过也存)/ list_recent(72h)/ cleanup(删行+返图路径·跳已发布)。
 
 DB 测(midas_test · CI 跑;本地无 PG 用 --collect-only 验证)。
 """
@@ -41,17 +41,18 @@ async def test_create_stores_pass_and_fail(db_session) -> None:  # noqa: ANN001
 
 
 @pytest.mark.asyncio
-async def test_list_recent_only_24h(db_session) -> None:  # noqa: ANN001
+async def test_list_recent_only_72h(db_session) -> None:  # noqa: ANN001
+    # ★发布层 PR-1:窗口 24h→72h · 超 72h 的不在列表(73h 老的排除,1h 新的留)
     now = datetime(2026, 6, 25, 12, 0, tzinfo=UTC)
     db_session.add_all([
         XTweet(symbol="OLDUSDT", bias="中性", tweet_text="老", compliance_passed=True,
-               created_at=now - timedelta(hours=25)),
+               created_at=now - timedelta(hours=73)),
         XTweet(symbol="NEWUSDT", bias="偏多", tweet_text="新", compliance_passed=True,
                created_at=now - timedelta(hours=1)),
     ])
     await db_session.commit()
     rows = await list_recent(db_session, now=now)
-    assert [r.symbol for r in rows] == ["NEWUSDT"]  # 只显 24h 内
+    assert [r.symbol for r in rows] == ["NEWUSDT"]  # 只显 72h 内
 
 
 @pytest.mark.asyncio
