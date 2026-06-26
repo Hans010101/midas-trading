@@ -99,3 +99,49 @@ async def test_detail_404_missing(client: AsyncClient, db_session: AsyncSession)
     headers = await _authed_headers(db_session, role="admin")
     r = await client.get(f"{_LIST}/999999", headers=headers)
     assert r.status_code == 404
+
+
+# ── 截图端点(403 矩阵 + 无图 404 + 有图 200 · 阶段4a PR-4)────────────────────
+
+
+@pytest.mark.asyncio
+async def test_image_unauthenticated_401(client: AsyncClient) -> None:
+    r = await client.get(f"{_LIST}/1/image")
+    assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_image_normal_user_403(client: AsyncClient, db_session: AsyncSession) -> None:
+    headers = await _authed_headers(db_session, role="user")
+    r = await client.get(f"{_LIST}/1/image", headers=headers)
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_image_404_when_no_screenshot(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    # 推文存在但 image_path 为 null(还没截好)→ 404
+    row = await create_tweet(
+        db_session, symbol="BTCUSDT", bias="偏多", tweet_text="x", compliance_passed=True,
+    )
+    headers = await _authed_headers(db_session, role="admin")
+    r = await client.get(f"{_LIST}/{row.id}/image", headers=headers)
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_image_200_with_file(
+    client: AsyncClient, db_session: AsyncSession, tmp_path,  # noqa: ANN001
+) -> None:
+    # image_path 指向真实 PNG → 200 + image/png(FileResponse 读共享卷)
+    png = tmp_path / "1.png"
+    png.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+    row = await create_tweet(
+        db_session, symbol="BTCUSDT", bias="偏多", tweet_text="x", compliance_passed=True,
+        image_path=str(png),
+    )
+    headers = await _authed_headers(db_session, role="admin")
+    r = await client.get(f"{_LIST}/{row.id}/image", headers=headers)
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "image/png"

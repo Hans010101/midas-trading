@@ -67,6 +67,18 @@ async def get_tweet(session: AsyncSession, tweet_id: int) -> XTweet | None:
     return await session.get(XTweet, tweet_id)
 
 
+async def set_image_path(
+    session: AsyncSession, tweet_id: int, image_path: str,
+) -> bool:
+    """更新某条推文的截图路径(x-shooter 截完 · 主 worker link 回调调用)· 行不存在返 False。"""
+    row = await session.get(XTweet, tweet_id)
+    if row is None:
+        return False
+    row.image_path = image_path
+    await session.commit()
+    return True
+
+
 async def cleanup_expired(
     session: AsyncSession, *, now: datetime | None = None,
 ) -> list[str]:

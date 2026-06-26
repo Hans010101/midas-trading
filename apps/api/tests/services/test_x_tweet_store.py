@@ -10,7 +10,12 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app.models.x_tweet import XTweet
-from app.services.x_marketing.store import cleanup_expired, create_tweet, list_recent
+from app.services.x_marketing.store import (
+    cleanup_expired,
+    create_tweet,
+    list_recent,
+    set_image_path,
+)
 
 
 @pytest.mark.asyncio
@@ -45,6 +50,20 @@ async def test_list_recent_only_24h(db_session) -> None:  # noqa: ANN001
     await db_session.commit()
     rows = await list_recent(db_session, now=now)
     assert [r.symbol for r in rows] == ["NEWUSDT"]  # 只显 24h 内
+
+
+@pytest.mark.asyncio
+async def test_set_image_path(db_session) -> None:  # noqa: ANN001
+    # x-shooter 截完 · 主 worker 回调更新 image_path
+    row = await create_tweet(
+        db_session, symbol="BTCUSDT", bias="偏多", tweet_text="x", compliance_passed=True,
+    )
+    ok = await set_image_path(db_session, row.id, "/shots/1.png")
+    assert ok is True
+    refreshed = await list_recent(db_session)
+    assert refreshed[0].image_path == "/shots/1.png"
+    # 行不存在 → False(截图回来但行已被 24h 清理)
+    assert await set_image_path(db_session, 999999, "/shots/x.png") is False
 
 
 @pytest.mark.asyncio

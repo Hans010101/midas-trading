@@ -25,6 +25,8 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from app.models.x_tweet import XTweet
+
 logger = logging.getLogger(__name__)
 
 _GENERATE_TASK = "tasks.x_tweets.generate_daily"
@@ -66,18 +68,19 @@ def _to_context(row: dict[str, Any]) -> TweetContext:
 
 async def generate_and_store(
     session: AsyncSession, contexts: list[TweetContext], *, generated_by: UUID | None,
-) -> dict[str, int]:
-    """逐币:DeepSeek 生成 → 拼标签 → 门禁 → 存行(★门禁不过也存+reason)· 返回计数。
+) -> list[XTweet]:
+    """逐币:DeepSeek 生成 → 拼标签 → 门禁 → 存行(★门禁不过也存+reason)· 返回创建的行。
 
+    返回行(含 id+symbol)供 worker 逐条 enqueue 截图(image_path 后续由截图回调填)。
     单币失败(LLM 异常)隔离:log + 跳过,不影响其他币(批量稳健)。
     """
-    generated = passed_n = 0
+    created: list[XTweet] = []
     for ctx in contexts:
         try:
             resp = await generate_tweet_text(ctx)
             tweet = append_tags(resp.content, ctx.symbol)
             result = validate_tweet(tweet)
-            await create_tweet(
+            row = await create_tweet(
                 session,
                 symbol=ctx.symbol,
                 bias=ctx.bias,
@@ -86,12 +89,12 @@ async def generate_and_store(
                 compliance_reason=None if result.passed else " | ".join(result.reasons),
                 generated_by=generated_by,
             )
-            generated += 1
-            passed_n += int(result.passed)
+            created.append(row)
         except Exception as exc:  # noqa: BLE001 · 单币失败隔离,不中断批量
             logger.warning("[x-tweets] 生成失败 symbol=%s · %s", ctx.symbol, exc)
-    logger.info("[x-tweets] 生成入库 · 共 %d 门禁通过 %d", generated, passed_n)
-    return {"generated": generated, "passed": passed_n, "rejected": generated - passed_n}
+    passed_n = sum(1 for r in created if r.compliance_passed)
+    logger.info("[x-tweets] 生成入库 · 共 %d 门禁通过 %d", len(created), passed_n)
+    return created
 
 
 def enqueue_daily_generation(generated_by: UUID) -> None:

@@ -11,11 +11,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { AdminNav } from '@/components/admin/admin-nav'
 import { TopNav } from '@/components/layout/top-nav'
-import { fetchXTweets, generateXTweets, type XTweetItem } from '@/lib/api/x-tweets'
+import {
+  fetchXTweetImage,
+  fetchXTweets,
+  generateXTweets,
+  type XTweetItem,
+} from '@/lib/api/x-tweets'
 
 function fmtTime(iso: string): string {
   const d = new Date(iso)
@@ -30,7 +35,47 @@ function BiasBadge({ bias }: { bias: string }) {
   )
 }
 
-function TweetCard({ t }: { t: XTweetItem }) {
+/** K线主图截图:★端点 AdminDep → authed fetch blob → objectURL → <img>。无图/未截好显占位。 */
+function XTweetImage({ id, hasImage, token }: { id: number; hasImage: boolean; token: string }) {
+  const [url, setUrl] = useState<string>('')
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    if (!hasImage || token === '') return
+    let revoked = ''
+    let alive = true
+    fetchXTweetImage(token, id)
+      .then((blob) => {
+        if (!alive) return
+        revoked = URL.createObjectURL(blob)
+        setUrl(revoked)
+      })
+      .catch(() => alive && setFailed(true))
+    return () => {
+      alive = false
+      if (revoked) URL.revokeObjectURL(revoked)
+    }
+  }, [id, hasImage, token])
+
+  if (!hasImage || failed) {
+    return (
+      <div className="flex h-32 items-center justify-center rounded-md border border-dashed border-paper text-xs text-muted-foreground">
+        {hasImage ? '截图读取失败' : '截图生成中…(异步,稍后刷新)'}
+      </div>
+    )
+  }
+  if (!url) {
+    return (
+      <div className="flex h-32 items-center justify-center rounded-md border border-paper text-xs text-muted-foreground">
+        载入截图…
+      </div>
+    )
+  }
+  // eslint-disable-next-line @next/next/no-img-element -- blob objectURL,非静态资源,不走 next/image
+  return <img src={url} alt="K线主图截图" className="w-full rounded-md border border-paper" />
+}
+
+function TweetCard({ t, token }: { t: XTweetItem; token: string }) {
   return (
     <div className="rounded-lg border border-paper bg-cream p-4 shadow-sm">
       <div className="mb-2 flex items-center gap-2">
@@ -41,6 +86,9 @@ function TweetCard({ t }: { t: XTweetItem }) {
         </span>
       </div>
       <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{t.tweet_text}</p>
+      <div className="mt-3">
+        <XTweetImage id={t.id} hasImage={t.image_path !== null} token={token} />
+      </div>
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-paper pt-2">
         {t.compliance_passed ? (
           <span className="rounded bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
@@ -146,7 +194,7 @@ export default function AdminXTweetsPage() {
             ) : (
               <div className="space-y-3">
                 {items.map((t) => (
-                  <TweetCard key={t.id} t={t} />
+                  <TweetCard key={t.id} t={t} token={token} />
                 ))}
               </div>
             )}

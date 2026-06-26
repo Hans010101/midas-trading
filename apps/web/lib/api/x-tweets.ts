@@ -55,3 +55,15 @@ export async function generateXTweets(token: string): Promise<XTweetGenerateOut>
   if (!r.ok) throw new Error(`x-tweets generate HTTP ${r.status}`)
   return (await r.json()) as XTweetGenerateOut
 }
+
+/**
+ * 取推文截图(★端点是 AdminDep,<img src> 不能带 Bearer → authed fetch 拿 blob,
+ * 调用方 URL.createObjectURL 给 <img>)· 无截图 404 → 抛错(调用方显占位)。
+ */
+export async function fetchXTweetImage(token: string, id: number): Promise<Blob> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/x-tweets/${id}/image`, {
+    headers: _authHeaders(token),
+  })
+  if (!r.ok) throw new Error(`x-tweets image HTTP ${r.status}`)
+  return await r.blob()
+}

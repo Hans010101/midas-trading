@@ -62,8 +62,11 @@ async def test_generate_and_store_pass_and_fail(db_session, monkeypatch) -> None
         TweetContext("BTCUSDT", 6.0, 1.0, "偏多", "三线齐上·上升结构", "近上轨", 0.9, 0.0),
         TweetContext("ETHUSDT", 3.0, -1.0, "偏空", "带宽开口·向下", "破下轨", 0.05, 0.0),
     ]
-    result = await gen.generate_and_store(db_session, ctxs, generated_by=None)
-    assert result == {"generated": 2, "passed": 1, "rejected": 1}
+    # ★返回创建的行(id+symbol 供 worker enqueue 截图)· 门禁过/不过都在内
+    created = await gen.generate_and_store(db_session, ctxs, generated_by=None)
+    assert len(created) == 2
+    assert all(r.id is not None for r in created)  # id 已落(供截图 enqueue)
+    assert sum(1 for r in created if r.compliance_passed) == 1  # BTC 过 · ETH 不过
 
     rows = await list_recent(db_session)
     assert len(rows) == 2
@@ -72,5 +75,6 @@ async def test_generate_and_store_pass_and_fail(db_session, monkeypatch) -> None
     assert "买卖引导" in (eth.compliance_reason or "")  # 记了原因
     assert eth.status == "draft"  # 仍止于待发
     assert eth.tweet_text.endswith("#ETH #点金Midas")  # 标签拼了
+    assert eth.image_path is None  # ★截图异步回填,此刻仍 null
     btc = next(r for r in rows if r.symbol == "BTCUSDT")
     assert btc.compliance_passed is True
