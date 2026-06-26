@@ -113,6 +113,9 @@ services:
       timeout: 5s
       retries: 10
       start_period: 40s
+    volumes:
+      # ★ X 营销每日推文截图共享卷(x-shooter 写 / api 读出图 FileResponse · 阶段4a PR-4)
+      - x_shots:/shots
 
   worker:
     build:
@@ -141,6 +144,8 @@ services:
     volumes:
       # 共享回测 artifacts 卷:vibe-worker 写 / 主 worker 读 + 落库后清(P1-4b 方案戊)
       - backtest_runs:/work/runs
+      # ★ X 营销截图共享卷:x-shooter 写 / 主 worker 24h 清理 unlink(阶段4a PR-4)
+      - x_shots:/shots
 
   # ── P1-4b 方案戊:vibe 专用 Celery worker(消费 backtest 队列)──────────────────
   # 主 worker enqueue 到 backtest 队列 → 本服务跑 run_backtest_job 逻辑 → 写 artifacts 共享卷
@@ -235,6 +240,49 @@ services:
       retries: 10
       start_period: 60s
 
+  # ── X 营销每日推文截图 worker(阶段4a · PR-4 · 照搬 vibe-worker 范式)─────────────
+  # 主 worker enqueue 到 xshot 队列 → 本服务(Playwright)截 crypto-preview 主图卡 →
+  # 写 PNG 到共享卷 x_shots → 结果经 Celery link 回主 worker 更新 image_path。
+  # ★ 独立镜像 midas-xshot(手工 build · 不进 compose build)· 不连 DB(只截图,不落库)。
+  # ★★ 部署前必须先在 VPS 手动 build:docker build -t midas-xshot:0.1.0 deploy/xshot/
+  #     (否则 compose up 找不到镜像 → 回滚,踩 vibe S1a 坑)。
+  x-shooter:
+    image: midas-xshot:0.1.0          # ★ 独立镜像(非 compose build)· VPS 手工 build
+    container_name: midas-xshot
+    restart: unless-stopped
+    # ★ 1.5g 硬限(阶段1 验证的资源隔离 · 不挤 clickhouse/worker)
+    mem_limit: 1.5g
+    command:
+      - celery
+      - -A
+      - xshot_celery_app
+      - worker
+      - -Q
+      - xshot
+      - --concurrency=1            # ★ 串行(一次一个浏览器 · 1.5g 内不堆)
+      - -n
+      - xshot@%h
+      - --loglevel=info
+    env_file:
+      - path: ../.env
+        required: true
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      XSHOT_BASE_URL: ${PUBLIC_WEB_URL:-https://midastrade.asia}  # 截公开 crypto-preview
+      XSHOT_DIR: /shots
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - midas-net
+    volumes:
+      # ★ 相对路径以 compose 所在 docker/ 为基:../ = 仓库根 · celery app + 截图脚本运行时挂载
+      - ../deploy/xshot/xshot_celery_app.py:/work/xshot_celery_app.py:ro
+      - ../deploy/xshot/capture.py:/work/capture.py:ro
+      - x_shots:/shots                  # ★ 写截图 PNG(主 worker 读删)
+
 networks:
   midas-net:
     name: midas-net
@@ -249,3 +297,6 @@ volumes:
     name: midas-redis-data
   backtest_runs:
     name: midas-backtest-runs
+  # ★ X 营销每日推文截图共享卷(x-shooter 写 / 主 worker 24h 清理删 / api FileResponse 读)
+  x_shots:
+    name: midas-x-shots

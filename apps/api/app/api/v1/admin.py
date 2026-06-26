@@ -14,10 +14,12 @@
 import logging
 from datetime import UTC, datetime, timedelta
 from datetime import date as date_type
+from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -962,3 +964,15 @@ async def get_x_tweet(tweet_id: int, _admin: AdminDep, db: DbDep) -> XTweetItem:
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="推文不存在或已过期")
     return _to_tweet_item(row)
+
+
+@router.get("/x-tweets/{tweet_id}/image", summary="推文 K线主图截图(x-shooter 截 · 共享卷读)")
+async def get_x_tweet_image(tweet_id: int, _admin: AdminDep, db: DbDep) -> FileResponse:
+    """读共享卷的截图 PNG(FileResponse)· 无截图 / 文件不存在(未截好或已过 24h)→ 404。"""
+    row = await get_tweet(db, tweet_id)
+    if row is None or not row.image_path or not Path(row.image_path).is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="截图不存在")
+    return FileResponse(
+        row.image_path, media_type="image/png",
+        headers={"Cache-Control": "private, max-age=600"},
+    )
