@@ -26,14 +26,38 @@ ENV PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/ \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# celery + redis 客户端:消费 xshot 队列(与主 worker 共用 Redis broker)。
+# celery + redis + ★playwright(同一行 pip · 同一 Python 环境 · 见根因):
+# ★★根因(0.1.0 翻车):mcr 镜像自带的 playwright 装在【镜像自身的某个 Python 环境】,但本 Dockerfile
+#   `pip install celery` 把 celery 落到另一个 site-packages(/usr/local/lib/python3.10)· celery worker
+#   进程跑的 python 只看得到 celery、看不到 playwright → 运行时 `import playwright` → ModuleNotFoundError。
+# ★修法:用同一个 `python3 -m pip` 把 playwright + celery + redis 一次装齐 → 三者保证落同一 site-packages
+#   → celery 跑的 python 必能 import playwright。compose command 也改 `python3 -m celery`(用同一 python3)。
+# ★playwright==1.49.0 钉死 = 基础镜像 tag(v1.49.0)→ 与镜像预装的 /ms-playwright chromium 二进制版本对齐;
+#   pip 只装 python 包不下浏览器,浏览器走 PLAYWRIGHT_BROWSERS_PATH(基础镜像已置 /ms-playwright)。
 # ★ 不加 app.* / 不加 DB 驱动 / 不塞 DB 凭证 —— shooter 只截图,不落库(解耦)。
-RUN pip install --no-cache-dir "celery>=5.3" "redis>=5.0"
+RUN python3 -m pip install --no-cache-dir \
+    "playwright==1.49.0" "celery>=5.3" "redis>=5.0"
+
+# ★★build-time 守卫(0.1.0 没验直接出镜像翻车的教训 · 最强证明 = build 时真跑一遍 capture.py 的核心动作):
+#   ① celery 跑的 python3 能 import playwright(修复直击的 ModuleNotFoundError)
+#   ② chromium 二进制真实存在  ③ chromium 真能 --no-sandbox 启动(= 运行时实际操作)
+#   任一不过 → build 失败,绝不再出"能 build 但跑起来不行"的带病镜像(0.1.0 教训:没验就出镜像)。
+RUN python3 - <<'PY'
+import os
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    exe = p.chromium.executable_path
+    assert os.path.exists(exe), f"chromium 二进制缺失:{exe}"
+    browser = p.chromium.launch(args=["--no-sandbox", "--disable-dev-shm-usage"])
+    ver = browser.version
+    browser.close()
+print(f"[build-check] ✓ playwright import OK · chromium 启动 OK · version={ver} · exe={exe}")
+PY
 
 # /shots = 共享卷挂载点(shooter 写 / 主 worker 删 / api 读)· /work = 运行时挂载脚本。
 RUN mkdir -p /shots /work
 WORKDIR /work
 
 # ★ root 运行(内部容器 · 不暴露端口)· Chromium 在容器内须 --no-sandbox(见 capture.py)。
-# 默认 idle 保活;compose command 覆盖为:celery -A xshot_celery_app worker -Q xshot。
+# 默认 idle 保活;compose command 覆盖为:python3 -m celery -A xshot_celery_app worker -Q xshot。
 CMD ["sleep", "infinity"]

@@ -247,12 +247,16 @@ services:
   # ★★ 部署前必须先在 VPS 手动 build:docker build -t midas-xshot:0.1.0 deploy/xshot/
   #     (否则 compose up 找不到镜像 → 回滚,踩 vibe S1a 坑)。
   x-shooter:
-    image: midas-xshot:0.1.0          # ★ 独立镜像(非 compose build)· VPS 手工 build
+    image: midas-xshot:0.1.1          # ★ 独立镜像(非 compose build)· VPS 手工 build · 0.1.1 修缺 playwright
     container_name: midas-xshot
     restart: unless-stopped
     # ★ 1.5g 硬限(阶段1 验证的资源隔离 · 不挤 clickhouse/worker)
     mem_limit: 1.5g
+    # ★ python3 -m celery(非裸 celery):用 Dockerfile build-check 验过的同一 python3 跑 worker,
+    #   保证跑 worker 的 python = 装了 playwright 的 python(去掉裸 `celery` 走哪个 python 的歧义)。
     command:
+      - python3
+      - -m
       - celery
       - -A
       - xshot_celery_app
