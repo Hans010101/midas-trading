@@ -11,6 +11,13 @@
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
+export interface XTweetDispatchItem {
+  platform: string
+  status: string // pending / success / failed
+  url: string | null
+  error: string | null
+}
+
 export interface XTweetItem {
   id: number
   symbol: string
@@ -21,6 +28,7 @@ export interface XTweetItem {
   status: string
   image_path: string | null
   created_at: string
+  dispatches: XTweetDispatchItem[] // 各平台发布状态(发布层 PR-3)
 }
 
 export interface XTweetListOut {
@@ -29,6 +37,13 @@ export interface XTweetListOut {
 }
 
 export interface XTweetGenerateOut {
+  status: string
+  message: string
+}
+
+export interface XTweetPublishOut {
+  dispatch_id: number
+  platform: string
   status: string
   message: string
 }
@@ -66,4 +81,25 @@ export async function fetchXTweetImage(token: string, id: number): Promise<Blob>
   })
   if (!r.ok) throw new Error(`x-tweets image HTTP ${r.status}`)
   return await r.blob()
+}
+
+/**
+ * 发布到指定平台(★admin 单次显式 · 异步 enqueue · 后端硬校验门禁通过/幂等/频率)。
+ * 返回 dispatch 状态(pending)· 失败抛错(含后端 detail:门禁未过/未配置/已发过/频率超)。
+ */
+export async function publishXTweet(
+  token: string,
+  id: number,
+  platform: string,
+): Promise<XTweetPublishOut> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/x-tweets/${id}/publish`, {
+    method: 'POST',
+    headers: { ...(_authHeaders(token) ?? {}), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform }),
+  })
+  if (!r.ok) {
+    const detail = await r.json().catch(() => null)
+    throw new Error(detail?.detail ?? `x-tweets publish HTTP ${r.status}`)
+  }
+  return (await r.json()) as XTweetPublishOut
 }

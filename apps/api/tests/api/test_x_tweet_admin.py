@@ -11,6 +11,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.auth import issue_session
+from app.services.x_marketing.publish.store import update_dispatch_result, upsert_pending
 from app.services.x_marketing.store import create_tweet
 from tests.factories import make_user
 
@@ -99,6 +100,44 @@ async def test_detail_404_missing(client: AsyncClient, db_session: AsyncSession)
     headers = await _authed_headers(db_session, role="admin")
     r = await client.get(f"{_LIST}/999999", headers=headers)
     assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_list_includes_dispatches(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    # 发布层 PR-3:列表带各平台发布状态(★批量查 · 一条推文配一条 success dispatch)
+    row = await create_tweet(
+        db_session, symbol="BTCUSDT", bias="偏多", tweet_text="好", compliance_passed=True,
+    )
+    d = await upsert_pending(
+        db_session, tweet_id=row.id, platform="binance_square", dispatched_by=None,
+    )
+    await update_dispatch_result(
+        db_session, d.id, status="success", platform_post_id="p1",
+        url="https://www.binance.com/square/post/p1",
+    )
+    headers = await _authed_headers(db_session, role="admin")
+    r = await client.get(_LIST, headers=headers)
+    assert r.status_code == 200
+    item = next(i for i in r.json()["items"] if i["symbol"] == "BTCUSDT")
+    assert len(item["dispatches"]) == 1
+    disp = item["dispatches"][0]
+    assert disp["platform"] == "binance_square"
+    assert disp["status"] == "success"
+    assert disp["url"] == "https://www.binance.com/square/post/p1"
+
+
+@pytest.mark.asyncio
+async def test_list_no_dispatch_empty(client: AsyncClient, db_session: AsyncSession) -> None:
+    # 没发过的推文 → dispatches 空列表(不报错)
+    await create_tweet(
+        db_session, symbol="ETHUSDT", bias="偏空", tweet_text="x", compliance_passed=True,
+    )
+    headers = await _authed_headers(db_session, role="admin")
+    r = await client.get(_LIST, headers=headers)
+    item = next(i for i in r.json()["items"] if i["symbol"] == "ETHUSDT")
+    assert item["dispatches"] == []
 
 
 # ── 截图端点(403 矩阵 + 无图 404 + 有图 200 · 阶段4a PR-4)────────────────────

@@ -29,6 +29,7 @@ from app.core.database import get_db
 from app.core.redis_client import get_redis
 from app.models.admin_action_log import AdminActionLog
 from app.models.daily_visit_stat import DailyVisitStat
+from app.models.platform_dispatch import PlatformDispatch
 from app.models.redeem_code import RedeemCode
 from app.models.session import Session
 from app.models.subscription import Subscription
@@ -69,7 +70,12 @@ from app.services.x_marketing.generate import enqueue_daily_generation
 from app.services.x_marketing.publish.dispatch import enqueue_publish
 from app.services.x_marketing.publish.rate_limit import check_rate
 from app.services.x_marketing.publish.registry import get_adapter
-from app.services.x_marketing.publish.store import get_dispatch, upsert_pending
+from app.services.x_marketing.publish.store import (
+    get_dispatch,
+    list_dispatches,
+    list_dispatches_for_tweets,
+    upsert_pending,
+)
 from app.services.x_marketing.store import get_tweet, list_recent
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -926,8 +932,17 @@ async def generate_x_tweets(admin: AdminDep) -> XTweetGenerateOut:
     )
 
 
+class XTweetDispatchItem(BaseModel):
+    """单条推文在某平台的发布状态(发布层 PR-3 · 前端按平台显状态/链接)。"""
+
+    platform: str
+    status: str  # pending / success / failed
+    url: str | None  # 成功后的帖子链接
+    error: str | None  # 失败原因(含平台错误码)
+
+
 class XTweetItem(BaseModel):
-    """单条推文(后台展示 · 24h 临时)。"""
+    """单条推文(后台展示 · 72h 临时)。"""
 
     id: int
     symbol: str
@@ -938,6 +953,7 @@ class XTweetItem(BaseModel):
     status: str  # draft 待发(4b 才会有 sent 等)
     image_path: str | None  # PR-4 截图后非空 · 现阶段 null
     created_at: datetime
+    dispatches: list[XTweetDispatchItem] = []  # 各平台发布状态(发布层 PR-3)
 
 
 class XTweetListOut(BaseModel):
@@ -945,29 +961,42 @@ class XTweetListOut(BaseModel):
     total: int
 
 
-def _to_tweet_item(row: XTweet) -> XTweetItem:
+def _to_dispatch_item(d: PlatformDispatch) -> XTweetDispatchItem:
+    return XTweetDispatchItem(
+        platform=d.platform, status=d.status, url=d.platform_post_url, error=d.error,
+    )
+
+
+def _to_tweet_item(
+    row: XTweet, dispatches: list[PlatformDispatch] | None = None,
+) -> XTweetItem:
     return XTweetItem(
         id=row.id, symbol=row.symbol, bias=row.bias, tweet_text=row.tweet_text,
         compliance_passed=row.compliance_passed, compliance_reason=row.compliance_reason,
         status=row.status, image_path=row.image_path, created_at=row.created_at,
+        dispatches=[_to_dispatch_item(d) for d in (dispatches or [])],
     )
 
 
-@router.get("/x-tweets", summary="今日推文列表(24h · 含门禁结果 · 止于 draft)")
+@router.get("/x-tweets", summary="今日推文列表(72h · 含门禁结果 + 各平台发布状态)")
 async def list_x_tweets(_admin: AdminDep, db: DbDep) -> XTweetListOut:
-    """最近 24h 生成的推文(created_at desc)· ★门禁不过的也列出(passed=false + reason)。"""
+    """最近 72h 生成的推文(created_at desc)· ★门禁不过的也列出 · 带各平台发布状态。"""
     rows = await list_recent(db)
-    items = [_to_tweet_item(r) for r in rows]
+    # ★批量查 dispatches(一次)避 N+1 · 按 tweet_id 分组
+    by_tweet: dict[int, list[PlatformDispatch]] = {}
+    for d in await list_dispatches_for_tweets(db, [r.id for r in rows]):
+        by_tweet.setdefault(d.tweet_id, []).append(d)
+    items = [_to_tweet_item(r, by_tweet.get(r.id)) for r in rows]
     return XTweetListOut(items=items, total=len(items))
 
 
-@router.get("/x-tweets/{tweet_id}", summary="单条推文详情")
+@router.get("/x-tweets/{tweet_id}", summary="单条推文详情(含各平台发布状态)")
 async def get_x_tweet(tweet_id: int, _admin: AdminDep, db: DbDep) -> XTweetItem:
-    """单条推文详情 · 不存在 404(可能已过 24h 被清理)。"""
+    """单条推文详情 · 不存在 404(可能已过 72h 被清理)。"""
     row = await get_tweet(db, tweet_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="推文不存在或已过期")
-    return _to_tweet_item(row)
+    return _to_tweet_item(row, await list_dispatches(db, tweet_id))
 
 
 @router.get("/x-tweets/{tweet_id}/image", summary="推文 K线主图截图(x-shooter 截 · 共享卷读)")
