@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 1024               # 单次响应硬上限
     llm_timeout_seconds: float = 30.0
 
+    # X 营销发布层 · 币安广场发布 OpenAPI Key(发布层 PR-1)
+    # ⚠ 敏感:只从 env 读 · ★与交易 API 隔离(creator-center 单独建)· 绝不进 git/前端/DB/日志·
+    # 空 = 币安广场 adapter 禁用(enabled=False · 端点拦)· PR-2 接真 API 时 Hans 配。
+    binance_square_openapi_key: str = ""
+
     # 阿里云 OSS · 周报素材原始文件归档(第三刀-B · prefix report-materials/ · 桶 lifecycle 7 天)
     # ⚠ 敏感:oss_access_key_id/secret 只从 env 读 · 绝不进 git/前端/DB/日志(脱敏)· 空 = 上传未启用。
     # ★凭证现在 VPS /etc/midas/backup.env,需 Hans 复制到 app 容器 env(/opt/midas/.env)。
