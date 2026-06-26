@@ -120,7 +120,7 @@ async def test_run_publish_success(db_session, monkeypatch) -> None:  # noqa: AN
     # ★PR-2:adapter 已是真 API → mock 传输层 _post_content(不打真 binance · 不依赖网络)
     from app.services.x_marketing.publish import binance_square as bs
 
-    async def fake_post(text: str) -> dict[str, Any]:  # noqa: ARG001
+    async def fake_post(text: str, image_urls: list[str] | None = None) -> dict[str, Any]:  # noqa: ARG001
         return {"code": "000000", "success": True, "data": {"id": "p1"}}
 
     monkeypatch.setattr(bs, "_post_content", fake_post)
