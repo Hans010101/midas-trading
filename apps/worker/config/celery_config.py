@@ -263,6 +263,14 @@ beat_schedule = {
         "schedule": crontab(minute="6,21,36,51"),
         "options": {"expires": 600},
     },
+    "managed-close-scan": {
+        "task": "tasks.managed.close_scan",
+        # 托管交易平仓监控(PR-3)· ★每 5min · ★不被开关拦(已有 managed 仓必须被监控平仓)·
+        # TP(标记价≥entry×1.20)/ 信号转换(离开偏多)/ 超时(24h)→ route_close_perp + 记原因。
+        # 无 managed 活仓时空转(查询空 → return)。标记价每分钟刷,5min 检查可及时止盈。
+        "schedule": crontab(minute="*/5"),
+        "options": {"expires": 280},
+    },
     "x-auto-draft": {
         "task": "tasks.x_auto.draft_scan",
         # X 营销自动托管起草(自动托管 PR-2)· 挂 boll_scan(:03/:18/:33/:48)后 1min 读新鲜快照 →

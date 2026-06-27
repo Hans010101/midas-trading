@@ -153,6 +153,9 @@ class VirtualPerpPosition(Base):
     managed: Mapped[bool] = mapped_column(
         Boolean, server_default=text("false"), nullable=False,
     )
+    # ★托管平仓原因(策略前向测试 · PR-3)· tp / signal / timeout · ★nullable:只托管单平仓才写,
+    #   普通单 / 持仓中 / 非托管都是 null · 引擎枚举 PerpCloseReason 零碰(托管原因记自己的列)。
+    managed_close_reason: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     __table_args__ = (
         # 单向净持仓(D6):同账户同 symbol 最多一个活仓 · partial unique
