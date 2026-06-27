@@ -1,0 +1,63 @@
+"""托管交易 · 前向测试统计(托管交易 PR-4)· 纯函数 · 从已平仓 managed 仓算。
+
+胜率 / 总盈亏 / 平均盈亏 / 盈亏比(profit factor)/ 最大回撤 / 按平仓原因分类。
+🔴纯虚拟统计 · 只读 closed managed 仓的 realized_pnl + managed_close_reason,零碰引擎。
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from decimal import Decimal
+
+
+@dataclass(frozen=True)
+class ClosedTrade:
+    """已平仓 managed 单(统计入参 · 从 VirtualPerpPosition 抽)。"""
+
+    realized_pnl: Decimal
+    close_reason: str | None  # tp / signal / timeout
+
+
+def compute_managed_stats(trades: list[ClosedTrade]) -> dict[str, float | int | dict[str, int]]:
+    """聚合统计(全 float 便于 JSON)· trades 按平仓时间升序(算最大回撤的权益曲线)。"""
+    total = len(trades)
+    by_reason: dict[str, int] = {"tp": 0, "signal": 0, "timeout": 0}
+    if total == 0:
+        return {
+            "total_trades": 0, "wins": 0, "losses": 0, "win_rate": 0.0,
+            "total_pnl": 0.0, "avg_pnl": 0.0, "profit_factor": 0.0,
+            "max_drawdown": 0.0, "by_reason": by_reason,
+        }
+
+    wins = sum(1 for t in trades if t.realized_pnl > 0)
+    losses = sum(1 for t in trades if t.realized_pnl < 0)
+    total_pnl = sum((t.realized_pnl for t in trades), Decimal("0"))
+    gross_profit = sum((t.realized_pnl for t in trades if t.realized_pnl > 0), Decimal("0"))
+    gross_loss = sum((-t.realized_pnl for t in trades if t.realized_pnl < 0), Decimal("0"))
+    # 盈亏比:总盈利 / 总亏损(无亏损 → 0.0 表示「无穷大/无亏损」,前端特判展示)
+    profit_factor = float(gross_profit / gross_loss) if gross_loss > 0 else 0.0
+
+    # 最大回撤:累计权益曲线的峰值回落最大值(绝对 U)
+    cum = Decimal("0")
+    peak = Decimal("0")
+    max_dd = Decimal("0")
+    for t in trades:
+        cum += t.realized_pnl
+        peak = max(peak, cum)
+        max_dd = max(max_dd, peak - cum)
+
+    for t in trades:
+        if t.close_reason in by_reason:
+            by_reason[t.close_reason] += 1
+
+    return {
+        "total_trades": total,
+        "wins": wins,
+        "losses": losses,
+        "win_rate": round(wins / total, 4),
+        "total_pnl": round(float(total_pnl), 4),
+        "avg_pnl": round(float(total_pnl) / total, 4),
+        "profit_factor": round(profit_factor, 4),
+        "max_drawdown": round(float(max_dd), 4),
+        "by_reason": by_reason,
+    }
