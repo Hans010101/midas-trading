@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     dott_push_live: bool = False
     # bot 用户名(拼 t.me deep link)· D9 待定 · 可空(前端 G3 补)。
     tg_bot_username: str = ""
+    # ★X 营销自动托管运维告警 chat(PR-3 · 熔断时 TG 提醒 Hans)· 空 = 不发(仅日志 · best-effort)。
+    #   设 ADMIN_TG_CHAT_ID=<Hans TG chat id> 才推 · 熔断不依赖它(照常开,只少条提醒)。
+    admin_tg_chat_id: str = ""
     # 公网 API base · 拼 webhook URL · prod = https://api.midastrade.asia · 非 secret。
     public_api_base_url: str = "http://localhost:8000"
     # 公网 Web base · 拼 bot K 线深链(DP14)· prod = https://midastrade.asia · 非 secret。

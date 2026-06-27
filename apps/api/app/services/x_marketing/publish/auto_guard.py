@@ -105,6 +105,7 @@ async def reset_fail(redis: Any) -> None:
 # ── 排队任务追踪(熔断 revoke 用)─────────────────────────────────────
 async def add_pending_task(redis: Any, task_id: str) -> None:
     await redis.sadd(_PENDING, task_id)
+    await redis.expire(_PENDING, 2 * 3600)  # 兜底 TTL · 防 id 永久堆积(任务几分钟内必触发)
 
 
 async def pop_pending_tasks(redis: Any) -> list[str]:
@@ -113,3 +114,8 @@ async def pop_pending_tasks(redis: Any) -> list[str]:
     if ids:
         await redis.delete(_PENDING)
     return [str(x) for x in ids]
+
+
+async def remove_pending_task(redis: Any, task_id: str) -> None:
+    """auto-publish 任务执行完移除自身 id(保持 pending 集只含真排队中的)。"""
+    await redis.srem(_PENDING, task_id)
