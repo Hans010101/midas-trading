@@ -13,6 +13,7 @@ from app.api.v1.crypto import router as crypto_router
 from app.api.v1.feishu import router as feishu_router
 from app.api.v1.hk import router as hk_router
 from app.api.v1.invite import router as invite_router
+from app.api.v1.managed_admin import router as managed_admin_router
 from app.api.v1.market import router as market_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.overview import router as overview_router
@@ -31,6 +32,7 @@ from app.api.v1.watchlist import router as watchlist_router
 
 router = APIRouter()
 router.include_router(auth_router)
+router.include_router(managed_admin_router)  # 托管交易 admin(独立于 admin 域 · 见 managed_admin.py)
 router.include_router(market_router)
 router.include_router(watchlist_router)
 router.include_router(virtual_router)
