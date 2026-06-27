@@ -145,34 +145,33 @@ async def test_drafts_two_but_publishes_only_first(db_session, monkeypatch) -> N
 
 
 @pytest.mark.asyncio
-async def test_dedup_understanding_a_first_blocked_no_promote(
+async def test_understanding_b_first_dedup_promotes_second(
     db_session, monkeypatch,  # noqa: ANN001
 ) -> None:
-    # ★理解A:rows[0](|change| 最大)6h 内已发 → 整轮不自动发,★不顺延第 2 条
+    # ★理解B 核心:rows[0] 6h 去重命中 → ★顺延发 rows[1](不是整轮跳过)
     _mock_compliant_llm(monkeypatch)
     r = _FakeRedis()
     await auto_guard.set_enabled(r, enabled=True)
     await auto_guard.mark_published(r, "BBBUSDT")  # rows[0] 近 6h 发过
     _seed_snapshot(r, [
         _snap_item("BBBUSDT", -9.0, transition=True),  # rows[0] · 被去重挡
-        _snap_item("CCCUSDT", 4.0, transition=True),   # rows[1]
+        _snap_item("CCCUSDT", 4.0, transition=True),   # rows[1] · 可发
     ])
     out = await auto_draft.run_auto_draft(db_session, r, now=_in_window())
     assert out["status"] == "ok"
-    # ★两条仍都起草存后台(去重不影响起草)
-    assert {s for _, s in out["drafted"]} == {"BBBUSDT", "CCCUSDT"}
-    # ★理解A:第 1 条被挡 → auto_publish=None(不顺延发 CCC)
-    assert out["auto_publish"] is None
+    assert {s for _, s in out["drafted"]} == {"BBBUSDT", "CCCUSDT"}  # 两条都起草
+    # ★理解B:rows[0] 重复 → 顺延发 rows[1]=CCC(★仍只发 1 条 · 单 target)
+    assert out["auto_publish"] is not None
+    assert out["auto_publish"][1] == "CCCUSDT"
 
 
 @pytest.mark.asyncio
-async def test_first_fails_gate_no_publish_no_promote(
+async def test_understanding_b_first_gate_fail_promotes_second(
     db_session, monkeypatch,  # noqa: ANN001
 ) -> None:
-    # ★成因②:rows[0] 门禁未过 → 不自动发,★不顺延第2条(只发第1条规则)
+    # ★理解B:rows[0] 门禁未过 → 顺延发 rows[1](合规那条)
     async def fake_gen(ctx: TweetContext) -> object:
-        # BBB(rows[0]·|change|最大)违规(买卖祈使)· CCC 合规
-        bad = "建议逢低买入"
+        bad = "建议逢低买入"  # 买卖祈使 → 门禁拦
         body = bad if ctx.symbol == "BBBUSDT" else "偏空,运行于下轨下方"
         return SimpleNamespace(
             content=f"${ctx.symbol} {body}。仅供参考,不构成投资建议。", is_mock=True,
@@ -187,5 +186,27 @@ async def test_first_fails_gate_no_publish_no_promote(
     ])
     out = await auto_draft.run_auto_draft(db_session, r, now=_in_window())
     assert out["status"] == "ok"
-    assert {s for _, s in out["drafted"]} == {"BBBUSDT", "CCCUSDT"}  # 两条都起草
-    assert out["auto_publish"] is None  # ★rows[0] 门禁未过 → 不发,不顺延 CCC
+    assert {s for _, s in out["drafted"]} == {"BBBUSDT", "CCCUSDT"}
+    # ★rows[0] 门禁未过 → 顺延发 rows[1]=CCC
+    assert out["auto_publish"] is not None
+    assert out["auto_publish"][1] == "CCCUSDT"
+
+
+@pytest.mark.asyncio
+async def test_understanding_b_both_blocked_no_publish(
+    db_session, monkeypatch,  # noqa: ANN001
+) -> None:
+    # ★理解B:两条都被挡(6h 去重)→ 不发(target=None)· 这轮空档
+    _mock_compliant_llm(monkeypatch)
+    r = _FakeRedis()
+    await auto_guard.set_enabled(r, enabled=True)
+    await auto_guard.mark_published(r, "BBBUSDT")  # 两条都近 6h 发过
+    await auto_guard.mark_published(r, "CCCUSDT")
+    _seed_snapshot(r, [
+        _snap_item("BBBUSDT", -9.0, transition=True),
+        _snap_item("CCCUSDT", 4.0, transition=True),
+    ])
+    out = await auto_draft.run_auto_draft(db_session, r, now=_in_window())
+    assert out["status"] == "ok"
+    assert {s for _, s in out["drafted"]} == {"BBBUSDT", "CCCUSDT"}  # 仍都起草
+    assert out["auto_publish"] is None  # ★两条都被挡 → 不发
