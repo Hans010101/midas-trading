@@ -17,6 +17,7 @@ from app.services.visit_stats import CN_TZ
 from app.services.x_marketing import auto_draft
 from app.services.x_marketing import generate as gen
 from app.services.x_marketing.publish import auto_guard
+from app.services.x_marketing.store import list_recent
 from app.services.x_marketing.tweet_gen import TweetContext
 
 _SNAP = "boll:snapshot:latest"
@@ -115,39 +116,50 @@ async def test_skip_no_candidates_empty_snapshot(db_session) -> None:  # noqa: A
     assert out["reason"] == "no_candidates"
 
 
-# ── happy:选币 b + 门禁 + 返回 passed ────────────────────────────────
+# ── happy:每轮 2 条都起草,★只 rows[0] 进自动发(频率调整 · 调整A)──────────
 
 
 @pytest.mark.asyncio
-async def test_happy_drafts_transition_top_change(db_session, monkeypatch) -> None:  # noqa: ANN001
+async def test_drafts_two_but_publishes_only_first(db_session, monkeypatch) -> None:  # noqa: ANN001
     _mock_compliant_llm(monkeypatch)
     r = _FakeRedis()
     await auto_guard.set_enabled(r, enabled=True)
     _seed_snapshot(r, [
         _snap_item("AAAUSDT", -2.0, transition=False),  # 非转换 → 不选
-        _snap_item("BBBUSDT", -9.0, transition=True),   # |9| 最大 → 选
-        _snap_item("CCCUSDT", 4.0, transition=True),    # |4| → 选
-        _snap_item("DDDUSDT", 1.0, transition=True),    # |1| → 超 limit 不选
+        _snap_item("BBBUSDT", -9.0, transition=True),   # |9| 最大 → rows[0] → 自动发
+        _snap_item("CCCUSDT", 4.0, transition=True),    # |4| → rows[1] → 留后台补发
+        _snap_item("DDDUSDT", 1.0, transition=True),    # 超 limit 不选
     ])
     out = await auto_draft.run_auto_draft(db_session, r, now=_in_window())
     assert out["status"] == "ok"
-    assert out["drafted"] == 2  # 每轮最多 2
-    passed_syms = {s for _, s in out["passed"]}
-    assert passed_syms == {"BBBUSDT", "CCCUSDT"}  # transition + |change| 降序 top2
+    # ★两条都起草存后台
+    assert {s for _, s in out["drafted"]} == {"BBBUSDT", "CCCUSDT"}
+    # ★只自动发 rows[0](|change| 最大 = BBB)· 第 2 条 CCC 不进自动发队列
+    assert out["auto_publish"] is not None
+    assert out["auto_publish"][1] == "BBBUSDT"
+    # ★auto_drafted=True 标记(待补发素材识别 + 计入日配额)
+    rows = await list_recent(db_session)
+    drafted = [row for row in rows if row.symbol in {"BBBUSDT", "CCCUSDT"}]
+    assert len(drafted) == 2
+    assert all(row.auto_drafted for row in drafted)
 
 
 @pytest.mark.asyncio
-async def test_dedup_skips_recent_symbol(db_session, monkeypatch) -> None:  # noqa: ANN001
+async def test_dedup_understanding_a_first_blocked_no_promote(
+    db_session, monkeypatch,  # noqa: ANN001
+) -> None:
+    # ★理解A:rows[0](|change| 最大)6h 内已发 → 整轮不自动发,★不顺延第 2 条
     _mock_compliant_llm(monkeypatch)
     r = _FakeRedis()
     await auto_guard.set_enabled(r, enabled=True)
-    await auto_guard.mark_published(r, "BBBUSDT")  # BBB 近 6h 发过
+    await auto_guard.mark_published(r, "BBBUSDT")  # rows[0] 近 6h 发过
     _seed_snapshot(r, [
-        _snap_item("BBBUSDT", -9.0, transition=True),  # 去重命中 → 跳
-        _snap_item("CCCUSDT", 4.0, transition=True),   # 仍起草
+        _snap_item("BBBUSDT", -9.0, transition=True),  # rows[0] · 被去重挡
+        _snap_item("CCCUSDT", 4.0, transition=True),   # rows[1]
     ])
     out = await auto_draft.run_auto_draft(db_session, r, now=_in_window())
     assert out["status"] == "ok"
-    passed_syms = {s for _, s in out["passed"]}
-    assert "BBBUSDT" not in passed_syms  # ★6h 去重生效
-    assert "CCCUSDT" in passed_syms
+    # ★两条仍都起草存后台(去重不影响起草)
+    assert {s for _, s in out["drafted"]} == {"BBBUSDT", "CCCUSDT"}
+    # ★理解A:第 1 条被挡 → auto_publish=None(不顺延发 CCC)
+    assert out["auto_publish"] is None

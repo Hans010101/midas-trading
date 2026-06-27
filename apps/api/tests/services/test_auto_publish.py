@@ -83,11 +83,13 @@ async def test_publish_skips_circuit_open(db_session) -> None:  # noqa: ANN001
 
 
 @pytest.mark.asyncio
-async def test_publish_skips_out_of_window(db_session) -> None:  # noqa: ANN001
+async def test_publish_skips_after_delay_past_window(db_session) -> None:  # noqa: ANN001
+    # ★边界2(时段 TOCTOU):起草 22:28 + 随机延迟 7min → 实际发布 22:35 → 守卫复检按【延迟后实际时刻】
+    # → 22:35 > 22:30 → skip 不发。run_auto_publish 用执行时的真实时刻(worker 延迟后才跑 → now=实际)。
     r = await _enabled_redis()
     out = await ap.run_auto_publish(
         db_session, r, tweet_id=1, symbol="BTCUSDT",
-        now=datetime(2026, 6, 27, 23, 0, tzinfo=CN_TZ),  # 23:00 窗外
+        now=datetime(2026, 6, 27, 22, 35, tzinfo=CN_TZ),  # 延迟后超 22:30
     )
     assert out["reason"] == "out_of_window"
 
@@ -114,8 +116,8 @@ async def test_publish_success_marks_and_counts(db_session, monkeypatch) -> None
     )
     assert out["status"] == "success"
     assert await auto_guard.is_recently_published(r, "BTCUSDT") is True  # ★6h 去重已标
-    assert await auto_guard.daily_remaining(r, _in_window()) == auto_guard.AUTO_DAILY_MAX - 1  # 计数+1
     assert await auto_guard.record_fail(r) == 1  # reset 后从 1 起(说明成功清了)
+    # ★日计数 +1 不在这测:已移到 run_publish(此处 run_publish 被 mock)· 配额 incr 见 test_x_publish
 
 
 # ── 失败退避:连续失败计数,达阈值开熔断 ──────────────────────────────
@@ -149,3 +151,13 @@ async def test_publish_fail_threshold_opens_circuit(db_session, monkeypatch) -> 
     assert out["fail_count"] == auto_guard.FAIL_THRESHOLD  # 3
     assert out["circuit_opened"] is True  # ★达阈值开熔断
     assert await auto_guard.is_circuit_open(r) is True  # 熔断真的开了 → 停所有自动发
+
+
+# ── 随机发布延迟(★1-7min · 抹固定分钟指纹 · 频率调整)────────────────
+
+
+def test_publish_delay_in_range() -> None:
+    # ★延迟 ∈ [60, 420](1-7min)· 多次抽样确认边界 · 非配速(每次随机)
+    for _ in range(100):
+        d = ap.publish_delay_seconds()
+        assert 60 <= d <= 420
