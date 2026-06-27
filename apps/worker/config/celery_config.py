@@ -256,6 +256,13 @@ beat_schedule = {
         "schedule": crontab(minute="3,18,33,48"),
         "options": {"expires": 600},
     },
+    "managed-open-scan": {
+        "task": "tasks.managed.open_scan",
+        # 托管交易开仓(策略前向测试 · PR-2)· 挂 boll_scan(:03/18/33/48)后 · 选偏多 transition 开仓。
+        # ★开关默认 OFF:关着时任务内立刻 skip(零下单)· :06/21/36/51 错开自动托管(:04/19/34/49)。
+        "schedule": crontab(minute="6,21,36,51"),
+        "options": {"expires": 600},
+    },
     "x-auto-draft": {
         "task": "tasks.x_auto.draft_scan",
         # X 营销自动托管起草(自动托管 PR-2)· 挂 boll_scan(:03/:18/:33/:48)后 1min 读新鲜快照 →
