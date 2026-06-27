@@ -34,6 +34,7 @@ from app.models.redeem_code import RedeemCode
 from app.models.session import Session
 from app.models.subscription import Subscription
 from app.models.user import User
+from app.models.virtual import VirtualAccount
 from app.models.weekly_dispatch import WeeklyDispatch
 from app.models.x_tweet import XTweet
 from app.schemas.report import (
@@ -1146,3 +1147,65 @@ async def stop_auto_pilot(_admin: AdminDep) -> AutoPilotStopOut:
         stopped=True, revoked=revoked,
         message=f"已停止自动托管 · 关开关 + 熔断 + revoke {revoked} 个排队任务",
     )
+
+
+# ── 托管交易(策略前向测试 · PR-1 地基)· 管理员专用 · 🔴纯虚拟绝不真单 ──────────
+
+
+class ManagedStatus(BaseModel):
+    enabled: bool             # 托管开关(默认 OFF)
+    account_ready: bool       # 托管账户已建
+    cash_balance: float       # 托管账户现金(USDT)
+    initial_capital: float    # 起始资金(10万U)
+    open_positions: int       # 当前活仓数(≤5)
+
+
+class ManagedToggleIn(BaseModel):
+    enabled: bool
+
+
+async def _managed_status(db: DbDep) -> ManagedStatus:
+    from app.services.virtual_trading.managed import account as managed_account  # noqa: PLC0415
+    from app.services.virtual_trading.managed import guard as managed_guard  # noqa: PLC0415
+
+    redis = await get_redis()
+    enabled = await managed_guard.is_enabled(redis)
+    acc = await db.scalar(
+        select(VirtualAccount).where(
+            VirtualAccount.user_id.in_(
+                select(User.id).where(User.email == managed_account.MANAGED_BOT_EMAIL),
+            ),
+            VirtualAccount.market == managed_account.MANAGED_MARKET,
+        ),
+    )
+    open_n = (
+        await managed_guard.count_open_positions(db, acc.id) if acc is not None else 0
+    )
+    return ManagedStatus(
+        enabled=enabled,
+        account_ready=acc is not None,
+        cash_balance=float(acc.cash_balance) if acc else 0.0,
+        initial_capital=float(managed_account.MANAGED_INITIAL_CAPITAL),
+        open_positions=open_n,
+    )
+
+
+@router.get("/managed/status", summary="托管交易状态(开关/账户/现金/活仓)")
+async def get_managed_status(_admin: AdminDep, db: DbDep) -> ManagedStatus:
+    return await _managed_status(db)
+
+
+@router.post("/managed/toggle", summary="开/关托管交易(★默认 OFF · 开则首次建账户)")
+async def toggle_managed(
+    payload: ManagedToggleIn, _admin: AdminDep, db: DbDep,
+) -> ManagedStatus:
+    """★开关 · 开启时幂等建托管账户(系统用户 + 10万U perp 钱包)· 开仓编排 = PR-2。"""
+    from app.services.virtual_trading.managed import account as managed_account  # noqa: PLC0415
+    from app.services.virtual_trading.managed import guard as managed_guard  # noqa: PLC0415
+
+    redis = await get_redis()
+    if payload.enabled:
+        await managed_account.ensure_managed_account(db)  # 首次开 → 幂等建账户
+    await managed_guard.set_enabled(redis, payload.enabled)
+    logger.info("[managed] 托管交易开关 → %s", payload.enabled)
+    return await _managed_status(db)

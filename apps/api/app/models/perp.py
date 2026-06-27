@@ -148,6 +148,11 @@ class VirtualPerpPosition(Base):
     close_reason: Mapped[PerpCloseReason | None] = mapped_column(
         Enum(PerpCloseReason, name="perp_close_reason"),
     )
+    # ★托管交易(策略前向测试)开的单 · True=托管单 · 用途:① 统计/展示 ② 强平 worker 跳过(禁强平)
+    #   server_default=false 兼容老数据 · 仿 x_tweet.auto_drafted 范式。
+    managed: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False,
+    )
 
     __table_args__ = (
         # 单向净持仓(D6):同账户同 symbol 最多一个活仓 · partial unique

@@ -39,6 +39,7 @@ from app.services.notifications.emit import emit_cross_liquidation
 from app.services.virtual_trading.perp_cross_liquidation import (
     STATUS_LIQUIDATED,
     liquidate_cross_account,
+    select_open_cross_account_ids,
 )
 
 logger = logging.getLogger(__name__)
@@ -92,17 +93,8 @@ async def _scan_and_liquidate_cross() -> dict[str, int]:
     positions_liquidated = 0
     try:
         async with session_maker() as session:
-            account_ids = (
-                await session.scalars(
-                    select(VirtualPerpPosition.account_id)
-                    .where(
-                        VirtualPerpPosition.closed_at.is_(None),
-                        VirtualPerpPosition.margin_mode == MarginMode.CROSS,
-                    )
-                    .distinct()
-                    .order_by(VirtualPerpPosition.account_id),
-                )
-            ).all()
+            # ★候选账户(已排除 managed 托管单 → 禁强平 · 见 select_open_cross_account_ids)
+            account_ids = await select_open_cross_account_ids(session)
             if not account_ids:
                 return {
                     "accounts_scanned": 0,
