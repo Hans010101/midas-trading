@@ -14,6 +14,7 @@ import { useSession } from 'next-auth/react'
 import { useEffect, useState } from 'react'
 
 import { AdminNav } from '@/components/admin/admin-nav'
+import { AutoPilotPanel } from '@/components/admin/auto-pilot-panel'
 import { TopNav } from '@/components/layout/top-nav'
 import {
   fetchXTweetImage,
@@ -98,10 +99,17 @@ function PublishRow({
   })
   const binance = t.dispatches.find((d) => d.platform === 'binance_square')
   const sending = mut.isPending || binance?.status === 'pending'
+  // ★审计:有发布记录则标来源(自动托管 PR-4)· auto 自动托管 / manual 人工点
+  const sourceBadge = binance ? (
+    <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+      {binance.source === 'auto' ? '🤖 自动' : '👤 人工'}
+    </span>
+  ) : null
 
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-paper pt-2">
       <span className="text-xs text-muted-foreground">发布到:</span>
+      {sourceBadge}
       {binance?.status === 'success' ? (
         <span className="rounded bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
           ✓ 币安广场
@@ -232,6 +240,9 @@ export default function AdminXTweetsPage() {
           </div>
         ) : (
           <>
+            {/* ★自动托管控制面板(开关/熔断/配额/时段)· 自动托管 PR-4 */}
+            <AutoPilotPanel token={token} />
+
             <div className="mb-4 flex items-center gap-3">
               <button
                 type="button"

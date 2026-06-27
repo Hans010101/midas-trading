@@ -16,6 +16,7 @@ export interface XTweetDispatchItem {
   status: string // pending / success / failed
   url: string | null
   error: string | null
+  source: string // 发布来源 · manual 人工 / auto 自动托管(自动托管 PR-4 审计)
 }
 
 export interface XTweetItem {
