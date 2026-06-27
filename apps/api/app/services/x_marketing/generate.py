@@ -33,6 +33,18 @@ _GENERATE_TASK = "tasks.x_tweets.generate_daily"
 _celery_client: Any = None
 
 
+def pick_auto_contexts(
+    items: list[dict[str, Any]], *, limit: int = 2,
+) -> list[TweetContext]:
+    """自动托管选币(★口径 b · Hans 定):transition=true 池 → |change_pct_24h| 降序 → 取 limit。
+
+    和 TG 推送近似同源(都偏向极端转换币)· 6h 去重在调用方(run_auto_draft)做 · 复用 _to_context。
+    """
+    trans = [x for x in items if x.get("transition")]
+    trans.sort(key=lambda x: abs(x.get("change_pct_24h") or 0.0), reverse=True)
+    return [_to_context(x) for x in trans[:limit]]
+
+
 def pick_contexts(
     items: list[dict[str, Any]], *, n_short: int = 5, n_long: int = 5, n_neutral: int = 4,
 ) -> list[TweetContext]:
