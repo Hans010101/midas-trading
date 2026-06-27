@@ -67,6 +67,19 @@ async def test_upsert_pending_idempotent(db_session) -> None:  # noqa: ANN001
 
 
 @pytest.mark.asyncio
+async def test_upsert_source_default_manual_and_auto(db_session) -> None:  # noqa: ANN001
+    # ★source:默认 manual(兼容现有手动发)· 自动托管传 auto
+    tweet = await _mk_tweet(db_session)
+    d1 = await upsert_pending(db_session, tweet_id=tweet.id, platform="binance_square", dispatched_by=None)
+    assert d1.source == "manual"  # 默认
+    t2 = await _mk_tweet(db_session)
+    d2 = await upsert_pending(
+        db_session, tweet_id=t2.id, platform="binance_square", dispatched_by=None, source="auto",
+    )
+    assert d2.source == "auto"
+
+
+@pytest.mark.asyncio
 async def test_update_dispatch_result_success(db_session) -> None:  # noqa: ANN001
     tweet = await _mk_tweet(db_session)
     d = await upsert_pending(db_session, tweet_id=tweet.id, platform="binance_square", dispatched_by=None)

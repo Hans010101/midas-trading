@@ -25,16 +25,34 @@ _PUBLISH_TASK = "tasks.x_publish.publish"
 _celery_client: Any = None
 
 
-def enqueue_publish(dispatch_id: int) -> None:
-    """admin 端点触发 · enqueue worker 异步发布(真 API 慢,不阻塞 HTTP)· 走 Celery broker。"""
+def _client() -> Any:
     global _celery_client
     if _celery_client is None:
         from celery import Celery  # noqa: PLC0415
 
         broker = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/1")
         _celery_client = Celery("midas-api", broker=broker)
-    _celery_client.send_task(_PUBLISH_TASK, args=[dispatch_id])
+    return _celery_client
+
+
+def enqueue_publish(dispatch_id: int) -> None:
+    """admin 端点触发 · enqueue worker 异步发布(真 API 慢,不阻塞 HTTP)· 走 Celery broker。"""
+    _client().send_task(_PUBLISH_TASK, args=[dispatch_id])
     logger.info("[x-publish] enqueue 发布 · dispatch=%s", dispatch_id)
+
+
+def revoke_auto_tasks(task_ids: list[str]) -> int:
+    """★紧急熔断:revoke 排队中的 auto-publish Celery 任务(取消未执行的)· 返回 revoke 数。
+
+    ★兜底:auto-publish 任务执行时还会自检开关/熔断(PR-3),即使 revoke 漏了也会 skip,双保险。
+    """
+    if not task_ids:
+        return 0
+    ctrl = _client().control
+    for tid in task_ids:
+        ctrl.revoke(tid)
+    logger.info("[x-publish] 熔断 revoke %d 个排队任务", len(task_ids))
+    return len(task_ids)
 
 
 async def run_publish(session: AsyncSession, redis: Any, dispatch_id: int) -> dict[str, Any]:

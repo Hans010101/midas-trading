@@ -42,20 +42,25 @@ async def list_dispatches_for_tweets(
 
 async def upsert_pending(
     session: AsyncSession, *, tweet_id: int, platform: str, dispatched_by: UUID | None,
+    source: str = "manual",
 ) -> PlatformDispatch:
     """★幂等:(tweet_id, platform) 已存在则【重置为 pending 重试】,否则新建 · 返回该行。
 
     端点已在调用前拦掉 status=success(不重复发);到这里只会是 新建 / 失败重试 / 重发 pending。
+    ★source:manual(后台人工点 · 默认)/ auto(自动托管 · PR-2/3 传)· 重发沿用新来源。
     """
     existing = await get_dispatch(session, tweet_id, platform)
     if existing is not None:
         existing.status = "pending"
         existing.error = None
         existing.dispatched_by = dispatched_by
+        existing.source = source
         await session.commit()
         await session.refresh(existing)
         return existing
-    row = PlatformDispatch(tweet_id=tweet_id, platform=platform, dispatched_by=dispatched_by)
+    row = PlatformDispatch(
+        tweet_id=tweet_id, platform=platform, dispatched_by=dispatched_by, source=source,
+    )
     session.add(row)
     await session.commit()
     await session.refresh(row)
