@@ -43,6 +43,10 @@ class PlatformDispatch(Base):
     status: Mapped[str] = mapped_column(
         String(16), server_default="pending", nullable=False,  # pending / success / failed
     )
+    # ★发布来源(自动托管 PR-1)· manual=后台人工点 · auto=自动托管 · ★server_default 兼容老数据
+    source: Mapped[str] = mapped_column(
+        String(16), server_default="manual", nullable=False,
+    )
     platform_post_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     platform_post_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)  # 失败原因(含平台错误码)

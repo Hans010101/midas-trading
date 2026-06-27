@@ -67,7 +67,8 @@ from app.services.report.weekly_email import render_email_html
 from app.services.report.weekly_md import WeeklyMdError
 from app.services.visit_stats import CN_TZ, cn_today, read_redis_day, read_redis_hours
 from app.services.x_marketing.generate import enqueue_daily_generation
-from app.services.x_marketing.publish.dispatch import enqueue_publish
+from app.services.x_marketing.publish import auto_guard
+from app.services.x_marketing.publish.dispatch import enqueue_publish, revoke_auto_tasks
 from app.services.x_marketing.publish.rate_limit import check_rate
 from app.services.x_marketing.publish.registry import get_adapter
 from app.services.x_marketing.publish.store import (
@@ -939,6 +940,7 @@ class XTweetDispatchItem(BaseModel):
     status: str  # pending / success / failed
     url: str | None  # 成功后的帖子链接
     error: str | None  # 失败原因(含平台错误码)
+    source: str = "manual"  # 发布来源 · manual 人工 / auto 自动托管(PR-1 审计)
 
 
 class XTweetItem(BaseModel):
@@ -964,6 +966,7 @@ class XTweetListOut(BaseModel):
 def _to_dispatch_item(d: PlatformDispatch) -> XTweetDispatchItem:
     return XTweetDispatchItem(
         platform=d.platform, status=d.status, url=d.platform_post_url, error=d.error,
+        source=d.source,
     )
 
 
@@ -1069,9 +1072,69 @@ async def publish_x_tweet(
 
     dispatch = await upsert_pending(
         db, tweet_id=tweet_id, platform=payload.platform, dispatched_by=admin.id,
+        source="manual",  # ★后台人工点 = manual(自动托管走 auto · PR-2/3)
     )
     enqueue_publish(dispatch.id)  # ★异步发布(真 API 慢 · worker 跑)
     return PublishOut(
         dispatch_id=dispatch.id, platform=payload.platform, status="pending",
         message="已提交发布 · 稍后查看状态",
+    )
+
+
+# ── X 营销自动托管(自动托管 PR-1)· 全局开关 + 紧急熔断 ─────────────────────
+
+
+class AutoPilotStatus(BaseModel):
+    enabled: bool          # 自动托管总开关(默认 OFF)
+    circuit_open: bool     # 熔断中(连续失败触发 · 开则停所有自动发)
+    daily_used: int        # 今日已自动发布数
+    daily_remaining: int   # 今日剩余配额(30 封顶)
+    in_window: bool        # 当前是否在发布时段(7:30-22:30 CST)
+
+
+class AutoPilotToggleIn(BaseModel):
+    enabled: bool
+
+
+@router.get("/x-auto/status", summary="自动托管状态(开关/熔断/日配额/时段)")
+async def get_auto_pilot_status(_admin: AdminDep) -> AutoPilotStatus:
+    redis = await get_redis()
+    remaining = await auto_guard.daily_remaining(redis)
+    return AutoPilotStatus(
+        enabled=await auto_guard.is_enabled(redis),
+        circuit_open=await auto_guard.is_circuit_open(redis),
+        daily_used=auto_guard.AUTO_DAILY_MAX - remaining,
+        daily_remaining=remaining,
+        in_window=auto_guard.is_in_publish_window(),
+    )
+
+
+@router.post("/x-auto/toggle", summary="开/关自动托管(★默认 OFF · 开=自动起草+自动发)")
+async def toggle_auto_pilot(payload: AutoPilotToggleIn, _admin: AdminDep) -> AutoPilotStatus:
+    """★全自动托管总开关 · 开则 worker beat 自动起草+发布(门禁/频率/时段/熔断守卫照常)。"""
+    redis = await get_redis()
+    await auto_guard.set_enabled(redis, payload.enabled)
+    if payload.enabled:  # 重新开启 → 清熔断(给个干净起点)
+        await auto_guard.close_circuit(redis)
+    logger.info("[x-auto] 自动托管开关 → %s", payload.enabled)
+    return await get_auto_pilot_status(_admin)
+
+
+class AutoPilotStopOut(BaseModel):
+    stopped: bool
+    revoked: int  # revoke 掉的排队中自动发布任务数
+    message: str
+
+
+@router.post("/x-auto/stop", summary="★紧急熔断:立刻停止自动托管(关开关 + 熔断 + revoke 排队任务)")
+async def stop_auto_pilot(_admin: AdminDep) -> AutoPilotStopOut:
+    """★紧急刹车 · 关总开关 + 开熔断 + revoke 排队中的 auto-publish 任务(三重停)。"""
+    redis = await get_redis()
+    await auto_guard.set_enabled(redis, enabled=False)
+    await auto_guard.open_circuit(redis)
+    revoked = revoke_auto_tasks(await auto_guard.pop_pending_tasks(redis))
+    logger.warning("[x-auto] ★紧急熔断触发 · revoke %d 个排队任务", revoked)
+    return AutoPilotStopOut(
+        stopped=True, revoked=revoked,
+        message=f"已停止自动托管 · 关开关 + 熔断 + revoke {revoked} 个排队任务",
     )
