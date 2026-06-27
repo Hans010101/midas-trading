@@ -1146,3 +1146,5 @@ async def stop_auto_pilot(_admin: AdminDep) -> AutoPilotStopOut:
         stopped=True, revoked=revoked,
         message=f"已停止自动托管 · 关开关 + 熔断 + revoke {revoked} 个排队任务",
     )
+# ★托管交易(策略前向测试)admin 端点在独立模块 api/v1/managed_admin.py —— ★admin 域不得 import
+#   virtual_trading(架构守卫 test_admin_domain_no_engine_no_login_import 递归扫 admin import 树)。

@@ -74,6 +74,27 @@ class CrossLiquidationOutcome:
 # ============================================================================
 
 
+async def select_open_cross_account_ids(session: AsyncSession) -> list[int]:
+    """选「有 cross 活仓」的账户 id(强平 worker 候选)· ★排除 managed(托管)仓 → 禁强平。
+
+    ★禁强平实现:托管交易是独立系统账户(仓全 managed=True)→ 加 managed=False 过滤后,
+    托管账户的仓全被排除 → 它的 account_id 不进候选 → 整个托管账户【不进强平扫描】。
+    引擎纯函数(cross_equity_and_maint / should_liquidate_cross / _liquidate_one)一字不改;
+    非托管账户的仓全 managed=False,一个不漏全进扫描 → 现有强平【零回归】。
+    """
+    rows = await session.scalars(
+        select(VirtualPerpPosition.account_id)
+        .where(
+            VirtualPerpPosition.closed_at.is_(None),
+            VirtualPerpPosition.margin_mode == MarginMode.CROSS,
+            VirtualPerpPosition.managed.is_(False),  # ★禁强平:托管单不进强平扫描
+        )
+        .distinct()
+        .order_by(VirtualPerpPosition.account_id),
+    )
+    return list(rows.all())
+
+
 def cross_equity_and_maint(
     cash: Decimal,
     positions: Sequence[VirtualPerpPosition],
