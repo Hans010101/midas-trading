@@ -80,23 +80,36 @@ async def test_skip_disabled(db_session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_skip_max_positions(db_session: AsyncSession) -> None:
+async def test_per_round_cap_not_total(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★每轮最多开 5 个新单 · ★总活仓数不限:已持 6 仓仍继续开,本轮再开满 5(不再是「持满5就停」)
     r = _FakeRedis()
     await mguard.set_enabled(r, enabled=True)
     acc = await macc.ensure_managed_account(db_session)
-    # 预填满 5 仓
-    for i in range(mguard.MAX_PARALLEL_POSITIONS):
+    for i in range(6):  # 已持 6 仓(> 5)· 旧逻辑会 skip max_positions,新逻辑不该
         db_session.add(VirtualPerpPosition(
-            account_id=acc.id, symbol=f"C{i}USDT", side=PerpSide.LONG,
+            account_id=acc.id, symbol=f"HELD{i}USDT", side=PerpSide.LONG,
             margin_mode=MarginMode.CROSS, leverage=5, quantity=Decimal("1"),
             entry_price=Decimal("100"), initial_margin=Decimal("20"),
             maintenance_margin_rate=Decimal("0.005"), liquidation_price=Decimal("0"),
             managed=True,
         ))
     await db_session.flush()
-    _seed_snapshot(r, [_item("NEWUSDT", "偏多", 9.0, transition=True)])
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(mopen, "route_open_perp", _spy_open(captured, acc.id))
+    # 快照 8 个【新】偏多∩transition 候选 → 本轮应开满 5(不被「总活仓≥5」挡)
+    _seed_snapshot(r, [_item(f"N{i}USDT", "偏多", 9.0 - i, transition=True) for i in range(8)])
     out = await mopen.run_managed_open(db_session, r, _mark_price)
-    assert out["reason"] == "max_positions"
+    assert out["status"] == "ok"
+    assert len(out["opened"]) == mguard.MAX_PER_ROUND  # ★本轮恰开 5 个新单
+    # ★总活仓累积(6 旧 + 5 新 = 11)· 没有总上限
+    from sqlalchemy import func, select  # noqa: PLC0415
+    total = await db_session.scalar(
+        select(func.count()).select_from(VirtualPerpPosition).where(
+            VirtualPerpPosition.account_id == acc.id,
+            VirtualPerpPosition.closed_at.is_(None),
+        ),
+    )
+    assert total == 11
 
 
 # ── happy:选偏多∩transition + 调 route_open_perp + 标 managed ──────────

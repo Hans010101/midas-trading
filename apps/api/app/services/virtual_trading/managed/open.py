@@ -64,23 +64,20 @@ async def run_managed_open(
     redis: Any,
     get_mark_price: Callable[[str], Awaitable[Decimal | None]],
 ) -> dict[str, Any]:
-    """守卫 → 选偏多 transition → 去重/≤5 → route_open_perp(LONG/100U/5x)→ 标 managed。
+    """守卫 → 选偏多 transition → 去重 → 每轮最多开 5 新单 → route_open_perp → 标 managed。
 
+    ★每轮(单次扫描)最多开 MAX_PER_ROUND 个【新】单 · ★总活仓数不限(下轮可继续累积 · Hans 定)。
     任一守卫不过 → {"status":"skip","reason":...}· 返回开了哪些币。★per-币 commit 隔离失败。
     """
     if not await mguard.is_enabled(redis):
         return {"status": "skip", "reason": "disabled"}
 
     account = await macc.ensure_managed_account(session)
-    used = await mguard.count_open_positions(session, account.id)
-    slots = mguard.MAX_PARALLEL_POSITIONS - used
-    if slots <= 0:
-        return {"status": "skip", "reason": "max_positions", "open": used}
-
+    # ★每轮最多开 MAX_PER_ROUND 个【新】单 · ★总活仓数不限(不查当前活仓当上限 · Hans 定:下轮可累积)
     picks = await _read_bullish_transition(redis)
     opened: list[str] = []
     for row in picks:
-        if len(opened) >= slots:
+        if len(opened) >= mguard.MAX_PER_ROUND:  # ★只限本轮新开数,不限总持仓
             break
         symbol = str(row.get("symbol") or "")
         if not symbol:
@@ -110,5 +107,8 @@ async def run_managed_open(
         except Exception:  # noqa: BLE001 · 单币失败隔离,不中断本轮
             await session.rollback()
             logger.exception("[managed] 开仓异常 %s", symbol)
-    logger.info("[managed] 开仓编排 · 槽位 %d 开了 %d:%s", slots, len(opened), opened)
-    return {"status": "ok", "opened": opened, "slots": slots}
+    logger.info(
+        "[managed] 开仓编排 · 本轮新开 %d(上限 %d · 总数不限):%s",
+        len(opened), mguard.MAX_PER_ROUND, opened,
+    )
+    return {"status": "ok", "opened": opened, "per_round_cap": mguard.MAX_PER_ROUND}

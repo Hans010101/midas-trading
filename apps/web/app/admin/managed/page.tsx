@@ -136,7 +136,7 @@ export default function AdminManagedPage() {
                   tone="text-gold"
                 />
                 <StatCard label="起始资金" value={st ? `${st.initial_capital.toLocaleString()} U` : '—'} />
-                <StatCard label="当前活仓" value={st ? `${st.open_positions} / 5` : '—'} />
+                <StatCard label="当前活仓" value={st ? `${st.open_positions}` : '—'} />
               </div>
               <div className="mt-4 flex items-center gap-2 border-t border-paper pt-3">
                 <button
