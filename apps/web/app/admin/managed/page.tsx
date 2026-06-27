@@ -128,14 +128,29 @@ export default function AdminManagedPage() {
                   🔴 纯虚拟资金 · 绝不真实下单
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <StatCard label="开关" value={enabled ? '开启' : '关闭'} />
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                {/* ★账户价值(权益·浮动)为主角 · = 现金 + Σ浮盈 · 和下面活仓浮盈对得上 */}
                 <StatCard
-                  label="账户现金"
-                  value={st ? `${st.cash_balance.toLocaleString()} U` : '—'}
+                  label="账户价值(权益)"
+                  value={st ? `${st.account_value.toLocaleString(undefined, { maximumFractionDigits: 2 })} U` : '—'}
+                  tone={st ? pnlTone(st.account_value - st.initial_capital) : undefined}
+                />
+                <StatCard
+                  label="可用资金"
+                  value={st ? `${st.available_funds.toLocaleString(undefined, { maximumFractionDigits: 2 })} U` : '—'}
                   tone="text-gold"
                 />
-                <StatCard label="起始资金" value={st ? `${st.initial_capital.toLocaleString()} U` : '—'} />
+                <StatCard
+                  label="阶段盈亏"
+                  value={
+                    st
+                      ? `${st.account_value - st.initial_capital >= 0 ? '+' : ''}${(st.account_value - st.initial_capital).toFixed(2)} U`
+                      : '—'
+                  }
+                  tone={st ? pnlTone(st.account_value - st.initial_capital) : undefined}
+                />
+                <StatCard label="账户现金" value={st ? `${st.cash_balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} U` : '—'} />
+                <StatCard label="已占保证金" value={st ? `${st.occupied_margin.toLocaleString(undefined, { maximumFractionDigits: 2 })} U` : '—'} />
                 <StatCard label="当前活仓" value={st ? `${st.open_positions}` : '—'} />
               </div>
               <div className="mt-4 flex items-center gap-2 border-t border-paper pt-3">
