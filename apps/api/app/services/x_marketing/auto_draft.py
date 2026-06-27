@@ -68,22 +68,25 @@ async def run_auto_draft(
     rows = await generate_and_store(session, contexts, generated_by=None, auto_drafted=True)
     drafted = [(r.id, r.symbol) for r in rows]  # 全部供截图
 
-    # ★只 rows[0](|change| 最大)进自动发布 · 门禁过 + 非 6h 重复(理解A:只看第 1 条,不顺延)
-    # ★诊断:None 必带原因(门禁未过 / 6h 去重命中 / 无行)· 否则无法区分「理解A 正确跳过」和 bug。
+    # ★理解B(Hans 定):按 rows 顺序(|change| 降序)找第一个「门禁过 且 6h 内没发过」的 → 只发它。
+    #   第1条优先;第1条重复/门禁未过 → 顺延第2条;都不满足 → 不发。★仍只发1条/轮(找到即 break)。
+    # ★诊断:逐条记原因,日志说清发了谁 / 为何顺延 / 为何全不发(可观测,不再猜)。
     target: tuple[int, str] | None = None
-    skip_reason: str | None = None
-    head = rows[0] if rows else None
-    if head is None:
-        skip_reason = "无起草行"
-    elif not head.compliance_passed:
-        skip_reason = f"rows[0]={head.symbol} 门禁未过 → 不自动发(不顺延第2条)"
-    elif await auto_guard.is_recently_published(redis, head.symbol):
-        skip_reason = f"rows[0]={head.symbol} 命中6h去重 → 理解A 本轮跳过(不顺延第2条)"
-    else:
-        target = (head.id, head.symbol)
+    notes: list[str] = []
+    for idx, r in enumerate(rows):
+        if not r.compliance_passed:
+            notes.append(f"rows[{idx}]={r.symbol} 门禁未过")
+            continue
+        if await auto_guard.is_recently_published(redis, r.symbol):
+            notes.append(f"rows[{idx}]={r.symbol} 命中6h去重")
+            continue
+        target = (r.id, r.symbol)
+        notes.append(f"→发 rows[{idx}]={r.symbol}")
+        break  # ★找到第一个可发的就停 · 仍只发 1 条/轮
+    trace = " | ".join(notes) if notes else "无起草行"
     logger.info(
         "[x-auto] 自动起草 · 起草 %d · %s",
         len(rows),
-        f"自动发 rows[0]={target[1]}" if target else f"不自动发 · {skip_reason}",
+        f"自动发 {target[1]} · {trace}" if target else f"不自动发(全被挡)· {trace}",
     )
     return {"status": "ok", "drafted": drafted, "auto_publish": target}
