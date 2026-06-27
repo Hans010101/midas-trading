@@ -955,6 +955,7 @@ class XTweetItem(BaseModel):
     status: str  # draft 待发(4b 才会有 sent 等)
     image_path: str | None  # PR-4 截图后非空 · 现阶段 null
     created_at: datetime
+    auto_drafted: bool = False  # ★自动托管起草(待补发素材标识 · 频率调整)
     dispatches: list[XTweetDispatchItem] = []  # 各平台发布状态(发布层 PR-3)
 
 
@@ -977,6 +978,7 @@ def _to_tweet_item(
         id=row.id, symbol=row.symbol, bias=row.bias, tweet_text=row.tweet_text,
         compliance_passed=row.compliance_passed, compliance_reason=row.compliance_reason,
         status=row.status, image_path=row.image_path, created_at=row.created_at,
+        auto_drafted=row.auto_drafted,
         dispatches=[_to_dispatch_item(d) for d in (dispatches or [])],
     )
 
@@ -1069,6 +1071,12 @@ async def publish_x_tweet(
     ok, reason = await check_rate(redis, payload.platform)
     if not ok:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=reason)
+    # ★自动托管素材(auto_drafted)的人工补发也计入 30 日配额(配额"算":自动发+补发 ≤30 · 封号总量可控)
+    if tweet.auto_drafted and await auto_guard.daily_remaining(redis) <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="今日自动托管配额(30 条)已满,明日再补发此素材",
+        )
 
     dispatch = await upsert_pending(
         db, tweet_id=tweet_id, platform=payload.platform, dispatched_by=admin.id,

@@ -161,6 +161,12 @@ function TweetCard({
       <div className="mb-2 flex items-center gap-2">
         <span className="font-mono text-sm font-bold">{t.symbol}</span>
         <BiasBadge bias={t.bias} />
+        {/* ★自动托管起草素材标识(频率调整)· 第2条未自动发=可人工补发 */}
+        {t.auto_drafted && (
+          <span className="rounded bg-gold/15 px-1.5 py-0.5 text-[11px] font-medium text-gold">
+            🤖 自动起草
+          </span>
+        )}
         <span className="ml-auto font-mono text-xs text-muted-foreground">
           {fmtTime(t.created_at)}
         </span>

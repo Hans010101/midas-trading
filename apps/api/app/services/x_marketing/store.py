@@ -31,8 +31,12 @@ async def create_tweet(
     compliance_reason: str | None = None,
     image_path: str | None = None,
     generated_by: UUID | None = None,
+    auto_drafted: bool = False,
 ) -> XTweet:
-    """存一条推文记录(status 默认 draft)· ★门禁不过的也存(passed=false + reason)。"""
+    """存一条推文记录(status 默认 draft)· ★门禁不过的也存(passed=false + reason)。
+
+    auto_drafted=True:自动托管起草(待补发素材识别 + 计入 30 日配额)· 默认 False(手动生成)。
+    """
     row = XTweet(
         symbol=symbol,
         bias=bias,
@@ -41,6 +45,7 @@ async def create_tweet(
         compliance_reason=compliance_reason,
         image_path=image_path,
         generated_by=generated_by,
+        auto_drafted=auto_drafted,
     )
     session.add(row)
     await session.commit()

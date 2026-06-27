@@ -41,6 +41,10 @@ class XTweet(Base):
     compliance_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     # draft(待发)· 阶段4b 加 posted(已发)/ failed(发送失败)
     status: Mapped[str] = mapped_column(String(16), server_default="draft", nullable=False)
+    # ★自动起草标记(频率调整)· True=自动起草(待补发素材 + 计入 30 配额)· server_default 兼容老数据
+    auto_drafted: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", nullable=False,
+    )
     # 触发生成的 admin(删 admin 置空)
     generated_by: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="SET NULL"), nullable=True,

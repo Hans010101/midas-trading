@@ -109,6 +109,32 @@ async def test_publish_rate_limited_429(
 
 
 @pytest.mark.asyncio
+async def test_publish_auto_drafted_quota_full_429(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch,  # noqa: ANN001
+) -> None:
+    # ★人工补发 auto_drafted 素材时,自动托管日配额(30)已满 → 429(配额"算":自动发+补发总量≤30)
+    monkeypatch.setattr("app.core.config.settings.binance_square_openapi_key", "test-key")
+
+    async def _ok(_redis: object, _platform: str) -> tuple[bool, str]:
+        return True, ""
+
+    monkeypatch.setattr("app.api.v1.admin.check_rate", _ok)
+
+    async def _full(*_args: object, **_kwargs: object) -> int:
+        return 0  # 配额满
+
+    monkeypatch.setattr("app.api.v1.admin.auto_guard.daily_remaining", _full)
+    headers = await _authed_headers(db_session, role="admin")
+    row = await create_tweet(
+        db_session, symbol="BTCUSDT", bias="偏多", tweet_text="好推文 仅供参考",
+        compliance_passed=True, auto_drafted=True,  # ★自动素材
+    )
+    r = await client.post(_ep(row.id), json={"platform": "binance_square"}, headers=headers)
+    assert r.status_code == 429
+    assert "配额" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_publish_happy_enqueues(
     client: AsyncClient, db_session: AsyncSession, monkeypatch,  # noqa: ANN001
 ) -> None:

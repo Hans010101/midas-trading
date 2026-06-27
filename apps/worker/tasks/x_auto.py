@@ -1,7 +1,8 @@
 """X 营销自动托管 worker 任务(自动托管 PR-2 起草 + PR-3 发布编排)。
 
-- draft_scan(beat 每 15min):守卫+选币+生成+门禁 → 截图 → 2-4min 间隔排发布(追踪 id 供 revoke)。
+- draft_scan(beat 每 15min):守卫+选币+生成+门禁 → 两条都截图 → ★只排 rows[0] 一条(随机 1-7min)。
 - publish(到点跑):再过守卫 → 发布 → 成功去重/计数,失败退避(连续 3 次开熔断 + TG 通知 Hans)。
+- ★每轮只自动发 1 条(|change| 最大)· 第 2 条留后台人工补发 · 随机延迟抹除固定分钟机器指纹。
 
 ★开关默认 OFF · 起草/发布两层守卫都先查开关,关着时立刻 skip(零起草、零发布)。
 ★红线:只发分析推文 binance_square,零碰交易引擎(虚拟交易绝不真实下单)。
@@ -12,7 +13,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import random
 from typing import Any
 
 from celery import shared_task
@@ -21,13 +21,14 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.services.x_marketing.auto_draft import run_auto_draft
-from app.services.x_marketing.auto_publish import notify_circuit_open, run_auto_publish
+from app.services.x_marketing.auto_publish import (
+    notify_circuit_open,
+    publish_delay_seconds,
+    run_auto_publish,
+)
 from app.services.x_marketing.publish import auto_guard
 
 logger = logging.getLogger(__name__)
-
-_MIN_GAP_S = 120  # 发布间隔下限 2min(更像真人 · 降封号)
-_MAX_GAP_S = 240  # 发布间隔上限 4min
 
 
 def _redis() -> Any:
@@ -64,29 +65,33 @@ async def _track_pending(task_ids: list[str]) -> None:
         await redis.aclose()
 
 
-def _schedule_publishes(passed: list[tuple[int, str]]) -> list[str]:
-    """截图门禁通过的 + 按 2-4min 累积间隔排发布任务 · 返回排队任务 id(供熔断 revoke 追踪)。"""
+def _screenshot_all(drafted: list[tuple[int, str]]) -> None:
+    """两条都截图(第 2 条留后台人工补发也要有图)· best-effort。"""
     from tasks.x_tweets import _enqueue_capture  # noqa: PLC0415
 
-    task_ids: list[str] = []
-    delay = 0
-    for tweet_id, symbol in passed:
-        _enqueue_capture(tweet_id, symbol)  # 截图(best-effort · 发布前 2-4min 给它时间跑完)
-        delay += random.randint(_MIN_GAP_S, _MAX_GAP_S)  # noqa: S311  # 累积间隔(非密码学用途)
-        res = auto_publish.apply_async(args=[tweet_id, symbol], countdown=delay)
-        task_ids.append(res.id)
-    return task_ids
+    for tweet_id, symbol in drafted:
+        _enqueue_capture(tweet_id, symbol)
+
+
+def _schedule_publish(target: tuple[int, str]) -> str:
+    """★只排 1 条自动发布(rows[0])· 随机 1-7min 延迟(抹固定分钟指纹)· 返回任务 id。"""
+    tweet_id, symbol = target
+    delay = publish_delay_seconds()  # ★每次随机 1-7min · 非配速(不憋信号)
+    res = auto_publish.apply_async(args=[tweet_id, symbol], countdown=delay)
+    logger.info("[x-auto] 排发布 tweet=%s symbol=%s · 延迟 %ds", tweet_id, symbol, delay)
+    return str(res.id)
 
 
 @shared_task(name="tasks.x_auto.draft_scan", max_retries=0)
 def auto_draft_scan() -> dict[str, Any]:
-    """自动起草入口(beat 每 15min)· 守卫不过立刻 skip · 起草门禁通过的 → 截图 + 排发布。"""
+    """自动起草入口(beat 每 15min)· 守卫不过立刻 skip · 两条都截图 · ★只排 rows[0] 一条发布。"""
     result = asyncio.run(_draft())
     if result.get("status") == "ok":
-        passed = result.get("passed", [])
-        if passed:
-            task_ids = _schedule_publishes(passed)
-            asyncio.run(_track_pending(task_ids))
+        _screenshot_all(result.get("drafted", []))  # 两条都截图
+        target = result.get("auto_publish")  # ★唯一自动发(rows[0] · 可能 None)
+        if target:
+            task_id = _schedule_publish(tuple(target))
+            asyncio.run(_track_pending([task_id]))
     logger.info("[x-auto] draft_scan · %s", result)
     return result
 

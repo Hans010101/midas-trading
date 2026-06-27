@@ -41,8 +41,13 @@ class _FakeRedis:
         pass
 
 
-async def _mk_tweet(session: Any, *, passed: bool = True) -> XTweet:
-    row = XTweet(symbol="BTCUSDT", bias="偏多", tweet_text="x 仅供参考", compliance_passed=passed)
+async def _mk_tweet(
+    session: Any, *, passed: bool = True, auto_drafted: bool = False,
+) -> XTweet:
+    row = XTweet(
+        symbol="BTCUSDT", bias="偏多", tweet_text="x 仅供参考",
+        compliance_passed=passed, auto_drafted=auto_drafted,
+    )
     session.add(row)
     await session.commit()
     await session.refresh(row)
@@ -144,6 +149,34 @@ async def test_run_publish_success(db_session, monkeypatch) -> None:  # noqa: AN
     got = await get_dispatch(db_session, tweet.id, "binance_square")
     assert got.status == "success"
     assert got.platform_post_id == "p1"  # 真 adapter 从响应 data.id 提取
+
+
+@pytest.mark.asyncio
+async def test_run_publish_auto_drafted_increments_daily(db_session, monkeypatch) -> None:  # noqa: ANN001
+    # ★配额"算":auto_drafted 推文成功发布 → 计入 x:auto:daily_count(自动发 + 人工补发共用 · 单点)
+    monkeypatch.setattr("app.core.config.settings.binance_square_openapi_key", "test-key")
+    from app.services.x_marketing.publish import auto_guard
+    from app.services.x_marketing.publish import binance_square as bs
+
+    async def fake_post(text: str, image_urls: list[str] | None = None) -> dict[str, Any]:  # noqa: ARG001
+        return {"code": "000000", "success": True, "data": {"id": "p1"}}
+
+    monkeypatch.setattr(bs, "_post_content", fake_post)
+    r = _FakeRedis()
+    # 普通推文(auto_drafted=False)→ 不计入自动配额
+    plain = await _mk_tweet(db_session, passed=True, auto_drafted=False)
+    dp = await upsert_pending(db_session, tweet_id=plain.id, platform="binance_square", dispatched_by=None)
+    await run_publish(db_session, r, dp.id)
+    assert await auto_guard.daily_remaining(r) == auto_guard.AUTO_DAILY_MAX  # 没动
+
+    # auto_drafted 推文 → +1
+    auto = await _mk_tweet(db_session, passed=True, auto_drafted=True)
+    auto.symbol = "ETHUSDT"
+    await db_session.commit()
+    da = await upsert_pending(db_session, tweet_id=auto.id, platform="binance_square", dispatched_by=None)
+    result = await run_publish(db_session, r, da.id)
+    assert result["status"] == "success"
+    assert await auto_guard.daily_remaining(r) == auto_guard.AUTO_DAILY_MAX - 1  # ★计入配额
 
 
 @pytest.mark.asyncio

@@ -12,6 +12,7 @@ upsert_pending(source=auto)→ run_publish(复用发布层:撮合+台账+rate_li
 from __future__ import annotations
 
 import logging
+import random
 from typing import TYPE_CHECKING, Any
 
 from app.core.config import settings
@@ -27,6 +28,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _PLATFORM = "binance_square"  # 自动托管只发币安广场(唯一有官方发帖 API 的平台)
+_DELAY_MIN_S = 60   # 单条自动发布随机延迟下限 1min(频率调整 · Hans 定)
+_DELAY_MAX_S = 420  # 上限 7min
+
+
+def publish_delay_seconds() -> int:
+    """单条自动发布的随机延迟(★1-7min · 每次随机 · 抹除「每小时固定分钟发」的机器指纹)。
+
+    ★不是配速/最小间隔(Hans 否决):做T 信号要及时,不憋信号;延迟只为打散发布时刻、更像真人。
+    """
+    return random.randint(_DELAY_MIN_S, _DELAY_MAX_S)  # noqa: S311 · 非密码学用途(打散时刻)
 
 
 async def run_auto_publish(
@@ -58,8 +69,8 @@ async def run_auto_publish(
 
     if result.get("status") == "success":
         await auto_guard.mark_published(redis, symbol)  # ★6h 去重(发成功才标)
-        await auto_guard.incr_daily(redis, now)         # ★日计数 +1(发成功才计)
         await auto_guard.reset_fail(redis)              # 成功 → 清连续失败
+        # ★日计数 +1 由 run_publish 在成功且 tweet.auto_drafted 时记(单点 · 自动发+人工补发共用配额)
         logger.info("[x-auto] ✓ 自动发布成功 tweet=%s symbol=%s", tweet_id, symbol)
         return {"status": "success", "url": result.get("url")}
 

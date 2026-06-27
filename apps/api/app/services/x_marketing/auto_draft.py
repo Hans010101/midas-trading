@@ -40,9 +40,12 @@ async def _read_snapshot_items(redis: Any) -> list[dict[str, Any]]:
 async def run_auto_draft(
     session: AsyncSession, redis: Any, *, now: datetime | None = None,
 ) -> dict[str, Any]:
-    """守卫 → 选币(口径 b)→ 6h 去重 → 生成+门禁存 → 返回门禁通过的 (id,symbol) 供截图/排发布。
+    """守卫 → 选币(口径 b)→ 两条都起草存后台 → 只标 rows[0] 为自动发目标(频率调整)。
 
-    任一守卫不过 → {"status":"skip","reason":...}(不起草)。无候选 → skip。
+    ★每轮 2 条都起草+截图+过门禁存后台(待补发素材);只有【rows[0]:|change| 最大那条】进自动发布,
+      且须 门禁通过 + 非 6h 重复(理解A:只看第 1 条,它被挡 → 整轮不自动发,不顺延第 2 条)。
+    返回 {"status":"ok","drafted":[(id,sym) 全部·供截图],"auto_publish":(id,sym)|None·唯一自动发}。
+    任一守卫不过 / 无候选 → {"status":"skip","reason":...}。
     """
     # ★守卫(顺序:开关 → 熔断 → 时段 → 日配额)
     if not await auto_guard.is_enabled(redis):
@@ -55,19 +58,24 @@ async def run_auto_draft(
     if remaining <= 0:
         return {"status": "skip", "reason": "daily_cap"}
 
-    # 选币(口径 b)· 取 min(每轮上限, 日剩余)
+    # 选币(口径 b · |change| 降序)· 取 min(每轮上限, 日剩余)
     items = await _read_snapshot_items(redis)
     contexts = pick_auto_contexts(items, limit=min(_MAX_PER_ROUND, remaining))
-    # ★6h 去重:近 6h 发过的 symbol 不再起草(省 LLM + 防同币刷屏)
-    fresh = [c for c in contexts if not await auto_guard.is_recently_published(redis, c.symbol)]
-    if not fresh:
+    if not contexts:
         return {"status": "skip", "reason": "no_candidates"}
 
-    # ★生成 + 门禁(generate_and_store 内 validate_tweet)· 门禁不过的也存但不进发布
-    rows = await generate_and_store(session, fresh, generated_by=None)
-    passed = [(r.id, r.symbol) for r in rows if r.compliance_passed]
+    # ★两条都起草存后台(不在起草层去重)· auto_drafted=True(待补发素材 + 计入日配额)
+    rows = await generate_and_store(session, contexts, generated_by=None, auto_drafted=True)
+    drafted = [(r.id, r.symbol) for r in rows]  # 全部供截图
+
+    # ★只 rows[0](|change| 最大)进自动发布 · 门禁过 + 非 6h 重复(理解A:只看第 1 条,不顺延)
+    target: tuple[int, str] | None = None
+    if rows and rows[0].compliance_passed and not await auto_guard.is_recently_published(
+        redis, rows[0].symbol,
+    ):
+        target = (rows[0].id, rows[0].symbol)
     logger.info(
-        "[x-auto] 自动起草 · 候选 %d 起草 %d 门禁通过 %d",
-        len(fresh), len(rows), len(passed),
+        "[x-auto] 自动起草 · 起草 %d 自动发 %s(其余留后台待补发)",
+        len(rows), target[1] if target else "无",
     )
-    return {"status": "ok", "drafted": len(rows), "passed": passed}
+    return {"status": "ok", "drafted": drafted, "auto_publish": target}

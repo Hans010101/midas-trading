@@ -80,11 +80,13 @@ def _to_context(row: dict[str, Any]) -> TweetContext:
 
 async def generate_and_store(
     session: AsyncSession, contexts: list[TweetContext], *, generated_by: UUID | None,
+    auto_drafted: bool = False,
 ) -> list[XTweet]:
     """逐币:DeepSeek 生成 → 拼标签 → 门禁 → 存行(★门禁不过也存+reason)· 返回创建的行。
 
     返回行(含 id+symbol)供 worker 逐条 enqueue 截图(image_path 后续由截图回调填)。
     单币失败(LLM 异常)隔离:log + 跳过,不影响其他币(批量稳健)。
+    auto_drafted=True:自动托管起草(待补发素材 + 计入 30 日配额)· 默认 False(手动)。
     """
     created: list[XTweet] = []
     for ctx in contexts:
@@ -100,6 +102,7 @@ async def generate_and_store(
                 compliance_passed=result.passed,
                 compliance_reason=None if result.passed else " | ".join(result.reasons),
                 generated_by=generated_by,
+                auto_drafted=auto_drafted,
             )
             created.append(row)
         except Exception as exc:  # noqa: BLE001 · 单币失败隔离,不中断批量

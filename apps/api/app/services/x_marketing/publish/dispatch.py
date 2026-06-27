@@ -88,6 +88,11 @@ async def run_publish(session: AsyncSession, redis: Any, dispatch_id: int) -> di
             platform_post_id=result.platform_post_id, url=result.url,
         )
         await record_post(redis, dispatch.platform)  # ★成功才计入频率(失败不耗配额)
+        # ★自动托管素材(auto_drafted)成功发布 → 计入 30 日配额(单点 · 自动发 + 人工补发共用)
+        if tweet.auto_drafted:
+            from app.services.x_marketing.publish import auto_guard  # noqa: PLC0415
+
+            await auto_guard.incr_daily(redis)
         logger.info(
             "[x-publish] ✓ 发布成功 platform=%s tweet=%s url=%s",
             dispatch.platform, tweet.id, result.url,
