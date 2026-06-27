@@ -256,6 +256,14 @@ beat_schedule = {
         "schedule": crontab(minute="3,18,33,48"),
         "options": {"expires": 600},
     },
+    "x-auto-draft": {
+        "task": "tasks.x_auto.draft_scan",
+        # X 营销自动托管起草(自动托管 PR-2)· 挂 boll_scan(:03/:18/:33/:48)后 1min 读新鲜快照 →
+        # 守卫(开关默认 OFF/熔断/时段 7:30-22:30 CST/日配额)→ 选币(口径 b)→ 生成+门禁 → 截图。
+        # ★开关默认 OFF:关着时任务内立刻 skip(不烧 LLM)· 发布编排 = PR-3。
+        "schedule": crontab(minute="4,19,34,49"),
+        "options": {"expires": 600},
+    },
     "crypto-boll-hourly-digest": {
         "task": "tasks.crypto.boll_hourly_digest",
         # 做T 体系1(M2-3a · ★影子)· 每小时整点读 A-1 快照 → 分偏多/中性/偏空三组 → 每组前 5(按 %B)

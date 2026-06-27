@@ -46,6 +46,38 @@ def test_pick_contexts_respects_caps() -> None:
     assert len(ctxs) == 3  # 偏空只取前 3
 
 
+# ── 自动托管选币(口径 b · transition + |change| 降序)──────────────────────
+
+
+def _auto_row(symbol: str, change: float, *, transition: bool) -> dict[str, Any]:
+    r = _row(symbol, "中性", 0.5)
+    r["change_pct_24h"] = change
+    r["transition"] = transition
+    return r
+
+
+def test_pick_auto_contexts_transition_and_change_order() -> None:
+    from app.services.x_marketing.generate import pick_auto_contexts
+
+    items = [
+        _auto_row("A", -3.0, transition=False),  # 非转换 → 排除(即使涨跌大)
+        _auto_row("B", -8.0, transition=True),   # 转换 · |8| 最大 → 第一
+        _auto_row("C", 5.0, transition=True),    # 转换 · |5| → 第二
+        _auto_row("D", 1.0, transition=True),    # 转换 · |1| 最小
+    ]
+    ctxs = pick_auto_contexts(items, limit=2)
+    assert [c.symbol for c in ctxs] == ["B", "C"]  # 仅 transition · |change| 降序 · 取 2
+
+
+def test_pick_auto_contexts_handles_none_change() -> None:
+    from app.services.x_marketing.generate import pick_auto_contexts
+
+    items = [_auto_row("X", 0.0, transition=True)]
+    items[0]["change_pct_24h"] = None  # None 当 0 处理,不崩
+    ctxs = pick_auto_contexts(items, limit=2)
+    assert [c.symbol for c in ctxs] == ["X"]
+
+
 @pytest.mark.asyncio
 async def test_generate_and_store_pass_and_fail(db_session, monkeypatch) -> None:  # noqa: ANN001
     # mock DeepSeek:BTC 合规 / ETH 违规(建议买入)· ★两条都存(不过的记 reason)
