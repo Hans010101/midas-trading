@@ -69,13 +69,21 @@ async def run_auto_draft(
     drafted = [(r.id, r.symbol) for r in rows]  # 全部供截图
 
     # ★只 rows[0](|change| 最大)进自动发布 · 门禁过 + 非 6h 重复(理解A:只看第 1 条,不顺延)
+    # ★诊断:None 必带原因(门禁未过 / 6h 去重命中 / 无行)· 否则无法区分「理解A 正确跳过」和 bug。
     target: tuple[int, str] | None = None
-    if rows and rows[0].compliance_passed and not await auto_guard.is_recently_published(
-        redis, rows[0].symbol,
-    ):
-        target = (rows[0].id, rows[0].symbol)
+    skip_reason: str | None = None
+    head = rows[0] if rows else None
+    if head is None:
+        skip_reason = "无起草行"
+    elif not head.compliance_passed:
+        skip_reason = f"rows[0]={head.symbol} 门禁未过 → 不自动发(不顺延第2条)"
+    elif await auto_guard.is_recently_published(redis, head.symbol):
+        skip_reason = f"rows[0]={head.symbol} 命中6h去重 → 理解A 本轮跳过(不顺延第2条)"
+    else:
+        target = (head.id, head.symbol)
     logger.info(
-        "[x-auto] 自动起草 · 起草 %d 自动发 %s(其余留后台待补发)",
-        len(rows), target[1] if target else "无",
+        "[x-auto] 自动起草 · 起草 %d · %s",
+        len(rows),
+        f"自动发 rows[0]={target[1]}" if target else f"不自动发 · {skip_reason}",
     )
     return {"status": "ok", "drafted": drafted, "auto_publish": target}

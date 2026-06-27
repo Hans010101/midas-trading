@@ -163,3 +163,29 @@ async def test_dedup_understanding_a_first_blocked_no_promote(
     assert {s for _, s in out["drafted"]} == {"BBBUSDT", "CCCUSDT"}
     # ★理解A:第 1 条被挡 → auto_publish=None(不顺延发 CCC)
     assert out["auto_publish"] is None
+
+
+@pytest.mark.asyncio
+async def test_first_fails_gate_no_publish_no_promote(
+    db_session, monkeypatch,  # noqa: ANN001
+) -> None:
+    # ★成因②:rows[0] 门禁未过 → 不自动发,★不顺延第2条(只发第1条规则)
+    async def fake_gen(ctx: TweetContext) -> object:
+        # BBB(rows[0]·|change|最大)违规(买卖祈使)· CCC 合规
+        bad = "建议逢低买入"
+        body = bad if ctx.symbol == "BBBUSDT" else "偏空,运行于下轨下方"
+        return SimpleNamespace(
+            content=f"${ctx.symbol} {body}。仅供参考,不构成投资建议。", is_mock=True,
+        )
+
+    monkeypatch.setattr(gen, "generate_tweet_text", fake_gen)
+    r = _FakeRedis()
+    await auto_guard.set_enabled(r, enabled=True)
+    _seed_snapshot(r, [
+        _snap_item("BBBUSDT", -9.0, transition=True),  # rows[0] · 门禁未过
+        _snap_item("CCCUSDT", 4.0, transition=True),   # rows[1] · 合规
+    ])
+    out = await auto_draft.run_auto_draft(db_session, r, now=_in_window())
+    assert out["status"] == "ok"
+    assert {s for _, s in out["drafted"]} == {"BBBUSDT", "CCCUSDT"}  # 两条都起草
+    assert out["auto_publish"] is None  # ★rows[0] 门禁未过 → 不发,不顺延 CCC
