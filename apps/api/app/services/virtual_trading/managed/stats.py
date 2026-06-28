@@ -15,13 +15,14 @@ class ClosedTrade:
     """已平仓 managed 单(统计入参 · 从 VirtualPerpPosition 抽)。"""
 
     realized_pnl: Decimal
-    close_reason: str | None  # tp / signal / timeout
+    close_reason: str | None  # tp / signal / timeout / manual(手动平单)
 
 
 def compute_managed_stats(trades: list[ClosedTrade]) -> dict[str, float | int | dict[str, int]]:
     """聚合统计(全 float 便于 JSON)· trades 按平仓时间升序(算最大回撤的权益曲线)。"""
     total = len(trades)
-    by_reason: dict[str, int] = {"tp": 0, "signal": 0, "timeout": 0}
+    # ★manual = 手动平单(人工应急出口)· 第 50 行 `in by_reason` 已泛化,加 key 即自动分类
+    by_reason: dict[str, int] = {"tp": 0, "signal": 0, "timeout": 0, "manual": 0}
     if total == 0:
         return {
             "total_trades": 0, "wins": 0, "losses": 0, "win_rate": 0.0,

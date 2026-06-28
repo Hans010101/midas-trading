@@ -123,3 +123,50 @@ async def run_managed_close(
             logger.exception("[managed] 平仓异常 %s", symbol)
     logger.info("[managed] 平仓监控 · 活仓 %d 平了 %d:%s", len(positions), len(closed), closed)
     return {"status": "ok", "closed": closed}
+
+
+async def close_one_managed_position(
+    session: AsyncSession,
+    get_mark_price: Callable[[str], Awaitable[Decimal | None]],
+    position_id: int,
+) -> dict[str, Any]:
+    """★手动平单(人工应急出口)· 校验后 route_close_perp 平指定 managed 活仓 + 记 manual。
+
+    校验:仓存在 / managed=True(防平非托管仓)/ 活仓(closed_at is None)· 任一不过 → error。
+    ★唯一入口铁律:只调 route_close_perp(close_all)· 不重写撮合/盈亏 · 引擎枚举 PerpCloseReason 零碰
+      (managed_close_reason="manual" post-close 在编排层写)· 同币去重保证 close_all 平的就这一仓。
+    """
+    pos = await session.get(VirtualPerpPosition, position_id)
+    if pos is None:
+        return {"status": "error", "reason": "not_found"}
+    if not pos.managed:
+        return {"status": "error", "reason": "not_managed"}  # ★只能平托管仓
+    if pos.closed_at is not None:
+        return {"status": "error", "reason": "already_closed"}
+    uid = await macc.get_managed_user_id(session)
+    if uid is None:
+        return {"status": "error", "reason": "no_account"}
+
+    symbol = pos.symbol
+    try:
+        order = await route_close_perp(
+            session,
+            user_id=uid,
+            symbol=symbol,
+            quantity=None,
+            close_all=True,  # ★全平(同币去重保证只此一仓)
+            get_mark_price=get_mark_price,
+        )
+        if order.status == OrderStatus.FILLED:
+            pos.managed_close_reason = "manual"  # ★post-close 写托管原因(引擎枚举零碰)
+            realized = float(pos.realized_pnl)   # commit 前读(commit 后 expire)
+            await session.commit()
+            logger.info("[managed] ✓ 手动平仓 %s · position_id=%s", symbol, position_id)
+            return {"status": "ok", "symbol": symbol, "realized_pnl": realized}
+        await session.rollback()
+        logger.info("[managed] 手动平仓被拒 %s · %s", symbol, order.reject_reason)
+        return {"status": "error", "reason": "rejected", "detail": order.reject_reason}
+    except Exception:  # noqa: BLE001 · 平仓异常隔离
+        await session.rollback()
+        logger.exception("[managed] 手动平仓异常 %s", symbol)
+        return {"status": "error", "reason": "exception"}

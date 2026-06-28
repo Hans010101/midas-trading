@@ -10,12 +10,13 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import AdminDep, ClickHouseDep
+from app.api.v1.perp import make_perp_mark_price_fetcher
 from app.core.database import get_db
 from app.core.redis_client import get_redis
 from app.models.perp import VirtualPerpPosition
@@ -24,6 +25,7 @@ from app.models.virtual import VirtualAccount
 from app.services.clickhouse_crypto import select_premium_index_marks
 from app.services.virtual_trading.managed import account as managed_account
 from app.services.virtual_trading.managed import guard as managed_guard
+from app.services.virtual_trading.managed.close import close_one_managed_position
 from app.services.virtual_trading.managed.stats import ClosedTrade, compute_managed_stats
 from app.services.virtual_trading.perp_cross_engine import _cross_available_margin
 
@@ -109,6 +111,7 @@ async def toggle_managed(
 
 
 class ManagedPosition(BaseModel):
+    id: int                  # ★position_id(手动平单用)
     symbol: str
     leverage: int
     entry_price: float
@@ -157,7 +160,7 @@ async def list_managed_positions(
         upnl = (mark - r.entry_price) * r.quantity if mark is not None else None  # LONG
         margin = r.initial_margin
         out.append(ManagedPosition(
-            symbol=r.symbol, leverage=r.leverage, entry_price=float(r.entry_price),
+            id=r.id, symbol=r.symbol, leverage=r.leverage, entry_price=float(r.entry_price),
             quantity=float(r.quantity), margin=float(margin), opened_at=r.opened_at.isoformat(),
             mark=float(mark) if mark is not None else None,
             unrealized_pnl=float(upnl) if upnl is not None else None,
@@ -221,3 +224,34 @@ async def get_managed_stats(
     trades = [ClosedTrade(realized_pnl=r.realized_pnl, close_reason=r.managed_close_reason)
               for r in rows]
     return compute_managed_stats(trades)
+
+
+# ── 手动平单(人工应急出口 · 记 manual)────────────────────────────────
+
+
+class ManualCloseResult(BaseModel):
+    status: str                      # ok / error
+    symbol: str | None = None
+    realized_pnl: float | None = None
+    reason: str | None = None        # error 时:not_found/not_managed/already_closed/rejected/...
+
+
+@router.post(
+    "/positions/{position_id}/close",
+    summary="★手动平单(人工应急出口 · 调 route_close_perp · 记 managed_close_reason=manual)",
+)
+async def close_managed_position(
+    position_id: int, _admin: AdminDep, db: DbDep, ch: ClickHouseDep,
+) -> ManualCloseResult:
+    """手动平掉一个托管活仓(突发应急)· ★唯一入口 route_close_perp · 不重写撮合 · 引擎零碰。"""
+    fetcher = make_perp_mark_price_fetcher(ch)  # ★撮合 mark:premium 优先 + perp ticker 兜底
+    result = await close_one_managed_position(db, fetcher, position_id)
+    if result["status"] == "error":
+        reason = str(result.get("reason") or "error")
+        code = {"not_found": 404, "not_managed": 403, "already_closed": 409}.get(reason, 400)
+        raise HTTPException(status_code=code, detail=reason)
+    return ManualCloseResult(
+        status="ok",
+        symbol=result.get("symbol"),
+        realized_pnl=result.get("realized_pnl"),
+    )

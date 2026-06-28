@@ -177,4 +177,64 @@ async def test_close_none_when_holding(db_session: AsyncSession, monkeypatch) ->
     assert out["closed"] == []  # 继续持有
     await db_session.refresh(pos)
     assert pos.managed_close_reason is None
-    assert pos.closed_at is None
+
+
+# ── close_one_managed_position(手动平单 · 人工应急出口)─────────────────
+@pytest.mark.asyncio
+async def test_manual_close_ok(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★手动平 managed 活仓 → route_close_perp(close_all)+ 记 manual + 返回 realized_pnl
+    acc = await macc.ensure_managed_account(db_session)
+    pos = await _managed_pos(db_session, acc.id, "BTCUSDT", "100", opened_h_ago=1)
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(mclose, "route_close_perp", _spy_close(captured))
+    out = await mclose.close_one_managed_position(db_session, await _mark("110"), pos.id)
+    assert out["status"] == "ok"
+    assert out["symbol"] == "BTCUSDT"
+    assert out["realized_pnl"] == 100.0          # _spy_close 设的平仓盈亏
+    assert captured[0]["close_all"] is True       # ★唯一入口 route_close_perp · close_all
+    await db_session.refresh(pos)
+    assert pos.managed_close_reason == "manual"   # ★记 manual(区别 tp/signal/timeout)
+    assert pos.closed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_manual_close_rejects_non_managed(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★非托管仓(managed=False)→ 拒(防误平用户自己的仓)· 不调 route_close_perp
+    acc = await macc.ensure_managed_account(db_session)
+    pos = VirtualPerpPosition(
+        account_id=acc.id, symbol="XXXUSDT", side=PerpSide.LONG,
+        margin_mode=MarginMode.CROSS, leverage=5, quantity=Decimal("1"),
+        entry_price=Decimal("100"), initial_margin=Decimal("20"),
+        maintenance_margin_rate=Decimal("0.005"), liquidation_price=Decimal("0"),
+        opened_at=_NOW, managed=False,
+    )
+    db_session.add(pos)
+    await db_session.flush()
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(mclose, "route_close_perp", _spy_close(captured))
+    out = await mclose.close_one_managed_position(db_session, await _mark("110"), pos.id)
+    assert out == {"status": "error", "reason": "not_managed"}
+    assert captured == []  # ★校验拦截 · 没调撮合
+
+
+@pytest.mark.asyncio
+async def test_manual_close_rejects_already_closed(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    acc = await macc.ensure_managed_account(db_session)
+    pos = await _managed_pos(db_session, acc.id, "BTCUSDT", "100", opened_h_ago=1)
+    pos.closed_at = _NOW  # 已平
+    await db_session.flush()
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(mclose, "route_close_perp", _spy_close(captured))
+    out = await mclose.close_one_managed_position(db_session, await _mark("110"), pos.id)
+    assert out == {"status": "error", "reason": "already_closed"}
+    assert captured == []
+
+
+@pytest.mark.asyncio
+async def test_manual_close_rejects_not_found(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    await macc.ensure_managed_account(db_session)
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(mclose, "route_close_perp", _spy_close(captured))
+    out = await mclose.close_one_managed_position(db_session, await _mark("110"), 999999)
+    assert out == {"status": "error", "reason": "not_found"}
+    assert captured == []
