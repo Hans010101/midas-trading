@@ -87,11 +87,11 @@ async def test_positions_long_short_upnl(
         intelligent_signals={"score": -8.0, "contributions": {"boll": -1}},
     ))
     await db_session.commit()
-    # ★mark:BTC 涨到 110(LONG 赚)· ETH 跌到 90(SHORT 赚)
-    monkeypatch.setattr(
-        intelligent_admin, "select_premium_index_marks",
-        lambda _c, _s: {"BTCUSDT": Decimal("110"), "ETHUSDT": Decimal("90")},
-    )
+    # ★mark:BTC 涨到 110(LONG 赚)· ETH 跌到 90(SHORT 赚)· 端点 await 它 → mock 必须 async
+    async def _fake_marks(_c: object, _s: object) -> dict[str, Decimal]:
+        return {"BTCUSDT": Decimal("110"), "ETHUSDT": Decimal("90")}
+
+    monkeypatch.setattr(intelligent_admin, "select_premium_index_marks", _fake_marks)
     r = await client.get("/api/v1/admin/intelligent/positions", headers=headers)
     assert r.status_code == 200
     by_sym = {p["symbol"]: p for p in r.json()}
