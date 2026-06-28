@@ -18,6 +18,7 @@ import {
   getManagedPositions,
   getManagedStats,
   getManagedStatus,
+  setManagedExitSwitch,
   toggleManaged,
 } from '@/lib/api/managed'
 import { useSession } from 'next-auth/react'
@@ -31,6 +32,11 @@ const REASON_LABEL: Record<string, string> = {
 
 function pnlTone(v: number): string {
   return v > 0 ? 'text-rose-600' : v < 0 ? 'text-emerald-700' : 'text-muted-foreground'
+}
+
+// ★信号上色(Hans:偏空红 / 中性黄 / 偏多绿 · 西式多绿空红)
+function biasTone(bias: string): string {
+  return bias === '偏空' ? 'text-rose-600' : bias === '偏多' ? 'text-emerald-700' : 'text-gold'
 }
 
 function StatCard({ label, value, tone }: { label: string; value: string; tone?: string }) {
@@ -114,6 +120,14 @@ export default function AdminManagedPage() {
     if (ok) closeMut.mutate(id)
   }
 
+  // ★三个平仓条件开关(即时生效 · close_scan 下一轮按新开关判)
+  const exitMut = useMutation({
+    mutationFn: (v: { which: 'tp' | 'signal' | 'timeout'; on: boolean }) =>
+      setManagedExitSwitch(token, v.which, v.on),
+    onSuccess: () => invalidate(),
+    onError: () => setNote('开关切换失败,请重试'),
+  })
+
   const forbidden = status.isError
   const st = status.data
   const stat = stats.data
@@ -189,6 +203,38 @@ export default function AdminManagedPage() {
                   </span>
                 )}
               </div>
+              {/* ★三个平仓条件开关(Hans 补充 · 即时生效) */}
+              <div className="mt-3 border-t border-paper pt-3">
+                <div className="mb-2 text-xs text-muted-foreground">
+                  自动平仓条件(关 = 该条件不触发 · 即时对已有持仓生效)
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { which: 'tp' as const, label: '止盈 100%', val: st?.exit_tp ?? true },
+                    { which: 'signal' as const, label: '信号转换', val: st?.exit_signal ?? true },
+                    { which: 'timeout' as const, label: '超时 24h', val: st?.exit_timeout ?? true },
+                  ].map((s) => (
+                    <button
+                      key={s.which}
+                      type="button"
+                      onClick={() => exitMut.mutate({ which: s.which, on: !s.val })}
+                      disabled={exitMut.isPending || !on}
+                      className={
+                        s.val
+                          ? 'rounded-md border border-emerald-600/40 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 disabled:opacity-50'
+                          : 'rounded-md border border-paper bg-muted px-3 py-1 text-xs text-muted-foreground disabled:opacity-50'
+                      }
+                    >
+                      {s.label} · {s.val ? '开' : '关'}
+                    </button>
+                  ))}
+                </div>
+                {st && !st.exit_tp && !st.exit_signal && !st.exit_timeout && (
+                  <p className="mt-2 rounded-md bg-rose-50 px-3 py-2 text-xs font-medium text-rose-600">
+                    ⚠️ 自动平仓已全部关闭,持仓单仅能手动平仓
+                  </p>
+                )}
+              </div>
               {note && (
                 <p className="mt-3 rounded-md bg-gold/10 px-3 py-2 text-xs text-muted-foreground">{note}</p>
               )}
@@ -236,7 +282,7 @@ export default function AdminManagedPage() {
               <table className="w-full text-left text-xs">
                 <thead className="border-b border-paper text-muted-foreground">
                   <tr>
-                    {['币种', '杠杆', '开仓价', '标记价', '浮盈U', '浮盈%', '操作'].map((h) => (
+                    {['币种', '杠杆', '开仓价', '标记价', '信号', '浮盈U', '浮盈%', '操作'].map((h) => (
                       <th key={h} className="px-3 py-2 font-medium">
                         {h}
                       </th>
@@ -246,7 +292,7 @@ export default function AdminManagedPage() {
                 <tbody>
                   {(positions.data ?? []).length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-3 py-4 text-center text-muted-foreground">
+                      <td colSpan={8} className="px-3 py-4 text-center text-muted-foreground">
                         无活仓
                       </td>
                     </tr>
@@ -257,6 +303,14 @@ export default function AdminManagedPage() {
                         <td className="px-3 py-2">{p.leverage}x</td>
                         <td className="px-3 py-2 font-mono">{p.entry_price}</td>
                         <td className="px-3 py-2 font-mono">{p.mark ?? '—'}</td>
+                        <td className="px-3 py-2">
+                          {/* ★实时信号(维持的 bias)· 偏空红/中性黄/偏多绿 */}
+                          {p.bias ? (
+                            <span className={`font-medium ${biasTone(p.bias)}`}>{p.bias}</span>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
                         <td className={`px-3 py-2 font-mono ${p.unrealized_pnl != null ? pnlTone(p.unrealized_pnl) : ''}`}>
                           {p.unrealized_pnl != null ? p.unrealized_pnl.toFixed(2) : '—'}
                         </td>
