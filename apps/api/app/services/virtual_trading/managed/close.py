@@ -187,3 +187,48 @@ async def close_one_managed_position(
         await session.rollback()
         logger.exception("[managed] 手动平仓异常 %s", symbol)
         return {"status": "error", "reason": "exception"}
+
+
+async def close_all_managed_positions(
+    session: AsyncSession,
+    get_mark_price: Callable[[str], Awaitable[Decimal | None]],
+) -> dict[str, Any]:
+    """★一键平掉所有 managed 活仓(人工批量应急出口)· 逐个 route_close_perp 记 manual。
+
+    ★只平【托管账户】活仓:account_id == 托管账户 AND managed.is_(True)(双重隔离 · 绝不碰智能交易
+    /其他账户的仓)· ★唯一入口铁律:逐个 route_close_perp(close_all)· 不重写撮合 · 引擎枚举零碰 ·
+    per-仓失败隔离(单仓异常不中断整批)。
+    """
+    uid = await macc.get_managed_user_id(session)
+    if uid is None:
+        return {"status": "ok", "closed": 0, "total": 0}  # 没建过托管账户 → 无仓可平
+    acc = await macc.ensure_managed_account(session)
+    positions = list(await session.scalars(
+        select(VirtualPerpPosition).where(
+            VirtualPerpPosition.account_id == acc.id,    # ★只托管账户(不碰智能/其他账户仓)
+            VirtualPerpPosition.managed.is_(True),        # ★双重隔离(智能仓 managed=False)
+            VirtualPerpPosition.closed_at.is_(None),
+        ),
+    ))
+    total = len(positions)
+    closed = 0
+    for pos in positions:
+        symbol = pos.symbol
+        try:
+            order = await route_close_perp(
+                session, user_id=uid, symbol=symbol, quantity=None,
+                close_all=True, get_mark_price=get_mark_price,
+            )
+            if order.status == OrderStatus.FILLED:
+                pos.managed_close_reason = "manual"  # ★和单个手动平一样记 manual
+                await session.commit()
+                closed += 1
+                logger.info("[managed] ✓ 一键平仓 %s", symbol)
+            else:
+                await session.rollback()
+                logger.info("[managed] 一键平仓被拒 %s · %s", symbol, order.reject_reason)
+        except Exception:  # noqa: BLE001 · 单仓失败隔离
+            await session.rollback()
+            logger.exception("[managed] 一键平仓异常 %s", symbol)
+    logger.info("[managed] 一键平仓 · 平了 %d/%d", closed, total)
+    return {"status": "ok", "closed": closed, "total": total}

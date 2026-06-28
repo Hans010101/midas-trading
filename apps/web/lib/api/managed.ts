@@ -73,6 +73,19 @@ export interface ManualCloseResult {
   realized_pnl: number | null
 }
 
+export interface ManagedHistoryPage {
+  items: ManagedTrade[]
+  total: number // ★全部历史单数(前端算总页数)
+}
+
+export interface BatchCloseResult {
+  status: string
+  closed: number // 实际平掉数
+  total: number // 本次扫到的活仓数
+}
+
+export const MANAGED_HISTORY_PAGE_SIZE = 50
+
 function _h(token?: string): HeadersInit | undefined {
   return token ? { Authorization: `Bearer ${token}` } : undefined
 }
@@ -87,8 +100,13 @@ export const getManagedStatus = (t: string, s?: AbortSignal) =>
   _get<ManagedStatus>('/status', t, s)
 export const getManagedPositions = (t: string, s?: AbortSignal) =>
   _get<ManagedPosition[]>('/positions', t, s)
-export const getManagedHistory = (t: string, s?: AbortSignal) =>
-  _get<ManagedTrade[]>('/history', t, s)
+/** ★历史分页:offset/limit(默认每页 50)· 返回 {items, total}(total 算总页数)。 */
+export const getManagedHistory = (
+  t: string,
+  offset = 0,
+  limit: number = MANAGED_HISTORY_PAGE_SIZE,
+  s?: AbortSignal,
+) => _get<ManagedHistoryPage>(`/history?offset=${offset}&limit=${limit}`, t, s)
 export const getManagedStats = (t: string, s?: AbortSignal) =>
   _get<ManagedStats>('/stats', t, s)
 
@@ -114,6 +132,16 @@ export async function closeManagedPosition(
   })
   if (!r.ok) throw new Error(`managed close HTTP ${r.status}`)
   return (await r.json()) as ManualCloseResult
+}
+
+/** ★一键平掉所有托管活仓(★强制二次确认 · 调用方必须确认)· 后端逐个 route_close_perp 记 manual。 */
+export async function closeAllManagedPositions(token: string): Promise<BatchCloseResult> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/managed/positions/close-all`, {
+    method: 'POST',
+    headers: _h(token),
+  })
+  if (!r.ok) throw new Error(`managed close-all HTTP ${r.status}`)
+  return (await r.json()) as BatchCloseResult
 }
 
 /** ★设单个平仓条件开关(tp/signal/timeout · 即时生效)· 返回最新状态。 */

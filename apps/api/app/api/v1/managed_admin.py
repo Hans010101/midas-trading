@@ -12,7 +12,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import AdminDep, ClickHouseDep
@@ -26,7 +26,10 @@ from app.services.clickhouse_crypto import select_premium_index_marks
 from app.services.virtual_trading import account_admin
 from app.services.virtual_trading.managed import account as managed_account
 from app.services.virtual_trading.managed import guard as managed_guard
-from app.services.virtual_trading.managed.close import close_one_managed_position
+from app.services.virtual_trading.managed.close import (
+    close_all_managed_positions,
+    close_one_managed_position,
+)
 from app.services.virtual_trading.managed.stats import ClosedTrade, compute_managed_stats
 from app.services.virtual_trading.perp_cross_engine import _cross_available_margin
 
@@ -241,22 +244,33 @@ async def list_managed_positions(
     return out
 
 
-@router.get("/history", summary="托管历史平仓(每单明细 · 前向测试)")
+class ManagedHistoryPage(BaseModel):
+    items: list[ManagedTrade]
+    total: int  # ★全部历史单数(前端算总页数)
+
+
+@router.get("/history", summary="托管历史平仓(每单明细 · ★分页 50/页)")
 async def list_managed_history(
     _admin: AdminDep, db: DbDep,
-) -> list[ManagedTrade]:
+    offset: int = 0, limit: int = 50,
+) -> ManagedHistoryPage:
     acc = await _managed_account_row(db)
     if acc is None:
-        return []
+        return ManagedHistoryPage(items=[], total=0)
+    base_where = (
+        VirtualPerpPosition.account_id == acc.id,
+        VirtualPerpPosition.managed.is_(True),
+        VirtualPerpPosition.closed_at.is_not(None),
+    )
+    total = await db.scalar(
+        select(func.count()).select_from(VirtualPerpPosition).where(*base_where),
+    )
     rows = list(await db.scalars(
         select(VirtualPerpPosition)
-        .where(
-            VirtualPerpPosition.account_id == acc.id,
-            VirtualPerpPosition.managed.is_(True),
-            VirtualPerpPosition.closed_at.is_not(None),
-        )
+        .where(*base_where)
         .order_by(VirtualPerpPosition.closed_at.desc())
-        .limit(200),
+        .offset(max(offset, 0))
+        .limit(max(min(limit, 200), 1)),  # ★限 1~200 防滥用
     ))
     out: list[ManagedTrade] = []
     for r in rows:
@@ -274,7 +288,7 @@ async def list_managed_history(
             closed_at=r.closed_at.isoformat() if r.closed_at else None,
             hold_seconds=hold,
         ))
-    return out
+    return ManagedHistoryPage(items=out, total=total or 0)
 
 
 @router.get("/stats", summary="托管前向测试统计(胜率/盈亏比/最大回撤/按原因分类)")
@@ -326,4 +340,25 @@ async def close_managed_position(
         status="ok",
         symbol=result.get("symbol"),
         realized_pnl=result.get("realized_pnl"),
+    )
+
+
+class BatchCloseResult(BaseModel):
+    status: str       # ok
+    closed: int       # 实际平掉数
+    total: int        # 本次扫到的活仓数(closed ≤ total · 个别被拒不算)
+
+
+@router.post(
+    "/positions/close-all",
+    summary="★一键平掉所有托管活仓(人工批量 · 逐个 route_close_perp · 记 manual · 只托管账户)",
+)
+async def close_all_managed(
+    _admin: AdminDep, db: DbDep, ch: ClickHouseDep,
+) -> BatchCloseResult:
+    """一键平掉全部托管活仓 · ★唯一入口 route_close_perp(逐个)· 只托管账户 · 引擎零碰。"""
+    fetcher = make_perp_mark_price_fetcher(ch)
+    result = await close_all_managed_positions(db, fetcher)
+    return BatchCloseResult(
+        status="ok", closed=int(result["closed"]), total=int(result["total"]),
     )

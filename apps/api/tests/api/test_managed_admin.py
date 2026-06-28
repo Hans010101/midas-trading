@@ -17,6 +17,7 @@ from app.main import app
 from app.models.perp import MarginMode, PerpSide, VirtualPerpPosition
 from app.models.virtual import OrderStatus
 from app.services.auth import issue_session
+from app.services.virtual_trading.intelligent import account as iacc
 from app.services.virtual_trading.managed import account as macc
 from app.services.virtual_trading.managed import close as mclose
 from tests.factories import make_user
@@ -179,3 +180,95 @@ async def test_exit_tp_pct_endpoint_invalid(client: AsyncClient, db_session: Asy
         "/api/v1/admin/managed/exit-tp-pct", json={"pct": 0}, headers=headers,
     )
     assert r.status_code == 400  # ★pct ≤ 0 非法
+
+
+def _managed_pos(account_id: int, symbol: str) -> VirtualPerpPosition:
+    return VirtualPerpPosition(
+        account_id=account_id, symbol=symbol, side=PerpSide.LONG,
+        margin_mode=MarginMode.CROSS, leverage=5, quantity=Decimal("1"),
+        entry_price=Decimal("100"), initial_margin=Decimal("20"),
+        maintenance_margin_rate=Decimal("0.005"), liquidation_price=Decimal("0"),
+        managed=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_close_all_only_managed_not_intelligent(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch,  # noqa: ANN001
+) -> None:
+    # ★一键平仓:只平【托管账户】活仓 · 绝不碰智能交易账户的仓(account_id + managed 双重隔离)
+    headers = await _admin_headers(db_session)
+    macc_acc = await macc.ensure_managed_account(db_session)
+    iacc_acc = await iacc.ensure_intelligent_account(db_session)
+    db_session.add(_managed_pos(macc_acc.id, "BTCUSDT"))
+    db_session.add(_managed_pos(macc_acc.id, "ETHUSDT"))
+    # ★智能交易活仓(intelligent=True/managed=False · 另一账户)→ 不该被一键平仓碰
+    sol = VirtualPerpPosition(
+        account_id=iacc_acc.id, symbol="SOLUSDT", side=PerpSide.SHORT,
+        margin_mode=MarginMode.CROSS, leverage=5, quantity=Decimal("1"),
+        entry_price=Decimal("100"), initial_margin=Decimal("20"),
+        maintenance_margin_rate=Decimal("0.005"), liquidation_price=Decimal("0"),
+        intelligent=True,
+    )
+    db_session.add(sol)
+    await db_session.commit()
+
+    async def _fake_close(
+        session: AsyncSession, *, symbol: str, close_all: bool, **_kw: Any,  # noqa: ARG001
+    ) -> Any:
+        p = await session.scalar(select(VirtualPerpPosition).where(
+            VirtualPerpPosition.symbol == symbol, VirtualPerpPosition.closed_at.is_(None),
+        ))
+        if p is not None:
+            p.closed_at = datetime(2026, 6, 28, tzinfo=UTC)
+            p.realized_pnl = Decimal("5")
+        await session.flush()
+        return SimpleNamespace(status=OrderStatus.FILLED, reject_reason=None)
+
+    monkeypatch.setattr(mclose, "route_close_perp", _fake_close)
+    r = await client.post("/api/v1/admin/managed/positions/close-all", headers=headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["closed"] == 2  # ★只平了 2 个托管仓
+    assert body["total"] == 2
+    await db_session.refresh(sol)
+    assert sol.closed_at is None  # ★★红线:智能交易仓没被碰
+
+
+@pytest.mark.asyncio
+async def test_close_all_normal_user_403(client: AsyncClient, db_session: AsyncSession) -> None:
+    user = await make_user(db_session, role="user")
+    token = await issue_session(db_session, user_id=user.id)
+    await db_session.commit()
+    r = await client.post(
+        "/api/v1/admin/managed/positions/close-all",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_history_pagination(client: AsyncClient, db_session: AsyncSession) -> None:
+    # ★历史分页:60 单已平 → 每页 50 · total=60 · offset 翻页
+    headers = await _admin_headers(db_session)
+    acc = await macc.ensure_managed_account(db_session)
+    now = datetime(2026, 6, 28, tzinfo=UTC)
+    for i in range(60):
+        p = _managed_pos(acc.id, f"C{i}USDT")
+        p.realized_pnl = Decimal("1")
+        p.managed_close_reason = "tp"
+        p.opened_at = now
+        p.closed_at = now
+        db_session.add(p)
+    await db_session.commit()
+
+    r = await client.get("/api/v1/admin/managed/history?offset=0&limit=50", headers=headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 60          # ★全部数(算总页数)
+    assert len(body["items"]) == 50     # ★每页 50
+
+    r2 = await client.get("/api/v1/admin/managed/history?offset=50&limit=50", headers=headers)
+    body2 = r2.json()
+    assert body2["total"] == 60
+    assert len(body2["items"]) == 10    # ★第二页剩 10
