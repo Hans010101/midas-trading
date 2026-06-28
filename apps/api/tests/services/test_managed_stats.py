@@ -15,7 +15,7 @@ def test_empty() -> None:
     s = compute_managed_stats([])
     assert s["total_trades"] == 0
     assert s["win_rate"] == 0.0
-    assert s["by_reason"] == {"tp": 0, "signal": 0, "timeout": 0}
+    assert s["by_reason"] == {"tp": 0, "signal": 0, "timeout": 0, "manual": 0}
 
 
 def test_win_rate_and_pnl() -> None:
@@ -27,7 +27,7 @@ def test_win_rate_and_pnl() -> None:
     assert s["win_rate"] == round(2 / 3, 4)
     assert s["total_pnl"] == 120.0
     assert s["avg_pnl"] == 40.0
-    assert s["by_reason"] == {"tp": 1, "signal": 1, "timeout": 1}
+    assert s["by_reason"] == {"tp": 1, "signal": 1, "timeout": 1, "manual": 0}
 
 
 def test_profit_factor() -> None:
