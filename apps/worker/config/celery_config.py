@@ -256,6 +256,14 @@ beat_schedule = {
         "schedule": crontab(minute="3,18,33,48"),
         "options": {"expires": 600},
     },
+    "intelligent-signals-scan": {
+        "task": "tasks.crypto.intelligent_signals_scan",
+        # 智能交易信号生产(PR-1)· 挂 boll_scan(:03/18/33/48)后 5min(:08/23/38/53)· ★PR-3 读到的
+        # boll 快照已新 · 算 150 币技术指标方向分(MA/MACD/RSI/KDJ + extreme)→ intelligent:signals:latest。
+        # 纯读 CH · ★信号生产层不下单(下单是 PR-4)· 错开所有现有栅格(funding/ticker/OI/托管)。
+        "schedule": crontab(minute="8,23,38,53"),
+        "options": {"expires": 600},
+    },
     "managed-open-scan": {
         "task": "tasks.managed.open_scan",
         # 托管交易开仓(策略前向测试 · PR-2)· 挂 boll_scan(:03/18/33/48)后 · 选偏多 transition 开仓。

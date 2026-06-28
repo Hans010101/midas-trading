@@ -36,23 +36,17 @@ from app.schemas.market import Kline, Market, Period
 from app.schemas.strategy import (
     StrategyKind,
     StrategyRecommendResponse,
-    StrategySignal,
     StrategySignalsResponse,
 )
 from app.services.ai.accuracy import compute_accuracy
 from app.services.ai.actionable import with_actionable
 from app.services.ai.cache import get_cached_card, set_cached_card
+from app.services.ai.extreme_signals import compute_extreme_signals
 from app.services.ai.memory import record_decision
 from app.services.ai.strategy_recommend import recommend_strategy
-from app.services.ai.strategy_signals import scan_extreme, scan_signals
+from app.services.ai.strategy_signals import scan_signals
 from app.services.ai.workflow import run_decision_workflow
 from app.services.analysis.chan import analyze as analyze_chan
-from app.services.clickhouse_client import ClickHouseClient
-from app.services.clickhouse_crypto import (
-    select_funding_rates,
-    select_long_short,
-    select_open_interest,
-)
 from app.services.data_sources.base import BaseDataSource
 from app.services.membership import resolve_plan
 
@@ -408,47 +402,6 @@ async def _fetch_klines_for_strategy(
     return klines
 
 
-_OI_LOOKBACK = 20  # OI 序列回看点数(够算 scan_extreme 的 _OI_WINDOW=12 变动)
-
-
-async def _scan_extreme_for(
-    ch: ClickHouseClient, symbol: str, market: Market, instrument: str,
-    klines: list[Kline],
-) -> list[StrategySignal]:
-    """极端信号取数 + 扫描(★仅 crypto perp · 只读 CH · LOADER_REGISTRY=0 不新建采集)。
-
-    非 crypto perp → 返回空(现货无 funding/OI/多空比 · extreme 不出)。
-    funding / OI / 多空比 各自 try:某项取不到 → None(不参与触发 · 不报错 · 优雅降级)。
-    """
-    if not (market == "crypto" and instrument == "perp"):
-        return []
-    fut_sym = symbol.upper().replace("/", "")
-    funding_rate: float | None = None
-    oi_series: list[float] | None = None
-    ls_ratio: float | None = None
-    try:
-        fr = await select_funding_rates(ch._client, fut_sym, limit=1)  # noqa: SLF001
-        funding_rate = fr[-1].rate if fr else None
-    except Exception:  # noqa: BLE001 — 某项缺数据优雅降级,不阻断
-        logger.warning("[extreme] funding 取数失败 · 跳过该项", exc_info=True)
-    try:
-        oi = await select_open_interest(ch._client, fut_sym, limit=_OI_LOOKBACK)  # noqa: SLF001
-        oi_series = [o.oi_usd for o in oi] if oi else None
-    except Exception:  # noqa: BLE001
-        logger.warning("[extreme] OI 取数失败 · 跳过该项", exc_info=True)
-    try:
-        ls = await select_long_short(ch._client, fut_sym, limit=1)  # noqa: SLF001
-        ls_ratio = ls[-1].top_account_ratio if ls else None
-    except Exception:  # noqa: BLE001
-        logger.warning("[extreme] 多空比取数失败 · 跳过该项", exc_info=True)
-    return scan_extreme(
-        klines,
-        funding_rate=funding_rate,
-        oi_usd_series=oi_series,
-        long_short_ratio=ls_ratio,
-    )
-
-
 @router.get(
     "/strategy-signals",
     response_model=StrategySignalsResponse,
@@ -491,7 +444,7 @@ async def get_strategy_signals(
     )
     # extreme = 合约极端信号(★仅 crypto perp · 需 funding/OI/多空比)· 走专路;其余 5 个纯 klines。
     if strategy == "extreme":
-        signals = await _scan_extreme_for(ch, symbol, market, instrument, klines)
+        signals = await compute_extreme_signals(ch._client, symbol, market, instrument, klines)  # noqa: SLF001
     else:
         signals = scan_signals(klines, strategy)
     # 当前是否触发:最新一根 K 是否为信号点(klines / signals 均 ts 升序)
