@@ -15,6 +15,7 @@ const ADMIN_TABS = [
   { href: '/admin/weekly-dispatch', label: '周报发送', exact: false },
   { href: '/admin/x-tweets', label: '每日推文', exact: false },
   { href: '/admin/managed', label: '托管交易', exact: false },
+  { href: '/admin/intelligent', label: '智能交易', exact: false },
 ] as const
 
 export function AdminNav() {
