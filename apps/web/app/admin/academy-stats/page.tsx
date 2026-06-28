@@ -98,7 +98,6 @@ export default function AdminAcademyStatsPage() {
     <div className="flex min-h-screen flex-col bg-background">
       <TopNav />
       <main className="mx-auto w-full max-w-6xl px-6 py-8">
-        <h1 className="mb-4 font-serif text-xl font-bold">训练营统计</h1>
         <AdminNav />
 
         {forbidden ? (

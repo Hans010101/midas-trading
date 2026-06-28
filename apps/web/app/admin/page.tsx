@@ -38,15 +38,12 @@ export default function AdminUsersPage() {
     <div className="flex min-h-screen flex-col bg-background">
       <TopNav />
       <main className="mx-auto w-full max-w-6xl px-6 py-8">
-        <div className="mb-4 flex flex-wrap items-baseline gap-3">
-          <h1 className="font-serif text-xl font-bold">用户管理</h1>
-          {query.data && (
-            <span className="text-sm text-muted-foreground">
-              共 <span className="font-mono font-bold text-foreground">{query.data.total}</span> 位用户
-            </span>
-          )}
-        </div>
         <AdminNav />
+        {query.data && (
+          <p className="mb-4 text-sm text-muted-foreground">
+            共 <span className="font-mono font-bold text-foreground">{query.data.total}</span> 位用户
+          </p>
+        )}
 
         {/* 后端 403(普通用户手输 URL)→ 无权限降级 · 不渲染空表 */}
         {forbidden ? (
