@@ -13,11 +13,13 @@ import { useEffect, useState } from 'react'
 import { AdminNav } from '@/components/admin/admin-nav'
 import { TopNav } from '@/components/layout/top-nav'
 import {
+  closeAllManagedPositions,
   closeManagedPosition,
   getManagedHistory,
   getManagedPositions,
   getManagedStats,
   getManagedStatus,
+  MANAGED_HISTORY_PAGE_SIZE,
   setManagedExitSwitch,
   setManagedTpPct,
   toggleManaged,
@@ -68,11 +70,16 @@ export default function AdminManagedPage() {
     enabled: on,
     refetchInterval: 15000,
   })
+  // ★历史分页(每页 50)· page 从 0 起
+  const [histPage, setHistPage] = useState(0)
   const history = useQuery({
-    queryKey: ['managed-history'],
-    queryFn: ({ signal }) => getManagedHistory(token, signal),
+    queryKey: ['managed-history', histPage],
+    queryFn: ({ signal }) =>
+      getManagedHistory(token, histPage * MANAGED_HISTORY_PAGE_SIZE, MANAGED_HISTORY_PAGE_SIZE, signal),
     enabled: on,
   })
+  const histTotal = history.data?.total ?? 0
+  const histPages = Math.max(1, Math.ceil(histTotal / MANAGED_HISTORY_PAGE_SIZE))
   const stats = useQuery({
     queryKey: ['managed-stats'],
     queryFn: ({ signal }) => getManagedStats(token, signal),
@@ -135,6 +142,24 @@ export default function AdminManagedPage() {
       if (!ok) return
     }
     closeMut.mutate(id)
+  }
+
+  // ★一键平仓(平掉全部托管活仓)· ★★强制二次确认(不受 confirmClose 开关影响 · 一键平全部太危险)
+  const closeAllMut = useMutation({
+    mutationFn: () => closeAllManagedPositions(token),
+    onSuccess: (r) => {
+      setNote(`✓ 已平 ${r.closed} 个托管活仓`)
+      invalidate()
+    },
+    onError: () => setNote('一键平仓失败,请重试'),
+  })
+  const openCount = status.data?.open_positions ?? 0
+  const onCloseAll = () => {
+    // ★强制确认 · 显示数量 N · 不可关
+    const ok = window.confirm(
+      `确认平掉全部 ${openCount} 个活仓?此操作不可撤销\n\n会立即按当前标记价逐个平掉所有托管活仓(记为「手动」平仓)。\n🔴纯虚拟资金。`,
+    )
+    if (ok) closeAllMut.mutate()
   }
 
   // ★三个平仓条件开关(即时生效 · close_scan 下一轮按新开关判)
@@ -336,9 +361,21 @@ export default function AdminManagedPage() {
             </div>
 
             {/* 当前活仓 */}
-            <h2 className="mb-2 font-serif text-base font-bold">
-              当前活仓 {positions.data ? `(${positions.data.length})` : ''}
-            </h2>
+            <div className="mb-2 flex items-center gap-3">
+              <h2 className="font-serif text-base font-bold">
+                当前活仓 {positions.data ? `(${positions.data.length})` : ''}
+              </h2>
+              {(positions.data ?? []).length > 0 && (
+                <button
+                  type="button"
+                  onClick={onCloseAll}
+                  disabled={closeAllMut.isPending || !on}
+                  className="ml-auto rounded-md border border-midas-red px-3 py-1 text-xs font-medium text-midas-red hover:bg-midas-red/10 disabled:opacity-50"
+                >
+                  {closeAllMut.isPending ? '平仓中…' : '一键平仓'}
+                </button>
+              )}
+            </div>
             <div className="mb-6 overflow-x-auto rounded-lg border border-paper bg-cream shadow-sm">
               <table className="w-full text-left text-xs">
                 <thead className="border-b border-paper text-muted-foreground">
@@ -396,9 +433,9 @@ export default function AdminManagedPage() {
               </table>
             </div>
 
-            {/* 历史平仓 */}
+            {/* 历史平仓(★分页 50/页) */}
             <h2 className="mb-2 font-serif text-base font-bold">
-              历史平仓 {history.data ? `(${history.data.length})` : ''}
+              历史平仓 {history.data ? `(${histTotal})` : ''}
             </h2>
             <div className="overflow-x-auto rounded-lg border border-paper bg-cream shadow-sm">
               <table className="w-full text-left text-xs">
@@ -412,14 +449,14 @@ export default function AdminManagedPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(history.data ?? []).length === 0 ? (
+                  {(history.data?.items ?? []).length === 0 ? (
                     <tr>
                       <td colSpan={7} className="px-3 py-4 text-center text-muted-foreground">
                         还没有平仓记录
                       </td>
                     </tr>
                   ) : (
-                    history.data?.map((t, i) => (
+                    history.data?.items.map((t, i) => (
                       <tr key={`${t.symbol}-${i}`} className="border-b border-paper/60">
                         <td className="px-3 py-2 font-mono font-bold">{t.symbol}</td>
                         <td className="px-3 py-2 font-mono">{t.entry_price}</td>
@@ -440,6 +477,30 @@ export default function AdminManagedPage() {
                 </tbody>
               </table>
             </div>
+            {/* ★历史分页控件(上一页/下一页 + 当前页/总页数) */}
+            {histTotal > MANAGED_HISTORY_PAGE_SIZE && (
+              <div className="mt-3 flex items-center justify-center gap-3 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setHistPage((p) => Math.max(0, p - 1))}
+                  disabled={histPage <= 0 || history.isFetching}
+                  className="rounded-md border border-paper px-3 py-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
+                >
+                  上一页
+                </button>
+                <span className="font-mono text-muted-foreground">
+                  第 {histPage + 1} / {histPages} 页
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setHistPage((p) => Math.min(histPages - 1, p + 1))}
+                  disabled={histPage >= histPages - 1 || history.isFetching}
+                  className="rounded-md border border-paper px-3 py-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
+                >
+                  下一页
+                </button>
+              </div>
+            )}
           </>
         )}
       </main>
