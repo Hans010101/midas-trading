@@ -41,6 +41,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -166,6 +167,11 @@ class VirtualPerpPosition(Base):
     )
     # ★智能交易平仓原因 · atr_stop/take_profit/signal_flip/manual · ★nullable(仿 managed)。
     intelligent_close_reason: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # ★智能交易 ATR 止损/止盈价(PR-4 开仓时记 · PR-5 平仓判价)· Numeric(20,8) 价格 · nullable。
+    intelligent_stop_price: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)
+    intelligent_tp_price: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)
+    # ★共振明细(contributions 各指标方向分 + score · PR-6 看板 + PR-7 复盘)· JSONB · nullable。
+    intelligent_signals: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
 
     __table_args__ = (
         # 单向净持仓(D6):同账户同 symbol 最多一个活仓 · partial unique
