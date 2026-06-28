@@ -15,7 +15,10 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 export interface ManagedStatus {
   enabled: boolean
   account_ready: boolean
-  cash_balance: number
+  account_value: number // ★账户价值(权益·浮动)= 现金 + Σ浮盈浮亏 · 和活仓浮盈对得上
+  available_funds: number // ★可用资金 = 账户价值 − 已占用保证金
+  occupied_margin: number // 已占用保证金
+  cash_balance: number // 账户现金(只扣手续费)
   initial_capital: number
   open_positions: number
 }

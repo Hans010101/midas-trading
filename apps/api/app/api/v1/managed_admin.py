@@ -25,6 +25,7 @@ from app.services.clickhouse_crypto import select_premium_index_marks
 from app.services.virtual_trading.managed import account as managed_account
 from app.services.virtual_trading.managed import guard as managed_guard
 from app.services.virtual_trading.managed.stats import ClosedTrade, compute_managed_stats
+from app.services.virtual_trading.perp_cross_engine import _cross_available_margin
 
 router = APIRouter(prefix="/admin/managed", tags=["managed"])
 
@@ -46,44 +47,62 @@ async def _managed_account_row(db: AsyncSession) -> VirtualAccount | None:
 class ManagedStatus(BaseModel):
     enabled: bool             # 托管开关(默认 OFF)
     account_ready: bool       # 托管账户已建
-    cash_balance: float       # 托管账户现金(USDT)
+    account_value: float      # ★账户价值(权益·浮动)= 现金 + Σ未实现浮盈浮亏 · 和活仓浮盈对得上
+    available_funds: float    # ★可用资金 = 账户价值 − 已占用保证金 · 还能开多少单
+    occupied_margin: float    # 已占用保证金(Σ initial_margin)
+    cash_balance: float       # 账户现金(只扣手续费 · 不含浮盈)
     initial_capital: float    # 起始资金(10万U)
-    open_positions: int       # 当前活仓数(≤5)
+    open_positions: int       # 当前活仓数(总数不限)
 
 
 class ManagedToggleIn(BaseModel):
     enabled: bool
 
 
-async def _status(db: AsyncSession) -> ManagedStatus:
+async def _status(db: AsyncSession, ch: ClickHouseDep) -> ManagedStatus:
     redis = await get_redis()
     enabled = await managed_guard.is_enabled(redis)
     acc = await _managed_account_row(db)
-    open_n = await managed_guard.count_open_positions(db, acc.id) if acc is not None else 0
+    account_value = available = occupied = 0.0
+    open_n = 0
+    if acc is not None:
+        open_n = await managed_guard.count_open_positions(db, acc.id)
+
+        async def _fetch_mark(symbol: str) -> Decimal | None:
+            marks = await select_premium_index_marks(ch._client, [symbol])  # noqa: SLF001
+            return marks.get(symbol)
+
+        # ★复用引擎现成 _cross_available_margin:(cross_equity=现金+ΣuPnL, used=Σ保证金, available)
+        #   零重写盈亏 · 看板和活仓浮盈天然对得上(同一算法)。
+        equity, used, avail = await _cross_available_margin(db, acc, _fetch_mark)
+        account_value, occupied, available = float(equity), float(used), float(avail)
     return ManagedStatus(
         enabled=enabled,
         account_ready=acc is not None,
+        account_value=account_value,
+        available_funds=available,
+        occupied_margin=occupied,
         cash_balance=float(acc.cash_balance) if acc else 0.0,
         initial_capital=float(managed_account.MANAGED_INITIAL_CAPITAL),
         open_positions=open_n,
     )
 
 
-@router.get("/status", summary="托管交易状态(开关/账户/现金/活仓)")
-async def get_managed_status(_admin: AdminDep, db: DbDep) -> ManagedStatus:
-    return await _status(db)
+@router.get("/status", summary="托管交易状态(开关/账户价值/可用/活仓)")
+async def get_managed_status(_admin: AdminDep, db: DbDep, ch: ClickHouseDep) -> ManagedStatus:
+    return await _status(db, ch)
 
 
 @router.post("/toggle", summary="开/关托管交易(★默认 OFF · 开则首次建账户)")
 async def toggle_managed(
-    payload: ManagedToggleIn, _admin: AdminDep, db: DbDep,
+    payload: ManagedToggleIn, _admin: AdminDep, db: DbDep, ch: ClickHouseDep,
 ) -> ManagedStatus:
     """★开关 · 开启时幂等建托管账户(系统用户 + 10万U perp 钱包)· 开仓编排 = PR-2。"""
     redis = await get_redis()
     if payload.enabled:
         await managed_account.ensure_managed_account(db)  # 首次开 → 幂等建账户
     await managed_guard.set_enabled(redis, payload.enabled)
-    return await _status(db)
+    return await _status(db, ch)
 
 
 # ── 看板:活仓 / 历史 / 统计(PR-4 · 前向测试)──────────────────────────

@@ -16,7 +16,7 @@ from app.models.perp import VirtualPerpPosition
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-MAX_PARALLEL_POSITIONS = 5  # 每轮最多并行持有的托管仓(Hans 定)
+MAX_PER_ROUND = 5  # ★每轮(单次扫描)最多开 5 个【新】单 · ★总活仓数不限(Hans 定:下轮可继续累积)
 
 _ENABLED = "managed:enabled"
 
@@ -32,7 +32,7 @@ async def set_enabled(redis: Any, enabled: bool) -> None:  # noqa: FBT001
 
 # ── 仓位约束(PR-2 开仓编排用 · 只读 DB)─────────────────────────────
 async def count_open_positions(session: AsyncSession, account_id: int) -> int:
-    """托管账户当前活仓数(并行 ≤ MAX_PARALLEL_POSITIONS 用)。"""
+    """托管账户当前活仓数(★仅状态展示用 · 不再作总上限 · 总数不限)。"""
     n = await session.scalar(
         select(func.count())
         .select_from(VirtualPerpPosition)
