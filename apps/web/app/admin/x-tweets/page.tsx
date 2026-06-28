@@ -230,8 +230,7 @@ export default function AdminXTweetsPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <TopNav />
-      <main className="mx-auto w-full max-w-3xl px-6 py-8">
-        <h1 className="mb-4 font-serif text-xl font-bold">每日推文</h1>
+      <main className="mx-auto w-full max-w-6xl px-6 py-8">
         <AdminNav />
 
         {forbidden ? (

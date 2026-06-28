@@ -121,8 +121,7 @@ export default function AdminManagedPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <TopNav />
-      <main className="mx-auto w-full max-w-4xl px-6 py-8">
-        <h1 className="mb-4 font-serif text-xl font-bold">托管交易 · 策略前向测试</h1>
+      <main className="mx-auto w-full max-w-6xl px-6 py-8">
         <AdminNav />
 
         {forbidden ? (

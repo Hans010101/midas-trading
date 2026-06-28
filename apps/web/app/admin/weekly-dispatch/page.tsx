@@ -100,8 +100,7 @@ export default function AdminWeeklyDispatchPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <TopNav />
-      <main className="mx-auto w-full max-w-5xl px-6 py-8">
-        <h1 className="mb-4 font-serif text-xl font-bold">周报发送</h1>
+      <main className="mx-auto w-full max-w-6xl px-6 py-8">
         <AdminNav />
 
         {forbidden ? (
