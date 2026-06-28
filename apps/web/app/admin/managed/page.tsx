@@ -13,6 +13,7 @@ import { useState } from 'react'
 import { AdminNav } from '@/components/admin/admin-nav'
 import { TopNav } from '@/components/layout/top-nav'
 import {
+  closeManagedPosition,
   getManagedHistory,
   getManagedPositions,
   getManagedStats,
@@ -25,6 +26,7 @@ const REASON_LABEL: Record<string, string> = {
   tp: '止盈',
   signal: '信号转换',
   timeout: '超时',
+  manual: '手动',
 }
 
 function pnlTone(v: number): string {
@@ -96,6 +98,22 @@ export default function AdminManagedPage() {
     toggle.mutate(!enabled)
   }
 
+  // ★手动平单(人工应急出口)· 二次确认防误点
+  const closeMut = useMutation({
+    mutationFn: (id: number) => closeManagedPosition(token, id),
+    onSuccess: (r) => {
+      setNote(`✓ 手动平仓 ${r.symbol ?? ''} · 盈亏 ${r.realized_pnl != null ? r.realized_pnl.toFixed(2) : '—'} U`)
+      invalidate()
+    },
+    onError: () => setNote('平仓失败,请重试'),
+  })
+  const onClose = (id: number, symbol: string) => {
+    const ok = window.confirm(
+      `确定手动平仓【${symbol}】?\n\n会立即按当前标记价平掉该托管仓位(记为「手动」平仓)。\n🔴纯虚拟资金。`,
+    )
+    if (ok) closeMut.mutate(id)
+  }
+
   const forbidden = status.isError
   const st = status.data
   const stat = stats.data
@@ -128,8 +146,9 @@ export default function AdminManagedPage() {
                   🔴 纯虚拟资金 · 绝不真实下单
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-                {/* ★账户价值(权益·浮动)为主角 · = 现金 + Σ浮盈 · 和下面活仓浮盈对得上 */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                {/* ★账户价值(权益·浮动)为主角 · = 现金 + Σ浮盈 · 和下面活仓浮盈对得上
+                    (去掉「账户现金」· 活仓 0 时与账户价值相等、重复 · 账户价值含浮盈更有意义)*/}
                 <StatCard
                   label="账户价值(权益)"
                   value={st ? `${st.account_value.toLocaleString(undefined, { maximumFractionDigits: 2 })} U` : '—'}
@@ -149,7 +168,6 @@ export default function AdminManagedPage() {
                   }
                   tone={st ? pnlTone(st.account_value - st.initial_capital) : undefined}
                 />
-                <StatCard label="账户现金" value={st ? `${st.cash_balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} U` : '—'} />
                 <StatCard label="已占保证金" value={st ? `${st.occupied_margin.toLocaleString(undefined, { maximumFractionDigits: 2 })} U` : '—'} />
                 <StatCard label="当前活仓" value={st ? `${st.open_positions}` : '—'} />
               </div>
@@ -201,9 +219,11 @@ export default function AdminManagedPage() {
               />
               <StatCard label="最大回撤" value={stat ? `${stat.max_drawdown.toFixed(2)} U` : '—'} />
               <StatCard
-                label="止盈 / 信号 / 超时"
+                label="止盈/信号/超时/手动"
                 value={
-                  stat ? `${stat.by_reason.tp} / ${stat.by_reason.signal} / ${stat.by_reason.timeout}` : '—'
+                  stat
+                    ? `${stat.by_reason.tp}/${stat.by_reason.signal}/${stat.by_reason.timeout}/${stat.by_reason.manual}`
+                    : '—'
                 }
               />
               <StatCard label="盈 / 亏" value={stat ? `${stat.wins} / ${stat.losses}` : '—'} />
@@ -217,7 +237,7 @@ export default function AdminManagedPage() {
               <table className="w-full text-left text-xs">
                 <thead className="border-b border-paper text-muted-foreground">
                   <tr>
-                    {['币种', '杠杆', '开仓价', '标记价', '浮盈U', '浮盈%'].map((h) => (
+                    {['币种', '杠杆', '开仓价', '标记价', '浮盈U', '浮盈%', '操作'].map((h) => (
                       <th key={h} className="px-3 py-2 font-medium">
                         {h}
                       </th>
@@ -227,7 +247,7 @@ export default function AdminManagedPage() {
                 <tbody>
                   {(positions.data ?? []).length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-3 py-4 text-center text-muted-foreground">
+                      <td colSpan={7} className="px-3 py-4 text-center text-muted-foreground">
                         无活仓
                       </td>
                     </tr>
@@ -243,6 +263,17 @@ export default function AdminManagedPage() {
                         </td>
                         <td className={`px-3 py-2 font-mono ${p.unrealized_pct != null ? pnlTone(p.unrealized_pct) : ''}`}>
                           {p.unrealized_pct != null ? `${(p.unrealized_pct * 100).toFixed(1)}%` : '—'}
+                        </td>
+                        <td className="px-3 py-2">
+                          {/* ★手动平单 · 人工应急出口 · 二次确认防误点 */}
+                          <button
+                            type="button"
+                            onClick={() => onClose(p.id, p.symbol)}
+                            disabled={closeMut.isPending}
+                            className="rounded border border-paper px-2 py-1 text-xs font-medium text-midas-red hover:bg-midas-red/10 disabled:opacity-50"
+                          >
+                            平仓
+                          </button>
                         </td>
                       </tr>
                     ))

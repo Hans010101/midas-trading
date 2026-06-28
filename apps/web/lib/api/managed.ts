@@ -24,6 +24,7 @@ export interface ManagedStatus {
 }
 
 export interface ManagedPosition {
+  id: number // ★position_id(手动平单用)
   symbol: string
   leverage: number
   entry_price: number
@@ -58,7 +59,13 @@ export interface ManagedStats {
   avg_pnl: number
   profit_factor: number
   max_drawdown: number
-  by_reason: { tp: number; signal: number; timeout: number }
+  by_reason: { tp: number; signal: number; timeout: number; manual: number }
+}
+
+export interface ManualCloseResult {
+  status: string
+  symbol: string | null
+  realized_pnl: number | null
 }
 
 function _h(token?: string): HeadersInit | undefined {
@@ -89,4 +96,17 @@ export async function toggleManaged(token: string, enabled: boolean): Promise<Ma
   })
   if (!r.ok) throw new Error(`managed toggle HTTP ${r.status}`)
   return (await r.json()) as ManagedStatus
+}
+
+/** ★手动平单(人工应急出口 · 调用方应二次确认)· 后端调 route_close_perp 记 manual。 */
+export async function closeManagedPosition(
+  token: string,
+  positionId: number,
+): Promise<ManualCloseResult> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/managed/positions/${positionId}/close`, {
+    method: 'POST',
+    headers: _h(token),
+  })
+  if (!r.ok) throw new Error(`managed close HTTP ${r.status}`)
+  return (await r.json()) as ManualCloseResult
 }
