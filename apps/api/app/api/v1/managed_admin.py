@@ -23,6 +23,7 @@ from app.models.perp import VirtualPerpPosition
 from app.models.user import User
 from app.models.virtual import VirtualAccount
 from app.services.clickhouse_crypto import select_premium_index_marks
+from app.services.virtual_trading import account_admin
 from app.services.virtual_trading.managed import account as managed_account
 from app.services.virtual_trading.managed import guard as managed_guard
 from app.services.virtual_trading.managed.close import close_one_managed_position
@@ -100,7 +101,10 @@ async def _status(db: AsyncSession, ch: ClickHouseDep) -> ManagedStatus:
         available_funds=available,
         occupied_margin=occupied,
         cash_balance=float(acc.cash_balance) if acc else 0.0,
-        initial_capital=float(managed_account.MANAGED_INITIAL_CAPITAL),
+        initial_capital=(
+            float(acc.initial_capital) if acc
+            else float(managed_account.MANAGED_INITIAL_CAPITAL)
+        ),
         open_positions=open_n,
         exit_tp=switches["tp"],
         exit_signal=switches["signal"],
@@ -123,6 +127,29 @@ async def toggle_managed(
     if payload.enabled:
         await managed_account.ensure_managed_account(db)  # 首次开 → 幂等建账户
     await managed_guard.set_enabled(redis, payload.enabled)
+    return await _status(db, ch)
+
+
+class CapitalIn(BaseModel):
+    amount: float             # 起始资金(> 0)
+
+
+@router.post("/account/reset", summary="★清零重来(删托管账户持仓+历史 · cash 重置初始)")
+async def reset_account(_admin: AdminDep, db: DbDep, ch: ClickHouseDep) -> ManagedStatus:
+    """清零重置:删托管账户【所有持仓+历史】+ cash 重置 initial_capital · ★只该账户 · 不碰引擎。"""
+    acc = await managed_account.ensure_managed_account(db)
+    await account_admin.reset_account(db, acc)
+    return await _status(db, ch)
+
+
+@router.post("/account/capital", summary="★改起始资金(>0 · 清持仓 + 用新资金重来)")
+async def set_capital(
+    payload: CapitalIn, _admin: AdminDep, db: DbDep, ch: ClickHouseDep,
+) -> ManagedStatus:
+    if payload.amount <= 0:
+        raise HTTPException(status_code=400, detail="起始资金必须 > 0")
+    acc = await managed_account.ensure_managed_account(db)
+    await account_admin.set_account_capital(db, acc, Decimal(str(payload.amount)))
     return await _status(db, ch)
 
 

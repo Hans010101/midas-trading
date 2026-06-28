@@ -159,6 +159,13 @@ class VirtualPerpPosition(Base):
     # ★维持的上一次 bias(托管信号判平 + 活仓表信号列 · 补充)· 偏多/偏空/中性 · ★nullable:
     #   开仓记当时 bias,close_scan 每轮快照有则更新/无则保持(不在快照=信号没转换=维持老信号)。
     last_bias: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # ★智能交易(多指标共振 · PR-2)开的单 · True=智能单 · 用途:统计/展示/区分 · ★不禁强平
+    #   (intelligent 仓自然进强平 = ATR 止损外兜底)· server_default=false · 仿 managed。
+    intelligent: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False,
+    )
+    # ★智能交易平仓原因 · atr_stop/take_profit/signal_flip/manual · ★nullable(仿 managed)。
+    intelligent_close_reason: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     __table_args__ = (
         # 单向净持仓(D6):同账户同 symbol 最多一个活仓 · partial unique
