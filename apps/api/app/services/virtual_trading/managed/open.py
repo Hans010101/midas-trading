@@ -29,8 +29,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _SNAPSHOT_KEY = "boll:snapshot:latest"  # boll_scan 落 · 只读挑币(同自动托管源)
-MANAGED_MARGIN_USDT = Decimal("100")    # 每单本金 100U(Hans 定)
-MANAGED_LEVERAGE = 5                     # 5 倍杠杆
+# ★每单本金/杠杆改为可调(读 Redis · 见 guard.get_open_margin/get_open_leverage · 默认 100U/5x)
 _LONG_BIAS = "偏多"
 
 PerpPriceFetcher = "Callable[[str], Awaitable[Decimal | None]]"
@@ -65,20 +64,26 @@ async def run_managed_open(
     redis: Any,
     get_mark_price: Callable[[str], Awaitable[Decimal | None]],
 ) -> dict[str, Any]:
-    """守卫 → 选偏多 transition → 去重 → 每轮最多开 5 新单 → route_open_perp → 标 managed。
+    """守卫 → 选偏多 transition → 去重 → 每轮≤5 ∧ 总数≤max → route_open_perp → 标 managed。
 
-    ★每轮(单次扫描)最多开 MAX_PER_ROUND 个【新】单 · ★总活仓数不限(下轮可继续累积 · Hans 定)。
-    任一守卫不过 → {"status":"skip","reason":...}· 返回开了哪些币。★per-币 commit 隔离失败。
+    ★三参数读 Redis(margin/leverage/max_positions · 即时生效)· ★本轮可开 = min(每轮≤5, max−当前活仓)
+    两约束并存 · 任一守卫不过 → skip · per-币 commit 隔离失败。
     """
     if not await mguard.is_enabled(redis):
         return {"status": "skip", "reason": "disabled"}
 
     account = await macc.ensure_managed_account(session)
-    # ★每轮最多开 MAX_PER_ROUND 个【新】单 · ★总活仓数不限(不查当前活仓当上限 · Hans 定:下轮可累积)
+    # ★三参数读 Redis(即时生效)· margin/leverage 传给 route(引擎零碰)· max_positions 限总持仓
+    margin = await mguard.get_open_margin(redis)
+    leverage = await mguard.get_open_leverage(redis)
+    max_positions = await mguard.get_max_positions(redis)
+    current_open = await mguard.count_open_positions(session, account.id)
+    # ★本轮可开 = min(每轮≤5, 总数上限剩余空间)· 两约束并存 · 负/0 → 不开(已达总上限)
+    room = min(mguard.MAX_PER_ROUND, max_positions - current_open)
     picks = await _read_bullish_transition(redis)
     opened: list[str] = []
     for row in picks:
-        if len(opened) >= mguard.MAX_PER_ROUND:  # ★只限本轮新开数,不限总持仓
+        if len(opened) >= room:  # ★到本轮可开上限(每轮≤5 AND 总数≤max 取小)
             break
         symbol = str(row.get("symbol") or "")
         if not symbol:
@@ -91,8 +96,8 @@ async def run_managed_open(
                 user_id=account.user_id,
                 symbol=symbol,
                 side=PerpSide.LONG,       # ★只做多
-                leverage=MANAGED_LEVERAGE,
-                margin=MANAGED_MARGIN_USDT,
+                leverage=leverage,        # ★读 Redis(可调 1-20)
+                margin=margin,            # ★读 Redis(可调 10-10000)
                 quantity=None,
                 preferred_mode=MarginMode.CROSS,  # ★全仓
                 get_mark_price=get_mark_price,
@@ -101,7 +106,7 @@ async def run_managed_open(
                 await _mark_managed(session, order.position_id)  # ★标 managed
                 await session.commit()
                 opened.append(symbol)
-                logger.info("[managed] ✓ 托管开仓 %s LONG 100U 5x", symbol)
+                logger.info("[managed] ✓ 托管开仓 %s LONG %sU %sx", symbol, margin, leverage)
             else:
                 await session.rollback()  # 拒单 → 回滚(不留半截)
                 logger.info("[managed] 开仓被拒 %s · %s", symbol, order.reject_reason)

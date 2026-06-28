@@ -19,6 +19,9 @@ import {
   getManagedStats,
   getManagedStatus,
   setManagedExitSwitch,
+  setManagedMaxPositions,
+  setManagedOpenLeverage,
+  setManagedOpenMargin,
   setManagedTpPct,
   toggleManaged,
 } from '@/lib/api/managed'
@@ -155,6 +158,32 @@ export default function AdminManagedPage() {
     onError: () => setNote('止盈目标更新失败,请重试'),
   })
 
+  // ★开仓参数(每单本金 / 杠杆 / 最大单数 · 即时生效 · 失焦保存)
+  const marginMut = useMutation({
+    mutationFn: (margin: number) => setManagedOpenMargin(token, margin),
+    onSuccess: (s) => {
+      setNote(`✓ 每单本金 ${s.open_margin} U`)
+      invalidate()
+    },
+    onError: () => setNote('每单本金更新失败(需 10-10000)'),
+  })
+  const leverageMut = useMutation({
+    mutationFn: (lev: number) => setManagedOpenLeverage(token, lev),
+    onSuccess: (s) => {
+      setNote(`✓ 杠杆 ${s.open_leverage}x`)
+      invalidate()
+    },
+    onError: () => setNote('杠杆更新失败(需 1-20)'),
+  })
+  const maxPosMut = useMutation({
+    mutationFn: (n: number) => setManagedMaxPositions(token, n),
+    onSuccess: (s) => {
+      setNote(`✓ 最大总持仓 ${s.max_positions} 单`)
+      invalidate()
+    },
+    onError: () => setNote('最大单数更新失败(需 > 0)'),
+  })
+
   const forbidden = status.isError
   const st = status.data
   const stat = stats.data
@@ -279,6 +308,62 @@ export default function AdminManagedPage() {
                   <span className="text-muted-foreground">
                     % · = 价涨 {((st?.tp_pct ?? 100) / 5).toFixed(1)}%(盈利%÷5倍杠杆 · 失焦保存)
                   </span>
+                </div>
+                {/* ★开仓参数(每单本金 / 杠杆 / 最大单数 · Hans 可调 · 失焦保存 · 即时生效) */}
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-paper pt-3 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">每单本金:</span>
+                    <input
+                      key={`m${st?.open_margin ?? 100}`}
+                      type="number"
+                      min={10}
+                      max={10000}
+                      defaultValue={st?.open_margin ?? 100}
+                      disabled={!on || marginMut.isPending}
+                      onBlur={(e) => {
+                        const v = Number.parseFloat(e.currentTarget.value)
+                        if (Number.isFinite(v) && v >= 10 && v <= 10000 && v !== (st?.open_margin ?? 100))
+                          marginMut.mutate(v)
+                      }}
+                      className="w-20 rounded border border-paper bg-cream px-2 py-1 font-mono disabled:opacity-50"
+                    />
+                    <span className="text-muted-foreground">U(10-10000)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">杠杆:</span>
+                    <input
+                      key={`l${st?.open_leverage ?? 5}`}
+                      type="number"
+                      min={1}
+                      max={20}
+                      defaultValue={st?.open_leverage ?? 5}
+                      disabled={!on || leverageMut.isPending}
+                      onBlur={(e) => {
+                        const v = Number.parseInt(e.currentTarget.value, 10)
+                        if (Number.isFinite(v) && v >= 1 && v <= 20 && v !== (st?.open_leverage ?? 5))
+                          leverageMut.mutate(v)
+                      }}
+                      className="w-16 rounded border border-paper bg-cream px-2 py-1 font-mono disabled:opacity-50"
+                    />
+                    <span className="text-muted-foreground">x(1-20)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">最大单数:</span>
+                    <input
+                      key={`p${st?.max_positions ?? 50}`}
+                      type="number"
+                      min={1}
+                      defaultValue={st?.max_positions ?? 50}
+                      disabled={!on || maxPosMut.isPending}
+                      onBlur={(e) => {
+                        const v = Number.parseInt(e.currentTarget.value, 10)
+                        if (Number.isFinite(v) && v > 0 && v !== (st?.max_positions ?? 50))
+                          maxPosMut.mutate(v)
+                      }}
+                      className="w-20 rounded border border-paper bg-cream px-2 py-1 font-mono disabled:opacity-50"
+                    />
+                    <span className="text-muted-foreground">单(到上限不开新 · 失焦保存)</span>
+                  </div>
                 </div>
                 {/* ★手动平单二次确认开关(纯前端偏好 · localStorage) */}
                 <div className="mt-2 flex items-center gap-2 text-xs">

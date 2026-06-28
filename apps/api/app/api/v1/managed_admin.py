@@ -60,6 +60,9 @@ class ManagedStatus(BaseModel):
     exit_signal: bool         # ★信号转换平仓开关(默认开)
     exit_timeout: bool        # ★超时平仓开关(默认开 · 三个全关=仅手动平)
     tp_pct: int               # ★止盈目标(盈利%·默认 100 · 仅止盈开关开时生效)
+    open_margin: float        # ★每单本金(U·可调 10-10000·默认 100)
+    open_leverage: int        # ★杠杆(可调 1-20·默认 5)
+    max_positions: int        # ★最大总持仓数(可调·默认 50·到上限不开新)
 
 
 class ManagedToggleIn(BaseModel):
@@ -80,6 +83,9 @@ async def _status(db: AsyncSession, ch: ClickHouseDep) -> ManagedStatus:
     enabled = await managed_guard.is_enabled(redis)
     switches = await managed_guard.get_exit_switches(redis)  # ★三平仓条件开关
     tp_pct = await managed_guard.get_tp_pct(redis)           # ★止盈目标(盈利%)
+    open_margin = await managed_guard.get_open_margin(redis)       # ★每单本金
+    open_leverage = await managed_guard.get_open_leverage(redis)   # ★杠杆
+    max_positions = await managed_guard.get_max_positions(redis)   # ★最大总持仓
     acc = await _managed_account_row(db)
     account_value = available = occupied = 0.0
     open_n = 0
@@ -110,6 +116,9 @@ async def _status(db: AsyncSession, ch: ClickHouseDep) -> ManagedStatus:
         exit_signal=switches["signal"],
         exit_timeout=switches["timeout"],
         tp_pct=tp_pct,
+        open_margin=float(open_margin),
+        open_leverage=open_leverage,
+        max_positions=max_positions,
     )
 
 
@@ -174,6 +183,52 @@ async def set_tp_pct(
         raise HTTPException(status_code=400, detail="止盈目标(盈利%)必须 > 0")
     redis = await get_redis()
     await managed_guard.set_tp_pct(redis, payload.pct)
+    return await _status(db, ch)
+
+
+# ── 开仓参数(每单本金 / 杠杆 / 最大单数 · 即时生效)──────────────────────
+class OpenMarginIn(BaseModel):
+    margin: float             # 每单本金(U·10-10000)
+
+
+class OpenLeverageIn(BaseModel):
+    leverage: int             # 杠杆(1-20)
+
+
+class MaxPositionsIn(BaseModel):
+    max_positions: int        # 最大总持仓数(> 0)
+
+
+@router.post("/open-margin", summary="★设每单本金(U·10-10000 · 即时生效)")
+async def set_open_margin(
+    payload: OpenMarginIn, _admin: AdminDep, db: DbDep, ch: ClickHouseDep,
+) -> ManagedStatus:
+    if not (10 <= payload.margin <= 10000):  # noqa: PLR2004
+        raise HTTPException(status_code=400, detail="每单本金必须在 10-10000 U")
+    redis = await get_redis()
+    await managed_guard.set_open_margin(redis, Decimal(str(payload.margin)))
+    return await _status(db, ch)
+
+
+@router.post("/open-leverage", summary="★设杠杆(1-20 · 即时生效)")
+async def set_open_leverage(
+    payload: OpenLeverageIn, _admin: AdminDep, db: DbDep, ch: ClickHouseDep,
+) -> ManagedStatus:
+    if not (1 <= payload.leverage <= 20):  # noqa: PLR2004
+        raise HTTPException(status_code=400, detail="杠杆必须在 1-20 倍")
+    redis = await get_redis()
+    await managed_guard.set_open_leverage(redis, payload.leverage)
+    return await _status(db, ch)
+
+
+@router.post("/max-positions", summary="★设最大总持仓数(>0 · 到上限不开新 · 即时生效)")
+async def set_max_positions(
+    payload: MaxPositionsIn, _admin: AdminDep, db: DbDep, ch: ClickHouseDep,
+) -> ManagedStatus:
+    if payload.max_positions <= 0:
+        raise HTTPException(status_code=400, detail="最大总持仓数必须 > 0")
+    redis = await get_redis()
+    await managed_guard.set_max_positions(redis, payload.max_positions)
     return await _status(db, ch)
 
 

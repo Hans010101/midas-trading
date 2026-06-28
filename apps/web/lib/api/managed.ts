@@ -25,6 +25,9 @@ export interface ManagedStatus {
   exit_signal: boolean // ★信号转换平仓开关
   exit_timeout: boolean // ★超时平仓开关(三个全关=仅手动平)
   tp_pct: number // ★止盈目标(盈利%·默认100·仅止盈开关开时生效·价涨幅%=盈利%÷杠杆)
+  open_margin: number // ★每单本金(U·可调 10-10000·默认 100)
+  open_leverage: number // ★杠杆(可调 1-20·默认 5)
+  max_positions: number // ★最大总持仓数(可调·默认 50·到上限不开新)
 }
 
 export interface ManagedPosition {
@@ -141,3 +144,25 @@ export async function setManagedTpPct(token: string, pct: number): Promise<Manag
   if (!r.ok) throw new Error(`managed exit-tp-pct HTTP ${r.status}`)
   return (await r.json()) as ManagedStatus
 }
+
+async function _postManaged(path: string, token: string, body: unknown): Promise<ManagedStatus> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/managed${path}`, {
+    method: 'POST',
+    headers: { ...(_h(token) ?? {}), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!r.ok) throw new Error(`managed${path} HTTP ${r.status}`)
+  return (await r.json()) as ManagedStatus
+}
+
+/** ★设每单本金(U·10-10000 · 即时生效)。 */
+export const setManagedOpenMargin = (token: string, margin: number) =>
+  _postManaged('/open-margin', token, { margin })
+
+/** ★设杠杆(1-20 · 即时生效)。 */
+export const setManagedOpenLeverage = (token: string, leverage: number) =>
+  _postManaged('/open-leverage', token, { leverage })
+
+/** ★设最大总持仓数(>0 · 即时生效)。 */
+export const setManagedMaxPositions = (token: string, maxPositions: number) =>
+  _postManaged('/max-positions', token, { max_positions: maxPositions })
