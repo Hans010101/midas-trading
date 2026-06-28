@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 _SNAPSHOT_KEY = "boll:snapshot:latest"
 _LONG_BIAS = "偏多"
-TP_MULTIPLIER = Decimal("1.20")  # 止盈:标记价 ≥ entry × 1.20(涨 20% = ROI 100% @ 5x)
+# ★止盈阈值不写死:读 managed:exit:tp_pct(盈利%·默认100)· 价涨幅%=盈利%÷杠杆(见 _exit_reason)
 TIMEOUT_HOURS = 24
 
 
@@ -58,14 +58,18 @@ async def _read_bias_map(redis: Any) -> dict[str, str]:
 
 def _exit_reason(
     pos: VirtualPerpPosition, mark: Decimal | None, bias: str | None, now: datetime,
-    switches: dict[str, bool],
+    switches: dict[str, bool], tp_pct: int = 100,
 ) -> str | None:
     """三种退出判定(优先级 TP > 信号 > 超时)· ★各条件先查开关(关了跳过)· 都不满足/都关 → None。
 
     switches:{"tp":bool,"signal":bool,"timeout":bool}· 三个全关 = 自动平仓失效(仅手动平)。
+    ★tp_pct = 止盈目标(盈利%·可调·默认100)· 价涨幅%=盈利%÷杠杆 · 阈值=entry×(1+tp_pct/lev/100)。
     """
-    if switches["tp"] and mark is not None and mark >= pos.entry_price * TP_MULTIPLIER:
-        return "tp"  # 止盈(LONG · 标记价涨到 entry×1.20)
+    tp_threshold = pos.entry_price * (
+        Decimal("1") + Decimal(tp_pct) / pos.leverage / Decimal("100")
+    )  # ★盈利% → 价涨幅%(÷杠杆)· 用 pos.leverage(不硬编码 5)
+    if switches["tp"] and mark is not None and mark >= tp_threshold:
+        return "tp"  # 止盈(LONG · 标记价涨到盈利 tp_pct%)
     if switches["signal"] and bias is not None and bias != _LONG_BIAS:
         return "signal"  # 信号转换(离开偏多 · bias = 维持的上一次)
     if switches["timeout"] and now - pos.opened_at > timedelta(hours=TIMEOUT_HOURS):
@@ -100,6 +104,7 @@ async def run_managed_close(
 
     bias_map = await _read_bias_map(redis)
     switches = await mguard.get_exit_switches(redis)  # ★每轮读最新三开关 → 即时生效
+    tp_pct = await mguard.get_tp_pct(redis)           # ★每轮读最新止盈目标(盈利%)→ 即时生效
     closed: list[tuple[str, str]] = []
     for pos in positions:
         symbol = pos.symbol
@@ -110,7 +115,7 @@ async def run_managed_close(
             await session.commit()
         effective_bias = pos.last_bias  # ★维持的 bias(判信号平 + 活仓表信号列)
         mark = await get_mark_price(symbol)
-        reason = _exit_reason(pos, mark, effective_bias, now, switches)
+        reason = _exit_reason(pos, mark, effective_bias, now, switches, tp_pct)
         if reason is None:
             continue
         try:

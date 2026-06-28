@@ -58,6 +58,7 @@ class ManagedStatus(BaseModel):
     exit_tp: bool             # ★止盈平仓开关(默认开)
     exit_signal: bool         # ★信号转换平仓开关(默认开)
     exit_timeout: bool        # ★超时平仓开关(默认开 · 三个全关=仅手动平)
+    tp_pct: int               # ★止盈目标(盈利%·默认 100 · 仅止盈开关开时生效)
 
 
 class ManagedToggleIn(BaseModel):
@@ -69,10 +70,15 @@ class ManagedExitToggleIn(BaseModel):
     on: bool
 
 
+class ManagedTpPctIn(BaseModel):
+    pct: int                  # 止盈目标(盈利%·> 0)
+
+
 async def _status(db: AsyncSession, ch: ClickHouseDep) -> ManagedStatus:
     redis = await get_redis()
     enabled = await managed_guard.is_enabled(redis)
     switches = await managed_guard.get_exit_switches(redis)  # ★三平仓条件开关
+    tp_pct = await managed_guard.get_tp_pct(redis)           # ★止盈目标(盈利%)
     acc = await _managed_account_row(db)
     account_value = available = occupied = 0.0
     open_n = 0
@@ -99,6 +105,7 @@ async def _status(db: AsyncSession, ch: ClickHouseDep) -> ManagedStatus:
         exit_tp=switches["tp"],
         exit_signal=switches["signal"],
         exit_timeout=switches["timeout"],
+        tp_pct=tp_pct,
     )
 
 
@@ -128,6 +135,18 @@ async def set_exit_switch(
         raise HTTPException(status_code=400, detail="which 必须是 tp/signal/timeout")
     redis = await get_redis()
     await managed_guard.set_exit_switch(redis, payload.which, payload.on)
+    return await _status(db, ch)
+
+
+@router.post("/exit-tp-pct", summary="★设止盈目标(盈利%·>0 · 即时生效)")
+async def set_tp_pct(
+    payload: ManagedTpPctIn, _admin: AdminDep, db: DbDep, ch: ClickHouseDep,
+) -> ManagedStatus:
+    """止盈目标(盈利%)· close_scan 每轮读最新 → 即时生效 · 价涨幅% = 盈利% ÷ 杠杆。"""
+    if payload.pct <= 0:
+        raise HTTPException(status_code=400, detail="止盈目标(盈利%)必须 > 0")
+    redis = await get_redis()
+    await managed_guard.set_tp_pct(redis, payload.pct)
     return await _status(db, ch)
 
 

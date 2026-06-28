@@ -8,7 +8,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { AdminNav } from '@/components/admin/admin-nav'
 import { TopNav } from '@/components/layout/top-nav'
@@ -19,6 +19,7 @@ import {
   getManagedStats,
   getManagedStatus,
   setManagedExitSwitch,
+  setManagedTpPct,
   toggleManaged,
 } from '@/lib/api/managed'
 import { useSession } from 'next-auth/react'
@@ -104,7 +105,20 @@ export default function AdminManagedPage() {
     toggle.mutate(!enabled)
   }
 
-  // ★手动平单(人工应急出口)· 二次确认防误点
+  // ★手动平单二次确认偏好(纯前端 localStorage · 默认开 · 可关)
+  const [confirmClose, setConfirmClose] = useState(true)
+  useEffect(() => {
+    setConfirmClose(localStorage.getItem('managed:confirmClose') !== '0')
+  }, [])
+  const toggleConfirmClose = () => {
+    setConfirmClose((prev) => {
+      const next = !prev
+      localStorage.setItem('managed:confirmClose', next ? '1' : '0')
+      return next
+    })
+  }
+
+  // ★手动平单(人工应急出口)· 二次确认可关(confirmClose)
   const closeMut = useMutation({
     mutationFn: (id: number) => closeManagedPosition(token, id),
     onSuccess: (r) => {
@@ -114,10 +128,13 @@ export default function AdminManagedPage() {
     onError: () => setNote('平仓失败,请重试'),
   })
   const onClose = (id: number, symbol: string) => {
-    const ok = window.confirm(
-      `确定手动平仓【${symbol}】?\n\n会立即按当前标记价平掉该托管仓位(记为「手动」平仓)。\n🔴纯虚拟资金。`,
-    )
-    if (ok) closeMut.mutate(id)
+    if (confirmClose) {
+      const ok = window.confirm(
+        `确定手动平仓【${symbol}】?\n\n会立即按当前标记价平掉该托管仓位(记为「手动」平仓)。\n🔴纯虚拟资金。`,
+      )
+      if (!ok) return
+    }
+    closeMut.mutate(id)
   }
 
   // ★三个平仓条件开关(即时生效 · close_scan 下一轮按新开关判)
@@ -126,6 +143,16 @@ export default function AdminManagedPage() {
       setManagedExitSwitch(token, v.which, v.on),
     onSuccess: () => invalidate(),
     onError: () => setNote('开关切换失败,请重试'),
+  })
+
+  // ★止盈目标(盈利%·即时生效)
+  const tpPctMut = useMutation({
+    mutationFn: (pct: number) => setManagedTpPct(token, pct),
+    onSuccess: (s) => {
+      setNote(`✓ 止盈目标 ${s.tp_pct}%(盈利)= 价涨 ${(s.tp_pct / 5).toFixed(1)}%`)
+      invalidate()
+    },
+    onError: () => setNote('止盈目标更新失败,请重试'),
   })
 
   const forbidden = status.isError
@@ -210,7 +237,7 @@ export default function AdminManagedPage() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {[
-                    { which: 'tp' as const, label: '止盈 100%', val: st?.exit_tp ?? true },
+                    { which: 'tp' as const, label: `止盈 ${st?.tp_pct ?? 100}%`, val: st?.exit_tp ?? true },
                     { which: 'signal' as const, label: '信号转换', val: st?.exit_signal ?? true },
                     { which: 'timeout' as const, label: '超时 24h', val: st?.exit_timeout ?? true },
                   ].map((s) => (
@@ -234,6 +261,40 @@ export default function AdminManagedPage() {
                     ⚠️ 自动平仓已全部关闭,持仓单仅能手动平仓
                   </p>
                 )}
+                {/* ★止盈目标(盈利%·Hans 可调)· 口径=盈利%(保证金赚%)≠价格% · 仅止盈开关开时生效 */}
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-muted-foreground">止盈目标(盈利%):</span>
+                  <input
+                    key={st?.tp_pct ?? 100}
+                    type="number"
+                    min={1}
+                    defaultValue={st?.tp_pct ?? 100}
+                    disabled={!on || tpPctMut.isPending}
+                    onBlur={(e) => {
+                      const v = Number.parseInt(e.currentTarget.value, 10)
+                      if (Number.isFinite(v) && v > 0 && v !== (st?.tp_pct ?? 100)) tpPctMut.mutate(v)
+                    }}
+                    className="w-16 rounded border border-paper bg-cream px-2 py-1 font-mono disabled:opacity-50"
+                  />
+                  <span className="text-muted-foreground">
+                    % · = 价涨 {((st?.tp_pct ?? 100) / 5).toFixed(1)}%(盈利%÷5倍杠杆 · 失焦保存)
+                  </span>
+                </div>
+                {/* ★手动平单二次确认开关(纯前端偏好 · localStorage) */}
+                <div className="mt-2 flex items-center gap-2 text-xs">
+                  <span className="text-muted-foreground">平仓需二次确认:</span>
+                  <button
+                    type="button"
+                    onClick={toggleConfirmClose}
+                    className={
+                      confirmClose
+                        ? 'rounded-md border border-emerald-600/40 bg-emerald-50 px-3 py-1 font-medium text-emerald-700'
+                        : 'rounded-md border border-paper bg-muted px-3 py-1 text-muted-foreground'
+                    }
+                  >
+                    {confirmClose ? '开(防误点)' : '关(直接平)'}
+                  </button>
+                </div>
               </div>
               {note && (
                 <p className="mt-3 rounded-md bg-gold/10 px-3 py-2 text-xs text-muted-foreground">{note}</p>

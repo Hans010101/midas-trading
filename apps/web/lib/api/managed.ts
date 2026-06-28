@@ -24,6 +24,7 @@ export interface ManagedStatus {
   exit_tp: boolean // ★止盈平仓开关
   exit_signal: boolean // ★信号转换平仓开关
   exit_timeout: boolean // ★超时平仓开关(三个全关=仅手动平)
+  tp_pct: number // ★止盈目标(盈利%·默认100·仅止盈开关开时生效·价涨幅%=盈利%÷杠杆)
 }
 
 export interface ManagedPosition {
@@ -127,5 +128,16 @@ export async function setManagedExitSwitch(
     body: JSON.stringify({ which, on }),
   })
   if (!r.ok) throw new Error(`managed exit-switch HTTP ${r.status}`)
+  return (await r.json()) as ManagedStatus
+}
+
+/** ★设止盈目标(盈利%·>0 · 即时生效)· 返回最新状态。 */
+export async function setManagedTpPct(token: string, pct: number): Promise<ManagedStatus> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/managed/exit-tp-pct`, {
+    method: 'POST',
+    headers: { ...(_h(token) ?? {}), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pct }),
+  })
+  if (!r.ok) throw new Error(`managed exit-tp-pct HTTP ${r.status}`)
   return (await r.json()) as ManagedStatus
 }
