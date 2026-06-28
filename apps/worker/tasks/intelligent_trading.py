@@ -2,8 +2,9 @@
 
 - open_scan(beat):★守卫第一行(开关 OFF→skip · 空转零副作用)→ 打分共振决策 → route_open_perp
   做多做空 → 标 intelligent + 记止损/止盈/共振。
+- close_scan(beat):★【不被开关拦】监控所有 intelligent 活仓 → 止损/止盈/信号反转 → route_close_perp
+  + 记原因。关开关只停新开仓,已有仓仍被平。无活仓时空转。★保留强平兜底(不碰强平 worker)。
 ★mark 价源照 managed_trading / conditional:真标记价(premium_index)优先 + perp ticker 兜底。
-★平仓 close_scan = PR-5(本文件后续加)。
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from app.services.clickhouse_crypto import (
     select_premium_index_marks,
     select_tickers_by_symbols,
 )
+from app.services.virtual_trading.intelligent.close import run_intelligent_close
 from app.services.virtual_trading.intelligent.open import run_intelligent_open
 
 logger = logging.getLogger(__name__)
@@ -66,7 +68,8 @@ def _make_mark_price(raw_ch: Any) -> Any:
     return get_mark_price
 
 
-async def _run_open() -> dict[str, Any]:
+async def _run(which: str) -> dict[str, Any]:
+    """共用环境(redis/pg/ch + fetcher)· which='open' 走开仓,'close' 走平仓监控。"""
     redis = aioredis.from_url(
         os.environ.get("REDIS_URL", "redis://localhost:6379/0"), decode_responses=True,
     )
@@ -76,7 +79,9 @@ async def _run_open() -> dict[str, Any]:
     fetcher = _make_mark_price(raw_ch)
     try:
         async with session_maker() as session:
-            return await run_intelligent_open(session, redis, fetcher)
+            if which == "open":
+                return await run_intelligent_open(session, redis, fetcher)
+            return await run_intelligent_close(session, redis, fetcher)
     finally:
         await redis.aclose()
         await engine.dispose()
@@ -86,6 +91,14 @@ async def _run_open() -> dict[str, Any]:
 @shared_task(name="tasks.intelligent.open_scan", max_retries=0)
 def intelligent_open_scan() -> dict[str, Any]:
     """智能交易开仓入口(beat)· ★守卫不过立刻 skip(空转零副作用)· 打分共振 → 做多做空。"""
-    result = asyncio.run(_run_open())
+    result = asyncio.run(_run("open"))
     logger.info("[intelligent] open_scan · %s", result)
+    return result
+
+
+@shared_task(name="tasks.intelligent.close_scan", max_retries=0)
+def intelligent_close_scan() -> dict[str, Any]:
+    """智能平仓监控(beat)· ★不被开关拦 · 监控 intelligent 活仓 → 三退出 → 平+记原因。"""
+    result = asyncio.run(_run("close"))
+    logger.info("[intelligent] close_scan · %s", result)
     return result
