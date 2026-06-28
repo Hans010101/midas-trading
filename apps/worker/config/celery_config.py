@@ -274,7 +274,7 @@ beat_schedule = {
     },
     "intelligent-close-scan": {
         "task": "tasks.intelligent.close_scan",
-        # 智能交易平仓监控(PR-5)· ★每 5min · ★不被开关拦(已有仓必须监控)·
+        # 智能交易平仓监控(PR-5)· ★每 5min · ★不被开关拦(已有仓必监控)·
         # 止损/止盈(做多做空对称)/ 信号反转 → route_close_perp · 无活仓空转。
         # ★保留强平兜底(不碰强平 worker)· 错开 managed close(*/5)。
         "schedule": crontab(minute="2-59/5"),
