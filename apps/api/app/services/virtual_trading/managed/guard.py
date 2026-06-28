@@ -20,6 +20,13 @@ MAX_PER_ROUND = 5  # ★每轮(单次扫描)最多开 5 个【新】单 · ★�
 
 _ENABLED = "managed:enabled"
 
+# ★三个平仓条件开关(Hans 补充)· close_scan 每轮读最新 → 改开关即时生效。
+#   ★默认开(未设过 = None ≠ "0" = 开)· 显式 set "0" = 关 · 三个全关 = 自动平仓失效(仅手动平)。
+_EXIT_TP = "managed:exit:tp"
+_EXIT_SIGNAL = "managed:exit:signal"
+_EXIT_TIMEOUT = "managed:exit:timeout"
+_EXIT_KEYS = {"tp": _EXIT_TP, "signal": _EXIT_SIGNAL, "timeout": _EXIT_TIMEOUT}
+
 
 # ── 开关(默认 OFF · worker beat 读)─────────────────────────────────
 async def is_enabled(redis: Any) -> bool:
@@ -28,6 +35,21 @@ async def is_enabled(redis: Any) -> bool:
 
 async def set_enabled(redis: Any, enabled: bool) -> None:  # noqa: FBT001
     await redis.set(_ENABLED, "1" if enabled else "0")
+
+
+# ── 三个平仓条件开关(tp / signal / timeout · 默认开)──────────────────
+async def get_exit_switches(redis: Any) -> dict[str, bool]:
+    """三平仓条件开关 · ★默认开(未设过 = None ≠ "0")· close_scan 每轮读 → 即时生效。"""
+    return {
+        "tp": (await redis.get(_EXIT_TP)) != "0",
+        "signal": (await redis.get(_EXIT_SIGNAL)) != "0",
+        "timeout": (await redis.get(_EXIT_TIMEOUT)) != "0",
+    }
+
+
+async def set_exit_switch(redis: Any, which: str, on: bool) -> None:  # noqa: FBT001
+    """设单个平仓条件开关(which ∈ tp/signal/timeout)· 关 = set "0" · 开 = set "1"。"""
+    await redis.set(_EXIT_KEYS[which], "1" if on else "0")
 
 
 # ── 仓位约束(PR-2 开仓编排用 · 只读 DB)─────────────────────────────

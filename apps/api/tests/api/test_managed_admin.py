@@ -132,3 +132,28 @@ async def test_manual_close_normal_user_403(client: AsyncClient, db_session: Asy
         headers={"Authorization": f"Bearer {token}"},
     )
     assert r.status_code == 403  # ★AdminDep 拦在 close_one 之前
+
+
+# ── 三平仓条件开关端点(exit-switch · 即时生效)──────────────────────────
+@pytest.mark.asyncio
+async def test_exit_switch_endpoint_toggle(client: AsyncClient, db_session: AsyncSession) -> None:
+    headers = await _admin_headers(db_session)
+    r = await client.post(
+        "/api/v1/admin/managed/exit-switch", json={"which": "tp", "on": False}, headers=headers,
+    )
+    assert r.status_code == 200
+    assert r.json()["exit_tp"] is False  # ★关了
+    # 恢复(默认开 · 不污染其他测)
+    r2 = await client.post(
+        "/api/v1/admin/managed/exit-switch", json={"which": "tp", "on": True}, headers=headers,
+    )
+    assert r2.json()["exit_tp"] is True
+
+
+@pytest.mark.asyncio
+async def test_exit_switch_endpoint_invalid_which(client: AsyncClient, db_session: AsyncSession) -> None:
+    headers = await _admin_headers(db_session)
+    r = await client.post(
+        "/api/v1/admin/managed/exit-switch", json={"which": "xxx", "on": True}, headers=headers,
+    )
+    assert r.status_code == 400  # ★which 非法

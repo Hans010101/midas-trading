@@ -21,6 +21,9 @@ export interface ManagedStatus {
   cash_balance: number // 账户现金(只扣手续费)
   initial_capital: number
   open_positions: number
+  exit_tp: boolean // ★止盈平仓开关
+  exit_signal: boolean // ★信号转换平仓开关
+  exit_timeout: boolean // ★超时平仓开关(三个全关=仅手动平)
 }
 
 export interface ManagedPosition {
@@ -34,6 +37,7 @@ export interface ManagedPosition {
   mark: number | null
   unrealized_pnl: number | null
   unrealized_pct: number | null
+  bias: string | null // ★维持的信号(偏多/偏空/中性 · 不在快照=维持上一次)
 }
 
 export interface ManagedTrade {
@@ -109,4 +113,19 @@ export async function closeManagedPosition(
   })
   if (!r.ok) throw new Error(`managed close HTTP ${r.status}`)
   return (await r.json()) as ManualCloseResult
+}
+
+/** ★设单个平仓条件开关(tp/signal/timeout · 即时生效)· 返回最新状态。 */
+export async function setManagedExitSwitch(
+  token: string,
+  which: 'tp' | 'signal' | 'timeout',
+  on: boolean,
+): Promise<ManagedStatus> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/managed/exit-switch`, {
+    method: 'POST',
+    headers: { ...(_h(token) ?? {}), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ which, on }),
+  })
+  if (!r.ok) throw new Error(`managed exit-switch HTTP ${r.status}`)
+  return (await r.json()) as ManagedStatus
 }

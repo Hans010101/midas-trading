@@ -55,15 +55,24 @@ class ManagedStatus(BaseModel):
     cash_balance: float       # 账户现金(只扣手续费 · 不含浮盈)
     initial_capital: float    # 起始资金(10万U)
     open_positions: int       # 当前活仓数(总数不限)
+    exit_tp: bool             # ★止盈平仓开关(默认开)
+    exit_signal: bool         # ★信号转换平仓开关(默认开)
+    exit_timeout: bool        # ★超时平仓开关(默认开 · 三个全关=仅手动平)
 
 
 class ManagedToggleIn(BaseModel):
     enabled: bool
 
 
+class ManagedExitToggleIn(BaseModel):
+    which: str                # tp / signal / timeout
+    on: bool
+
+
 async def _status(db: AsyncSession, ch: ClickHouseDep) -> ManagedStatus:
     redis = await get_redis()
     enabled = await managed_guard.is_enabled(redis)
+    switches = await managed_guard.get_exit_switches(redis)  # ★三平仓条件开关
     acc = await _managed_account_row(db)
     account_value = available = occupied = 0.0
     open_n = 0
@@ -87,6 +96,9 @@ async def _status(db: AsyncSession, ch: ClickHouseDep) -> ManagedStatus:
         cash_balance=float(acc.cash_balance) if acc else 0.0,
         initial_capital=float(managed_account.MANAGED_INITIAL_CAPITAL),
         open_positions=open_n,
+        exit_tp=switches["tp"],
+        exit_signal=switches["signal"],
+        exit_timeout=switches["timeout"],
     )
 
 
@@ -107,6 +119,18 @@ async def toggle_managed(
     return await _status(db, ch)
 
 
+@router.post("/exit-switch", summary="★设单个平仓条件开关(tp/signal/timeout · 即时生效)")
+async def set_exit_switch(
+    payload: ManagedExitToggleIn, _admin: AdminDep, db: DbDep, ch: ClickHouseDep,
+) -> ManagedStatus:
+    """单个平仓条件开/关 · close_scan 每轮读最新 → 即时对已有持仓生效。"""
+    if payload.which not in ("tp", "signal", "timeout"):
+        raise HTTPException(status_code=400, detail="which 必须是 tp/signal/timeout")
+    redis = await get_redis()
+    await managed_guard.set_exit_switch(redis, payload.which, payload.on)
+    return await _status(db, ch)
+
+
 # ── 看板:活仓 / 历史 / 统计(PR-4 · 前向测试)──────────────────────────
 
 
@@ -121,6 +145,7 @@ class ManagedPosition(BaseModel):
     mark: float | None       # 当前标记价(无则 null)
     unrealized_pnl: float | None  # 浮盈 U =(mark−entry)×qty
     unrealized_pct: float | None  # 浮盈 % = uPnL / 本金
+    bias: str | None         # ★维持的信号(last_bias · 偏多/偏空/中性 · 不在快照=维持上一次)
 
 
 class ManagedTrade(BaseModel):
@@ -165,6 +190,7 @@ async def list_managed_positions(
             mark=float(mark) if mark is not None else None,
             unrealized_pnl=float(upnl) if upnl is not None else None,
             unrealized_pct=float(upnl / margin) if upnl is not None and margin > 0 else None,
+            bias=r.last_bias,  # ★维持的信号(close_scan 维护)
         ))
     return out
 

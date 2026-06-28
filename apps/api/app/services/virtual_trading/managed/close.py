@@ -26,6 +26,7 @@ from sqlalchemy import select
 from app.models.perp import VirtualPerpPosition
 from app.models.virtual import OrderStatus
 from app.services.virtual_trading.managed import account as macc
+from app.services.virtual_trading.managed import guard as mguard
 from app.services.virtual_trading.perp_dispatcher import route_close_perp
 
 if TYPE_CHECKING:
@@ -57,13 +58,17 @@ async def _read_bias_map(redis: Any) -> dict[str, str]:
 
 def _exit_reason(
     pos: VirtualPerpPosition, mark: Decimal | None, bias: str | None, now: datetime,
+    switches: dict[str, bool],
 ) -> str | None:
-    """三种退出判定(优先级 TP > 信号 > 超时)· 都不满足 → None(继续持有)。"""
-    if mark is not None and mark >= pos.entry_price * TP_MULTIPLIER:
+    """三种退出判定(优先级 TP > 信号 > 超时)· ★各条件先查开关(关了跳过)· 都不满足/都关 → None。
+
+    switches:{"tp":bool,"signal":bool,"timeout":bool}· 三个全关 = 自动平仓失效(仅手动平)。
+    """
+    if switches["tp"] and mark is not None and mark >= pos.entry_price * TP_MULTIPLIER:
         return "tp"  # 止盈(LONG · 标记价涨到 entry×1.20)
-    if bias is not None and bias != _LONG_BIAS:
-        return "signal"  # 信号转换(离开偏多)
-    if now - pos.opened_at > timedelta(hours=TIMEOUT_HOURS):
+    if switches["signal"] and bias is not None and bias != _LONG_BIAS:
+        return "signal"  # 信号转换(离开偏多 · bias = 维持的上一次)
+    if switches["timeout"] and now - pos.opened_at > timedelta(hours=TIMEOUT_HOURS):
         return "timeout"  # 超时(持仓 > 24h)
     return None
 
@@ -94,11 +99,18 @@ async def run_managed_close(
         return {"status": "ok", "closed": []}  # 无 managed 活仓 → 空转
 
     bias_map = await _read_bias_map(redis)
+    switches = await mguard.get_exit_switches(redis)  # ★每轮读最新三开关 → 即时生效
     closed: list[tuple[str, str]] = []
     for pos in positions:
         symbol = pos.symbol
+        # ★维护 last_bias:快照有该币 → 更新(独立提交,不受平仓 rollback 影响)· 不在 → 保持上一次
+        snap_bias = bias_map.get(symbol)
+        if snap_bias and pos.last_bias != snap_bias:
+            pos.last_bias = snap_bias
+            await session.commit()
+        effective_bias = pos.last_bias  # ★维持的 bias(判信号平 + 活仓表信号列)
         mark = await get_mark_price(symbol)
-        reason = _exit_reason(pos, mark, bias_map.get(symbol), now)
+        reason = _exit_reason(pos, mark, effective_bias, now, switches)
         if reason is None:
             continue
         try:

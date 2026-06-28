@@ -56,6 +56,7 @@ async def _mark_managed(session: AsyncSession, position_id: int) -> None:
     pos = await session.get(VirtualPerpPosition, position_id)
     if pos is not None:
         pos.managed = True
+        pos.last_bias = _LONG_BIAS  # ★开仓记当时 bias(条件=偏多∩transition · 信号列/判平初值)
         await session.flush()
 
 
