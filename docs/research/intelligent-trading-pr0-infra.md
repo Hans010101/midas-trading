@@ -46,6 +46,30 @@ def compute_atr(klines: list[Kline], period: int = 14) -> float  # Wilder 平滑
 
 ---
 
+## 1·B. ★指标 → 方向分(PR-3 打分引擎核心 · 本轮调研关键)
+
+★**关键认知**:`scan_signals` 返回的是【信号事件序列】(何时金叉/穿轨那一根),**不是"当前方向状态"**。多指标共振打分要的是"每个指标当前偏多/偏空",所以**不用 `scan_signals` 的信号点**,而用 `indicators.compute_*`(返回最新一根的指标当前值)判方向:
+
+| 指标 | 权重(Hans 定) | 方向分来源(当前值) | 偏多 +1 | 偏空 −1 |
+|---|---|---|---|---|
+| 布林 | **2.0** | `boll:snapshot:latest` 的 `bias`(现成·托管在吃·无需重算) | bias=偏多 | bias=偏空 |
+| MACD | **1.5** | `compute_macd(klines)`(indicators.py:58)→ DIF vs DEA | DIF>DEA | DIF<DEA |
+| MA | **1.5** | `compute_ma(klines)`(indicators.py:48)→ MA5 vs MA20 | MA5>MA20 | MA5<MA20 |
+| RSI | **1.0** | `compute_rsi(klines)`(indicators.py:87)→ RSI vs 50 | RSI>50 | RSI<50 |
+| KDJ | **1.0** | `compute_kdj(klines)`(indicators.py:117)→ K vs D | K>D | K<D |
+| perp 极端 | **1.0** | `scan_extreme(...)` → kind(★反向情绪:正费率高=多头拥挤→偏空) | kind=buy | kind=sell |
+
+→ **加权求和 → > +3.0 开多 / < −3.0 开空 / 中间不动**(满足 Hans 策略)。
+满分(全偏多)= 2.0+1.5+1.5+1.0+1.0+1.0 = **8.0**;±3.0 阈值 ≈ 需布林 + 1~2 个指标同向共振。
+
+★**为什么用 compute_\* 不用 scan_signals**:scan_signals 是"事件"(金叉那一根),大部分时候 `[-1]` 很旧或为空,**共振打分需要"每根都有的持续方向"**。`compute_*` 返回当前值,每根都有方向,正适合打分。`scan_signals` 的信号点 + `current_triggered`(analysis.py:498)更适合"事件触发"语义,本模块用不上。
+
+★**中性带建议**(PR-3 定):可给每指标设中性区(RSI 45~55=0 · MA5≈MA20 一定阈值内=0),避免噪声反复开平。
+
+★**extreme 方向口径已确认**(strategy_signals.py:385 docstring):反向情绪 —— 资金费率正高=多头拥挤→**偏空**;多空比>2=过度做多→**偏空**;OI 急变=情绪转折(随 funding/多空比方向或逆价格)。
+
+---
+
 ## 2. 极端信号标量来源(★PR-1 关键)
 
 `_scan_extreme_for`(analysis.py:414)现在**埋在 API 端点层**,逻辑:仅 crypto perp,三处独立 try 取数(任一失败→None 降级):
@@ -124,15 +148,16 @@ async def _scan_async():
         klines = await ch.select_kline(symbol=sym, market="crypto", period="15m",
                                        limit=50, instrument="perp")
         if len(klines) < 26: continue
-        # ★用真实 scan_signals(不是臆想的 detect_*):
-        ma = scan_signals(klines, "ma_cross")      # 各取 [-1] 判最新是否触发
-        rsi = scan_signals(klines, "rsi_reversal")
-        macd = scan_signals(klines, "macd_cross")
-        kdj = scan_signals(klines, "kdj_cross")
-        boll_rev = scan_signals(klines, "boll_reversion")
-        extreme = await compute_extreme(ch, sym, klines)   # ★PR-1 提取的 service 函数
-        atr = compute_atr(klines, 14)
-        rows.append({"symbol": sym, "ma_cross": _trig(ma), "rsi": ..., "atr": atr, ...})
+        # ★方向分用 indicators.compute_*(当前值 · 见 §1·B),不是 scan_signals 信号点:
+        macd = compute_macd(klines)    # {"dif","dea","hist"} → DIF vs DEA 判方向
+        ma = compute_ma(klines)        # {5,20,...} → MA5 vs MA20
+        rsi = compute_rsi(klines)      # {14} → vs 50
+        kdj = compute_kdj(klines)      # K vs D
+        extreme = await compute_extreme(ch, sym, klines)   # ★PR-1 提取的 service 函数(perp 极端)
+        atr = compute_atr(klines, 14)  # 止损用
+        # 布林方向分另读 boll:snapshot:latest 的 bias(权重2.0·不在本快照重算)
+        rows.append({"symbol": sym, "macd_dir": _dir(macd), "ma_dir": ...,
+                     "rsi": rsi[14], "atr": atr, "extreme_dir": ..., ...})
     payload = json.dumps({"as_of": datetime.now(tz=UTC).isoformat(), "items": rows},
                          ensure_ascii=False)
     await redis.set("intelligent:signals:latest", payload, ex=30*60)   # boll_scan.py:214 范式
