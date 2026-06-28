@@ -157,3 +157,25 @@ async def test_exit_switch_endpoint_invalid_which(client: AsyncClient, db_sessio
         "/api/v1/admin/managed/exit-switch", json={"which": "xxx", "on": True}, headers=headers,
     )
     assert r.status_code == 400  # ★which 非法
+
+
+# ── 止盈目标(盈利%)端点(exit-tp-pct)──────────────────────────────────
+@pytest.mark.asyncio
+async def test_exit_tp_pct_endpoint_ok(client: AsyncClient, db_session: AsyncSession) -> None:
+    headers = await _admin_headers(db_session)
+    r = await client.post(
+        "/api/v1/admin/managed/exit-tp-pct", json={"pct": 30}, headers=headers,
+    )
+    assert r.status_code == 200
+    assert r.json()["tp_pct"] == 30  # ★盈利目标 30%
+    # 恢复默认(不污染其他测)
+    await client.post("/api/v1/admin/managed/exit-tp-pct", json={"pct": 100}, headers=headers)
+
+
+@pytest.mark.asyncio
+async def test_exit_tp_pct_endpoint_invalid(client: AsyncClient, db_session: AsyncSession) -> None:
+    headers = await _admin_headers(db_session)
+    r = await client.post(
+        "/api/v1/admin/managed/exit-tp-pct", json={"pct": 0}, headers=headers,
+    )
+    assert r.status_code == 400  # ★pct ≤ 0 非法

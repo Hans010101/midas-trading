@@ -41,15 +41,22 @@ _ALL_ON = {"tp": True, "signal": True, "timeout": True}  # ★三平仓开关全
 def _pos(entry: str, *, opened_h_ago: float = 1.0) -> VirtualPerpPosition:
     return VirtualPerpPosition(
         symbol="BTCUSDT", side=PerpSide.LONG, entry_price=Decimal(entry),
+        leverage=5,  # ★_exit_reason 用 pos.leverage 换算止盈阈值(盈利%÷杠杆)
         opened_at=_NOW - timedelta(hours=opened_h_ago),
     )
 
 
 # ── _exit_reason 纯函数:TP > 信号 > 超时(★各条件先查开关)─────────────
 def test_exit_reason_tp() -> None:
-    p = _pos("100")
-    assert mclose._exit_reason(p, Decimal("120"), "偏多", _NOW, _ALL_ON) == "tp"  # mark≥entry×1.20
+    p = _pos("100")  # leverage=5
+    # 默认 tp_pct=100 → 价涨 100%÷5 = 20% → 阈值 entry×1.20
+    assert mclose._exit_reason(p, Decimal("120"), "偏多", _NOW, _ALL_ON) == "tp"
     assert mclose._exit_reason(p, Decimal("119.99"), "偏多", _NOW, _ALL_ON) is None  # 差一点不止盈
+    # ★tp_pct=30 → 价涨 30%÷5 = 6% → 阈值 entry×1.06(盈利30%≠价30%)
+    assert mclose._exit_reason(p, Decimal("106"), "偏多", _NOW, _ALL_ON, 30) == "tp"
+    assert mclose._exit_reason(p, Decimal("105.99"), "偏多", _NOW, _ALL_ON, 30) is None
+    # ★tp_pct=200 → 价涨 40% → 阈值 1.40 · mark=120 不够
+    assert mclose._exit_reason(p, Decimal("120"), "偏多", _NOW, _ALL_ON, 200) is None
 
 
 def test_exit_reason_signal() -> None:
@@ -317,3 +324,26 @@ async def test_exit_switches_default_on_and_toggle() -> None:
     assert await mguard.get_exit_switches(r) == {"tp": True, "signal": False, "timeout": True}
     await mguard.set_exit_switch(r, "signal", on=True)
     assert (await mguard.get_exit_switches(r))["signal"] is True  # 重新开
+
+
+@pytest.mark.asyncio
+async def test_tp_pct_default_and_set() -> None:
+    r = _FakeRedis()
+    assert await mguard.get_tp_pct(r) == 100  # ★默认 100
+    await mguard.set_tp_pct(r, 30)
+    assert await mguard.get_tp_pct(r) == 30
+
+
+@pytest.mark.asyncio
+async def test_close_tp_uses_configured_tp_pct(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★tp_pct=30(价6%)· mark=106 触发 tp(默认 100=价20% 时 106 不触发 → 证明 run 真读了 tp_pct)
+    acc = await macc.ensure_managed_account(db_session)
+    pos = await _managed_pos(db_session, acc.id, "BTCUSDT", "100", opened_h_ago=1)
+    pos.last_bias = "偏多"
+    await db_session.flush()
+    monkeypatch.setattr(mclose, "route_close_perp", _spy_close([]))
+    r = _FakeRedis()
+    await mguard.set_tp_pct(r, 30)
+    r.kv["boll:snapshot:latest"] = json.dumps({"items": [{"symbol": "BTCUSDT", "bias": "偏多"}]})
+    out = await mclose.run_managed_close(db_session, r, await _mark("106"), now=_NOW)  # 价 6%
+    assert out["closed"] == [("BTCUSDT", "tp")]  # ★tp_pct=30 → 106 触发(默认 100 不会)

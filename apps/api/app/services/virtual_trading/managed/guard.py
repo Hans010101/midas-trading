@@ -27,6 +27,11 @@ _EXIT_SIGNAL = "managed:exit:signal"
 _EXIT_TIMEOUT = "managed:exit:timeout"
 _EXIT_KEYS = {"tp": _EXIT_TP, "signal": _EXIT_SIGNAL, "timeout": _EXIT_TIMEOUT}
 
+# ★止盈目标(盈利%·Hans 补充)· 默认 100(=ROI 100% = 价涨 100%/杠杆)· close_scan 每轮读 → 即时生效。
+#   口径 = 盈利%(保证金赚%)· 价涨幅% = 盈利% ÷ 杠杆 · 仅止盈开关开时生效。
+_EXIT_TP_PCT = "managed:exit:tp_pct"
+DEFAULT_TP_PCT = 100
+
 
 # ── 开关(默认 OFF · worker beat 读)─────────────────────────────────
 async def is_enabled(redis: Any) -> bool:
@@ -50,6 +55,21 @@ async def get_exit_switches(redis: Any) -> dict[str, bool]:
 async def set_exit_switch(redis: Any, which: str, on: bool) -> None:  # noqa: FBT001
     """设单个平仓条件开关(which ∈ tp/signal/timeout)· 关 = set "0" · 开 = set "1"。"""
     await redis.set(_EXIT_KEYS[which], "1" if on else "0")
+
+
+# ── 止盈目标(盈利%·默认 100)─────────────────────────────────────────
+async def get_tp_pct(redis: Any) -> int:
+    """止盈目标(盈利%)· 默认 DEFAULT_TP_PCT(100)· close_scan 每轮读 → 即时生效。"""
+    raw = await redis.get(_EXIT_TP_PCT)
+    try:
+        return int(raw) if raw is not None else DEFAULT_TP_PCT
+    except (TypeError, ValueError):
+        return DEFAULT_TP_PCT
+
+
+async def set_tp_pct(redis: Any, pct: int) -> None:
+    """设止盈目标(盈利%)· 调用方校验 pct > 0。"""
+    await redis.set(_EXIT_TP_PCT, str(pct))
 
 
 # ── 仓位约束(PR-2 开仓编排用 · 只读 DB)─────────────────────────────
