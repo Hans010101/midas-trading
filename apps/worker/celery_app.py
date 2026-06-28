@@ -29,6 +29,7 @@ from tasks import (  # noqa: E402, F401
     hk_sector_ingest,
     incremental,
     intelligent_signals,
+    intelligent_trading,
     managed_trading,
     market_home_ingest,
     notifications,

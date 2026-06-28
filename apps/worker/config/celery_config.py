@@ -264,6 +264,14 @@ beat_schedule = {
         "schedule": crontab(minute="8,23,38,53"),
         "options": {"expires": 600},
     },
+    "intelligent-open-scan": {
+        "task": "tasks.intelligent.open_scan",
+        # 智能交易开仓(PR-4)· signals-scan 后(:09/24/39/54)· 读两快照打分共振
+        # → route_open_perp 做多做空 → 标 intelligent · ★开关 OFF 守卫 skip 零下单
+        # 错开所有栅格(boll:03 / 托管:06 / 信号:08)。
+        "schedule": crontab(minute="9,24,39,54"),
+        "options": {"expires": 600},
+    },
     "managed-open-scan": {
         "task": "tasks.managed.open_scan",
         # 托管交易开仓(策略前向测试 · PR-2)· 挂 boll_scan(:03/18/33/48)后 · 选偏多 transition 开仓。
