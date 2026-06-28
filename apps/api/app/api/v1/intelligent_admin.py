@@ -15,14 +15,18 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import AdminDep
+from app.api.deps import AdminDep, ClickHouseDep
 from app.core.database import get_db
 from app.core.redis_client import get_redis
+from app.models.perp import PerpSide, VirtualPerpPosition
 from app.models.user import User
 from app.models.virtual import VirtualAccount
+from app.services.clickhouse_crypto import select_premium_index_marks
 from app.services.virtual_trading import account_admin
 from app.services.virtual_trading.intelligent import account as intelligent_account
 from app.services.virtual_trading.intelligent import guard as intelligent_guard
+from app.services.virtual_trading.intelligent import stats as intelligent_stats
+from app.services.virtual_trading.perp_fees import unrealized_pnl
 
 router = APIRouter(prefix="/admin/intelligent", tags=["intelligent"])
 
@@ -102,3 +106,140 @@ async def set_capital(payload: CapitalIn, _admin: AdminDep, db: DbDep) -> Intell
     acc = await intelligent_account.ensure_intelligent_account(db)
     await account_admin.set_account_capital(db, acc, Decimal(str(payload.amount)))
     return await _status(db)
+
+
+# ── 看板:活仓 / 历史 / 统计(PR-6 · 前向测试 · ★做多做空 + 共振信号)──────
+
+
+class IntelligentPosition(BaseModel):
+    id: int
+    symbol: str
+    side: str                      # ★long / short(做多做空)
+    leverage: int
+    entry_price: float
+    quantity: float
+    margin: float                  # 本金(initial_margin)
+    opened_at: str
+    mark: float | None             # 当前标记价(无则 null)
+    unrealized_pnl: float | None   # 浮盈 U(★复用引擎 unrealized_pnl · 做多做空对称)
+    unrealized_pct: float | None   # 浮盈 % = uPnL / 本金
+    stop_price: float | None       # ATR 止损价(PR-4 记 · PR-5 判)
+    tp_price: float | None         # 2:1 止盈价
+    signals: dict[str, object] | None  # ★共振明细(contributions + score)
+
+
+class IntelligentTrade(BaseModel):
+    symbol: str
+    side: str                      # ★long / short
+    leverage: int
+    entry_price: float
+    exit_price: float              # ≈ entry + realized_pnl/qty(纯价格反推)
+    quantity: float
+    pnl_usdt: float                # realized_pnl
+    pnl_pct: float                 # realized_pnl / 本金
+    close_reason: str | None       # stop_loss / take_profit / signal_reversal
+    opened_at: str
+    closed_at: str | None
+    hold_seconds: int
+
+
+@router.get("/positions", summary="智能交易当前活仓(含浮盈 + 共振 · 做多做空)")
+async def list_intelligent_positions(
+    _admin: AdminDep, db: DbDep, ch: ClickHouseDep,
+) -> list[IntelligentPosition]:
+    acc = await _intelligent_account_row(db)
+    if acc is None:
+        return []
+    rows = list(await db.scalars(
+        select(VirtualPerpPosition)
+        .where(
+            VirtualPerpPosition.account_id == acc.id,
+            VirtualPerpPosition.intelligent.is_(True),
+            VirtualPerpPosition.closed_at.is_(None),
+        )
+        .order_by(VirtualPerpPosition.opened_at.desc()),
+    ))
+    marks = (
+        await select_premium_index_marks(ch._client, [r.symbol for r in rows]) if rows else {}  # noqa: SLF001
+    )
+    out: list[IntelligentPosition] = []
+    for r in rows:
+        mark = marks.get(r.symbol)
+        # ★复用引擎 unrealized_pnl(做多做空对称 · 不重写盈亏 · 引擎零碰)
+        upnl = unrealized_pnl(r.side, r.entry_price, mark, r.quantity) if mark is not None else None
+        margin = r.initial_margin
+        out.append(IntelligentPosition(
+            id=r.id, symbol=r.symbol, side=r.side.value, leverage=r.leverage,
+            entry_price=float(r.entry_price), quantity=float(r.quantity), margin=float(margin),
+            opened_at=r.opened_at.isoformat(),
+            mark=float(mark) if mark is not None else None,
+            unrealized_pnl=float(upnl) if upnl is not None else None,
+            unrealized_pct=float(upnl / margin) if upnl is not None and margin > 0 else None,
+            stop_price=float(r.intelligent_stop_price) if r.intelligent_stop_price else None,
+            tp_price=float(r.intelligent_tp_price) if r.intelligent_tp_price else None,
+            signals=r.intelligent_signals,
+        ))
+    return out
+
+
+@router.get("/history", summary="智能交易历史平仓(每单明细 · 做多做空)")
+async def list_intelligent_history(
+    _admin: AdminDep, db: DbDep,
+) -> list[IntelligentTrade]:
+    acc = await _intelligent_account_row(db)
+    if acc is None:
+        return []
+    rows = list(await db.scalars(
+        select(VirtualPerpPosition)
+        .where(
+            VirtualPerpPosition.account_id == acc.id,
+            VirtualPerpPosition.intelligent.is_(True),
+            VirtualPerpPosition.closed_at.is_not(None),
+        )
+        .order_by(VirtualPerpPosition.closed_at.desc())
+        .limit(200),
+    ))
+    out: list[IntelligentTrade] = []
+    for r in rows:
+        qty = r.quantity or Decimal("1")
+        # exit_price 反推:做多做空对称(long entry+pnl/qty · short entry−pnl/qty)
+        delta = r.realized_pnl / qty if qty > 0 else Decimal("0")
+        exit_price = r.entry_price + delta if r.side == PerpSide.LONG else r.entry_price - delta
+        margin = r.initial_margin
+        hold = int((r.closed_at - r.opened_at).total_seconds()) if r.closed_at else 0
+        out.append(IntelligentTrade(
+            symbol=r.symbol, side=r.side.value, leverage=r.leverage,
+            entry_price=float(r.entry_price), exit_price=float(exit_price), quantity=float(qty),
+            pnl_usdt=float(r.realized_pnl),
+            pnl_pct=float(r.realized_pnl / margin) if margin > 0 else 0.0,
+            close_reason=r.intelligent_close_reason,
+            opened_at=r.opened_at.isoformat(),
+            closed_at=r.closed_at.isoformat() if r.closed_at else None,
+            hold_seconds=hold,
+        ))
+    return out
+
+
+@router.get("/stats", summary="智能交易前向测试统计(胜率/盈亏比/回撤/按原因/做多做空)")
+async def get_intelligent_stats(
+    _admin: AdminDep, db: DbDep,
+) -> dict[str, float | int | dict[str, int]]:
+    acc = await _intelligent_account_row(db)
+    if acc is None:
+        return intelligent_stats.compute_intelligent_stats([])
+    rows = list(await db.scalars(
+        select(VirtualPerpPosition)
+        .where(
+            VirtualPerpPosition.account_id == acc.id,
+            VirtualPerpPosition.intelligent.is_(True),
+            VirtualPerpPosition.closed_at.is_not(None),
+        )
+        .order_by(VirtualPerpPosition.closed_at.asc()),  # 升序 · 算最大回撤权益曲线
+    ))
+    trades = [
+        intelligent_stats.ClosedIntelligentTrade(
+            realized_pnl=r.realized_pnl, close_reason=r.intelligent_close_reason, side=r.side.value,
+        )
+        for r in rows
+    ]
+    return intelligent_stats.compute_intelligent_stats(trades)
