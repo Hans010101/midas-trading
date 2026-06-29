@@ -266,21 +266,33 @@ class ManagedTrade(BaseModel):
     hold_seconds: int
 
 
-@router.get("/positions", summary="托管当前活仓(含浮盈 · 前向测试)")
+class ManagedPositionsPage(BaseModel):
+    items: list[ManagedPosition]
+    total: int  # ★全部活仓数(前端算总页数)
+
+
+@router.get("/positions", summary="托管当前活仓(含浮盈 · ★分页 100/页)")
 async def list_managed_positions(
     _admin: AdminDep, db: DbDep, ch: ClickHouseDep,
-) -> list[ManagedPosition]:
+    offset: int = 0, limit: int = 100,
+) -> ManagedPositionsPage:
     acc = await _managed_account_row(db)
     if acc is None:
-        return []
+        return ManagedPositionsPage(items=[], total=0)
+    base_where = (
+        VirtualPerpPosition.account_id == acc.id,
+        VirtualPerpPosition.managed.is_(True),
+        VirtualPerpPosition.closed_at.is_(None),
+    )
+    total = await db.scalar(
+        select(func.count()).select_from(VirtualPerpPosition).where(*base_where),
+    )
     rows = list(await db.scalars(
         select(VirtualPerpPosition)
-        .where(
-            VirtualPerpPosition.account_id == acc.id,
-            VirtualPerpPosition.managed.is_(True),
-            VirtualPerpPosition.closed_at.is_(None),
-        )
-        .order_by(VirtualPerpPosition.opened_at.desc()),
+        .where(*base_where)
+        .order_by(VirtualPerpPosition.opened_at.desc())
+        .offset(max(offset, 0))
+        .limit(max(min(limit, 500), 1)),  # ★限 1~500 防滥用
     ))
     marks = await select_premium_index_marks(ch._client, [r.symbol for r in rows]) if rows else {}  # noqa: SLF001
     out: list[ManagedPosition] = []
@@ -296,7 +308,7 @@ async def list_managed_positions(
             unrealized_pct=float(upnl / margin) if upnl is not None and margin > 0 else None,
             bias=r.last_bias,  # ★维持的信号(close_scan 维护)
         ))
-    return out
+    return ManagedPositionsPage(items=out, total=total or 0)
 
 
 class ManagedHistoryPage(BaseModel):

@@ -12,7 +12,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import AdminDep, ClickHouseDep
@@ -196,21 +196,33 @@ class IntelligentTrade(BaseModel):
     hold_seconds: int
 
 
-@router.get("/positions", summary="智能交易当前活仓(含浮盈 + 共振 · 做多做空)")
+class IntelligentPositionsPage(BaseModel):
+    items: list[IntelligentPosition]
+    total: int  # ★全部活仓数(前端算总页数)
+
+
+@router.get("/positions", summary="智能交易当前活仓(含浮盈 + 共振 · ★分页 100/页)")
 async def list_intelligent_positions(
     _admin: AdminDep, db: DbDep, ch: ClickHouseDep,
-) -> list[IntelligentPosition]:
+    offset: int = 0, limit: int = 100,
+) -> IntelligentPositionsPage:
     acc = await _intelligent_account_row(db)
     if acc is None:
-        return []
+        return IntelligentPositionsPage(items=[], total=0)
+    base_where = (
+        VirtualPerpPosition.account_id == acc.id,
+        VirtualPerpPosition.intelligent.is_(True),
+        VirtualPerpPosition.closed_at.is_(None),
+    )
+    total = await db.scalar(
+        select(func.count()).select_from(VirtualPerpPosition).where(*base_where),
+    )
     rows = list(await db.scalars(
         select(VirtualPerpPosition)
-        .where(
-            VirtualPerpPosition.account_id == acc.id,
-            VirtualPerpPosition.intelligent.is_(True),
-            VirtualPerpPosition.closed_at.is_(None),
-        )
-        .order_by(VirtualPerpPosition.opened_at.desc()),
+        .where(*base_where)
+        .order_by(VirtualPerpPosition.opened_at.desc())
+        .offset(max(offset, 0))
+        .limit(max(min(limit, 500), 1)),  # ★限 1~500 防滥用
     ))
     marks = (
         await select_premium_index_marks(ch._client, [r.symbol for r in rows]) if rows else {}  # noqa: SLF001
@@ -232,25 +244,36 @@ async def list_intelligent_positions(
             tp_price=float(r.intelligent_tp_price) if r.intelligent_tp_price else None,
             signals=r.intelligent_signals,
         ))
-    return out
+    return IntelligentPositionsPage(items=out, total=total or 0)
 
 
-@router.get("/history", summary="智能交易历史平仓(每单明细 · 做多做空)")
+class IntelligentHistoryPage(BaseModel):
+    items: list[IntelligentTrade]
+    total: int  # ★全部历史单数(前端算总页数)
+
+
+@router.get("/history", summary="智能交易历史平仓(每单明细 · ★分页 50/页 · 照搬托管 PR#82)")
 async def list_intelligent_history(
     _admin: AdminDep, db: DbDep,
-) -> list[IntelligentTrade]:
+    offset: int = 0, limit: int = 50,
+) -> IntelligentHistoryPage:
     acc = await _intelligent_account_row(db)
     if acc is None:
-        return []
+        return IntelligentHistoryPage(items=[], total=0)
+    base_where = (
+        VirtualPerpPosition.account_id == acc.id,
+        VirtualPerpPosition.intelligent.is_(True),
+        VirtualPerpPosition.closed_at.is_not(None),
+    )
+    total = await db.scalar(
+        select(func.count()).select_from(VirtualPerpPosition).where(*base_where),
+    )
     rows = list(await db.scalars(
         select(VirtualPerpPosition)
-        .where(
-            VirtualPerpPosition.account_id == acc.id,
-            VirtualPerpPosition.intelligent.is_(True),
-            VirtualPerpPosition.closed_at.is_not(None),
-        )
+        .where(*base_where)
         .order_by(VirtualPerpPosition.closed_at.desc())
-        .limit(200),
+        .offset(max(offset, 0))
+        .limit(max(min(limit, 200), 1)),  # ★限 1~200 防滥用
     ))
     out: list[IntelligentTrade] = []
     for r in rows:
@@ -270,7 +293,7 @@ async def list_intelligent_history(
             closed_at=r.closed_at.isoformat() if r.closed_at else None,
             hold_seconds=hold,
         ))
-    return out
+    return IntelligentHistoryPage(items=out, total=total or 0)
 
 
 @router.get("/stats", summary="智能交易前向测试统计(胜率/盈亏比/回撤/按原因/做多做空)")

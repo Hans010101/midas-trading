@@ -94,7 +94,9 @@ async def test_positions_long_short_upnl(
     monkeypatch.setattr(intelligent_admin, "select_premium_index_marks", _fake_marks)
     r = await client.get("/api/v1/admin/intelligent/positions", headers=headers)
     assert r.status_code == 200
-    by_sym = {p["symbol"]: p for p in r.json()}
+    body = r.json()
+    assert body["total"] == 2  # ★分页返回 {items,total}
+    by_sym = {p["symbol"]: p for p in body["items"]}
     # LONG entry=100 mark=110 qty=1 → upnl=+10
     assert by_sym["BTCUSDT"]["side"] == "long"
     assert by_sym["BTCUSDT"]["unrealized_pnl"] == 10.0
@@ -122,7 +124,9 @@ async def test_history_records_side_and_reason(
     await db_session.commit()
     r = await client.get("/api/v1/admin/intelligent/history", headers=headers)
     assert r.status_code == 200
-    trades = r.json()
+    body = r.json()
+    assert body["total"] == 1  # ★分页返回 {items,total}
+    trades = body["items"]
     assert len(trades) == 1
     assert trades[0]["side"] == "short"
     assert trades[0]["close_reason"] == "take_profit"
@@ -167,3 +171,48 @@ async def test_open_params_normal_user_403(client: AsyncClient, db_session: Asyn
     r = await client.post("/api/v1/admin/intelligent/open-margin", json={"margin": 100},
                           headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 403
+
+
+# ── 分页(智能活仓 100/页 · 智能历史 50/页 · ★照搬托管 PR#82)──────────
+@pytest.mark.asyncio
+async def test_positions_pagination(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch,  # noqa: ANN001
+) -> None:
+    # ★活仓分页:建 3 活仓 + limit=2 → 第一页 2 + total=3 · offset=2 → 1
+    acc = await iacc.ensure_intelligent_account(db_session)
+    for i in range(3):
+        db_session.add(_pos(acc.id, f"C{i}USDT", PerpSide.LONG))
+    await db_session.commit()
+
+    async def _fake_marks(_c: object, _s: object) -> dict[str, Decimal]:
+        return {}  # 无 mark(浮盈 None·不影响分页)
+
+    monkeypatch.setattr(intelligent_admin, "select_premium_index_marks", _fake_marks)
+    headers = await _admin_headers(db_session)
+    r1 = await client.get("/api/v1/admin/intelligent/positions?offset=0&limit=2", headers=headers)
+    b1 = r1.json()
+    assert b1["total"] == 3
+    assert len(b1["items"]) == 2
+    r2 = await client.get("/api/v1/admin/intelligent/positions?offset=2&limit=2", headers=headers)
+    assert len(r2.json()["items"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_history_pagination(client: AsyncClient, db_session: AsyncSession) -> None:
+    # ★历史分页(照搬托管 PR#82):60 已平 → 每页 50 · total=60 · offset 翻页剩 10
+    acc = await iacc.ensure_intelligent_account(db_session)
+    now = datetime(2026, 6, 28, tzinfo=UTC)
+    for i in range(60):
+        p = _pos(acc.id, f"H{i}USDT", PerpSide.LONG,
+                 realized_pnl=Decimal("1"), intelligent_close_reason="take_profit")
+        p.opened_at = now
+        p.closed_at = now
+        db_session.add(p)
+    await db_session.commit()
+    headers = await _admin_headers(db_session)
+    r1 = await client.get("/api/v1/admin/intelligent/history?offset=0&limit=50", headers=headers)
+    b1 = r1.json()
+    assert b1["total"] == 60
+    assert len(b1["items"]) == 50
+    r2 = await client.get("/api/v1/admin/intelligent/history?offset=50&limit=50", headers=headers)
+    assert len(r2.json()["items"]) == 10

@@ -20,6 +20,7 @@ import {
   getManagedStats,
   getManagedStatus,
   MANAGED_HISTORY_PAGE_SIZE,
+  MANAGED_POSITIONS_PAGE_SIZE,
   setManagedExitSwitch,
   setManagedMaxPositions,
   setManagedOpenLeverage,
@@ -67,12 +68,22 @@ export default function AdminManagedPage() {
     enabled: on,
     refetchInterval: 15000,
   })
+  // ★活仓分页(每页 100)· page 从 0 起 · 15s 刷新保持当前页(posPage state 不随 refetch 重置)
+  const [posPage, setPosPage] = useState(0)
   const positions = useQuery({
-    queryKey: ['managed-positions'],
-    queryFn: ({ signal }) => getManagedPositions(token, signal),
+    queryKey: ['managed-positions', posPage],
+    queryFn: ({ signal }) =>
+      getManagedPositions(token, posPage * MANAGED_POSITIONS_PAGE_SIZE, MANAGED_POSITIONS_PAGE_SIZE, signal),
     enabled: on,
     refetchInterval: 15000,
   })
+  const posItems = positions.data?.items ?? []
+  const posTotal = positions.data?.total ?? 0
+  const posPages = Math.max(1, Math.ceil(posTotal / MANAGED_POSITIONS_PAGE_SIZE))
+  // ★当前页变空(平仓后)且非首页 → 回上一页(动态刷新兜底)
+  useEffect(() => {
+    if (posItems.length === 0 && posPage > 0 && posTotal > 0) setPosPage((p) => Math.max(0, p - 1))
+  }, [posItems.length, posPage, posTotal])
   // ★历史分页(每页 50)· page 从 0 起
   const [histPage, setHistPage] = useState(0)
   const history = useQuery({
@@ -445,12 +456,12 @@ export default function AdminManagedPage() {
               <StatCard label="盈 / 亏" value={stat ? `${stat.wins} / ${stat.losses}` : '—'} />
             </div>
 
-            {/* 当前活仓 */}
+            {/* 当前活仓(★分页 100/页) */}
             <div className="mb-2 flex items-center gap-3">
               <h2 className="font-serif text-base font-bold">
-                当前活仓 {positions.data ? `(${positions.data.length})` : ''}
+                当前活仓 {positions.data ? `(${posTotal})` : ''}
               </h2>
-              {(positions.data ?? []).length > 0 && (
+              {posItems.length > 0 && (
                 <button
                   type="button"
                   onClick={onCloseAll}
@@ -473,14 +484,14 @@ export default function AdminManagedPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(positions.data ?? []).length === 0 ? (
+                  {posItems.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="px-3 py-4 text-center text-muted-foreground">
                         无活仓
                       </td>
                     </tr>
                   ) : (
-                    positions.data?.map((p) => (
+                    posItems.map((p) => (
                       <tr key={p.symbol} className="border-b border-paper/60">
                         <td className="px-3 py-2 font-mono font-bold">{p.symbol}</td>
                         <td className="px-3 py-2">{p.leverage}x</td>
@@ -517,6 +528,30 @@ export default function AdminManagedPage() {
                 </tbody>
               </table>
             </div>
+            {/* ★活仓分页控件(100/页·超出翻页) */}
+            {posTotal > MANAGED_POSITIONS_PAGE_SIZE && (
+              <div className="mb-6 flex items-center justify-center gap-3 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setPosPage((p) => Math.max(0, p - 1))}
+                  disabled={posPage <= 0 || positions.isFetching}
+                  className="rounded-md border border-paper px-3 py-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
+                >
+                  上一页
+                </button>
+                <span className="font-mono text-muted-foreground">
+                  第 {posPage + 1} / {posPages} 页
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPosPage((p) => Math.min(posPages - 1, p + 1))}
+                  disabled={posPage >= posPages - 1 || positions.isFetching}
+                  className="rounded-md border border-paper px-3 py-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
+                >
+                  下一页
+                </button>
+              </div>
+            )}
 
             {/* 历史平仓(★分页 50/页) */}
             <h2 className="mb-2 font-serif text-base font-bold">
