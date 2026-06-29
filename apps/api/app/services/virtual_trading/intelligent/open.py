@@ -86,7 +86,15 @@ async def run_intelligent_open(
     room = max_positions - current_open
     boll_items = await _read_items(redis, _BOLL_KEY)
     signal_items = await _read_items(redis, _SIGNALS_KEY)
-    decisions = istrategy.open_decisions(istrategy.build_decisions(boll_items, signal_items))
+    # ★策略参数读 Redis(即时生效)· 传给纯函数 build_decisions/decide(保持可测)
+    threshold = await iguard.get_strategy_threshold(redis)
+    weights = await iguard.get_strategy_weights(redis)
+    atr_stop = await iguard.get_strategy_atr_stop_mult(redis)
+    atr_tp = await iguard.get_strategy_atr_tp_mult(redis)
+    decisions = istrategy.open_decisions(istrategy.build_decisions(
+        boll_items, signal_items,
+        threshold=threshold, weights=weights, atr_stop_mult=atr_stop, atr_tp_mult=atr_tp,
+    ))
 
     opened: list[dict[str, Any]] = []
     for d in decisions:

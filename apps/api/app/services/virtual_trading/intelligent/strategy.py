@@ -45,12 +45,18 @@ def decide(
     boll_item: dict[str, Any] | None,
     signal_item: dict[str, Any],
     price: float,
+    *,
+    threshold: float = OPEN_THRESHOLD,
+    weights: dict[str, float] | None = None,
+    atr_stop_mult: float = ATR_STOP_MULT,
+    atr_tp_mult: float = ATR_TP_MULT,
 ) -> StrategyDecision:
-    """单币决策(纯函数)。
+    """单币决策(★纯函数 · 策略参数入参 · 不读 Redis · 可测)。
 
-    boll_item = boll:snapshot:latest 该币(可 None=布林缺,权重 2.0 不计)·
-    signal_item = intelligent:signals:latest 该币(各方向分 + atr)· price = 标记价。
+    boll_item = boll 快照该币(可 None=布林缺)· signal_item = intelligent 快照该币 · price = 标记价。
+    ★threshold/weights/atr_*_mult 默认 module 常量(向后兼容)· 调用层读 Redis 传入 → 即时生效。
     """
+    w = weights if weights is not None else WEIGHTS
     contributions: dict[str, int] = {
         "boll": _bias_to_dir(boll_item.get("bias") if boll_item else None),
         "macd": int(signal_item.get("macd_dir", 0) or 0),
@@ -59,17 +65,17 @@ def decide(
         "kdj": int(signal_item.get("kdj_dir", 0) or 0),
         "extreme": int(signal_item.get("extreme_dir", 0) or 0),
     }
-    score = round(sum(contributions[k] * WEIGHTS[k] for k in WEIGHTS), 2)
+    score = round(sum(contributions[k] * w.get(k, 0.0) for k in contributions), 2)
     atr = float(signal_item.get("atr", 0) or 0)
 
-    if score > OPEN_THRESHOLD:
+    if score > threshold:
         action = "open_long"
-        stop = round(price - ATR_STOP_MULT * atr, 8) if atr > 0 else None
-        tp = round(price + ATR_TP_MULT * atr, 8) if atr > 0 else None
-    elif score < -OPEN_THRESHOLD:
+        stop = round(price - atr_stop_mult * atr, 8) if atr > 0 else None
+        tp = round(price + atr_tp_mult * atr, 8) if atr > 0 else None
+    elif score < -threshold:
         action = "open_short"
-        stop = round(price + ATR_STOP_MULT * atr, 8) if atr > 0 else None
-        tp = round(price - ATR_TP_MULT * atr, 8) if atr > 0 else None
+        stop = round(price + atr_stop_mult * atr, 8) if atr > 0 else None
+        tp = round(price - atr_tp_mult * atr, 8) if atr > 0 else None
     else:
         action, stop, tp = "hold", None, None
 
@@ -82,10 +88,15 @@ def decide(
 def build_decisions(
     boll_items: list[dict[str, Any]],
     signal_items: list[dict[str, Any]],
+    *,
+    threshold: float = OPEN_THRESHOLD,
+    weights: dict[str, float] | None = None,
+    atr_stop_mult: float = ATR_STOP_MULT,
+    atr_tp_mult: float = ATR_TP_MULT,
 ) -> list[StrategyDecision]:
-    """批量决策(PR-4 用)· boll 按 symbol 索引取 price(close)· 遍历 signal_items。
+    """批量决策 · boll 按 symbol 索引取 price(close)· 遍历 signal_items。
 
-    ★无 boll 该币(无 bias + 无 close)→ 跳过:布林是最高权重(2.0)且 price 取自 boll.close,缺则不决策。
+    ★策略参数透传给 decide(默认常量)· 无 boll 该币(无 close)→ 跳过(布林最高权重·price 取 close)。
     """
     boll_map = {str(x["symbol"]): x for x in boll_items if x.get("symbol")}
     out: list[StrategyDecision] = []
@@ -94,7 +105,11 @@ def build_decisions(
         boll = boll_map.get(sym)
         if not sym or boll is None or not boll.get("close"):
             continue
-        out.append(decide(sym, boll, sig, float(boll["close"])))
+        out.append(decide(
+            sym, boll, sig, float(boll["close"]),
+            threshold=threshold, weights=weights,
+            atr_stop_mult=atr_stop_mult, atr_tp_mult=atr_tp_mult,
+        ))
     return out
 
 
