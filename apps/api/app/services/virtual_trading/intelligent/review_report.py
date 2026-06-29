@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -98,6 +99,19 @@ _REVIEW_SYSTEM = (
     "你是量化交易策略复盘分析师,只做复盘诊断,不预测未来、不给交易指令、不参与下单决策。"
     "必须基于提供的具体数据分析,引用具体数字,严禁空洞套话。"
 )
+
+
+def _strip_markdown(text: str) -> str:
+    """复盘标准 Markdown → TG 纯文本(parse_mode='')· 纯函数 · 可测。
+
+    ★DeepSeek 复盘输出标准 Markdown(**粗体**/### 标题/--- 分隔/- 列表)· 与 Telegram legacy
+    Markdown 不兼容(`**`/`###` 触发 400 can't parse entities · 实测 TG 发送失败)· 故 TG 走纯文本
+    并轻量去符号(email 保留原文 HTML 渲染不受影响)。
+    """
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)                      # **粗体** → 粗体
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)        # ### 标题 → 标题
+    text = re.sub(r"^\s*[-*]\s+", "· ", text, flags=re.MULTILINE)     # - 列表 → · 列表
+    return re.sub(r"^-{3,}$", "──────────", text, flags=re.MULTILINE)  # --- → 分隔线
 
 
 def build_review_prompt(
@@ -241,11 +255,13 @@ async def dispatch_review(
 
     if "tg" in channels and chat_ids and settings.tg_bot_token:
         # 🔴TG 正文带免责 · 超长截断(复盘多在限内)
-        text = f"📊 *智能交易策略复盘 · {label}* · {review.period_start}\n\n{review.content}"
+        # ★复盘是标准 Markdown · 与 TG legacy Markdown 不兼容(400)→ 去符号 + parse_mode=""
+        body = _strip_markdown(review.content)
+        text = f"📊 智能交易策略复盘 · {label} · {review.period_start}\n\n{body}"
         text = f"{text[:_TG_MAX]}\n\n{_DISCLAIMER}"
         for chat_id in chat_ids:
             try:
-                await telegram.send(settings.tg_bot_token, chat_id, text)
+                await telegram.send(settings.tg_bot_token, chat_id, text, parse_mode="")
                 sent["tg"] += 1
             except telegram.TelegramApiError:
                 logger.warning("[intelligent-review] TG 发送失败 chat=%s", chat_id)

@@ -57,6 +57,29 @@ def test_prompt_month_without_prev() -> None:
     assert "对比本期 vs 上期" not in prompt
 
 
+# ── _strip_markdown(★复盘标准 MD → TG 纯文本·去 **/### 避 TG 400)──────────
+def test_strip_markdown_bold() -> None:
+    assert rr._strip_markdown("**诊断结论：** 做空更准") == "诊断结论： 做空更准"
+
+
+def test_strip_markdown_heading() -> None:
+    assert rr._strip_markdown("### 整体表现诊断") == "整体表现诊断"
+    assert rr._strip_markdown("#### 1. 子标题") == "1. 子标题"
+
+
+def test_strip_markdown_list_and_rule() -> None:
+    assert rr._strip_markdown("- 胜率 30%") == "· 胜率 30%"
+    assert rr._strip_markdown("---") == "──────────"
+
+
+def test_strip_markdown_no_residual_markers() -> None:
+    # ★综合:去掉触发 TG 400 的 **/### 符号
+    out = rr._strip_markdown("### 标题\n**粗体**正文\n- 列表项")
+    assert "**" not in out
+    assert "###" not in out
+    assert "粗体正文" in out
+
+
 # ── is_last_day_of_month(各月边界 28/29/30/31)──────────────────────────
 def test_is_last_day_31() -> None:
     assert rr.is_last_day_of_month(datetime(2026, 1, 31, 21, 0, tzinfo=UTC)) is True
