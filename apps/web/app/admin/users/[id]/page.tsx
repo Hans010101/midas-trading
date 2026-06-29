@@ -15,6 +15,7 @@ import { useSession } from 'next-auth/react'
 
 import { BanSection } from '@/components/admin/ban-section'
 import { GrantProSection } from '@/components/admin/grant-pro-section'
+import { PlatinumSection } from '@/components/admin/platinum-section'
 import { TopNav } from '@/components/layout/top-nav'
 import { AdminApiError, type AdminUserDetail, fetchAdminUserDetail } from '@/lib/api/admin'
 import { createdAtText } from '@/lib/admin-view'
@@ -174,6 +175,15 @@ export default function AdminUserDetailPage() {
               userId={d.id}
               email={d.email}
               banned={d.banned}
+              token={token}
+              onChanged={() => void qc.invalidateQueries({ queryKey: ['admin-user-detail', id] })}
+            />
+
+            {/* ★铂金标记(多账户 PR-1 · superadmin 手动设 · 享受所有 pro 权益 + 托管/智能交易)*/}
+            <PlatinumSection
+              userId={d.id}
+              email={d.email}
+              isPlatinum={d.is_platinum}
               token={token}
               onChanged={() => void qc.invalidateQueries({ queryKey: ['admin-user-detail', id] })}
             />

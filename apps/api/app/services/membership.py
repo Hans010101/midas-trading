@@ -53,7 +53,15 @@ _QUOTA_KEY_TTL_S = 35 * 24 * 3600
 
 
 async def resolve_plan(db: AsyncSession, user_id: UUID) -> str:
-    """订阅行 → plan;无行 / 非 active / 已过期 / 未知 plan → 'free'。"""
+    """订阅行 → plan;无行 / 非 active / 已过期 / 未知 plan → 'free'。
+
+    ★铂金标记(多账户 PR-1):is_platinum=true → 直接 'pro'(superadmin 手动设·独立于订阅)。
+    这是全库 pro 权益单一事实源 —— 一处判断 → 决策卡/策略信号/配额/做T通知/做T推送/用户详情/
+    quota_me 全部自动生效,前端 /quota/me 返 'pro' → 前端零改(ProLock 自动不显示)。
+    """
+    is_platinum = await db.scalar(select(User.is_platinum).where(User.id == user_id))
+    if is_platinum:
+        return "pro"
     sub = await db.scalar(select(Subscription).where(Subscription.user_id == user_id))
     if sub is None or sub.status != "active":
         return "free"
