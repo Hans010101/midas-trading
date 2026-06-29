@@ -91,6 +91,7 @@ class AdminUserItem(BaseModel):
     role: str
     banned: bool  # 刀3b-2:已停用
     plan: str  # 会员刀2:free / pro(subscription outerjoin 批量解析 · 防 N+1)
+    is_platinum: bool  # ★铂金标记(多账户 PR-1)· superadmin 手动设 · 享受所有 pro 权益
     created_at: datetime
     email_verified: bool
     register_method: str  # google | password | both
@@ -155,7 +156,12 @@ async def list_users(
     ).all()
     total = (await db.execute(select(func.count()).select_from(User))).scalar_one()
 
-    def _plan_of(plan: str | None, sub_status: str | None, expires_at: datetime | None) -> str:
+    def _plan_of(
+        plan: str | None, sub_status: str | None, expires_at: datetime | None, *,
+        is_platinum: bool,
+    ) -> str:
+        if is_platinum:  # ★铂金标记 → pro(与 resolve_plan 一致 · 管理员列表口径对齐实际)
+            return "pro"
         if plan is None or sub_status != "active":
             return "free"
         if expires_at is not None and expires_at <= now:
@@ -169,7 +175,8 @@ async def list_users(
                 email=u.email,
                 role=u.role,
                 banned=u.banned_at is not None,
-                plan=_plan_of(plan, sub_status, expires_at),
+                plan=_plan_of(plan, sub_status, expires_at, is_platinum=u.is_platinum),
+                is_platinum=u.is_platinum,
                 created_at=u.created_at,
                 email_verified=u.email_verified_at is not None,
                 register_method=_register_method(u.google_sub, u.password_hash),
@@ -214,6 +221,7 @@ class AdminUserDetail(BaseModel):
     banned: bool  # 刀3b-2:已停用
     # 会员
     plan: str
+    is_platinum: bool  # ★铂金标记(多账户 PR-1)· superadmin 手动设 · 享受所有 pro 权益
     plan_status: str | None
     plan_expires_at: datetime | None
     plan_source: str | None
@@ -281,6 +289,7 @@ async def get_user_detail(user_id: str, _admin: AdminDep, db: DbDep) -> AdminUse
         email_verified=user.email_verified_at is not None,
         banned=user.banned_at is not None,
         plan=plan,
+        is_platinum=user.is_platinum,
         plan_status=sub.status if sub else None,
         plan_expires_at=sub.expires_at if sub else None,
         plan_source=sub.source if sub else None,
@@ -407,6 +416,45 @@ async def ban_user(user_id: str, payload: BanIn, admin: AdminDep, db: DbDep) -> 
 @router.post("/users/{user_id}/unban", response_model=BanOut)
 async def unban_user(user_id: str, payload: BanIn, admin: AdminDep, db: DbDep) -> BanOut:
     return await _set_ban(user_id, admin, db, ban=False, note=payload.note)
+
+
+# ── 铂金标记(多账户 PR-1)· superadmin 手动设 · 仿 ban 范式 ──────────────────────
+class PlatinumIn(BaseModel):
+    is_platinum: bool  # ★服务端定·★不信前端传 user_id(从路径 + 鉴权)
+    note: str | None = Field(default=None, max_length=200)
+
+
+class PlatinumOut(BaseModel):
+    user_id: str
+    is_platinum: bool
+
+
+@router.post("/users/{user_id}/set-platinum", response_model=PlatinumOut)
+async def set_platinum(
+    user_id: str, payload: PlatinumIn, admin: AdminDep, db: DbDep,
+) -> PlatinumOut:
+    """★superadmin 给/收用户铂金标记(享受所有 pro 权益 + 后续 3 功能)· 仿 ban_user 范式。
+
+    🔴 AdminDep(只 superadmin)· operator 取自鉴权绝不信前端 · target 从路径 user_id ·
+    is_platinum 值服务端按 payload 落库 · AdminActionLog 审计。
+    """
+    try:
+        uid = UUID(user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在") from e
+    target = await db.scalar(select(User).where(User.id == uid))
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+
+    target.is_platinum = payload.is_platinum
+    db.add(AdminActionLog(
+        operator_id=admin.id,  # ★ 取自鉴权,绝不信前端
+        target_user_id=uid,
+        action="set_platinum" if payload.is_platinum else "unset_platinum",
+        detail={"is_platinum": payload.is_platinum, "note": payload.note},
+    ))
+    await db.commit()
+    return PlatinumOut(user_id=str(uid), is_platinum=payload.is_platinum)
 
 
 # ── 网站访问看板(PV/UV 趋势 + 注册趋势)· AdminDep · 纯只读 ──────────────────────

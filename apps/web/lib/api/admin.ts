@@ -15,6 +15,7 @@ export interface AdminUserItem {
   role: string
   banned: boolean
   plan: string
+  is_platinum: boolean // ★铂金标记(多账户 PR-1)· superadmin 手动设
   created_at: string
   email_verified: boolean
   register_method: RegisterMethod
@@ -93,6 +94,7 @@ export interface AdminUserDetail {
   email_verified: boolean
   banned: boolean
   plan: string
+  is_platinum: boolean // ★铂金标记(多账户 PR-1)
   plan_status: string | null
   plan_expires_at: string | null
   plan_source: string | null
@@ -140,6 +142,22 @@ export async function setBan(
   })
   if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
   return (await r.json()) as { user_id: string; banned: boolean }
+}
+
+/** ★superadmin 设/取铂金标记(多账户 PR-1 · 享受所有 pro 权益 · 仿 setBan)。 */
+export async function setPlatinum(
+  token: string,
+  userId: string,
+  isPlatinum: boolean,
+  note?: string | null,
+): Promise<{ user_id: string; is_platinum: boolean }> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/users/${userId}/set-platinum`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_platinum: isPlatinum, note: note ?? null }),
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as { user_id: string; is_platinum: boolean }
 }
 
 export async function fetchAdminUserDetail(
