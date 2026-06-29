@@ -169,3 +169,97 @@ async def test_dedup_skips_held_symbol(
     ])
     out = await mopen.run_managed_open(db_session, r, _mark_price)
     assert out["opened"] == ["DDDUSDT"]  # ★CCC 已持被跳,只开 DDD
+
+
+# ── 开仓参数可调(margin/leverage 读 Redis · max_positions 总数约束)──────
+@pytest.mark.asyncio
+async def test_guard_open_params_defaults_and_set() -> None:
+    # ★三参数 get/set(纯 · FakeRedis 真跑)· 默认 100/5/50 · set 后读新值
+    r = _FakeRedis()
+    assert await mguard.get_open_margin(r) == Decimal("100")
+    assert await mguard.get_open_leverage(r) == 5
+    assert await mguard.get_max_positions(r) == 50
+    await mguard.set_open_margin(r, Decimal("250"))
+    await mguard.set_open_leverage(r, 10)
+    await mguard.set_max_positions(r, 30)
+    assert await mguard.get_open_margin(r) == Decimal("250")
+    assert await mguard.get_open_leverage(r) == 10
+    assert await mguard.get_max_positions(r) == 30
+
+
+@pytest.mark.asyncio
+async def test_margin_leverage_from_redis(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★margin/leverage 读 Redis(不再 hardcode 100/5)
+    r = _FakeRedis()
+    await mguard.set_enabled(r, enabled=True)
+    await mguard.set_open_margin(r, Decimal("200"))
+    await mguard.set_open_leverage(r, 8)
+    acc = await macc.ensure_managed_account(db_session)
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(mopen, "route_open_perp", _spy_open(captured, acc.id))
+    _seed_snapshot(r, [_item("AAAUSDT", "偏多", 9.0, transition=True)])
+    await mopen.run_managed_open(db_session, r, _mark_price)
+    assert captured[0]["margin"] == Decimal("200")  # ★读 Redis
+    assert captured[0]["leverage"] == 8
+
+
+@pytest.mark.asyncio
+async def test_max_positions_caps_to_exact_limit(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★已持 3 仓 + max_positions=5 → 本轮只开 2(开到刚好 5 · 不超)· 且仍受每轮≤5
+    r = _FakeRedis()
+    await mguard.set_enabled(r, enabled=True)
+    await mguard.set_max_positions(r, 5)
+    acc = await macc.ensure_managed_account(db_session)
+    for i in range(3):  # 已持 3 仓
+        db_session.add(VirtualPerpPosition(
+            account_id=acc.id, symbol=f"HELD{i}USDT", side=PerpSide.LONG,
+            margin_mode=MarginMode.CROSS, leverage=5, quantity=Decimal("1"),
+            entry_price=Decimal("100"), initial_margin=Decimal("20"),
+            maintenance_margin_rate=Decimal("0.005"), liquidation_price=Decimal("0"),
+            managed=True,
+        ))
+    await db_session.flush()
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(mopen, "route_open_perp", _spy_open(captured, acc.id))
+    # 候选 6 个新币(足够多)→ 但 max=5 · 已持 3 → 只能再开 2
+    _seed_snapshot(r, [_item(f"N{i}USDT", "偏多", 9.0 - i, transition=True) for i in range(6)])
+    out = await mopen.run_managed_open(db_session, r, _mark_price)
+    assert len(out["opened"]) == 2  # ★开到刚好 5(3+2),不超
+
+
+@pytest.mark.asyncio
+async def test_max_positions_reached_no_open(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★已持 ≥ max_positions → 本轮不开新仓
+    r = _FakeRedis()
+    await mguard.set_enabled(r, enabled=True)
+    await mguard.set_max_positions(r, 3)
+    acc = await macc.ensure_managed_account(db_session)
+    for i in range(3):  # 已持 3 = max
+        db_session.add(VirtualPerpPosition(
+            account_id=acc.id, symbol=f"HELD{i}USDT", side=PerpSide.LONG,
+            margin_mode=MarginMode.CROSS, leverage=5, quantity=Decimal("1"),
+            entry_price=Decimal("100"), initial_margin=Decimal("20"),
+            maintenance_margin_rate=Decimal("0.005"), liquidation_price=Decimal("0"),
+            managed=True,
+        ))
+    await db_session.flush()
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(mopen, "route_open_perp", _spy_open(captured, acc.id))
+    _seed_snapshot(r, [_item(f"N{i}USDT", "偏多", 9.0 - i, transition=True) for i in range(6)])
+    out = await mopen.run_managed_open(db_session, r, _mark_price)
+    assert out["opened"] == []   # ★到上限不开
+    assert captured == []        # 没调 route_open_perp
+
+
+@pytest.mark.asyncio
+async def test_both_constraints_per_round_and_max(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★每轮≤5 AND 总数≤max 并存:max=100(够大)+ 已持 0 + 候选 8 → 每轮 5 约束生效(开 5)
+    r = _FakeRedis()
+    await mguard.set_enabled(r, enabled=True)
+    await mguard.set_max_positions(r, 100)
+    acc = await macc.ensure_managed_account(db_session)
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(mopen, "route_open_perp", _spy_open(captured, acc.id))
+    _seed_snapshot(r, [_item(f"N{i}USDT", "偏多", 9.0 - i, transition=True) for i in range(8)])
+    out = await mopen.run_managed_open(db_session, r, _mark_price)
+    assert len(out["opened"]) == mguard.MAX_PER_ROUND  # ★每轮≤5 生效(虽 max=100 够大)
