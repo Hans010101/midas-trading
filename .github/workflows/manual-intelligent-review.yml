@@ -51,6 +51,16 @@ jobs:
               )
               sm = async_sessionmaker(engine, expire_on_commit=False)
               async with sm() as s:
+                  # ── 诊断:admin 收件人 + TG token 状态(查 TG sent=0 根因)──
+                  from app.core.config import settings as _settings
+                  from app.services.virtual_trading.intelligent.review_report import (
+                      _admin_recipients,
+                  )
+                  _emails, _chats = await _admin_recipients(s)
+                  print(
+                      f"=== DIAG admin_emails={_emails} admin_chat_ids={_chats} "
+                      f"tg_bot_token_set={bool(_settings.tg_bot_token)} ===",
+                  )
                   result = await dispatch_review(s, period, cn_now(), channels={"email", "tg"})
                   print("=== DISPATCH RESULT ===")
                   print(result)
