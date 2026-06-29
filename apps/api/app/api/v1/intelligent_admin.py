@@ -26,6 +26,7 @@ from app.services.virtual_trading import account_admin
 from app.services.virtual_trading.intelligent import account as intelligent_account
 from app.services.virtual_trading.intelligent import guard as intelligent_guard
 from app.services.virtual_trading.intelligent import stats as intelligent_stats
+from app.services.virtual_trading.perp_cross_engine import _cross_available_margin
 from app.services.virtual_trading.perp_fees import unrealized_pnl
 
 router = APIRouter(prefix="/admin/intelligent", tags=["intelligent"])
@@ -48,8 +49,9 @@ async def _intelligent_account_row(db: AsyncSession) -> VirtualAccount | None:
 class IntelligentStatus(BaseModel):
     enabled: bool             # 智能交易开关(默认 OFF)
     account_ready: bool       # 智能交易账户已建
+    account_value: float      # ★账户总价值(权益·浮动)= 现金 + Σ未实现浮盈浮亏 · 复用引擎算法
     initial_capital: float    # ★起始资金(可改 · 取自 account.initial_capital · 默认 10万U)
-    cash_balance: float       # 账户现金
+    cash_balance: float       # 账户现金(只扣手续费 · 不含浮盈)
     open_positions: int       # 当前活仓数
     open_margin: float        # ★每单本金(U·可调 10-10000·默认 100)
     open_leverage: int        # ★杠杆(可调 1-20·默认 5·不影响 ATR 止损止盈价)
@@ -64,7 +66,7 @@ class CapitalIn(BaseModel):
     amount: float             # 起始资金(> 0)
 
 
-async def _status(db: AsyncSession) -> IntelligentStatus:
+async def _status(db: AsyncSession, ch: ClickHouseDep) -> IntelligentStatus:
     redis = await get_redis()
     enabled = await intelligent_guard.is_enabled(redis)
     acc = await _intelligent_account_row(db)
@@ -73,9 +75,19 @@ async def _status(db: AsyncSession) -> IntelligentStatus:
     open_margin = await intelligent_guard.get_open_margin(redis)        # ★每单本金
     open_leverage = await intelligent_guard.get_open_leverage(redis)    # ★杠杆
     max_positions = await intelligent_guard.get_max_positions(redis)    # ★最大总持仓
+    account_value = 0.0
+    if acc is not None:
+        async def _fetch_mark(symbol: str) -> Decimal | None:
+            marks = await select_premium_index_marks(ch._client, [symbol])  # noqa: SLF001
+            return marks.get(symbol)
+
+        # ★复用引擎 _cross_available_margin(equity=现金+ΣuPnL)· 零重写盈亏 · 与活仓浮盈同算法对得上
+        equity, _used, _avail = await _cross_available_margin(db, acc, _fetch_mark)
+        account_value = float(equity)
     return IntelligentStatus(
         enabled=enabled,
         account_ready=acc is not None,
+        account_value=account_value,
         initial_capital=float(acc.initial_capital) if acc else default_cap,
         cash_balance=float(acc.cash_balance) if acc else 0.0,
         open_positions=open_n,
@@ -86,35 +98,39 @@ async def _status(db: AsyncSession) -> IntelligentStatus:
 
 
 @router.get("/status", summary="智能交易状态(开关/账户/起始资金/活仓)")
-async def get_status(_admin: AdminDep, db: DbDep) -> IntelligentStatus:
-    return await _status(db)
+async def get_status(_admin: AdminDep, db: DbDep, ch: ClickHouseDep) -> IntelligentStatus:
+    return await _status(db, ch)
 
 
 @router.post("/toggle", summary="开/关智能交易(★默认 OFF · 开则首次建账户)")
-async def toggle(payload: IntelligentToggleIn, _admin: AdminDep, db: DbDep) -> IntelligentStatus:
+async def toggle(
+    payload: IntelligentToggleIn, _admin: AdminDep, db: DbDep, ch: ClickHouseDep,
+) -> IntelligentStatus:
     """★开关 · 开启时幂等建智能交易账户(系统用户 + perp 钱包)· 开仓编排 = PR-4。"""
     redis = await get_redis()
     if payload.enabled:
         await intelligent_account.ensure_intelligent_account(db)
     await intelligent_guard.set_enabled(redis, payload.enabled)
-    return await _status(db)
+    return await _status(db, ch)
 
 
 @router.post("/account/reset", summary="★清零重来(删智能账户持仓+历史 · cash 重置初始)")
-async def reset(_admin: AdminDep, db: DbDep) -> IntelligentStatus:
+async def reset(_admin: AdminDep, db: DbDep, ch: ClickHouseDep) -> IntelligentStatus:
     """清零重置:删智能账户【持仓+历史】+ cash 重置 initial_capital · ★只该账户 · 不碰引擎。"""
     acc = await intelligent_account.ensure_intelligent_account(db)
     await account_admin.reset_account(db, acc)
-    return await _status(db)
+    return await _status(db, ch)
 
 
 @router.post("/account/capital", summary="★改起始资金(>0 · 清持仓 + 用新资金重来)")
-async def set_capital(payload: CapitalIn, _admin: AdminDep, db: DbDep) -> IntelligentStatus:
+async def set_capital(
+    payload: CapitalIn, _admin: AdminDep, db: DbDep, ch: ClickHouseDep,
+) -> IntelligentStatus:
     if payload.amount <= 0:
         raise HTTPException(status_code=400, detail="起始资金必须 > 0")
     acc = await intelligent_account.ensure_intelligent_account(db)
     await account_admin.set_account_capital(db, acc, Decimal(str(payload.amount)))
-    return await _status(db)
+    return await _status(db, ch)
 
 
 # ── 开仓参数(每单本金 / 杠杆 / 最大单数 · 即时生效)──────────────────────
@@ -131,34 +147,36 @@ class MaxPositionsIn(BaseModel):
 
 
 @router.post("/open-margin", summary="★设每单本金(U·10-10000 · 即时生效)")
-async def set_open_margin(payload: OpenMarginIn, _admin: AdminDep, db: DbDep) -> IntelligentStatus:
+async def set_open_margin(
+    payload: OpenMarginIn, _admin: AdminDep, db: DbDep, ch: ClickHouseDep,
+) -> IntelligentStatus:
     if not (10 <= payload.margin <= 10000):  # noqa: PLR2004
         raise HTTPException(status_code=400, detail="每单本金必须在 10-10000 U")
     redis = await get_redis()
     await intelligent_guard.set_open_margin(redis, Decimal(str(payload.margin)))
-    return await _status(db)
+    return await _status(db, ch)
 
 
 @router.post("/open-leverage", summary="★设杠杆(1-20 · 即时生效 · 不影响 ATR 止损止盈价)")
 async def set_open_leverage(
-    payload: OpenLeverageIn, _admin: AdminDep, db: DbDep,
+    payload: OpenLeverageIn, _admin: AdminDep, db: DbDep, ch: ClickHouseDep,
 ) -> IntelligentStatus:
     if not (1 <= payload.leverage <= 20):  # noqa: PLR2004
         raise HTTPException(status_code=400, detail="杠杆必须在 1-20 倍")
     redis = await get_redis()
     await intelligent_guard.set_open_leverage(redis, payload.leverage)
-    return await _status(db)
+    return await _status(db, ch)
 
 
 @router.post("/max-positions", summary="★设最大总持仓数(>0 · 到上限不开新 · 即时生效)")
 async def set_max_positions(
-    payload: MaxPositionsIn, _admin: AdminDep, db: DbDep,
+    payload: MaxPositionsIn, _admin: AdminDep, db: DbDep, ch: ClickHouseDep,
 ) -> IntelligentStatus:
     if payload.max_positions <= 0:
         raise HTTPException(status_code=400, detail="最大总持仓数必须 > 0")
     redis = await get_redis()
     await intelligent_guard.set_max_positions(redis, payload.max_positions)
-    return await _status(db)
+    return await _status(db, ch)
 
 
 # ── 看板:活仓 / 历史 / 统计(PR-6 · 前向测试 · ★做多做空 + 共振信号)──────
