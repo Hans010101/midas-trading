@@ -345,6 +345,25 @@ beat_schedule = {
         "schedule": crontab(hour="21", minute="0", day_of_week="sun"),
         "options": {"expires": 3600},
     },
+    # ── 智能交易 DeepSeek 复盘(第二期 PR-8)· 🔴只读分析不碰执行 · 发 admin 邮件/TG ──────────
+    "intelligent-review-daily": {
+        "task": "tasks.intelligent_review.daily_review",
+        # ★每天 20:00 CST · 日报 · 邮件 + TG(即时看 + 邮箱存档)· 顺带清理 30 天前历史
+        "schedule": crontab(hour="20", minute="0"),
+        "options": {"expires": 3600},
+    },
+    "intelligent-review-weekly": {
+        "task": "tasks.intelligent_review.weekly_review",
+        # ★每周六 20:30 CST · 周报 · 邮件 · 对比上周
+        "schedule": crontab(hour="20", minute="30", day_of_week="sat"),
+        "options": {"expires": 3600},
+    },
+    "intelligent-review-monthly": {
+        "task": "tasks.intelligent_review.monthly_review",
+        # ★每月末 21:00 CST · 月报 · 邮件 · day_of_month=28-31 触发 + 任务内判真【最后一天】
+        "schedule": crontab(hour="21", minute="0", day_of_month="28-31"),
+        "options": {"expires": 3600},
+    },
     # ── X 营销每日推文(阶段4a · PR-1)· 每小时删 24h 前的 x_tweet 行 + 删截图文件 ──
     "cleanup-x-tweets": {
         "task": "tasks.x_tweets.cleanup_expired",

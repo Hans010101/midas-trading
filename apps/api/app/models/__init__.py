@@ -9,6 +9,7 @@ from app.models.bot_order_preset import BotOrderPreset  # noqa: F401
 from app.models.daily_visit_stat import DailyVisitStat  # noqa: F401
 from app.models.hk_board_lot import HkBoardLot  # noqa: F401
 from app.models.hk_sector import HkSector  # noqa: F401
+from app.models.intelligent_review import IntelligentReview  # noqa: F401
 from app.models.market_report import MarketReport  # noqa: F401
 from app.models.notification import NotificationConfig  # noqa: F401
 from app.models.payment_order import PaymentOrder  # noqa: F401
