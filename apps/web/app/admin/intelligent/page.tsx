@@ -9,7 +9,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { AdminNav } from '@/components/admin/admin-nav'
 import { TopNav } from '@/components/layout/top-nav'
@@ -18,6 +18,8 @@ import {
   getIntelligentPositions,
   getIntelligentStats,
   getIntelligentStatus,
+  INTELLIGENT_HISTORY_PAGE_SIZE,
+  INTELLIGENT_POSITIONS_PAGE_SIZE,
   resetIntelligentAccount,
   setIntelligentCapital,
   setIntelligentMaxPositions,
@@ -71,15 +73,21 @@ export default function AdminIntelligentPage() {
     enabled: on,
     refetchInterval: 15000,
   })
+  // ★活仓分页(每页 100)· 15s 刷新保持当前页(posPage state 不随 refetch 重置)
+  const [posPage, setPosPage] = useState(0)
   const positions = useQuery({
-    queryKey: ['intelligent-positions'],
-    queryFn: ({ signal }) => getIntelligentPositions(token, signal),
+    queryKey: ['intelligent-positions', posPage],
+    queryFn: ({ signal }) =>
+      getIntelligentPositions(token, posPage * INTELLIGENT_POSITIONS_PAGE_SIZE, INTELLIGENT_POSITIONS_PAGE_SIZE, signal),
     enabled: on,
     refetchInterval: 15000,
   })
+  // ★历史分页(每页 50·照搬托管 PR#82)
+  const [histPage, setHistPage] = useState(0)
   const history = useQuery({
-    queryKey: ['intelligent-history'],
-    queryFn: ({ signal }) => getIntelligentHistory(token, signal),
+    queryKey: ['intelligent-history', histPage],
+    queryFn: ({ signal }) =>
+      getIntelligentHistory(token, histPage * INTELLIGENT_HISTORY_PAGE_SIZE, INTELLIGENT_HISTORY_PAGE_SIZE, signal),
     enabled: on,
   })
   const stats = useQuery({
@@ -178,9 +186,17 @@ export default function AdminIntelligentPage() {
   const forbidden = status.isError
   const st = status.data
   const stat = stats.data
-  const pos = positions.data ?? []
+  const pos = positions.data?.items ?? []  // ★当前页活仓(分页 100/页)
+  const posTotal = positions.data?.total ?? 0
+  const posPages = Math.max(1, Math.ceil(posTotal / INTELLIGENT_POSITIONS_PAGE_SIZE))
+  const histTotal = history.data?.total ?? 0
+  const histPages = Math.max(1, Math.ceil(histTotal / INTELLIGENT_HISTORY_PAGE_SIZE))
+  // ★当前页变空(平仓后)且非首页 → 回上一页(动态刷新兜底)
+  useEffect(() => {
+    if (pos.length === 0 && posPage > 0 && posTotal > 0) setPosPage((p) => Math.max(0, p - 1))
+  }, [pos.length, posPage, posTotal])
 
-  // ★前端汇总:总敞口(Σ保证金)+ 做多做空笔数 + 总浮盈
+  // ★前端汇总:总敞口/做多做空/浮盈(当前页·活仓 <100 时即全部·1 页)
   const totalMargin = pos.reduce((s, p) => s + p.margin, 0)
   const longCount = pos.filter((p) => p.side === 'long').length
   const shortCount = pos.filter((p) => p.side === 'short').length
@@ -370,9 +386,9 @@ export default function AdminIntelligentPage() {
               />
             </div>
 
-            {/* 当前活仓 */}
+            {/* 当前活仓(★分页 100/页) */}
             <h2 className="mb-2 font-serif text-base font-bold">
-              当前活仓 {positions.data ? `(${positions.data.length})` : ''}
+              当前活仓 {positions.data ? `(${posTotal})` : ''}
             </h2>
             <div className="mb-6 overflow-x-auto rounded-lg border border-paper bg-cream shadow-sm">
               <table className="w-full text-left text-xs">
@@ -423,10 +439,32 @@ export default function AdminIntelligentPage() {
                 </tbody>
               </table>
             </div>
+            {/* ★活仓分页控件(100/页·超出翻页) */}
+            {posTotal > INTELLIGENT_POSITIONS_PAGE_SIZE && (
+              <div className="mb-6 flex items-center justify-center gap-3 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setPosPage((p) => Math.max(0, p - 1))}
+                  disabled={posPage <= 0 || positions.isFetching}
+                  className="rounded-md border border-paper px-3 py-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
+                >
+                  上一页
+                </button>
+                <span className="font-mono text-muted-foreground">第 {posPage + 1} / {posPages} 页</span>
+                <button
+                  type="button"
+                  onClick={() => setPosPage((p) => Math.min(posPages - 1, p + 1))}
+                  disabled={posPage >= posPages - 1 || positions.isFetching}
+                  className="rounded-md border border-paper px-3 py-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
+                >
+                  下一页
+                </button>
+              </div>
+            )}
 
-            {/* 历史平仓 */}
+            {/* 历史平仓(★分页 50/页) */}
             <h2 className="mb-2 font-serif text-base font-bold">
-              历史平仓 {history.data ? `(${history.data.length})` : ''}
+              历史平仓 {history.data ? `(${histTotal})` : ''}
             </h2>
             <div className="overflow-x-auto rounded-lg border border-paper bg-cream shadow-sm">
               <table className="w-full text-left text-xs">
@@ -440,14 +478,14 @@ export default function AdminIntelligentPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(history.data ?? []).length === 0 ? (
+                  {(history.data?.items ?? []).length === 0 ? (
                     <tr>
                       <td colSpan={8} className="px-3 py-4 text-center text-muted-foreground">
                         还没有平仓记录
                       </td>
                     </tr>
                   ) : (
-                    history.data?.map((t, i) => (
+                    history.data?.items.map((t, i) => (
                       <tr key={`${t.symbol}-${i}`} className="border-b border-paper/60">
                         <td className="px-3 py-2 font-mono font-bold">{t.symbol}</td>
                         <td className={`px-3 py-2 font-medium ${sideTone(t.side)}`}>{sideLabel(t.side)}</td>
@@ -469,6 +507,28 @@ export default function AdminIntelligentPage() {
                 </tbody>
               </table>
             </div>
+            {/* ★历史分页控件(50/页·超出翻页·照搬托管 PR#82) */}
+            {histTotal > INTELLIGENT_HISTORY_PAGE_SIZE && (
+              <div className="mt-3 flex items-center justify-center gap-3 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setHistPage((p) => Math.max(0, p - 1))}
+                  disabled={histPage <= 0 || history.isFetching}
+                  className="rounded-md border border-paper px-3 py-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
+                >
+                  上一页
+                </button>
+                <span className="font-mono text-muted-foreground">第 {histPage + 1} / {histPages} 页</span>
+                <button
+                  type="button"
+                  onClick={() => setHistPage((p) => Math.min(histPages - 1, p + 1))}
+                  disabled={histPage >= histPages - 1 || history.isFetching}
+                  className="rounded-md border border-paper px-3 py-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
+                >
+                  下一页
+                </button>
+              </div>
+            )}
           </>
         )}
       </main>

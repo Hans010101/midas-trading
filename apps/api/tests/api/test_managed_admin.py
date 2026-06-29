@@ -272,3 +272,27 @@ async def test_history_pagination(client: AsyncClient, db_session: AsyncSession)
     body2 = r2.json()
     assert body2["total"] == 60
     assert len(body2["items"]) == 10    # ★第二页剩 10
+
+
+@pytest.mark.asyncio
+async def test_positions_pagination(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch,  # noqa: ANN001
+) -> None:
+    # ★托管活仓分页(100/页):建 3 活仓 + limit=2 → 第一页 2 + total=3
+    from app.api.v1 import managed_admin  # noqa: PLC0415
+    acc = await macc.ensure_managed_account(db_session)
+    for i in range(3):
+        db_session.add(_managed_pos(acc.id, f"C{i}USDT"))
+    await db_session.commit()
+
+    async def _fake_marks(_c: object, _s: object) -> dict[str, Decimal]:
+        return {}
+
+    monkeypatch.setattr(managed_admin, "select_premium_index_marks", _fake_marks)
+    headers = await _admin_headers(db_session)
+    r1 = await client.get("/api/v1/admin/managed/positions?offset=0&limit=2", headers=headers)
+    b1 = r1.json()
+    assert b1["total"] == 3
+    assert len(b1["items"]) == 2
+    r2 = await client.get("/api/v1/admin/managed/positions?offset=2&limit=2", headers=headers)
+    assert len(r2.json()["items"]) == 1

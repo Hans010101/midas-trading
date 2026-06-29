@@ -70,6 +70,19 @@ export interface IntelligentStats {
   by_side: { long: number; short: number } // ★做多做空笔数
 }
 
+export interface IntelligentPositionsPage {
+  items: IntelligentPosition[]
+  total: number // ★全部活仓数(前端算总页数)
+}
+
+export interface IntelligentHistoryPage {
+  items: IntelligentTrade[]
+  total: number // ★全部历史单数
+}
+
+export const INTELLIGENT_POSITIONS_PAGE_SIZE = 100
+export const INTELLIGENT_HISTORY_PAGE_SIZE = 50
+
 function _h(token?: string): HeadersInit | undefined {
   return token ? { Authorization: `Bearer ${token}` } : undefined
 }
@@ -82,10 +95,20 @@ async function _get<T>(path: string, token: string, signal?: AbortSignal): Promi
 
 export const getIntelligentStatus = (t: string, s?: AbortSignal) =>
   _get<IntelligentStatus>('/status', t, s)
-export const getIntelligentPositions = (t: string, s?: AbortSignal) =>
-  _get<IntelligentPosition[]>('/positions', t, s)
-export const getIntelligentHistory = (t: string, s?: AbortSignal) =>
-  _get<IntelligentTrade[]>('/history', t, s)
+/** ★活仓分页:offset/limit(默认每页 100)· 返回 {items, total}。 */
+export const getIntelligentPositions = (
+  t: string,
+  offset = 0,
+  limit: number = INTELLIGENT_POSITIONS_PAGE_SIZE,
+  s?: AbortSignal,
+) => _get<IntelligentPositionsPage>(`/positions?offset=${offset}&limit=${limit}`, t, s)
+/** ★历史分页:offset/limit(默认每页 50·照搬托管 PR#82)· 返回 {items, total}。 */
+export const getIntelligentHistory = (
+  t: string,
+  offset = 0,
+  limit: number = INTELLIGENT_HISTORY_PAGE_SIZE,
+  s?: AbortSignal,
+) => _get<IntelligentHistoryPage>(`/history?offset=${offset}&limit=${limit}`, t, s)
 export const getIntelligentStats = (t: string, s?: AbortSignal) =>
   _get<IntelligentStats>('/stats', t, s)
 

@@ -81,6 +81,11 @@ export interface ManagedHistoryPage {
   total: number // ★全部历史单数(前端算总页数)
 }
 
+export interface ManagedPositionsPage {
+  items: ManagedPosition[]
+  total: number // ★全部活仓数(前端算总页数)
+}
+
 export interface BatchCloseResult {
   status: string
   closed: number // 实际平掉数
@@ -88,6 +93,7 @@ export interface BatchCloseResult {
 }
 
 export const MANAGED_HISTORY_PAGE_SIZE = 50
+export const MANAGED_POSITIONS_PAGE_SIZE = 100
 
 function _h(token?: string): HeadersInit | undefined {
   return token ? { Authorization: `Bearer ${token}` } : undefined
@@ -101,8 +107,13 @@ async function _get<T>(path: string, token: string, signal?: AbortSignal): Promi
 
 export const getManagedStatus = (t: string, s?: AbortSignal) =>
   _get<ManagedStatus>('/status', t, s)
-export const getManagedPositions = (t: string, s?: AbortSignal) =>
-  _get<ManagedPosition[]>('/positions', t, s)
+/** ★活仓分页:offset/limit(默认每页 100)· 返回 {items, total}。 */
+export const getManagedPositions = (
+  t: string,
+  offset = 0,
+  limit: number = MANAGED_POSITIONS_PAGE_SIZE,
+  s?: AbortSignal,
+) => _get<ManagedPositionsPage>(`/positions?offset=${offset}&limit=${limit}`, t, s)
 /** ★历史分页:offset/limit(默认每页 50)· 返回 {items, total}(total 算总页数)。 */
 export const getManagedHistory = (
   t: string,
