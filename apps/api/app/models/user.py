@@ -56,7 +56,7 @@ class User(Base):
     # ★ 零图片存储 —— 只存所选编号,绝不存上传图(用户只能从预设里选)。
     avatar_id: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     # 铂金标记(多账户 PR-1)· ★superadmin 后台手动设 · 非付费档 · 独立于 pro 订阅。
-    # is_platinum=true → resolve_plan 返 'pro'(享受 pro 权益)+ 后续 PR 解锁托管/智能/每日推文。
+    # is_platinum=true → resolve_plan 返 'pro'(享受 pro 权益)+ 后续 PR 解锁托管/智能交易(独立账户)。
     is_platinum: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false"), default=False,
     )

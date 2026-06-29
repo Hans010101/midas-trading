@@ -179,7 +179,7 @@ export default function AdminUserDetailPage() {
               onChanged={() => void qc.invalidateQueries({ queryKey: ['admin-user-detail', id] })}
             />
 
-            {/* ★铂金标记(多账户 PR-1 · superadmin 手动设 · 享受所有 pro 权益 + 3 功能)*/}
+            {/* ★铂金标记(多账户 PR-1 · superadmin 手动设 · 享受所有 pro 权益 + 托管/智能交易)*/}
             <PlatinumSection
               userId={d.id}
               email={d.email}

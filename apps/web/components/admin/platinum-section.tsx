@@ -3,7 +3,7 @@
 /**
  * 铂金标记区(多账户 PR-1 · 写操作 · superadmin 手动设)· 仿 BanSection 范式。
  *
- * 开通铂金 → 该用户享受【所有 pro 权益】+ 托管/智能/每日推文 3 功能(体验同管理员)。
+ * 开通铂金 → 该用户享受【所有 pro 权益】+ 托管交易/智能交易 2 个交易体系(每用户独立账户·体验同管理员)。
  * 二次确认(给权益较重)→ POST /set-platinum → 刷新。🔴 只调 set-platinum 端点(后端写 + 审计)。
  */
 
@@ -48,7 +48,7 @@ export function PlatinumSection({
           <h2 className="font-serif text-base font-bold">铂金标记</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {isPlatinum
-              ? '已开通 · 享受所有 Pro 权益 + 托管/智能/每日推文 3 功能'
+              ? '已开通 · 享受所有 Pro 权益 + 托管交易/智能交易(独立账户)'
               : '未开通 · 普通用户(按订阅判会员)'}
           </p>
         </div>
@@ -83,13 +83,13 @@ export function PlatinumSection({
               {isPlatinum ? (
                 <>
                   将取消 <span className="font-mono text-foreground">{email}</span> 的铂金标记,
-                  收回所有 Pro 权益 + 3 功能访问。
+                  收回所有 Pro 权益 + 托管/智能交易访问。
                 </>
               ) : (
                 <>
                   确认给 <span className="font-mono text-foreground">{email}</span> 开通铂金?
                   <span className="text-gold">
-                    该用户将享受所有 Pro 权益 + 托管/智能/每日推文 3 功能(体验同管理员)。
+                    该用户将享受所有 Pro 权益 + 托管交易/智能交易(每用户独立账户·体验同管理员)。
                   </span>
                 </>
               )}
