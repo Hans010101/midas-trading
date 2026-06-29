@@ -1,0 +1,89 @@
+name: 手动触发智能交易复盘(验证 DeepSeek + 发送)
+
+# 运维工具(★非产品代码 · 不碰 apps/)· workflow_dispatch 手动触发:
+#   在生产 worker 容器同步跑一次智能交易复盘(生成 + 发送 + 打印内容)· 验证 DeepSeek 真调用 + 邮件/TG 全链路。
+#   复用 deploy.yml 的 DEPLOY_SSH_KEY/HOST/USER secrets · 不等 beat 的 20:00。
+#   🔴 只读交易数据生成分析 · 不碰执行/下单(旁观分析师)。
+on:
+  workflow_dispatch:
+    inputs:
+      period:
+        description: 复盘周期(day / week / month)
+        default: day
+        type: string
+
+# 不和别的复盘触发并发(同账户)
+concurrency:
+  group: manual-intelligent-review
+  cancel-in-progress: false
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 写部署 SSH 私钥(复用 deploy secrets)
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: 写复盘脚本(runner 本地)
+        run: |
+          cat > /tmp/review.py <<'PYEOF'
+          """手动触发智能交易复盘 · 生成 + 发送 + 打印内容(验证 DeepSeek 真跑 + 全链路)。"""
+          import asyncio
+          import os
+
+          from sqlalchemy import select
+          from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+          from sqlalchemy.pool import NullPool
+
+          from app.models.intelligent_review import IntelligentReview
+          from app.services.virtual_trading.intelligent.review_report import dispatch_review
+          from app.services.visit_stats import cn_now
+
+
+          async def main() -> None:
+              period = os.environ.get("REVIEW_PERIOD", "day")
+              engine = create_async_engine(
+                  os.environ["DATABASE_URL"], future=True, poolclass=NullPool,
+              )
+              sm = async_sessionmaker(engine, expire_on_commit=False)
+              async with sm() as s:
+                  result = await dispatch_review(s, period, cn_now(), channels={"email", "tg"})
+                  print("=== DISPATCH RESULT ===")
+                  print(result)
+                  row = await s.scalar(
+                      select(IntelligentReview)
+                      .where(IntelligentReview.period == period)
+                      .order_by(IntelligentReview.id.desc())
+                      .limit(1),
+                  )
+                  if row is None:
+                      print("!!! 无复盘记录(dispatch 异常?)")
+                  else:
+                      print(
+                          f"=== is_mock={row.is_mock} trade_count={row.trade_count} "
+                          f"tokens={row.total_tokens} period_start={row.period_start} ===",
+                      )
+                      print("=== CONTENT START ===")
+                      print(row.content)
+                      print("=== CONTENT END ===")
+              await engine.dispose()
+
+
+          asyncio.run(main())
+          PYEOF
+
+      - name: SSH → docker exec midas-worker 跑复盘
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=accept-new \
+            -o ServerAliveInterval=30 -o ServerAliveCountMax=120 \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "docker exec -i -e REVIEW_PERIOD='${{ inputs.period }}' midas-worker python -" < /tmp/review.py
+
+      - name: 清理私钥(无论成败)
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
