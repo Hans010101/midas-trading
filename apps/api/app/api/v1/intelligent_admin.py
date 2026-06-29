@@ -51,6 +51,9 @@ class IntelligentStatus(BaseModel):
     initial_capital: float    # ★起始资金(可改 · 取自 account.initial_capital · 默认 10万U)
     cash_balance: float       # 账户现金
     open_positions: int       # 当前活仓数
+    open_margin: float        # ★每单本金(U·可调 10-10000·默认 100)
+    open_leverage: int        # ★杠杆(可调 1-20·默认 5·不影响 ATR 止损止盈价)
+    max_positions: int        # ★最大总持仓数(可调·默认 50·到上限不开新)
 
 
 class IntelligentToggleIn(BaseModel):
@@ -67,12 +70,18 @@ async def _status(db: AsyncSession) -> IntelligentStatus:
     acc = await _intelligent_account_row(db)
     open_n = await intelligent_guard.count_open_positions(db, acc.id) if acc is not None else 0
     default_cap = float(intelligent_account.INTELLIGENT_INITIAL_CAPITAL)
+    open_margin = await intelligent_guard.get_open_margin(redis)        # ★每单本金
+    open_leverage = await intelligent_guard.get_open_leverage(redis)    # ★杠杆
+    max_positions = await intelligent_guard.get_max_positions(redis)    # ★最大总持仓
     return IntelligentStatus(
         enabled=enabled,
         account_ready=acc is not None,
         initial_capital=float(acc.initial_capital) if acc else default_cap,
         cash_balance=float(acc.cash_balance) if acc else 0.0,
         open_positions=open_n,
+        open_margin=float(open_margin),
+        open_leverage=open_leverage,
+        max_positions=max_positions,
     )
 
 
@@ -105,6 +114,50 @@ async def set_capital(payload: CapitalIn, _admin: AdminDep, db: DbDep) -> Intell
         raise HTTPException(status_code=400, detail="起始资金必须 > 0")
     acc = await intelligent_account.ensure_intelligent_account(db)
     await account_admin.set_account_capital(db, acc, Decimal(str(payload.amount)))
+    return await _status(db)
+
+
+# ── 开仓参数(每单本金 / 杠杆 / 最大单数 · 即时生效)──────────────────────
+class OpenMarginIn(BaseModel):
+    margin: float             # 每单本金(U·10-10000)
+
+
+class OpenLeverageIn(BaseModel):
+    leverage: int             # 杠杆(1-20)
+
+
+class MaxPositionsIn(BaseModel):
+    max_positions: int        # 最大总持仓数(> 0)
+
+
+@router.post("/open-margin", summary="★设每单本金(U·10-10000 · 即时生效)")
+async def set_open_margin(payload: OpenMarginIn, _admin: AdminDep, db: DbDep) -> IntelligentStatus:
+    if not (10 <= payload.margin <= 10000):  # noqa: PLR2004
+        raise HTTPException(status_code=400, detail="每单本金必须在 10-10000 U")
+    redis = await get_redis()
+    await intelligent_guard.set_open_margin(redis, Decimal(str(payload.margin)))
+    return await _status(db)
+
+
+@router.post("/open-leverage", summary="★设杠杆(1-20 · 即时生效 · 不影响 ATR 止损止盈价)")
+async def set_open_leverage(
+    payload: OpenLeverageIn, _admin: AdminDep, db: DbDep,
+) -> IntelligentStatus:
+    if not (1 <= payload.leverage <= 20):  # noqa: PLR2004
+        raise HTTPException(status_code=400, detail="杠杆必须在 1-20 倍")
+    redis = await get_redis()
+    await intelligent_guard.set_open_leverage(redis, payload.leverage)
+    return await _status(db)
+
+
+@router.post("/max-positions", summary="★设最大总持仓数(>0 · 到上限不开新 · 即时生效)")
+async def set_max_positions(
+    payload: MaxPositionsIn, _admin: AdminDep, db: DbDep,
+) -> IntelligentStatus:
+    if payload.max_positions <= 0:
+        raise HTTPException(status_code=400, detail="最大总持仓数必须 > 0")
+    redis = await get_redis()
+    await intelligent_guard.set_max_positions(redis, payload.max_positions)
     return await _status(db)
 
 

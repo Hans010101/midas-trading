@@ -165,3 +165,95 @@ async def test_dedup_skips_held_symbol(db_session: AsyncSession, monkeypatch) ->
     )
     out = await iopen.run_intelligent_open(db_session, r, _mark)
     assert [o["symbol"] for o in out["opened"]] == ["ETHUSDT"]  # ★BTC 已持跳过,只开 ETH
+
+
+# ── 开仓参数可调(margin/leverage 读 Redis · max_positions 总数约束 · ★ATR 不受杠杆)──
+@pytest.mark.asyncio
+async def test_guard_open_params_defaults_and_set() -> None:
+    # ★三参数 get/set(纯 · FakeRedis 真跑)· 默认 100/5/50
+    r = _FakeRedis()
+    assert await iguard.get_open_margin(r) == Decimal("100")
+    assert await iguard.get_open_leverage(r) == 5
+    assert await iguard.get_max_positions(r) == 50
+    await iguard.set_open_margin(r, Decimal("300"))
+    await iguard.set_open_leverage(r, 12)
+    await iguard.set_max_positions(r, 20)
+    assert await iguard.get_open_margin(r) == Decimal("300")
+    assert await iguard.get_open_leverage(r) == 12
+    assert await iguard.get_max_positions(r) == 20
+
+
+@pytest.mark.asyncio
+async def test_margin_leverage_from_redis(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★margin/leverage 读 Redis(不再 hardcode 100/5)· 做多做空都用
+    r = _FakeRedis()
+    await iguard.set_enabled(r, enabled=True)
+    await iguard.set_open_margin(r, Decimal("250"))
+    await iguard.set_open_leverage(r, 8)
+    acc = await iacc.ensure_intelligent_account(db_session)
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(iopen, "route_open_perp", _spy_open(captured, acc.id))
+    _seed_snapshots(
+        r,
+        boll=[{"symbol": "BTCUSDT", "bias": "偏多", "close": 100.0}],
+        signals=[_bull("BTCUSDT")],
+    )
+    await iopen.run_intelligent_open(db_session, r, _mark)
+    assert captured[0]["margin"] == Decimal("250")  # ★读 Redis
+    assert captured[0]["leverage"] == 8
+
+
+@pytest.mark.asyncio
+async def test_max_positions_caps_to_exact_limit(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★已持 2 仓 + max_positions=3 → 本轮只开 1(开到刚好 3·不超)· 智能原本并发不限
+    r = _FakeRedis()
+    await iguard.set_enabled(r, enabled=True)
+    await iguard.set_max_positions(r, 3)
+    acc = await iacc.ensure_intelligent_account(db_session)
+    for i in range(2):  # 已持 2 仓
+        db_session.add(VirtualPerpPosition(
+            account_id=acc.id, symbol=f"HELD{i}USDT", side=PerpSide.LONG,
+            margin_mode=MarginMode.CROSS, leverage=5, quantity=Decimal("1"),
+            entry_price=Decimal("100"), initial_margin=Decimal("20"),
+            maintenance_margin_rate=Decimal("0.005"), liquidation_price=Decimal("0"),
+            intelligent=True,
+        ))
+    await db_session.flush()
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(iopen, "route_open_perp", _spy_open(captured, acc.id))
+    # 候选 4 个新币(全偏多)→ 但 max=3·已持 2 → 只能再开 1
+    _seed_snapshots(
+        r,
+        boll=[{"symbol": f"N{i}USDT", "bias": "偏多", "close": 100.0} for i in range(4)],
+        signals=[_bull(f"N{i}USDT") for i in range(4)],
+    )
+    out = await iopen.run_intelligent_open(db_session, r, _mark)
+    assert len(out["opened"]) == 1  # ★开到刚好 3(2+1),不超
+
+
+@pytest.mark.asyncio
+async def test_max_positions_reached_no_open(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★已持 ≥ max_positions → 本轮不开新仓
+    r = _FakeRedis()
+    await iguard.set_enabled(r, enabled=True)
+    await iguard.set_max_positions(r, 2)
+    acc = await iacc.ensure_intelligent_account(db_session)
+    for i in range(2):  # 已持 2 = max
+        db_session.add(VirtualPerpPosition(
+            account_id=acc.id, symbol=f"HELD{i}USDT", side=PerpSide.LONG,
+            margin_mode=MarginMode.CROSS, leverage=5, quantity=Decimal("1"),
+            entry_price=Decimal("100"), initial_margin=Decimal("20"),
+            maintenance_margin_rate=Decimal("0.005"), liquidation_price=Decimal("0"),
+            intelligent=True,
+        ))
+    await db_session.flush()
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(iopen, "route_open_perp", _spy_open(captured, acc.id))
+    _seed_snapshots(
+        r,
+        boll=[{"symbol": f"N{i}USDT", "bias": "偏多", "close": 100.0} for i in range(4)],
+        signals=[_bull(f"N{i}USDT") for i in range(4)],
+    )
+    out = await iopen.run_intelligent_open(db_session, r, _mark)
+    assert out["opened"] == []   # ★到上限不开
+    assert captured == []
