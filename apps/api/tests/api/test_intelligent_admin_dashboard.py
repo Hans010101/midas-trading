@@ -127,3 +127,43 @@ async def test_history_records_side_and_reason(
     assert trades[0]["side"] == "short"
     assert trades[0]["close_reason"] == "take_profit"
     assert trades[0]["pnl_usdt"] == 40.0
+
+
+# ── 开仓参数端点(margin/leverage/max-positions · 范围校验)──────────────
+@pytest.mark.asyncio
+async def test_open_params_endpoints_ok(client: AsyncClient, db_session: AsyncSession) -> None:
+    headers = await _admin_headers(db_session)
+    r1 = await client.post("/api/v1/admin/intelligent/open-margin",
+                           json={"margin": 250}, headers=headers)
+    assert r1.status_code == 200
+    assert r1.json()["open_margin"] == 250.0
+    r2 = await client.post("/api/v1/admin/intelligent/open-leverage",
+                           json={"leverage": 10}, headers=headers)
+    assert r2.json()["open_leverage"] == 10
+    r3 = await client.post("/api/v1/admin/intelligent/max-positions",
+                           json={"max_positions": 30}, headers=headers)
+    assert r3.json()["max_positions"] == 30
+
+
+@pytest.mark.asyncio
+async def test_open_params_range_validation(client: AsyncClient, db_session: AsyncSession) -> None:
+    headers = await _admin_headers(db_session)
+    # ★范围校验:本金 10-10000 · 杠杆 1-20 · 最大单数 >0
+    assert (await client.post("/api/v1/admin/intelligent/open-margin",
+            json={"margin": 5}, headers=headers)).status_code == 400      # < 10
+    assert (await client.post("/api/v1/admin/intelligent/open-margin",
+            json={"margin": 20000}, headers=headers)).status_code == 400  # > 10000
+    assert (await client.post("/api/v1/admin/intelligent/open-leverage",
+            json={"leverage": 25}, headers=headers)).status_code == 400   # > 20
+    assert (await client.post("/api/v1/admin/intelligent/max-positions",
+            json={"max_positions": 0}, headers=headers)).status_code == 400  # ≤ 0
+
+
+@pytest.mark.asyncio
+async def test_open_params_normal_user_403(client: AsyncClient, db_session: AsyncSession) -> None:
+    user = await make_user(db_session, role="user")
+    token = await issue_session(db_session, user_id=user.id)
+    await db_session.commit()
+    r = await client.post("/api/v1/admin/intelligent/open-margin", json={"margin": 100},
+                          headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 403

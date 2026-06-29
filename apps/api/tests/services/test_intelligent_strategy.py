@@ -115,3 +115,15 @@ def test_open_decisions_filters_hold() -> None:
     opens = st.open_decisions(st.build_decisions(boll, signals))
     assert len(opens) == 1
     assert opens[0].symbol == "BTCUSDT"
+
+
+def test_atr_stop_tp_independent_of_leverage() -> None:
+    # ★★智能特殊点钉死:ATR 止损止盈是纯价格(entry∓N×ATR)· decide() 不接受 leverage 参数 ·
+    # 杠杆可调【不影响】止损止盈价(与托管 tp_pct÷杠杆 不同)。entry=100 ATR=10 → 止损 80/止盈 140 恒定。
+    d = st.decide("BTCUSDT", _boll("偏多"), _sig(
+        ma_dir=1, macd_dir=1, rsi_dir=1, kdj_dir=1, extreme_dir=1, atr=10.0), 100.0)
+    assert d.stop_loss == 80.0   # entry−2×ATR · 不除杠杆
+    assert d.take_profit == 140.0  # entry+4×ATR · 不除杠杆
+    # decide 签名无 leverage(纯价格)· 这是与托管 tp_pct 的关键区别
+    import inspect  # noqa: PLC0415
+    assert "leverage" not in inspect.signature(st.decide).parameters

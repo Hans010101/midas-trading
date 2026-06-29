@@ -32,8 +32,7 @@ logger = logging.getLogger(__name__)
 
 _BOLL_KEY = "boll:snapshot:latest"
 _SIGNALS_KEY = "intelligent:signals:latest"
-INTELLIGENT_MARGIN_USDT = Decimal("100")  # 每单本金 100U
-INTELLIGENT_LEVERAGE = 5                    # 5 倍杠杆
+# ★每单本金/杠杆改为可调(读 Redis · 见 guard.get_open_margin/get_open_leverage · 默认 100U/5x)
 
 
 async def _read_items(redis: Any, key: str) -> list[dict[str, Any]]:
@@ -78,12 +77,21 @@ async def run_intelligent_open(
         return {"status": "skip", "reason": "disabled"}
 
     account = await iacc.ensure_intelligent_account(session)
+    # ★三参数读 Redis(即时生效)· margin/leverage 传 route(引擎零碰)· max_positions 限总持仓
+    margin = await iguard.get_open_margin(redis)
+    leverage = await iguard.get_open_leverage(redis)
+    max_positions = await iguard.get_max_positions(redis)
+    current_open = await iguard.count_open_positions(session, account.id)
+    # ★总数上限约束(智能原本并发不限·现加 total 上限)· room = 剩余空间 · ≤0 不开
+    room = max_positions - current_open
     boll_items = await _read_items(redis, _BOLL_KEY)
     signal_items = await _read_items(redis, _SIGNALS_KEY)
     decisions = istrategy.open_decisions(istrategy.build_decisions(boll_items, signal_items))
 
     opened: list[dict[str, Any]] = []
     for d in decisions:
+        if len(opened) >= room:  # ★到总数上限(开到刚好 max_positions·不超)
+            break
         symbol = d.symbol
         if await iguard.has_open_position(session, account.id, symbol):
             continue  # ★同币不重复开
@@ -94,8 +102,8 @@ async def run_intelligent_open(
                 user_id=account.user_id,
                 symbol=symbol,
                 side=side,
-                leverage=INTELLIGENT_LEVERAGE,
-                margin=INTELLIGENT_MARGIN_USDT,
+                leverage=leverage,        # ★读 Redis(可调 1-20)
+                margin=margin,            # ★读 Redis(可调 10-10000)
                 quantity=None,
                 preferred_mode=MarginMode.CROSS,  # ★全仓
                 get_mark_price=get_mark_price,
@@ -105,8 +113,8 @@ async def run_intelligent_open(
                 await session.commit()
                 opened.append({"symbol": symbol, "side": side.value, "score": d.score})
                 logger.info(
-                    "[intelligent] ✓ 开仓 %s %s 100U 5x · score=%s · 止损=%s 止盈=%s",
-                    symbol, side.value, d.score, d.stop_loss, d.take_profit,
+                    "[intelligent] ✓ 开仓 %s %s %sU %sx · score=%s · 止损=%s 止盈=%s",
+                    symbol, side.value, margin, leverage, d.score, d.stop_loss, d.take_profit,
                 )
             else:
                 await session.rollback()

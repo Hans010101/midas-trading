@@ -7,6 +7,7 @@ tp/signal/timeout 开关)。🔴纯虚拟 · 全程零碰引擎撮合。
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
@@ -19,6 +20,16 @@ if TYPE_CHECKING:
 MAX_PER_ROUND = 5  # ★每轮(单次扫描)最多开 5 个【新】单 · 总活仓数不限(仿 managed)
 
 _ENABLED = "intelligent:enabled"
+
+# ★开仓参数(Hans 可调)· open_scan 每轮读最新 → 即时生效 · 不碰引擎(margin/leverage 是 route 参数)。
+#   每单本金(10-10000)· 杠杆(1-20)· 最大总持仓数(到上限不开新 · 智能原本并发不限)· 范围校验在端点。
+#   ★杠杆只改保证金/盈亏倍数 · 不改 ATR 止损止盈价(ATR 是纯价格距离 entry∓N×ATR · 不除杠杆)。
+_OPEN_MARGIN = "intelligent:open:margin"
+DEFAULT_OPEN_MARGIN = Decimal("100")
+_OPEN_LEVERAGE = "intelligent:open:leverage"
+DEFAULT_OPEN_LEVERAGE = 5
+_MAX_POSITIONS = "intelligent:open:max_positions"
+DEFAULT_MAX_POSITIONS = 50
 
 
 # ── 开关(默认 OFF · worker beat 读)─────────────────────────────────
@@ -54,3 +65,46 @@ async def has_open_position(session: AsyncSession, account_id: int, symbol: str)
         ),
     )
     return pos is not None
+
+
+# ── 开仓参数(margin/leverage/max_positions · open_scan 每轮读 · 即时生效)──
+async def get_open_margin(redis: Any) -> Decimal:
+    """每单本金(U)· 默认 100 · 范围校验(10-10000)在端点。"""
+    raw = await redis.get(_OPEN_MARGIN)
+    try:
+        return Decimal(raw) if raw is not None else DEFAULT_OPEN_MARGIN
+    except (TypeError, ValueError, InvalidOperation):
+        return DEFAULT_OPEN_MARGIN
+
+
+async def set_open_margin(redis: Any, margin: Decimal) -> None:
+    """设每单本金 · 调用方校验 10 ≤ margin ≤ 10000。"""
+    await redis.set(_OPEN_MARGIN, str(margin))
+
+
+async def get_open_leverage(redis: Any) -> int:
+    """杠杆 · 默认 5 · 范围校验(1-20)在端点 · ★不影响 ATR 止损止盈价(纯价格距离)。"""
+    raw = await redis.get(_OPEN_LEVERAGE)
+    try:
+        return int(raw) if raw is not None else DEFAULT_OPEN_LEVERAGE
+    except (TypeError, ValueError):
+        return DEFAULT_OPEN_LEVERAGE
+
+
+async def set_open_leverage(redis: Any, leverage: int) -> None:
+    """设杠杆 · 调用方校验 1 ≤ leverage ≤ 20。"""
+    await redis.set(_OPEN_LEVERAGE, str(leverage))
+
+
+async def get_max_positions(redis: Any) -> int:
+    """最大总持仓数 · 默认 50 · 到上限不开新(智能原本并发不限)· 校验 > 0 在端点。"""
+    raw = await redis.get(_MAX_POSITIONS)
+    try:
+        return int(raw) if raw is not None else DEFAULT_MAX_POSITIONS
+    except (TypeError, ValueError):
+        return DEFAULT_MAX_POSITIONS
+
+
+async def set_max_positions(redis: Any, n: int) -> None:
+    """设最大总持仓数 · 调用方校验 n > 0。"""
+    await redis.set(_MAX_POSITIONS, str(n))

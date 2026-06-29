@@ -20,6 +20,9 @@ export interface IntelligentStatus {
   initial_capital: number
   cash_balance: number
   open_positions: number
+  open_margin: number // ★每单本金(U·可调 10-10000·默认 100)
+  open_leverage: number // ★杠杆(可调 1-20·默认 5·不影响 ATR 止损止盈价)
+  max_positions: number // ★最大总持仓数(可调·默认 50·到上限不开新)
 }
 
 export interface IntelligentPosition {
@@ -107,3 +110,15 @@ export const resetIntelligentAccount = (token: string) =>
 /** ★改起始资金(>0 · 清持仓 + 用新资金重来)。 */
 export const setIntelligentCapital = (token: string, amount: number) =>
   _post<IntelligentStatus>('/account/capital', token, { amount })
+
+/** ★设每单本金(U·10-10000 · 即时生效)。 */
+export const setIntelligentOpenMargin = (token: string, margin: number) =>
+  _post<IntelligentStatus>('/open-margin', token, { margin })
+
+/** ★设杠杆(1-20 · 即时生效 · 不影响 ATR 止损止盈价)。 */
+export const setIntelligentOpenLeverage = (token: string, leverage: number) =>
+  _post<IntelligentStatus>('/open-leverage', token, { leverage })
+
+/** ★设最大总持仓数(>0 · 即时生效)。 */
+export const setIntelligentMaxPositions = (token: string, maxPositions: number) =>
+  _post<IntelligentStatus>('/max-positions', token, { max_positions: maxPositions })
