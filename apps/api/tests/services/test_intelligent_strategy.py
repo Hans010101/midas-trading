@@ -127,3 +127,38 @@ def test_atr_stop_tp_independent_of_leverage() -> None:
     # decide 签名无 leverage(纯价格)· 这是与托管 tp_pct 的关键区别
     import inspect  # noqa: PLC0415
     assert "leverage" not in inspect.signature(st.decide).parameters
+
+
+# ── 策略参数入参(★传不同参数→决策变·纯函数可测·向后兼容)──────────────
+def test_decide_custom_threshold() -> None:
+    # 布林+MA=3.5 · 默认阈值 3.0 → 开多;阈值升到 4.0 → 不够 → hold
+    args = ("BTCUSDT", _boll("偏多"), _sig(ma_dir=1), 100.0)
+    assert st.decide(*args).action == "open_long"              # 默认 3.0
+    assert st.decide(*args, threshold=4.0).action == "hold"    # ★阈值升 → 不开
+
+
+def test_decide_custom_weights() -> None:
+    # 只 MA 偏多 · 默认 MA 权重 1.5 < 3.0 → hold;MA 权重升到 5.0 → 开多
+    args = ("BTCUSDT", _boll("中性"), _sig(ma_dir=1), 100.0)
+    assert st.decide(*args).action == "hold"
+    w = {"boll": 2.0, "macd": 1.5, "ma": 5.0, "rsi": 1.0, "kdj": 1.0, "extreme": 1.0}
+    assert st.decide(*args, weights=w).action == "open_long"   # ★MA 权重升 → 开
+
+
+def test_decide_custom_atr_mult() -> None:
+    # 全偏多开多 · entry=100 ATR=10 · 默认止损 80/止盈 140;改 3×/6× → 70/160
+    args = ("BTCUSDT", _boll("偏多"), _sig(
+        ma_dir=1, macd_dir=1, rsi_dir=1, kdj_dir=1, extreme_dir=1, atr=10.0), 100.0)
+    d0 = st.decide(*args)
+    assert (d0.stop_loss, d0.take_profit) == (80.0, 140.0)     # 默认 2×/4×
+    d1 = st.decide(*args, atr_stop_mult=3.0, atr_tp_mult=6.0)
+    assert (d1.stop_loss, d1.take_profit) == (70.0, 160.0)     # ★倍数变 → 止损止盈变
+
+
+def test_build_decisions_passes_params() -> None:
+    # ★build_decisions 透传参数给 decide(阈值 4.0 → 布林+MA=3.5 不够 → 空)
+    boll = [_boll("偏多")]
+    signals = [_sig(symbol="BTCUSDT", ma_dir=1)]
+    assert len(st.build_decisions(boll, signals)) == 1                    # action 含 hold
+    opened = st.open_decisions(st.build_decisions(boll, signals, threshold=4.0))
+    assert opened == []  # ★阈值升 → 不开

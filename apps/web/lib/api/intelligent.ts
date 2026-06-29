@@ -146,3 +146,19 @@ export const setIntelligentOpenLeverage = (token: string, leverage: number) =>
 /** ★设最大总持仓数(>0 · 即时生效)。 */
 export const setIntelligentMaxPositions = (token: string, maxPositions: number) =>
   _post<IntelligentStatus>('/max-positions', token, { max_positions: maxPositions })
+
+// ★策略参数(阈值/6权重/ATR倍数 · 前向测试迭代调参 · decide 纯函数入参)─────
+export interface StrategyParams {
+  threshold: number // 开仓阈值(> 0·默认 3.0)
+  weights: { boll: number; macd: number; ma: number; rsi: number; kdj: number; extreme: number }
+  atr_stop_mult: number // ATR 止损倍数(> 0·默认 2.0)
+  atr_tp_mult: number // ATR 止盈倍数(> 0·默认 4.0)
+}
+
+/** ★读策略参数(阈值/6权重/ATR倍数)。 */
+export const getIntelligentStrategyParams = (t: string, s?: AbortSignal) =>
+  _get<StrategyParams>('/strategy-params', t, s)
+
+/** ★设策略参数(批量·即时生效·后端范围校验)。 */
+export const setIntelligentStrategyParams = (token: string, params: StrategyParams) =>
+  _post<StrategyParams>('/strategy-params', token, params)

@@ -179,6 +179,51 @@ async def set_max_positions(
     return await _status(db, ch)
 
 
+# ── 策略参数(阈值 / 6 权重 / ATR 倍数 · 前向测试迭代调参 · 即时生效)──────────
+_INDICATORS = ("boll", "macd", "ma", "rsi", "kdj", "extreme")
+
+
+class StrategyParams(BaseModel):
+    threshold: float                # 开仓阈值(> 0 · 默认 3.0)
+    weights: dict[str, float]       # 6 指标权重(boll/macd/ma/rsi/kdj/extreme · ≥ 0)
+    atr_stop_mult: float            # ATR 止损倍数(> 0 · 默认 2.0)
+    atr_tp_mult: float              # ATR 止盈倍数(> 0 · 默认 4.0)
+
+
+async def _strategy_params(redis: object) -> StrategyParams:
+    return StrategyParams(
+        threshold=await intelligent_guard.get_strategy_threshold(redis),
+        weights=await intelligent_guard.get_strategy_weights(redis),
+        atr_stop_mult=await intelligent_guard.get_strategy_atr_stop_mult(redis),
+        atr_tp_mult=await intelligent_guard.get_strategy_atr_tp_mult(redis),
+    )
+
+
+@router.get("/strategy-params", summary="读策略参数(阈值/6权重/ATR倍数)")
+async def get_strategy_params(_admin: AdminDep) -> StrategyParams:
+    return await _strategy_params(await get_redis())
+
+
+@router.post("/strategy-params", summary="★设策略参数(批量 · 阈值/6权重/ATR倍数 · 即时生效)")
+async def set_strategy_params(payload: StrategyParams, _admin: AdminDep) -> StrategyParams:
+    """前向测试迭代调参 · open/close 每轮读传 decide(纯函数)· 范围校验后逐项写 Redis。"""
+    if payload.threshold <= 0:
+        raise HTTPException(status_code=400, detail="阈值必须 > 0")
+    if payload.atr_stop_mult <= 0 or payload.atr_tp_mult <= 0:
+        raise HTTPException(status_code=400, detail="ATR 倍数必须 > 0")
+    if set(payload.weights) != set(_INDICATORS):
+        raise HTTPException(status_code=400, detail=f"权重必须含且仅含 {_INDICATORS}")
+    if any(v < 0 for v in payload.weights.values()):
+        raise HTTPException(status_code=400, detail="权重必须 ≥ 0")
+    redis = await get_redis()
+    await intelligent_guard.set_strategy_threshold(redis, payload.threshold)
+    await intelligent_guard.set_strategy_atr_stop_mult(redis, payload.atr_stop_mult)
+    await intelligent_guard.set_strategy_atr_tp_mult(redis, payload.atr_tp_mult)
+    for ind, v in payload.weights.items():
+        await intelligent_guard.set_strategy_weight(redis, ind, v)
+    return await _strategy_params(redis)
+
+
 # ── 看板:活仓 / 历史 / 统计(PR-6 · 前向测试 · ★做多做空 + 共振信号)──────
 
 

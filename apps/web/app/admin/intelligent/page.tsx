@@ -18,6 +18,7 @@ import {
   getIntelligentPositions,
   getIntelligentStats,
   getIntelligentStatus,
+  getIntelligentStrategyParams,
   INTELLIGENT_HISTORY_PAGE_SIZE,
   INTELLIGENT_POSITIONS_PAGE_SIZE,
   resetIntelligentAccount,
@@ -25,6 +26,8 @@ import {
   setIntelligentMaxPositions,
   setIntelligentOpenLeverage,
   setIntelligentOpenMargin,
+  setIntelligentStrategyParams,
+  type StrategyParams,
   toggleIntelligent,
 } from '@/lib/api/intelligent'
 import { useSession } from 'next-auth/react'
@@ -182,6 +185,30 @@ export default function AdminIntelligentPage() {
     },
     onError: () => setNote('最大单数更新失败(需 > 0)'),
   })
+
+  // ★策略参数(阈值/6权重/ATR倍数 · 前向测试迭代调参 · 折叠区 · 失焦保存批量提交)
+  const [showStrat, setShowStrat] = useState(false)
+  const [strat, setStrat] = useState<StrategyParams | null>(null)
+  const stratQuery = useQuery({
+    queryKey: ['intelligent-strategy-params'],
+    queryFn: ({ signal }) => getIntelligentStrategyParams(token, signal),
+    enabled: on,
+  })
+  useEffect(() => {
+    if (stratQuery.data) setStrat(stratQuery.data)
+  }, [stratQuery.data])
+  const stratMut = useMutation({
+    mutationFn: (p: StrategyParams) => setIntelligentStrategyParams(token, p),
+    onSuccess: (p) => {
+      setStrat(p)
+      setNote('✓ 策略参数已更新 · 下一轮按新参数算')
+      void qc.invalidateQueries({ queryKey: ['intelligent-strategy-params'] })
+    },
+    onError: () => setNote('策略参数更新失败(阈值/ATR>0·权重≥0)'),
+  })
+  const saveStrat = () => {
+    if (strat) stratMut.mutate(strat)
+  }
 
   const forbidden = status.isError
   const st = status.data
@@ -352,6 +379,97 @@ export default function AdminIntelligentPage() {
               </div>
               {note && (
                 <p className="mt-3 rounded-md bg-gold/10 px-3 py-2 text-xs text-muted-foreground">{note}</p>
+              )}
+            </div>
+
+            {/* ★策略参数(阈值/6权重/ATR倍数 · 前向测试迭代调参 · 折叠区) */}
+            <div className="mb-6 rounded-lg border border-paper bg-cream p-4 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setShowStrat((v) => !v)}
+                className="flex w-full items-center gap-2 font-serif text-base font-bold"
+              >
+                <span>策略参数</span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  (阈值 {strat?.threshold ?? 3} · ATR {strat?.atr_stop_mult ?? 2}×/{strat?.atr_tp_mult ?? 4}× · 点击{showStrat ? '收起' : '展开'}调参)
+                </span>
+                <span className="ml-auto text-muted-foreground">{showStrat ? '▲' : '▼'}</span>
+              </button>
+              {showStrat && strat && (
+                <div className="mt-3 space-y-3 border-t border-paper pt-3 text-xs">
+                  <p className="text-muted-foreground">★改后点「保存」即时生效 · 下一轮 open/close 按新参数算 · 失焦或点保存提交</p>
+                  {/* 阈值 + ATR 倍数 */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <label className="flex items-center gap-2">
+                      <span className="text-muted-foreground">开仓阈值(&gt;0):</span>
+                      <input
+                        type="number" step="0.5" min={0.5}
+                        value={strat.threshold}
+                        disabled={!on || stratMut.isPending}
+                        onChange={(e) => setStrat({ ...strat, threshold: Number.parseFloat(e.currentTarget.value) || 0 })}
+                        onBlur={saveStrat}
+                        className="w-20 rounded border border-paper bg-cream px-2 py-1 font-mono disabled:opacity-50"
+                      />
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <span className="text-muted-foreground">ATR 止损倍数:</span>
+                      <input
+                        type="number" step="0.5" min={0.5}
+                        value={strat.atr_stop_mult}
+                        disabled={!on || stratMut.isPending}
+                        onChange={(e) => setStrat({ ...strat, atr_stop_mult: Number.parseFloat(e.currentTarget.value) || 0 })}
+                        onBlur={saveStrat}
+                        className="w-16 rounded border border-paper bg-cream px-2 py-1 font-mono disabled:opacity-50"
+                      />
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <span className="text-muted-foreground">ATR 止盈倍数:</span>
+                      <input
+                        type="number" step="0.5" min={0.5}
+                        value={strat.atr_tp_mult}
+                        disabled={!on || stratMut.isPending}
+                        onChange={(e) => setStrat({ ...strat, atr_tp_mult: Number.parseFloat(e.currentTarget.value) || 0 })}
+                        onBlur={saveStrat}
+                        className="w-16 rounded border border-paper bg-cream px-2 py-1 font-mono disabled:opacity-50"
+                      />
+                    </label>
+                  </div>
+                  {/* 6 权重 */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <span className="text-muted-foreground">指标权重(≥0):</span>
+                    {(
+                      [
+                        ['boll', '布林'], ['macd', 'MACD'], ['ma', 'MA'],
+                        ['rsi', 'RSI'], ['kdj', 'KDJ'], ['extreme', '极端'],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <label key={key} className="flex items-center gap-1">
+                        <span className="text-muted-foreground">{label}</span>
+                        <input
+                          type="number" step="0.5" min={0}
+                          value={strat.weights[key]}
+                          disabled={!on || stratMut.isPending}
+                          onChange={(e) =>
+                            setStrat({
+                              ...strat,
+                              weights: { ...strat.weights, [key]: Number.parseFloat(e.currentTarget.value) || 0 },
+                            })
+                          }
+                          onBlur={saveStrat}
+                          className="w-14 rounded border border-paper bg-cream px-2 py-1 font-mono disabled:opacity-50"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={saveStrat}
+                    disabled={!on || stratMut.isPending}
+                    className="rounded-md bg-midas-red px-4 py-1.5 text-xs font-medium text-white hover:bg-midas-red/90 disabled:opacity-50"
+                  >
+                    {stratMut.isPending ? '保存中…' : '保存策略参数'}
+                  </button>
+                </div>
               )}
             </div>
 

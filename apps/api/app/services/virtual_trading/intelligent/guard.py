@@ -31,6 +31,19 @@ DEFAULT_OPEN_LEVERAGE = 5
 _MAX_POSITIONS = "intelligent:open:max_positions"
 DEFAULT_MAX_POSITIONS = 50
 
+# ★策略参数(Hans 可调·前向测试迭代调)· open/close 每轮读传给 decide(纯函数入参)· 即时生效。
+#   阈值 · 6 权重 · ATR 止损/止盈倍数 · 默认对齐 strategy.py 常量。
+_STRAT_THRESHOLD = "intelligent:strategy:threshold"
+DEFAULT_STRAT_THRESHOLD = 3.0
+_STRAT_WEIGHT_PREFIX = "intelligent:strategy:weight_"  # + boll/macd/ma/rsi/kdj/extreme
+DEFAULT_STRAT_WEIGHTS: dict[str, float] = {
+    "boll": 2.0, "macd": 1.5, "ma": 1.5, "rsi": 1.0, "kdj": 1.0, "extreme": 1.0,
+}
+_STRAT_ATR_STOP = "intelligent:strategy:atr_stop_mult"
+DEFAULT_STRAT_ATR_STOP = 2.0
+_STRAT_ATR_TP = "intelligent:strategy:atr_tp_mult"
+DEFAULT_STRAT_ATR_TP = 4.0
+
 
 # ── 开关(默认 OFF · worker beat 读)─────────────────────────────────
 async def is_enabled(redis: Any) -> bool:
@@ -108,3 +121,51 @@ async def get_max_positions(redis: Any) -> int:
 async def set_max_positions(redis: Any, n: int) -> None:
     """设最大总持仓数 · 调用方校验 n > 0。"""
     await redis.set(_MAX_POSITIONS, str(n))
+
+
+# ── 策略参数(阈值 / 6 权重 / ATR 倍数 · open/close 每轮读传 decide · 即时生效)──
+def _to_float(raw: Any, default: float) -> float:
+    try:
+        return float(raw) if raw is not None else default
+    except (TypeError, ValueError):
+        return default
+
+
+async def get_strategy_threshold(redis: Any) -> float:
+    """开仓阈值 · 默认 3.0 · 调用方校验 > 0。"""
+    return _to_float(await redis.get(_STRAT_THRESHOLD), DEFAULT_STRAT_THRESHOLD)
+
+
+async def set_strategy_threshold(redis: Any, v: float) -> None:
+    await redis.set(_STRAT_THRESHOLD, str(v))
+
+
+async def get_strategy_weights(redis: Any) -> dict[str, float]:
+    """6 指标权重 dict · 每个缺则用默认 · 读 6 个 Redis key。"""
+    return {
+        k: _to_float(await redis.get(_STRAT_WEIGHT_PREFIX + k), DEFAULT_STRAT_WEIGHTS[k])
+        for k in DEFAULT_STRAT_WEIGHTS
+    }
+
+
+async def set_strategy_weight(redis: Any, indicator: str, v: float) -> None:
+    """设单个指标权重 · 调用方校验 indicator ∈ 6 指标 · v ≥ 0。"""
+    await redis.set(_STRAT_WEIGHT_PREFIX + indicator, str(v))
+
+
+async def get_strategy_atr_stop_mult(redis: Any) -> float:
+    """ATR 止损倍数 · 默认 2.0 · 调用方校验 > 0。"""
+    return _to_float(await redis.get(_STRAT_ATR_STOP), DEFAULT_STRAT_ATR_STOP)
+
+
+async def set_strategy_atr_stop_mult(redis: Any, v: float) -> None:
+    await redis.set(_STRAT_ATR_STOP, str(v))
+
+
+async def get_strategy_atr_tp_mult(redis: Any) -> float:
+    """ATR 止盈倍数 · 默认 4.0 · 调用方校验 > 0。"""
+    return _to_float(await redis.get(_STRAT_ATR_TP), DEFAULT_STRAT_ATR_TP)
+
+
+async def set_strategy_atr_tp_mult(redis: Any, v: float) -> None:
+    await redis.set(_STRAT_ATR_TP, str(v))

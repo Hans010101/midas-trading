@@ -216,3 +216,58 @@ async def test_history_pagination(client: AsyncClient, db_session: AsyncSession)
     assert len(b1["items"]) == 50
     r2 = await client.get("/api/v1/admin/intelligent/history?offset=50&limit=50", headers=headers)
     assert len(r2.json()["items"]) == 10
+
+
+# ── 策略参数端点(GET/POST · 范围校验 · 9 参数)──────────────────────────
+@pytest.mark.asyncio
+async def test_strategy_params_get_defaults(client: AsyncClient, db_session: AsyncSession) -> None:
+    headers = await _admin_headers(db_session)
+    r = await client.get("/api/v1/admin/intelligent/strategy-params", headers=headers)
+    assert r.status_code == 200
+    b = r.json()
+    assert b["threshold"] == 3.0
+    assert b["weights"] == {"boll": 2.0, "macd": 1.5, "ma": 1.5, "rsi": 1.0, "kdj": 1.0, "extreme": 1.0}
+    assert b["atr_stop_mult"] == 2.0
+    assert b["atr_tp_mult"] == 4.0
+
+
+@pytest.mark.asyncio
+async def test_strategy_params_set_and_readback(client: AsyncClient, db_session: AsyncSession) -> None:
+    headers = await _admin_headers(db_session)
+    payload = {
+        "threshold": 4.5,
+        "weights": {"boll": 3.0, "macd": 2.0, "ma": 1.0, "rsi": 0.5, "kdj": 0.5, "extreme": 2.0},
+        "atr_stop_mult": 2.5, "atr_tp_mult": 5.0,
+    }
+    r = await client.post("/api/v1/admin/intelligent/strategy-params", json=payload, headers=headers)
+    assert r.status_code == 200
+    assert r.json()["threshold"] == 4.5
+    assert r.json()["weights"]["boll"] == 3.0
+    # ★读回持久(即时生效)
+    r2 = await client.get("/api/v1/admin/intelligent/strategy-params", headers=headers)
+    assert r2.json()["atr_tp_mult"] == 5.0
+
+
+@pytest.mark.asyncio
+async def test_strategy_params_validation(client: AsyncClient, db_session: AsyncSession) -> None:
+    headers = await _admin_headers(db_session)
+    base = {"threshold": 3.0, "weights": {"boll": 2.0, "macd": 1.5, "ma": 1.5, "rsi": 1.0, "kdj": 1.0, "extreme": 1.0}, "atr_stop_mult": 2.0, "atr_tp_mult": 4.0}
+    # ★阈值 ≤ 0
+    assert (await client.post("/api/v1/admin/intelligent/strategy-params",
+            json={**base, "threshold": 0}, headers=headers)).status_code == 400
+    # ★权重缺指标
+    assert (await client.post("/api/v1/admin/intelligent/strategy-params",
+            json={**base, "weights": {"boll": 1.0}}, headers=headers)).status_code == 400
+    # ★ATR 倍数 ≤ 0
+    assert (await client.post("/api/v1/admin/intelligent/strategy-params",
+            json={**base, "atr_tp_mult": 0}, headers=headers)).status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_strategy_params_normal_user_403(client: AsyncClient, db_session: AsyncSession) -> None:
+    user = await make_user(db_session, role="user")
+    token = await issue_session(db_session, user_id=user.id)
+    await db_session.commit()
+    r = await client.get("/api/v1/admin/intelligent/strategy-params",
+                         headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 403

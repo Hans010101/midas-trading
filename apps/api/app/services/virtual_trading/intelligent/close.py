@@ -26,6 +26,7 @@ from sqlalchemy import select
 from app.models.perp import PerpSide, VirtualPerpPosition
 from app.models.virtual import OrderStatus
 from app.services.virtual_trading.intelligent import account as iacc
+from app.services.virtual_trading.intelligent import guard as iguard
 from app.services.virtual_trading.intelligent import strategy as istrategy
 from app.services.virtual_trading.perp_dispatcher import route_close_perp
 
@@ -111,7 +112,12 @@ async def run_intelligent_close(
     # ★读两快照重算当前方向分(信号反转用)· 当前快照无该币 → decisions 无 → 只止损止盈
     boll_items = await _read_items(redis, _BOLL_KEY)
     signal_items = await _read_items(redis, _SIGNALS_KEY)
-    decisions = {d.symbol: d for d in istrategy.build_decisions(boll_items, signal_items)}
+    # ★信号反转判 score 穿 0 · 用与开仓一致的 weights 重算(Redis · 即时生效)
+    weights = await iguard.get_strategy_weights(redis)
+    decisions = {
+        d.symbol: d
+        for d in istrategy.build_decisions(boll_items, signal_items, weights=weights)
+    }
 
     closed: list[tuple[str, str]] = []
     for pos in positions:
