@@ -230,16 +230,19 @@ export default function AdminIntelligentPage() {
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                {/* ★需求1:起始资金 → 账户总价值(权益·含浮盈亏·动态)· 盈亏染色 */}
                 <StatCard
-                  label="起始资金"
-                  value={st ? `${st.initial_capital.toLocaleString(undefined, { maximumFractionDigits: 0 })} U` : '—'}
+                  label="账户总价值"
+                  value={st ? `${st.account_value.toLocaleString(undefined, { maximumFractionDigits: 2 })} U` : '—'}
+                  tone={st ? pnlTone(st.account_value - st.initial_capital) : undefined}
                 />
                 <StatCard
                   label="账户现金"
                   value={st ? `${st.cash_balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} U` : '—'}
                 />
-                <StatCard label="当前活仓" value={st ? `${st.open_positions}` : '—'} />
+                {/* ★需求2:总敞口 ↔ 当前活仓 对换(资金类在前·仓位类在后)*/}
                 <StatCard label="总敞口(保证金)" value={`${totalMargin.toFixed(0)} U`} />
+                <StatCard label="当前活仓" value={st ? `${st.open_positions}` : '—'} />
                 <StatCard label="做多 / 做空" value={`${longCount} / ${shortCount}`} />
                 <StatCard
                   label="持仓浮盈"

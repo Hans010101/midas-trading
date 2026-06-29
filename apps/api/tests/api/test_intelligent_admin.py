@@ -2,12 +2,25 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_clickhouse
+from app.main import app
 from app.services.auth import issue_session
 from tests.factories import make_user
+
+
+@pytest.fixture(autouse=True)
+def _ch_override():  # noqa: ANN202
+    # ★status 加 account_value(_cross_available_margin)后所有端点要 ClickHouseDep · 测试无 lifespan →
+    #   假 holder(无活仓时 _cross_available_margin 不触发 fetch · account_value=现金)。
+    app.dependency_overrides[get_clickhouse] = lambda: SimpleNamespace(_client=object())
+    yield
+    app.dependency_overrides.pop(get_clickhouse, None)
 
 
 async def _admin_headers(db: AsyncSession) -> dict[str, str]:
@@ -54,6 +67,7 @@ async def test_toggle_on_provisions_account(client: AsyncClient, db_session: Asy
     assert body["account_ready"] is True              # ★开则幂等建账户
     assert body["initial_capital"] == 100000.0        # 默认 10万U
     assert body["cash_balance"] == 100000.0
+    assert body["account_value"] == 100000.0          # ★账户总价值(0 活仓 → = 现金 10万)
     assert body["open_positions"] == 0
 
 

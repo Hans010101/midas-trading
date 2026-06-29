@@ -17,6 +17,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 export interface IntelligentStatus {
   enabled: boolean
   account_ready: boolean
+  account_value: number // ★账户总价值(权益·浮动)= 现金 + Σ浮盈亏 · 复用引擎算法
   initial_capital: number
   cash_balance: number
   open_positions: number
