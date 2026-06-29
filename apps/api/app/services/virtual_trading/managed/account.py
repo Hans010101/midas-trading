@@ -25,6 +25,9 @@ if TYPE_CHECKING:
 
 # 系统用户(不可登录)· 托管账户挂在它名下
 MANAGED_BOT_EMAIL = "managed-trading-bot@system.midas.local"
+# ★铂金多账户(PR-2):每铂金用户专属【影子系统用户】email 模板(managed-{真人uid}@...·不可登录)。
+# ★全局 MANAGED_BOT_EMAIL 保留不动(现在的托管账户用它 · 向后兼容)。
+MANAGED_BOT_EMAIL_TEMPLATE = "managed-{uid}@system.midas.local"
 # 托管 perp 账户:market="crypto"(route_open_perp 走 _find_crypto_account 解析)· USDT 钱包
 MANAGED_MARKET = "crypto"
 MANAGED_CURRENCY = "USDT"
@@ -80,3 +83,59 @@ async def get_managed_user_id(session: AsyncSession) -> UUID | None:
         select(User.id).where(User.email == MANAGED_BOT_EMAIL),
     )
     return uid
+
+
+# ── ★铂金多账户(PR-2):每铂金用户专属影子账户(全局版上方保留不动 · 这些是新增)──────
+
+
+async def _ensure_bot_user_for_user(session: AsyncSession, user_id: UUID) -> User:
+    """幂等 ensure 某铂金用户(真人 user_id)的专属【影子系统用户】(★不可登录:无密码/无 OAuth)。"""
+    email = MANAGED_BOT_EMAIL_TEMPLATE.format(uid=user_id)
+    user = await session.scalar(select(User).where(User.email == email))
+    if user is not None:
+        return user
+    user = User(email=email, password_hash=None, google_sub=None, age_confirmed=True)
+    session.add(user)
+    await session.flush()
+    return user
+
+
+async def ensure_managed_account_for_user(
+    session: AsyncSession, user_id: UUID,
+) -> VirtualAccount:
+    """幂等 ensure 某铂金用户的专属托管影子账户(影子系统用户 + crypto perp 钱包 · 10万U)。
+
+    ★route_open_perp(user_id=影子user.id) 自然解析 · 引擎零碰 · 与全局账户 + 真人账户全隔离。
+    已存在 → 复用 · 不存在 → 建。PR-4 worker 遍历铂金用户时 lazy 调(幂等)。
+    """
+    user = await _ensure_bot_user_for_user(session, user_id)
+    account = await session.scalar(
+        select(VirtualAccount).where(
+            VirtualAccount.user_id == user.id,
+            VirtualAccount.market == MANAGED_MARKET,
+        ),
+    )
+    if account is not None:
+        return account
+    account = VirtualAccount(
+        user_id=user.id,
+        market=MANAGED_MARKET,
+        currency=MANAGED_CURRENCY,
+        initial_capital=MANAGED_INITIAL_CAPITAL,
+        cash_balance=MANAGED_INITIAL_CAPITAL,
+    )
+    session.add(account)
+    await session.commit()
+    await session.refresh(account)
+    return account
+
+
+async def get_managed_user_id_for_user(
+    session: AsyncSession, user_id: UUID,
+) -> UUID | None:
+    """取某铂金用户的影子托管系统用户 id(PR-4 开/平 + PR-5 自助端点用)· 未建则 None。"""
+    email = MANAGED_BOT_EMAIL_TEMPLATE.format(uid=user_id)
+    shadow_uid: UUID | None = await session.scalar(
+        select(User.id).where(User.email == email),
+    )
+    return shadow_uid
