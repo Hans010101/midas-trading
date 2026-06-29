@@ -155,3 +155,33 @@ async def send_report_email(
         raise EmailDeliveryError(msg) from e
 
     logger.info("report email 已发 to=%s", to)
+
+
+async def send_email(*, to: str, subject: str, html: str) -> None:
+    """通用 HTML 邮件(★无附件)· 复用 Resend 范式(智能交易复盘日/周/月报用)。
+
+    无 RESEND_API_KEY(dev)→ 记 warning 跳过实际投递(模拟);失败抛 EmailDeliveryError(调用方逐人 catch)。
+    """
+    api_key = _api_key()
+    if not api_key:
+        logger.warning("RESEND_API_KEY 未配置 · 模拟投递邮件 · to=%s · subject=%s", to, subject)
+        return
+
+    body = {"from": _from_addr(), "to": [to], "subject": subject, "html": html}
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                RESEND_ENDPOINT,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=body,
+            )
+            resp.raise_for_status()
+    except httpx.HTTPError as e:
+        logger.exception("Resend 邮件投递失败 to=%s", to)
+        msg = f"Resend 邮件投递失败:{e}"
+        raise EmailDeliveryError(msg) from e
+
+    logger.info("email 已发 to=%s", to)
