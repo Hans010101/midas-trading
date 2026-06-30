@@ -16,16 +16,19 @@ import type {
   IntelligentPositionsPage,
   IntelligentStats,
   IntelligentStatus,
+  StrategyParams,
 } from '@/lib/api/intelligent'
 import {
   INTELLIGENT_HISTORY_PAGE_SIZE,
   INTELLIGENT_POSITIONS_PAGE_SIZE,
 } from '@/lib/api/intelligent'
 import type {
+  BatchCloseResult,
   ManagedHistoryPage,
   ManagedPositionsPage,
   ManagedStats,
   ManagedStatus,
+  ManualCloseResult,
 } from '@/lib/api/managed'
 import {
   MANAGED_HISTORY_PAGE_SIZE,
@@ -83,3 +86,39 @@ export const getMyManagedHistory = (
 ) => _get<ManagedHistoryPage>(`/managed/history?offset=${offset}&limit=${limit}`, t, s)
 export const getMyManagedStats = (t: string, s?: AbortSignal) =>
   _get<ManagedStats>('/managed/stats', t, s)
+
+// ── 智能交易开仓参数 / 策略参数 / 账户操作(PR-7b/7c · per-user · 身份后端取 token)──
+export const setMyIntelligentOpenMargin = (t: string, margin: number) =>
+  _post<IntelligentStatus>('/intelligent/open-margin', t, { margin })
+export const setMyIntelligentOpenLeverage = (t: string, leverage: number) =>
+  _post<IntelligentStatus>('/intelligent/open-leverage', t, { leverage })
+export const setMyIntelligentMaxPositions = (t: string, max_positions: number) =>
+  _post<IntelligentStatus>('/intelligent/max-positions', t, { max_positions })
+export const getMyIntelligentStrategyParams = (t: string, s?: AbortSignal) =>
+  _get<StrategyParams>('/intelligent/strategy-params', t, s)
+export const setMyIntelligentStrategyParams = (t: string, params: StrategyParams) =>
+  _post<StrategyParams>('/intelligent/strategy-params', t, params)
+/** 清零我的智能影子账户(★调用方应二次确认)。 */
+export const resetMyIntelligent = (t: string) =>
+  _post<IntelligentStatus>('/intelligent/account/reset', t)
+export const setMyIntelligentCapital = (t: string, amount: number) =>
+  _post<IntelligentStatus>('/intelligent/account/capital', t, { amount })
+
+// ── 托管交易开仓参数 / 账户操作 / 平仓(PR-7b/7c · ★决策B 无 exit/tp 自助·平仓参数全局)──
+export const setMyManagedOpenMargin = (t: string, margin: number) =>
+  _post<ManagedStatus>('/managed/open-margin', t, { margin })
+export const setMyManagedOpenLeverage = (t: string, leverage: number) =>
+  _post<ManagedStatus>('/managed/open-leverage', t, { leverage })
+export const setMyManagedMaxPositions = (t: string, max_positions: number) =>
+  _post<ManagedStatus>('/managed/max-positions', t, { max_positions })
+/** 清零我的托管影子账户(★调用方应二次确认)。 */
+export const resetMyManaged = (t: string) =>
+  _post<ManagedStatus>('/managed/account/reset', t)
+export const setMyManagedCapital = (t: string, amount: number) =>
+  _post<ManagedStatus>('/managed/account/capital', t, { amount })
+/** 手动平我的某托管活仓(★越权:仓不属我后端返 not_found)。 */
+export const closeMyManagedPosition = (t: string, positionId: number) =>
+  _post<ManualCloseResult>(`/managed/positions/${positionId}/close`, t)
+/** 一键平我的所有托管活仓(★调用方应二次确认)。 */
+export const closeAllMyManaged = (t: string) =>
+  _post<BatchCloseResult>('/managed/positions/close-all', t)

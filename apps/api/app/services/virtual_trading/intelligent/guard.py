@@ -89,47 +89,64 @@ async def has_open_position(session: AsyncSession, account_id: int, symbol: str)
     return pos is not None
 
 
-# ── 开仓参数(margin/leverage/max_positions · open_scan 每轮读 · 即时生效)──
-async def get_open_margin(redis: Any) -> Decimal:
+# ── 开仓参数 per-user(PR-7a · margin/leverage/max_positions · open_scan 每轮读)──
+# ★user_id=None → 全局 key(现在跑的 + admin·一字不变·向后兼容)。给定 → 先读 per-user key
+#   f"{base}:{uid}";★铂金没单独设过 → 回退全局 key 当前值(决策③·非硬默认);均无 → DEFAULT。
+# ★只【开仓参数】per-user(open 透 enabled_user_id);平仓参数(close 读 weights/atr)调 getter 不传
+#   uid → user_id=None → 全局 key(决策 B·close.py 零改)。set 给 uid 只写 per-user key(不动全局)。
+def _param_key(base: str, user_id: UUID | None) -> str:
+    return base if user_id is None else f"{base}:{user_id}"
+
+
+async def _read_param(redis: Any, base: str, user_id: UUID | None) -> Any:
+    """给 uid 先读 per-user key·缺则回退全局 key(决策③)·均无 → None(调用方用 DEFAULT)。"""
+    if user_id is not None:
+        per_user = await redis.get(f"{base}:{user_id}")
+        if per_user is not None:
+            return per_user
+    return await redis.get(base)
+
+
+async def get_open_margin(redis: Any, user_id: UUID | None = None) -> Decimal:
     """每单本金(U)· 默认 100 · 范围校验(10-10000)在端点。"""
-    raw = await redis.get(_OPEN_MARGIN)
+    raw = await _read_param(redis, _OPEN_MARGIN, user_id)
     try:
         return Decimal(raw) if raw is not None else DEFAULT_OPEN_MARGIN
     except (TypeError, ValueError, InvalidOperation):
         return DEFAULT_OPEN_MARGIN
 
 
-async def set_open_margin(redis: Any, margin: Decimal) -> None:
+async def set_open_margin(redis: Any, margin: Decimal, user_id: UUID | None = None) -> None:
     """设每单本金 · 调用方校验 10 ≤ margin ≤ 10000。"""
-    await redis.set(_OPEN_MARGIN, str(margin))
+    await redis.set(_param_key(_OPEN_MARGIN, user_id), str(margin))
 
 
-async def get_open_leverage(redis: Any) -> int:
+async def get_open_leverage(redis: Any, user_id: UUID | None = None) -> int:
     """杠杆 · 默认 5 · 范围校验(1-20)在端点 · ★不影响 ATR 止损止盈价(纯价格距离)。"""
-    raw = await redis.get(_OPEN_LEVERAGE)
+    raw = await _read_param(redis, _OPEN_LEVERAGE, user_id)
     try:
         return int(raw) if raw is not None else DEFAULT_OPEN_LEVERAGE
     except (TypeError, ValueError):
         return DEFAULT_OPEN_LEVERAGE
 
 
-async def set_open_leverage(redis: Any, leverage: int) -> None:
+async def set_open_leverage(redis: Any, leverage: int, user_id: UUID | None = None) -> None:
     """设杠杆 · 调用方校验 1 ≤ leverage ≤ 20。"""
-    await redis.set(_OPEN_LEVERAGE, str(leverage))
+    await redis.set(_param_key(_OPEN_LEVERAGE, user_id), str(leverage))
 
 
-async def get_max_positions(redis: Any) -> int:
+async def get_max_positions(redis: Any, user_id: UUID | None = None) -> int:
     """最大总持仓数 · 默认 50 · 到上限不开新(智能原本并发不限)· 校验 > 0 在端点。"""
-    raw = await redis.get(_MAX_POSITIONS)
+    raw = await _read_param(redis, _MAX_POSITIONS, user_id)
     try:
         return int(raw) if raw is not None else DEFAULT_MAX_POSITIONS
     except (TypeError, ValueError):
         return DEFAULT_MAX_POSITIONS
 
 
-async def set_max_positions(redis: Any, n: int) -> None:
+async def set_max_positions(redis: Any, n: int, user_id: UUID | None = None) -> None:
     """设最大总持仓数 · 调用方校验 n > 0。"""
-    await redis.set(_MAX_POSITIONS, str(n))
+    await redis.set(_param_key(_MAX_POSITIONS, user_id), str(n))
 
 
 # ── 策略参数(阈值 / 6 权重 / ATR 倍数 · open/close 每轮读传 decide · 即时生效)──
@@ -140,41 +157,43 @@ def _to_float(raw: Any, default: float) -> float:
         return default
 
 
-async def get_strategy_threshold(redis: Any) -> float:
+async def get_strategy_threshold(redis: Any, user_id: UUID | None = None) -> float:
     """开仓阈值 · 默认 3.0 · 调用方校验 > 0。"""
-    return _to_float(await redis.get(_STRAT_THRESHOLD), DEFAULT_STRAT_THRESHOLD)
+    return _to_float(await _read_param(redis, _STRAT_THRESHOLD, user_id), DEFAULT_STRAT_THRESHOLD)
 
 
-async def set_strategy_threshold(redis: Any, v: float) -> None:
-    await redis.set(_STRAT_THRESHOLD, str(v))
+async def set_strategy_threshold(redis: Any, v: float, user_id: UUID | None = None) -> None:
+    await redis.set(_param_key(_STRAT_THRESHOLD, user_id), str(v))
 
 
-async def get_strategy_weights(redis: Any) -> dict[str, float]:
-    """6 指标权重 dict · 每个缺则用默认 · 读 6 个 Redis key。"""
-    return {
-        k: _to_float(await redis.get(_STRAT_WEIGHT_PREFIX + k), DEFAULT_STRAT_WEIGHTS[k])
-        for k in DEFAULT_STRAT_WEIGHTS
-    }
+async def get_strategy_weights(redis: Any, user_id: UUID | None = None) -> dict[str, float]:
+    """6 指标权重 dict · 每个缺则回退全局/默认 · 读 6 个 key。"""
+    out: dict[str, float] = {}
+    for k, default in DEFAULT_STRAT_WEIGHTS.items():
+        out[k] = _to_float(await _read_param(redis, _STRAT_WEIGHT_PREFIX + k, user_id), default)
+    return out
 
 
-async def set_strategy_weight(redis: Any, indicator: str, v: float) -> None:
+async def set_strategy_weight(
+    redis: Any, indicator: str, v: float, user_id: UUID | None = None,
+) -> None:
     """设单个指标权重 · 调用方校验 indicator ∈ 6 指标 · v ≥ 0。"""
-    await redis.set(_STRAT_WEIGHT_PREFIX + indicator, str(v))
+    await redis.set(_param_key(_STRAT_WEIGHT_PREFIX + indicator, user_id), str(v))
 
 
-async def get_strategy_atr_stop_mult(redis: Any) -> float:
+async def get_strategy_atr_stop_mult(redis: Any, user_id: UUID | None = None) -> float:
     """ATR 止损倍数 · 默认 2.0 · 调用方校验 > 0。"""
-    return _to_float(await redis.get(_STRAT_ATR_STOP), DEFAULT_STRAT_ATR_STOP)
+    return _to_float(await _read_param(redis, _STRAT_ATR_STOP, user_id), DEFAULT_STRAT_ATR_STOP)
 
 
-async def set_strategy_atr_stop_mult(redis: Any, v: float) -> None:
-    await redis.set(_STRAT_ATR_STOP, str(v))
+async def set_strategy_atr_stop_mult(redis: Any, v: float, user_id: UUID | None = None) -> None:
+    await redis.set(_param_key(_STRAT_ATR_STOP, user_id), str(v))
 
 
-async def get_strategy_atr_tp_mult(redis: Any) -> float:
+async def get_strategy_atr_tp_mult(redis: Any, user_id: UUID | None = None) -> float:
     """ATR 止盈倍数 · 默认 4.0 · 调用方校验 > 0。"""
-    return _to_float(await redis.get(_STRAT_ATR_TP), DEFAULT_STRAT_ATR_TP)
+    return _to_float(await _read_param(redis, _STRAT_ATR_TP, user_id), DEFAULT_STRAT_ATR_TP)
 
 
-async def set_strategy_atr_tp_mult(redis: Any, v: float) -> None:
-    await redis.set(_STRAT_ATR_TP, str(v))
+async def set_strategy_atr_tp_mult(redis: Any, v: float, user_id: UUID | None = None) -> None:
+    await redis.set(_param_key(_STRAT_ATR_TP, user_id), str(v))
