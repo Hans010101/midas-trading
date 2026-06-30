@@ -160,6 +160,17 @@ async def test_exit_switch_endpoint_invalid_which(client: AsyncClient, db_sessio
     assert r.status_code == 400  # ★which 非法
 
 
+@pytest.mark.asyncio
+async def test_allow_long_endpoint_global(client: AsyncClient, db_session: AsyncSession) -> None:
+    """★PR-8 admin 全局允许开多(托管恒做多·OFF=不开新仓)· 关→开回(默认 ON·不污染其他测)。"""
+    headers = await _admin_headers(db_session)
+    r = await client.post("/api/v1/admin/managed/allow-long", json={"on": False}, headers=headers)
+    assert r.status_code == 200
+    assert r.json()["allow_long"] is False
+    r2 = await client.post("/api/v1/admin/managed/allow-long", json={"on": True}, headers=headers)
+    assert r2.json()["allow_long"] is True  # 恢复默认 ON
+
+
 # ── 止盈目标(盈利%)端点(exit-tp-pct)──────────────────────────────────
 @pytest.mark.asyncio
 async def test_exit_tp_pct_endpoint_ok(client: AsyncClient, db_session: AsyncSession) -> None:

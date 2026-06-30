@@ -150,6 +150,22 @@ async def test_open_params_endpoints_ok(client: AsyncClient, db_session: AsyncSe
 
 
 @pytest.mark.asyncio
+async def test_allow_direction_endpoint_global(client: AsyncClient, db_session: AsyncSession) -> None:
+    """★PR-8 admin 全局方向过滤:关做空只影响 allow_short · 开回恢复 · bad which → 400。"""
+    headers = await _admin_headers(db_session)
+    r = await client.post("/api/v1/admin/intelligent/allow-direction",
+                          json={"which": "short", "on": False}, headers=headers)
+    assert r.status_code == 200
+    assert r.json()["allow_short"] is False
+    assert r.json()["allow_long"] is True   # ★做多不受影响
+    r2 = await client.post("/api/v1/admin/intelligent/allow-direction",
+                           json={"which": "short", "on": True}, headers=headers)
+    assert r2.json()["allow_short"] is True  # 开回
+    assert (await client.post("/api/v1/admin/intelligent/allow-direction",
+            json={"which": "x", "on": True}, headers=headers)).status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_open_params_range_validation(client: AsyncClient, db_session: AsyncSession) -> None:
     headers = await _admin_headers(db_session)
     # ★范围校验:本金 10-10000 · 杠杆 1-20 · 最大单数 >0
