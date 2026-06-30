@@ -13,6 +13,7 @@ export interface MeResponse {
   role: string
   has_password: boolean // false = OAuth-only(无密码)→ 不显示改密码表单
   avatar_id: number | null // NULL/0=首字母 · 1-16=预设头像
+  is_platinum: boolean // 铂金标记 · 前端据此显/隐铂金自助入口(PR-6 · 真边界在后端 PlatinumDep)
 }
 
 export class MeApiError extends Error {

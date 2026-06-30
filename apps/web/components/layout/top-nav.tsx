@@ -116,6 +116,13 @@ export function TopNav() {
                 <DropdownMenuItem asChild className="justify-end">
                   <Link href="/account/invite">邀请有礼</Link>
                 </DropdownMenuItem>
+                {/* 铂金自助(多账户 PR-6)· is_platinum 才渲染 —— 仅 UX,安全边界在后端 PlatinumDep 403。
+                    走 useMe(实时查 /me)·superadmin 刚开通即可见、免重登(不靠 JWT)。 */}
+                {me?.is_platinum && (
+                  <DropdownMenuItem asChild className="justify-end">
+                    <Link href="/platinum">铂金 · 自动交易</Link>
+                  </DropdownMenuItem>
+                )}
                 {/* 用户管理(刀2)· admin 才渲染 —— 仅 UX,安全边界在后端 AdminDep 403 */}
                 {session.user.role === 'admin' && (
                   <DropdownMenuItem asChild className="justify-end">

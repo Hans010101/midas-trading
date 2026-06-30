@@ -164,6 +164,22 @@ async def test_me_with_session_returns_current_user(
     assert body["user_id"] == str(user.id)
     assert body["email"] == user.email
     assert body["email_verified"] is True
+    assert body["is_platinum"] is False  # ★默认非铂金(PR-6 门控数据源)
+
+
+@pytest.mark.asyncio
+async def test_me_returns_is_platinum_true_for_platinum_user(
+    client: AsyncClient, db_session: AsyncSession,
+):
+    # ★铂金用户 /me 返 is_platinum=true(前端据此显铂金自助入口)
+    user = await make_user(db_session, is_platinum=True)
+    token = await issue_session(db_session, user_id=user.id)
+    await db_session.commit()
+    r = await client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 200
+    assert r.json()["is_platinum"] is True
 
 
 @pytest.mark.asyncio
