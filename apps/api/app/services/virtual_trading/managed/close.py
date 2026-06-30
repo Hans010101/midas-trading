@@ -35,6 +35,8 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from app.models.virtual import VirtualAccount
+
 logger = logging.getLogger(__name__)
 
 _SNAPSHOT_KEY = "boll:snapshot:latest"
@@ -202,20 +204,25 @@ async def close_one_managed_position(
 async def close_all_managed_positions(
     session: AsyncSession,
     get_mark_price: Callable[[str], Awaitable[Decimal | None]],
+    account: VirtualAccount | None = None,
 ) -> dict[str, Any]:
-    """★一键平掉所有 managed 活仓(人工批量应急出口)· 逐个 route_close_perp 记 manual。
+    """★一键平掉 managed 活仓(人工批量应急出口)· 逐个 route_close_perp 记 manual。
 
-    ★只平【托管账户】活仓:account_id == 托管账户 AND managed.is_(True)(双重隔离 · 绝不碰智能交易
+    ★PR-7c:account=None → 全局托管账户(向后兼容·admin 一键平);给定 → 该影子托管账户(铂金自助·
+    按 account.id 收窄·绝不碰全局/别人)。两者都靠 account.user_id 解析路由(引擎零碰)。
+    ★只平【该托管账户】活仓:account_id == 该账户 AND managed.is_(True)(双重隔离 · 绝不碰智能交易
     /其他账户的仓)· ★唯一入口铁律:逐个 route_close_perp(close_all)· 不重写撮合 · 引擎枚举零碰 ·
     per-仓失败隔离(单仓异常不中断整批)。
     """
-    uid = await macc.get_managed_user_id(session)
-    if uid is None:
-        return {"status": "ok", "closed": 0, "total": 0}  # 没建过托管账户 → 无仓可平
-    acc = await macc.ensure_managed_account(session)
+    if account is None:
+        uid = await macc.get_managed_user_id(session)
+        if uid is None:
+            return {"status": "ok", "closed": 0, "total": 0}  # 没建过托管账户 → 无仓可平
+        account = await macc.ensure_managed_account(session)
+    uid = account.user_id  # ★全局/影子都靠 account.user_id 解析路由(引擎零碰)
     positions = list(await session.scalars(
         select(VirtualPerpPosition).where(
-            VirtualPerpPosition.account_id == acc.id,    # ★只托管账户(不碰智能/其他账户仓)
+            VirtualPerpPosition.account_id == account.id,  # ★只该(全局/影子)托管账户(不碰别人)
             VirtualPerpPosition.managed.is_(True),        # ★双重隔离(智能仓 managed=False)
             VirtualPerpPosition.closed_at.is_(None),
         ),

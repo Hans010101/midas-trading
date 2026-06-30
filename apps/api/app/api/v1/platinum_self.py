@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import ClickHouseDep, PlatinumDep
 from app.api.v1.intelligent_admin import (
+    CapitalIn,
     IntelligentHistoryPage,
     IntelligentPosition,
     IntelligentPositionsPage,
@@ -41,23 +42,31 @@ from app.api.v1.intelligent_admin import (
     StrategyParams,
 )
 from app.api.v1.managed_admin import (
+    BatchCloseResult,
     ManagedHistoryPage,
     ManagedPosition,
     ManagedPositionsPage,
     ManagedStatus,
     ManagedToggleIn,
     ManagedTrade,
+    ManualCloseResult,
 )
+from app.api.v1.perp import make_perp_mark_price_fetcher
 from app.core.database import get_db
 from app.core.redis_client import get_redis
 from app.models.perp import PerpSide, VirtualPerpPosition
 from app.models.virtual import VirtualAccount
 from app.services.clickhouse_crypto import select_premium_index_marks
+from app.services.virtual_trading import account_admin
 from app.services.virtual_trading.intelligent import account as iacc
 from app.services.virtual_trading.intelligent import guard as iguard
 from app.services.virtual_trading.intelligent import stats as istats
 from app.services.virtual_trading.managed import account as macc
 from app.services.virtual_trading.managed import guard as mguard
+from app.services.virtual_trading.managed.close import (
+    close_all_managed_positions,
+    close_one_managed_position,
+)
 from app.services.virtual_trading.managed.stats import ClosedTrade, compute_managed_stats
 from app.services.virtual_trading.perp_cross_engine import _cross_available_margin
 from app.services.virtual_trading.perp_fees import unrealized_pnl
@@ -327,6 +336,28 @@ async def my_intelligent_set_strategy_params(
     return await _my_intel_strategy_params(me.id)
 
 
+# ── 智能交易账户操作自助(reset/capital · PR-7c · 决策④给清零权·前端二次确认)──
+@router.post("/intelligent/account/reset", summary="清零我的智能影子账户(删持仓+历史·重置初始)")
+async def my_intelligent_reset(
+    me: PlatinumDep, db: DbDep, ch: ClickHouseDep,
+) -> IntelligentStatus:
+    """★只清零我自己的影子账户(ensure 先建)· 删持仓+历史 + cash 重置 · 引擎零碰。"""
+    acc = await iacc.ensure_intelligent_account_for_user(db, me.id)
+    await account_admin.reset_account(db, acc)
+    return await _intel_status(db, ch, acc, me.id)
+
+
+@router.post("/intelligent/account/capital", summary="改我的智能起始资金(>0·清持仓重来)")
+async def my_intelligent_capital(
+    payload: CapitalIn, me: PlatinumDep, db: DbDep, ch: ClickHouseDep,
+) -> IntelligentStatus:
+    if payload.amount <= 0:
+        raise HTTPException(status_code=400, detail="起始资金必须 > 0")
+    acc = await iacc.ensure_intelligent_account_for_user(db, me.id)
+    await account_admin.set_account_capital(db, acc, Decimal(str(payload.amount)))
+    return await _intel_status(db, ch, acc, me.id)
+
+
 # ── 托管交易自助(/platinum/managed)─────────────────────────────────────
 async def _managed_status(
     db: AsyncSession, ch: ClickHouseDep, acc: VirtualAccount | None, me_id: UUID,
@@ -520,3 +551,62 @@ async def my_managed_max_positions(
         raise HTTPException(status_code=400, detail="最大总持仓数必须 > 0")
     await mguard.set_max_positions(await get_redis(), payload.max_positions, user_id=me.id)
     return await _managed_status(db, ch, await _managed_shadow_acc(db, me.id), me.id)
+
+
+# ── 托管交易账户操作自助(reset/capital · PR-7c · 决策④给清零权·前端二次确认)──
+@router.post("/managed/account/reset", summary="清零我的托管影子账户(删持仓+历史·重置初始)")
+async def my_managed_reset(me: PlatinumDep, db: DbDep, ch: ClickHouseDep) -> ManagedStatus:
+    """★只清零我自己的影子账户(ensure 先建)· 引擎零碰。"""
+    acc = await macc.ensure_managed_account_for_user(db, me.id)
+    await account_admin.reset_account(db, acc)
+    return await _managed_status(db, ch, acc, me.id)
+
+
+@router.post("/managed/account/capital", summary="改我的托管起始资金(>0·清持仓重来)")
+async def my_managed_capital(
+    payload: CapitalIn, me: PlatinumDep, db: DbDep, ch: ClickHouseDep,
+) -> ManagedStatus:
+    if payload.amount <= 0:
+        raise HTTPException(status_code=400, detail="起始资金必须 > 0")
+    acc = await macc.ensure_managed_account_for_user(db, me.id)
+    await account_admin.set_account_capital(db, acc, Decimal(str(payload.amount)))
+    return await _managed_status(db, ch, acc, me.id)
+
+
+# ── 托管交易平仓自助(手动平/一键平 · PR-7c · ★越权 owner==caller)──────────────
+@router.post(
+    "/managed/positions/{position_id}/close",
+    summary="手动平我的托管活仓(★越权:仓不属我 → not_found)",
+)
+async def my_managed_close_one(
+    position_id: int, me: PlatinumDep, db: DbDep, ch: ClickHouseDep,
+) -> ManualCloseResult:
+    """★越权:先校验该仓 account_id == 我影子账户(不属我/不存在 → 统一 not_found 不泄露)。"""
+    acc = await _managed_shadow_acc(db, me.id)
+    pos = await db.get(VirtualPerpPosition, position_id) if acc is not None else None
+    if acc is None or pos is None or pos.account_id != acc.id:
+        raise HTTPException(status_code=404, detail="not_found")
+    fetcher = make_perp_mark_price_fetcher(ch)
+    result = await close_one_managed_position(db, fetcher, position_id)
+    if result["status"] == "error":
+        reason = str(result.get("reason") or "error")
+        code = {"not_found": 404, "not_managed": 403, "already_closed": 409}.get(reason, 400)
+        raise HTTPException(status_code=code, detail=reason)
+    return ManualCloseResult(
+        status="ok", symbol=result.get("symbol"), realized_pnl=result.get("realized_pnl"),
+    )
+
+
+@router.post("/managed/positions/close-all", summary="一键平我的托管活仓(★只我影子账户)")
+async def my_managed_close_all(
+    me: PlatinumDep, db: DbDep, ch: ClickHouseDep,
+) -> BatchCloseResult:
+    """★account 收窄到我影子账户(close_all 传 account)· 绝不碰全局/别人的仓。"""
+    acc = await _managed_shadow_acc(db, me.id)
+    if acc is None:
+        return BatchCloseResult(status="ok", closed=0, total=0)  # 没影子账户 → 无仓可平
+    fetcher = make_perp_mark_price_fetcher(ch)
+    result = await close_all_managed_positions(db, fetcher, account=acc)
+    return BatchCloseResult(
+        status="ok", closed=int(result["closed"]), total=int(result["total"]),
+    )

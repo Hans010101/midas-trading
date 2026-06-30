@@ -21,6 +21,7 @@ from app.main import app
 from app.models.perp import MarginMode, PerpSide, VirtualPerpPosition
 from app.services.auth import issue_session
 from app.services.virtual_trading.intelligent import account as iacc
+from app.services.virtual_trading.managed import account as macc
 from tests.factories import make_user
 
 
@@ -254,4 +255,116 @@ async def test_param_set_non_platinum_403(
         "/api/v1/platinum/intelligent/open-margin", json={"margin": 250},
         headers={"Authorization": f"Bearer {token}"},
     )
+    assert r.status_code == 403
+
+
+# ── ⑥ 账户操作自助:reset/capital + ★平仓越权(PR-7c)────────────────────
+@pytest.mark.asyncio
+async def test_capital_updates_own_account(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    """改起始资金:ensure 先建 → account_ready + initial_capital 更新(只我自己)。"""
+    _a, ha = await _platinum_headers(db_session)
+    r = await client.post(
+        "/api/v1/platinum/intelligent/account/capital", json={"amount": 5000}, headers=ha)
+    assert r.status_code == 200
+    assert r.json()["account_ready"] is True   # ensure 先建
+    assert r.json()["initial_capital"] == 5000.0
+
+
+@pytest.mark.asyncio
+async def test_capital_rejects_non_positive(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    _a, ha = await _platinum_headers(db_session)
+    r = await client.post(
+        "/api/v1/platinum/managed/account/capital", json={"amount": 0}, headers=ha)
+    assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_reset_clears_own_positions(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch,  # noqa: ANN001
+) -> None:
+    monkeypatch.setattr(platinum_self, "select_premium_index_marks", _no_marks)
+    a_user, ha = await _platinum_headers(db_session)
+    acc = await macc.ensure_managed_account_for_user(db_session, a_user.id)
+    db_session.add(VirtualPerpPosition(
+        account_id=acc.id, symbol="BTCUSDT", side=PerpSide.LONG,
+        margin_mode=MarginMode.CROSS, leverage=5, quantity=Decimal("1"),
+        entry_price=Decimal("100"), initial_margin=Decimal("20"),
+        maintenance_margin_rate=Decimal("0.005"), liquidation_price=Decimal("0"),
+        managed=True,
+    ))
+    await db_session.commit()
+    r = await client.post("/api/v1/platinum/managed/account/reset", headers=ha)
+    assert r.status_code == 200
+    assert r.json()["open_positions"] == 0  # ★清零后无活仓
+
+
+@pytest.mark.asyncio
+async def test_close_one_rejects_others_position(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    """★越权红线:A 用自己 token 平 B 的 position_id → 404(owner==caller·不泄露他人仓存在)。"""
+    a_user, ha = await _platinum_headers(db_session)
+    b_user, _hb = await _platinum_headers(db_session)
+    await macc.ensure_managed_account_for_user(db_session, a_user.id)  # A 有自己影子账户
+    b_acc = await macc.ensure_managed_account_for_user(db_session, b_user.id)
+    pos = VirtualPerpPosition(
+        account_id=b_acc.id, symbol="BTCUSDT", side=PerpSide.LONG,
+        margin_mode=MarginMode.CROSS, leverage=5, quantity=Decimal("1"),
+        entry_price=Decimal("100"), initial_margin=Decimal("20"),
+        maintenance_margin_rate=Decimal("0.005"), liquidation_price=Decimal("0"),
+        managed=True,
+    )
+    db_session.add(pos)
+    await db_session.commit()
+    # ★A 平 B 的仓 → 404(端点层 pos.account_id != A 影子账户)
+    r = await client.post(f"/api/v1/platinum/managed/positions/{pos.id}/close", headers=ha)
+    assert r.status_code == 404
+    # B 的仓没被平(越权拦在调引擎前)
+    await db_session.refresh(pos)
+    assert pos.closed_at is None
+
+
+@pytest.mark.asyncio
+async def test_close_one_nonexistent_404(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    a_user, ha = await _platinum_headers(db_session)
+    await macc.ensure_managed_account_for_user(db_session, a_user.id)
+    r = await client.post("/api/v1/platinum/managed/positions/999999/close", headers=ha)
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_close_all_empty_when_no_account(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    """没开过托管(无影子账户)→ close-all 安静返 0(不报错·不碰全局)。"""
+    _a, ha = await _platinum_headers(db_session)
+    r = await client.post("/api/v1/platinum/managed/positions/close-all", headers=ha)
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok", "closed": 0, "total": 0}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/platinum/intelligent/account/reset",
+        "/api/v1/platinum/managed/account/capital",
+        "/api/v1/platinum/managed/positions/close-all",
+    ],
+)
+async def test_account_ops_non_platinum_403(
+    client: AsyncClient, db_session: AsyncSession, path: str,
+) -> None:
+    """★账户操作/平仓端点同样挂 PlatinumDep:非铂金 → 403。"""
+    user = await make_user(db_session, role="user")
+    token = await issue_session(db_session, user_id=user.id)
+    await db_session.commit()
+    body = {"amount": 100} if "capital" in path else None
+    r = await client.post(path, json=body, headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 403

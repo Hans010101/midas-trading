@@ -418,3 +418,39 @@ async def test_manual_close_shadow_uses_shadow_uid(db_session: AsyncSession, mon
     await db_session.refresh(pos)
     assert pos.managed_close_reason == "manual"
     assert pos.closed_at is not None
+
+
+# ── close_all_managed_positions(一键平 · PR-7c account 收窄 · 首次单测)──────
+@pytest.mark.asyncio
+async def test_close_all_scopes_to_given_account(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    """★PR-7c:close_all(account=影子)只平该影子账户的仓·全局仓不动(account.id+user_id 双收窄)。"""
+    g_acc = await macc.ensure_managed_account(db_session)
+    g_pos = await _managed_pos(db_session, g_acc.id, "BTCUSDT", "100", opened_h_ago=1)
+    real_uid = uuid.UUID("cccccccc-0000-0000-0000-000000000007")
+    s_acc = await macc.ensure_managed_account_for_user(db_session, real_uid)
+    s_pos = await _managed_pos(db_session, s_acc.id, "ETHUSDT", "200", opened_h_ago=1)
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(mclose, "route_close_perp", _spy_close(captured))
+    out = await mclose.close_all_managed_positions(db_session, await _mark("100"), account=s_acc)
+    assert out["total"] == 1  # ★只扫到影子账户那一仓
+    assert out["closed"] == 1
+    assert [c["user_id"] for c in captured] == [s_acc.user_id]  # ★只用影子 uid 平
+    await db_session.refresh(g_pos)
+    await db_session.refresh(s_pos)
+    assert s_pos.closed_at is not None       # 影子仓平了
+    assert g_pos.closed_at is None           # ★全局仓没动(account 收窄·红线④)
+    assert s_pos.managed_close_reason == "manual"
+
+
+@pytest.mark.asyncio
+async def test_close_all_global_when_no_account(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    """★向后兼容:close_all(account=None)平全局托管账户(admin 路径一字不变)。"""
+    g_acc = await macc.ensure_managed_account(db_session)
+    g_pos = await _managed_pos(db_session, g_acc.id, "BTCUSDT", "100", opened_h_ago=1)
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(mclose, "route_close_perp", _spy_close(captured))
+    out = await mclose.close_all_managed_positions(db_session, await _mark("100"))
+    assert out["closed"] == 1
+    assert captured[0]["user_id"] == g_acc.user_id  # ★全局 uid
+    await db_session.refresh(g_pos)
+    assert g_pos.closed_at is not None
