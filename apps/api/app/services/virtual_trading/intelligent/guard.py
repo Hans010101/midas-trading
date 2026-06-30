@@ -15,6 +15,8 @@ from sqlalchemy import func, select
 from app.models.perp import VirtualPerpPosition
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 MAX_PER_ROUND = 5  # ★每轮(单次扫描)最多开 5 个【新】单 · 总活仓数不限(仿 managed)
@@ -46,12 +48,19 @@ DEFAULT_STRAT_ATR_TP = 4.0
 
 
 # ── 开关(默认 OFF · worker beat 读)─────────────────────────────────
-async def is_enabled(redis: Any) -> bool:
-    return bool((await redis.get(_ENABLED)) == "1")
+# ★铂金多账户(PR-3):user_id=None → 全局 key(现在跑的智能交易 + admin toggle·向后兼容不破)。
+#   user_id 给定 → per-用户影子开关 key f"{_ENABLED}:{uid}"(各自独立·与全局互不覆盖)。
+#   零迁移(纯 Redis)· 引擎零碰(只活编排层)· ★只 gate 开仓·绝不 gate 平仓(平仓永不被拦)。
+def _enabled_key(user_id: UUID | None) -> str:
+    return _ENABLED if user_id is None else f"{_ENABLED}:{user_id}"
 
 
-async def set_enabled(redis: Any, enabled: bool) -> None:  # noqa: FBT001
-    await redis.set(_ENABLED, "1" if enabled else "0")
+async def is_enabled(redis: Any, user_id: UUID | None = None) -> bool:
+    return bool((await redis.get(_enabled_key(user_id))) == "1")
+
+
+async def set_enabled(redis: Any, enabled: bool, user_id: UUID | None = None) -> None:  # noqa: FBT001
+    await redis.set(_enabled_key(user_id), "1" if enabled else "0")
 
 
 # ── 仓位约束(PR-4 开仓编排用 · 只读 DB · 智能交易账户)──────────────────
