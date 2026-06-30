@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, cast
 from app.services import (
     clickhouse_cn_market,
     clickhouse_crypto,
+    clickhouse_hk_market,
     clickhouse_market_home,
     clickhouse_us_market,
 )
@@ -204,6 +205,15 @@ async def _f_cn_breadth_up_ratio(ctx: ScanContext, market: str, symbol: str | No
     return b.up_count / total * 100 if total > 0 else None
 
 
+async def _f_hk_breadth_up_ratio(ctx: ScanContext, market: str, symbol: str | None, tf: str | None) -> float | None:
+    # 港股无涨跌停 → 分母 = up + down(同 A股口径)· 全市场 ~900 只主要成分聚合的情绪条。
+    b = await clickhouse_hk_market.select_latest_breadth(ctx.raw)
+    if b is None:
+        return None
+    total = b.up_count + b.down_count
+    return b.up_count / total * 100 if total > 0 else None
+
+
 async def _f_sector_change_pct(ctx: ScanContext, market: str, symbol: str | None, tf: str | None) -> float | None:
     name = cast(str, symbol)
     sectors: list[CnSector] | list[UsSector]
@@ -227,6 +237,9 @@ async def _f_index_change_pct(ctx: ScanContext, market: str, symbol: str | None,
 # ── 注册表 ───────────────────────────────────────────────────────────
 
 _ALL = ("cn", "us", "crypto")
+# 含港股:per-symbol 指标(价格/涨跌幅/量/技术)统一走 K 线 → 港股仅覆盖有 K 线的策展池
+# 18 只(全市场 ~900 只只在 spot 快照、不在 kline 表)· 缠论/sector/index 不扩 hk(不在第一版 8 指标)。
+_ALL_HK = ("cn", "us", "crypto", "hk")
 _CRYPTO = ("crypto",)
 _CN_US = ("cn", "us")
 
@@ -236,17 +249,17 @@ def _reg(*defs: IndicatorDef) -> dict[str, IndicatorDef]:
 
 
 REGISTRY: dict[str, IndicatorDef] = _reg(
-    # 价格 / 成交量(per-symbol · K 线)
-    IndicatorDef("price", "最新价", "price", _ALL, True, True, _f_price),
-    IndicatorDef("price_change_pct", "涨跌幅 %", "price", _ALL, True, True, _f_price_change_pct, unit="%"),
-    IndicatorDef("volume", "成交量", "volume", _ALL, True, True, _f_volume),
-    # 技术指标(per-symbol · K 线现算)
-    IndicatorDef("ma_5", "MA5", "technical", _ALL, True, True, _ma_fetcher(5)),
-    IndicatorDef("ma_20", "MA20", "technical", _ALL, True, True, _ma_fetcher(20)),
-    IndicatorDef("ma_60", "MA60", "technical", _ALL, True, True, _ma_fetcher(60)),
-    IndicatorDef("macd_hist", "MACD 柱", "technical", _ALL, True, True, _f_macd_hist),
-    IndicatorDef("rsi_14", "RSI(14)", "technical", _ALL, True, True, _f_rsi_14),
-    IndicatorDef("boll_pctb", "布林 %B", "technical", _ALL, True, True, _f_boll_pctb, unit="%"),
+    # 价格 / 成交量(per-symbol · K 线)· 扩 _ALL_HK(港股走 K 线 → 覆盖策展池 18 只)
+    IndicatorDef("price", "最新价", "price", _ALL_HK, True, True, _f_price),
+    IndicatorDef("price_change_pct", "涨跌幅 %", "price", _ALL_HK, True, True, _f_price_change_pct, unit="%"),
+    IndicatorDef("volume", "成交量", "volume", _ALL_HK, True, True, _f_volume),
+    # 技术指标(per-symbol · K 线现算)· 扩 _ALL_HK(港股 300 根日线深度够算 MA60/MACD/RSI/布林)
+    IndicatorDef("ma_5", "MA5", "technical", _ALL_HK, True, True, _ma_fetcher(5)),
+    IndicatorDef("ma_20", "MA20", "technical", _ALL_HK, True, True, _ma_fetcher(20)),
+    IndicatorDef("ma_60", "MA60", "technical", _ALL_HK, True, True, _ma_fetcher(60)),
+    IndicatorDef("macd_hist", "MACD 柱", "technical", _ALL_HK, True, True, _f_macd_hist),
+    IndicatorDef("rsi_14", "RSI(14)", "technical", _ALL_HK, True, True, _f_rsi_14),
+    IndicatorDef("boll_pctb", "布林 %B", "technical", _ALL_HK, True, True, _f_boll_pctb, unit="%"),
     # 缠论(per-symbol · 现算 · 重 → 建议低频)
     IndicatorDef("chan_buy", "缠论买点出现", "chan", _ALL, True, True, _chan_fetcher("B")),
     IndicatorDef("chan_sell", "缠论卖点出现", "chan", _ALL, True, True, _chan_fetcher("S")),
@@ -260,6 +273,7 @@ REGISTRY: dict[str, IndicatorDef] = _reg(
     IndicatorDef("btc_dominance", "BTC 占比 %", "crypto_global", _CRYPTO, False, False, _f_btc_dominance, unit="%"),
     # 市场结构级
     IndicatorDef("cn_breadth_up_ratio", "A股上涨家数占比 %", "market_structure", ("cn",), False, False, _f_cn_breadth_up_ratio, unit="%"),
+    IndicatorDef("hk_breadth_up_ratio", "港股上涨家数占比 %", "market_structure", ("hk",), False, False, _f_hk_breadth_up_ratio, unit="%"),
     IndicatorDef("sector_change_pct", "板块涨跌 %(symbol=板块名)", "market_structure", _CN_US, True, False, _f_sector_change_pct, unit="%"),
     IndicatorDef("index_change_pct", "指数涨跌 %(symbol=指数代码)", "market_structure", _CN_US, True, False, _f_index_change_pct, unit="%"),
 )

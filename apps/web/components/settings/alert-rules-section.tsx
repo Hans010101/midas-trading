@@ -21,7 +21,7 @@ import {
 } from '@/hooks/use-alert-rules'
 import type { IndicatorMeta, Operator } from '@/lib/api/alert-rules'
 
-const MARKET_LABEL: Record<string, string> = { cn: 'A股', us: '美股', crypto: '加密' }
+const MARKET_LABEL: Record<string, string> = { cn: 'A股', us: '美股', crypto: '加密', hk: '港股' }
 const OP_LABEL: Record<Operator, string> = { gt: '>', gte: '≥', lt: '<', lte: '≤' }
 const MAX_RULES = 20
 
