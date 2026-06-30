@@ -7,6 +7,7 @@ DB(midas_test · CI)+ FakeRedis(快照 bias)+ ★mock route_close_perp(不碰真
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
@@ -17,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.perp import MarginMode, PerpSide, VirtualPerpPosition
-from app.models.virtual import OrderStatus
+from app.models.virtual import OrderStatus, VirtualAccount
 from app.services.virtual_trading.managed import account as macc
 from app.services.virtual_trading.managed import close as mclose
 from app.services.virtual_trading.managed import guard as mguard
@@ -107,19 +108,29 @@ async def _managed_pos(
 
 
 def _spy_close(captured: list[dict[str, Any]]):  # noqa: ANN202
-    """★mock route_close_perp:平掉该 symbol 活仓(set closed_at)+ 返 FILLED 单。"""
+    """★mock route_close_perp:模拟引擎按 user_id→account→symbol 解析活仓(与真引擎一致)。
+
+    ★uid 错配(用别的账户 uid 平本仓)→ 解析不到 → REJECTED(=能抓 close uid 错配回归)。
+    捕获 user_id 供断言「每仓用自己 owner uid 平」。
+    """
     async def fake(
-        session: AsyncSession, *, symbol: str, close_all: bool, **_kw: Any,
+        session: AsyncSession, *, user_id: Any, symbol: str, close_all: bool, **_kw: Any,
     ) -> Any:
-        captured.append({"symbol": symbol, "close_all": close_all})
-        pos = await session.scalar(select(VirtualPerpPosition).where(
-            VirtualPerpPosition.symbol == symbol,
-            VirtualPerpPosition.closed_at.is_(None),
-            VirtualPerpPosition.managed.is_(True),
-        ))
-        if pos is not None:
-            pos.closed_at = _NOW
-            pos.realized_pnl = Decimal("100")
+        captured.append({"symbol": symbol, "close_all": close_all, "user_id": user_id})
+        pos = await session.scalar(
+            select(VirtualPerpPosition)
+            .join(VirtualAccount, VirtualPerpPosition.account_id == VirtualAccount.id)
+            .where(
+                VirtualAccount.user_id == user_id,
+                VirtualPerpPosition.symbol == symbol,
+                VirtualPerpPosition.closed_at.is_(None),
+                VirtualPerpPosition.managed.is_(True),
+            ),
+        )
+        if pos is None:
+            return SimpleNamespace(status=OrderStatus.REJECTED, reject_reason="no active position")
+        pos.closed_at = _NOW
+        pos.realized_pnl = Decimal("100")
         await session.flush()
         return SimpleNamespace(status=OrderStatus.FILLED, reject_reason=None)
     return fake
@@ -347,3 +358,63 @@ async def test_close_tp_uses_configured_tp_pct(db_session: AsyncSession, monkeyp
     r.kv["boll:snapshot:latest"] = json.dumps({"items": [{"symbol": "BTCUSDT", "bias": "偏多"}]})
     out = await mclose.run_managed_close(db_session, r, await _mark("106"), now=_NOW)  # 价 6%
     assert out["closed"] == [("BTCUSDT", "tp")]  # ★tp_pct=30 → 106 触发(默认 100 不会)
+
+
+# ── ★PR-4a close uid 修复:影子仓 + 混合 + 手动平影子(逐仓按 account 反查 owner uid)──────
+@pytest.mark.asyncio
+async def test_close_shadow_managed_uses_shadow_uid(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★影子 managed 仓:close 用【影子账户 uid】平。影子 managed 仓免强平,close 是唯一出路——
+    #   旧版用全局 uid 平不掉 = 永久挂仓(红线④),本测钉死修复。
+    await macc.ensure_managed_account(db_session)  # 全局账户存在(过存在性闸)
+    real_uid = uuid.UUID("bbbbbbbb-0000-0000-0000-000000000001")
+    shadow_acc = await macc.ensure_managed_account_for_user(db_session, real_uid)
+    pos = await _managed_pos(db_session, shadow_acc.id, "BTCUSDT", "100", opened_h_ago=1)
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(mclose, "route_close_perp", _spy_close(captured))
+    r = _FakeRedis()
+    r.kv["boll:snapshot:latest"] = json.dumps({"items": [{"symbol": "BTCUSDT", "bias": "偏多"}]})
+    out = await mclose.run_managed_close(db_session, r, await _mark("120"), now=_NOW)  # TP
+    assert out["closed"] == [("BTCUSDT", "tp")]
+    assert captured[0]["user_id"] == shadow_acc.user_id  # ★影子 uid(不是全局)
+    await db_session.refresh(pos)
+    assert pos.closed_at is not None  # ★影子 managed 仓真平掉(不再永久挂仓)
+
+
+@pytest.mark.asyncio
+async def test_close_mixed_managed_each_own_uid(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★混合:全局 managed 仓 + 影子 managed 仓同轮各用各自 owner uid 平,互不串(红线①③)。
+    g_acc = await macc.ensure_managed_account(db_session)
+    real_uid = uuid.UUID("bbbbbbbb-0000-0000-0000-000000000002")
+    s_acc = await macc.ensure_managed_account_for_user(db_session, real_uid)
+    g_pos = await _managed_pos(db_session, g_acc.id, "BTCUSDT", "100", opened_h_ago=1)
+    s_pos = await _managed_pos(db_session, s_acc.id, "ETHUSDT", "100", opened_h_ago=1)
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(mclose, "route_close_perp", _spy_close(captured))
+    r = _FakeRedis()
+    r.kv["boll:snapshot:latest"] = json.dumps({"items": [
+        {"symbol": "BTCUSDT", "bias": "偏多"}, {"symbol": "ETHUSDT", "bias": "偏多"}]})
+    out = await mclose.run_managed_close(db_session, r, await _mark("120"), now=_NOW)  # 两仓都 TP
+    by_symbol = {c["symbol"]: c["user_id"] for c in captured}
+    assert by_symbol == {"BTCUSDT": g_acc.user_id, "ETHUSDT": s_acc.user_id}  # ★各用各 uid·不串
+    assert {s for s, _ in out["closed"]} == {"BTCUSDT", "ETHUSDT"}
+    await db_session.refresh(g_pos)
+    await db_session.refresh(s_pos)
+    assert g_pos.closed_at is not None
+    assert s_pos.closed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_manual_close_shadow_uses_shadow_uid(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★手动平影子 managed 仓:close_one 按 account_id 反查影子 uid(旧版写死全局 uid → 平不掉影子仓)。
+    await macc.ensure_managed_account(db_session)
+    real_uid = uuid.UUID("bbbbbbbb-0000-0000-0000-000000000003")
+    s_acc = await macc.ensure_managed_account_for_user(db_session, real_uid)
+    pos = await _managed_pos(db_session, s_acc.id, "BTCUSDT", "100", opened_h_ago=1)
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(mclose, "route_close_perp", _spy_close(captured))
+    out = await mclose.close_one_managed_position(db_session, await _mark("110"), pos.id)
+    assert out["status"] == "ok"
+    assert captured[0]["user_id"] == s_acc.user_id  # ★影子 uid 平影子仓
+    await db_session.refresh(pos)
+    assert pos.managed_close_reason == "manual"
+    assert pos.closed_at is not None

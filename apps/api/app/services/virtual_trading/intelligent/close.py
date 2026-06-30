@@ -25,6 +25,7 @@ from sqlalchemy import select
 
 from app.models.perp import PerpSide, VirtualPerpPosition
 from app.models.virtual import OrderStatus
+from app.services.virtual_trading import platinum
 from app.services.virtual_trading.intelligent import account as iacc
 from app.services.virtual_trading.intelligent import guard as iguard
 from app.services.virtual_trading.intelligent import strategy as istrategy
@@ -96,18 +97,23 @@ async def run_intelligent_close(
 
     ★不被开关 OFF 拦(已有仓必须被监控)· 无活仓 → {"status":"ok","closed":[]}(空转零副作用)。
     """
-    uid = await iacc.get_intelligent_user_id(session)
-    if uid is None:
-        return {"status": "skip", "reason": "no_account"}  # 智能账户没建过 → 无仓可监控
+    # ★存在性闸:全局账户没建过 → 无仓可监控(保留原行为·test 钉死)。
+    if await iacc.get_intelligent_user_id(session) is None:
+        return {"status": "skip", "reason": "no_account"}
 
     positions = list(await session.scalars(
         select(VirtualPerpPosition).where(
             VirtualPerpPosition.intelligent.is_(True),
             VirtualPerpPosition.closed_at.is_(None),
         ),
-    ))
+    ))  # ★查询不收窄:全表扫 intelligent 活仓(全局 + 所有影子一锅扫·绝不按用户列表收窄→不漏)
     if not positions:
         return {"status": "ok", "closed": []}  # 无 intelligent 活仓 → 空转
+
+    # ★PR-4a close uid 修复:逐仓按 account_id 反查 owner uid(全局/影子各归各)·批量一次取。
+    owner_by_account = await platinum.get_account_owner_uids(
+        session, [p.account_id for p in positions],
+    )
 
     # ★读两快照重算当前方向分(信号反转用)· 当前快照无该币 → decisions 无 → 只止损止盈
     boll_items = await _read_items(redis, _BOLL_KEY)
@@ -122,6 +128,9 @@ async def run_intelligent_close(
     closed: list[tuple[str, str]] = []
     for pos in positions:
         symbol = pos.symbol
+        uid = owner_by_account.get(pos.account_id)
+        if uid is None:
+            continue  # ★账户反查不到(理论不该发生)· 跳过不误平
         mark = await get_mark_price(symbol)
         reason = _exit_reason(pos, mark, decisions.get(symbol))
         if reason is None:
@@ -129,7 +138,7 @@ async def run_intelligent_close(
         try:
             order = await route_close_perp(
                 session,
-                user_id=uid,
+                user_id=uid,  # ★每仓用自己账户的 owner uid(全局/影子各归各)
                 symbol=symbol,
                 quantity=None,
                 close_all=True,  # ★全平(系统账户同币去重 · 平的就这一仓)

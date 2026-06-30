@@ -25,6 +25,7 @@ from sqlalchemy import select
 
 from app.models.perp import VirtualPerpPosition
 from app.models.virtual import OrderStatus
+from app.services.virtual_trading import platinum
 from app.services.virtual_trading.managed import account as macc
 from app.services.virtual_trading.managed import guard as mguard
 from app.services.virtual_trading.perp_dispatcher import route_close_perp
@@ -89,18 +90,23 @@ async def run_managed_close(
     ★不被开关 OFF 拦(已有仓必须被监控)· 无活仓 → {"status":"ok","closed":[]}(空转零副作用)。
     """
     now = now or datetime.now(tz=UTC)
-    uid = await macc.get_managed_user_id(session)
-    if uid is None:
-        return {"status": "skip", "reason": "no_account"}  # 托管账户没建过 → 无仓可监控
+    # ★存在性闸:全局托管账户没建过 → 无仓可监控(保留原行为·test 钉死)。
+    if await macc.get_managed_user_id(session) is None:
+        return {"status": "skip", "reason": "no_account"}
 
     positions = list(await session.scalars(
         select(VirtualPerpPosition).where(
             VirtualPerpPosition.managed.is_(True),
             VirtualPerpPosition.closed_at.is_(None),
         ),
-    ))
+    ))  # ★查询不收窄:全表扫 managed 活仓(全局 + 所有影子一锅扫·绝不按用户列表收窄→不漏)
     if not positions:
         return {"status": "ok", "closed": []}  # 无 managed 活仓 → 空转
+
+    # ★PR-4a close uid 修复:逐仓按 account_id 反查 owner uid(全局/影子各归各)·批量一次取。
+    owner_by_account = await platinum.get_account_owner_uids(
+        session, [p.account_id for p in positions],
+    )
 
     bias_map = await _read_bias_map(redis)
     switches = await mguard.get_exit_switches(redis)  # ★每轮读最新三开关 → 即时生效
@@ -108,6 +114,9 @@ async def run_managed_close(
     closed: list[tuple[str, str]] = []
     for pos in positions:
         symbol = pos.symbol
+        uid = owner_by_account.get(pos.account_id)
+        if uid is None:
+            continue  # ★账户反查不到(理论不该发生)· 跳过不误平
         # ★维护 last_bias:快照有该币 → 更新(独立提交,不受平仓 rollback 影响)· 不在 → 保持上一次
         snap_bias = bias_map.get(symbol)
         if snap_bias and pos.last_bias != snap_bias:
@@ -160,7 +169,8 @@ async def close_one_managed_position(
         return {"status": "error", "reason": "not_managed"}  # ★只能平托管仓
     if pos.closed_at is not None:
         return {"status": "error", "reason": "already_closed"}
-    uid = await macc.get_managed_user_id(session)
+    # ★PR-4a:按该仓 account_id 反查 owner uid(全局仓→全局 uid·影子仓→影子 uid)· 不再写死全局 uid。
+    uid = await platinum.get_account_owner_uid(session, pos.account_id)
     if uid is None:
         return {"status": "error", "reason": "no_account"}
 
