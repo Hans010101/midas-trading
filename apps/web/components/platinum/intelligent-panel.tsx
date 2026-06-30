@@ -3,8 +3,8 @@
 /**
  * 铂金自助 · 智能交易面板(多账户 PR-6)· 接 /platinum/intelligent/*。
  *
- * ★裁剪(对比 admin 看板):只读四件套(控制台卡 + 统计 + 活仓 + 历史)+ 单开关;
- *   无调参/手动平/清零/改资金(自助端点无 setter)· 无「纯虚拟」醒目徽章(用户面)。
+ * ★体验同管理员(PR-7):四件套(控制台 + 统计 + 活仓 + 历史)+ 开关 + 开仓参数/策略参数自助调
+ *   + 清零/改起始资金;★决策①智能侧不做手动平/一键平 · 无「纯虚拟」醒目徽章(用户面)。
  * ★配色硬编码(红线③):方向做多绿/做空红(不随涨跌偏好翻转)· 盈亏盈红亏绿 · 共振分正绿负红。
  * 🔴 安全边界后端 PlatinumDep(403)· fetch 透传 token。
  */
@@ -273,7 +273,13 @@ export function IntelligentPanel() {
             disabled={!on || capitalMut.isPending}
             onBlur={(e) => {
               const v = Number.parseFloat(e.currentTarget.value)
-              if (Number.isFinite(v) && v > 0 && v !== (st?.initial_capital ?? 100000)) capitalMut.mutate(v)
+              if (
+                Number.isFinite(v) &&
+                v > 0 &&
+                v !== (st?.initial_capital ?? 100000) &&
+                window.confirm(`改起始资金为 ${v} U 将清空当前全部持仓重来,确定?`)
+              )
+                capitalMut.mutate(v)
             }}
             className="w-28 rounded border border-paper bg-cream px-2 py-1 font-mono disabled:opacity-50"
           />

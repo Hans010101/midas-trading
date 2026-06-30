@@ -3,7 +3,8 @@
 /**
  * 铂金自助 · 托管交易面板(多账户 PR-6)· 接 /platinum/managed/*。
  *
- * ★裁剪同智能面板:只读四件套 + 单开关;无调参/手动平/清零/改资金 · 无「纯虚拟」醒目徽章。
+ * ★体验同管理员(PR-7):四件套 + 开关 + 开仓参数自助调 + 清零/改起始资金 + 一键平/手动平;
+ *   ★决策B 平仓参数(exit/tp_pct)仍全局不下放铂金 · 无「纯虚拟」醒目徽章。
  * ★托管 vs 智能:恒做多(无 side)· 信号列 = 维持 bias · 三退出 = 止盈/信号/超时。
  * ★配色硬编码(红线③):盈亏盈红亏绿 · bias 偏多绿/偏空红/中性金。
  */
@@ -262,7 +263,13 @@ export function ManagedPanel() {
             disabled={!on || capitalMut.isPending}
             onBlur={(e) => {
               const v = Number.parseFloat(e.currentTarget.value)
-              if (Number.isFinite(v) && v > 0 && v !== (st?.initial_capital ?? 100000)) capitalMut.mutate(v)
+              if (
+                Number.isFinite(v) &&
+                v > 0 &&
+                v !== (st?.initial_capital ?? 100000) &&
+                window.confirm(`改起始资金为 ${v} U 将清空当前全部持仓重来,确定?`)
+              )
+                capitalMut.mutate(v)
             }}
             className="w-28 rounded border border-paper bg-cream px-2 py-1 font-mono disabled:opacity-50"
           />
