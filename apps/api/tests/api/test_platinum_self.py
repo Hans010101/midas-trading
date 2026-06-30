@@ -368,3 +368,61 @@ async def test_account_ops_non_platinum_403(
     body = {"amount": 100} if "capital" in path else None
     r = await client.post(path, json=body, headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 403
+
+
+# ── ⑦ 方向过滤器 per-user 隔离 + 校验(PR-8)──────────────────────────────
+@pytest.mark.asyncio
+async def test_intelligent_allow_direction_isolated_per_user(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    """A 关自己的做空 → 只 A 的 allow_short False · B 默认仍多空都 ON(不串)。"""
+    _a, ha = await _platinum_headers(db_session)
+    _b, hb = await _platinum_headers(db_session)
+    ra = await client.post(
+        "/api/v1/platinum/intelligent/allow-direction",
+        json={"which": "short", "on": False}, headers=ha)
+    assert ra.status_code == 200
+    assert ra.json()["allow_short"] is False
+    assert ra.json()["allow_long"] is True   # ★做多不受影响
+    rb = await client.get("/api/v1/platinum/intelligent/status", headers=hb)
+    assert rb.json()["allow_short"] is True   # ★B 默认 ON(不串)
+    assert rb.json()["allow_long"] is True
+
+
+@pytest.mark.asyncio
+async def test_managed_allow_long_isolated_per_user(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    _a, ha = await _platinum_headers(db_session)
+    _b, hb = await _platinum_headers(db_session)
+    ra = await client.post(
+        "/api/v1/platinum/managed/allow-long", json={"on": False}, headers=ha)
+    assert ra.status_code == 200
+    assert ra.json()["allow_long"] is False
+    rb = await client.get("/api/v1/platinum/managed/status", headers=hb)
+    assert rb.json()["allow_long"] is True   # ★B 默认 ON
+
+
+@pytest.mark.asyncio
+async def test_allow_direction_bad_which_400(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    _a, ha = await _platinum_headers(db_session)
+    r = await client.post(
+        "/api/v1/platinum/intelligent/allow-direction",
+        json={"which": "sideways", "on": True}, headers=ha)
+    assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_allow_direction_non_platinum_403(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    user = await make_user(db_session, role="user")
+    token = await issue_session(db_session, user_id=user.id)
+    await db_session.commit()
+    r = await client.post(
+        "/api/v1/platinum/intelligent/allow-direction",
+        json={"which": "long", "on": False},
+        headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 403

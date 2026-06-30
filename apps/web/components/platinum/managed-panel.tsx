@@ -26,6 +26,7 @@ import {
   getMyManagedStats,
   getMyManagedStatus,
   resetMyManaged,
+  setMyManagedAllowLong,
   setMyManagedCapital,
   setMyManagedMaxPositions,
   setMyManagedOpenLeverage,
@@ -167,6 +168,15 @@ export function ManagedPanel() {
   const onCloseAll = () => {
     if (window.confirm('确定一键平掉你托管账户的【全部活仓】?不可撤销。')) closeAllMut.mutate()
   }
+  // ★PR-8 允许开多(托管恒做多·OFF=不开新仓·即时生效)
+  const allowLongMut = useMutation({
+    mutationFn: (next: boolean) => setMyManagedAllowLong(token, next),
+    onSuccess: (s) => {
+      setNote(`✓ 允许开多 ${s.allow_long ? '开' : '关(不开新仓)'}`)
+      invalidate()
+    },
+    onError: () => setNote('允许开多更新失败,请重试'),
+  })
 
   const enabled = status.data?.enabled ?? false
   const onToggle = () => {
@@ -329,6 +339,23 @@ export function ManagedPanel() {
             />
             <span className="text-muted-foreground">单(失焦保存)</span>
           </div>
+        </div>
+        {/* ★PR-8 允许开多(托管恒做多·OFF=不开新仓·只 gate 开仓不碰平仓) */}
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-paper pt-3 text-xs">
+          <span className="text-muted-foreground">方向过滤:</span>
+          <button
+            type="button"
+            onClick={() => st && allowLongMut.mutate(!st.allow_long)}
+            disabled={!on || allowLongMut.isPending || !st}
+            className={
+              st?.allow_long
+                ? 'rounded-md bg-emerald-50 px-3 py-1 font-medium text-emerald-700 disabled:opacity-50'
+                : 'rounded-md bg-muted px-3 py-1 font-medium text-muted-foreground disabled:opacity-50'
+            }
+          >
+            允许做多 {st?.allow_long ? 'ON' : 'OFF'}
+          </button>
+          <span className="text-muted-foreground">(托管恒做多 · OFF=不开新仓 · 不碰平仓)</span>
         </div>
         {note && (
           <p className="mt-3 rounded-md bg-gold/10 px-3 py-2 text-xs text-muted-foreground">{note}</p>

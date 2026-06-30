@@ -101,10 +101,17 @@ async def run_intelligent_open(
     weights = await iguard.get_strategy_weights(redis, enabled_user_id)
     atr_stop = await iguard.get_strategy_atr_stop_mult(redis, enabled_user_id)
     atr_tp = await iguard.get_strategy_atr_tp_mult(redis, enabled_user_id)
-    decisions = istrategy.open_decisions(istrategy.build_decisions(
-        boll_items, signal_items,
-        threshold=threshold, weights=weights, atr_stop_mult=atr_stop, atr_tp_mult=atr_tp,
-    ))
+    # ★PR-8 方向过滤(只滤被禁方向·不改 side)· 透 enabled_user_id 读 per-user/全局
+    allow_long = await iguard.get_allow_long(redis, enabled_user_id)
+    allow_short = await iguard.get_allow_short(redis, enabled_user_id)
+    decisions = istrategy.open_decisions(
+        istrategy.build_decisions(
+            boll_items, signal_items,
+            threshold=threshold, weights=weights, atr_stop_mult=atr_stop, atr_tp_mult=atr_tp,
+        ),
+        allow_long=allow_long,
+        allow_short=allow_short,
+    )
 
     opened: list[dict[str, Any]] = []
     for d in decisions:

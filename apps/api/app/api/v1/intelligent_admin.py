@@ -56,6 +56,8 @@ class IntelligentStatus(BaseModel):
     open_margin: float        # ★每单本金(U·可调 10-10000·默认 100)
     open_leverage: int        # ★杠杆(可调 1-20·默认 5·不影响 ATR 止损止盈价)
     max_positions: int        # ★最大总持仓数(可调·默认 50·到上限不开新)
+    allow_long: bool          # ★PR-8 允许开多(默认 ON·OFF=滤掉做多信号)
+    allow_short: bool         # ★PR-8 允许开空(默认 ON·OFF=滤掉做空信号)
 
 
 class IntelligentToggleIn(BaseModel):
@@ -75,6 +77,8 @@ async def _status(db: AsyncSession, ch: ClickHouseDep) -> IntelligentStatus:
     open_margin = await intelligent_guard.get_open_margin(redis)        # ★每单本金
     open_leverage = await intelligent_guard.get_open_leverage(redis)    # ★杠杆
     max_positions = await intelligent_guard.get_max_positions(redis)    # ★最大总持仓
+    allow_long = await intelligent_guard.get_allow_long(redis)          # ★PR-8 允许开多(全局)
+    allow_short = await intelligent_guard.get_allow_short(redis)        # ★PR-8 允许开空(全局)
     account_value = 0.0
     if acc is not None:
         async def _fetch_mark(symbol: str) -> Decimal | None:
@@ -94,6 +98,8 @@ async def _status(db: AsyncSession, ch: ClickHouseDep) -> IntelligentStatus:
         open_margin=float(open_margin),
         open_leverage=open_leverage,
         max_positions=max_positions,
+        allow_long=allow_long,
+        allow_short=allow_short,
     )
 
 
@@ -176,6 +182,26 @@ async def set_max_positions(
         raise HTTPException(status_code=400, detail="最大总持仓数必须 > 0")
     redis = await get_redis()
     await intelligent_guard.set_max_positions(redis, payload.max_positions)
+    return await _status(db, ch)
+
+
+# ── 方向过滤器(PR-8 · 允许做多/做空 · 默认 ON · 即时生效 · 只滤方向不改策略)──────
+class AllowDirectionIn(BaseModel):
+    which: str                # long / short
+    on: bool                  # True=允许该方向 / False=滤掉该方向信号
+
+
+@router.post("/allow-direction", summary="★设方向过滤(which=long/short · on · 即时生效)")
+async def set_allow_direction(
+    payload: AllowDirectionIn, _admin: AdminDep, db: DbDep, ch: ClickHouseDep,
+) -> IntelligentStatus:
+    if payload.which not in ("long", "short"):
+        raise HTTPException(status_code=400, detail="which 必须是 long/short")
+    redis = await get_redis()
+    if payload.which == "long":
+        await intelligent_guard.set_allow_long(redis, payload.on)
+    else:
+        await intelligent_guard.set_allow_short(redis, payload.on)
     return await _status(db, ch)
 
 

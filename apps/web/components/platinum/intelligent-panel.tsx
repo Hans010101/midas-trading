@@ -26,6 +26,7 @@ import {
   getMyIntelligentStatus,
   getMyIntelligentStrategyParams,
   resetMyIntelligent,
+  setMyIntelligentAllowDirection,
   setMyIntelligentCapital,
   setMyIntelligentMaxPositions,
   setMyIntelligentOpenLeverage,
@@ -175,6 +176,17 @@ export function IntelligentPanel() {
   const saveStrat = () => {
     if (strat) stratMut.mutate(strat)
   }
+
+  // ★PR-8 方向过滤(允许做多/做空 · per-user · 只滤方向不改策略)
+  const allowMut = useMutation({
+    mutationFn: (v: { which: 'long' | 'short'; on: boolean }) =>
+      setMyIntelligentAllowDirection(token, v.which, v.on),
+    onSuccess: (s) => {
+      setNote(`✓ 方向 · 做多 ${s.allow_long ? '开' : '关'} · 做空 ${s.allow_short ? '开' : '关'}`)
+      invalidate()
+    },
+    onError: () => setNote('方向过滤更新失败,请重试'),
+  })
 
   const enabled = status.data?.enabled ?? false
   const onToggle = () => {
@@ -339,6 +351,35 @@ export function IntelligentPanel() {
             />
             <span className="text-muted-foreground">单(失焦保存)</span>
           </div>
+        </div>
+        {/* ★PR-8 方向过滤(允许做多/做空 · 只滤方向不改策略) */}
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-paper pt-3 text-xs">
+          <span className="text-muted-foreground">方向过滤:</span>
+          <button
+            type="button"
+            onClick={() => st && allowMut.mutate({ which: 'long', on: !st.allow_long })}
+            disabled={!on || allowMut.isPending || !st}
+            className={
+              st?.allow_long
+                ? 'rounded-md bg-emerald-50 px-3 py-1 font-medium text-emerald-700 disabled:opacity-50'
+                : 'rounded-md bg-muted px-3 py-1 font-medium text-muted-foreground disabled:opacity-50'
+            }
+          >
+            允许做多 {st?.allow_long ? 'ON' : 'OFF'}
+          </button>
+          <button
+            type="button"
+            onClick={() => st && allowMut.mutate({ which: 'short', on: !st.allow_short })}
+            disabled={!on || allowMut.isPending || !st}
+            className={
+              st?.allow_short
+                ? 'rounded-md bg-emerald-50 px-3 py-1 font-medium text-emerald-700 disabled:opacity-50'
+                : 'rounded-md bg-muted px-3 py-1 font-medium text-muted-foreground disabled:opacity-50'
+            }
+          >
+            允许做空 {st?.allow_short ? 'ON' : 'OFF'}
+          </button>
+          <span className="text-muted-foreground">(OFF=不开该方向新仓 · 不碰平仓)</span>
         </div>
         {note && (
           <p className="mt-3 rounded-md bg-gold/10 px-3 py-2 text-xs text-muted-foreground">{note}</p>

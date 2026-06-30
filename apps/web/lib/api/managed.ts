@@ -28,6 +28,7 @@ export interface ManagedStatus {
   open_margin: number // ★每单本金(U·可调 10-10000·默认 100)
   open_leverage: number // ★杠杆(可调 1-20·默认 5)
   max_positions: number // ★最大总持仓数(可调·默认 50·到上限不开新)
+  allow_long: boolean // ★PR-8 允许开多(默认 ON·托管恒做多·OFF=不开新仓)
 }
 
 export interface ManagedPosition {
@@ -205,3 +206,7 @@ export const setManagedOpenLeverage = (token: string, leverage: number) =>
 /** ★设最大总持仓数(>0 · 即时生效)。 */
 export const setManagedMaxPositions = (token: string, maxPositions: number) =>
   _postManaged('/max-positions', token, { max_positions: maxPositions })
+
+/** ★PR-8 设允许开多(on · 托管恒做多·OFF=不开新仓 · 即时生效)。 */
+export const setManagedAllowLong = (token: string, on: boolean) =>
+  _postManaged('/allow-long', token, { on })

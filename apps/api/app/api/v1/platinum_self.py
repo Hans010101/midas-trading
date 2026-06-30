@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import ClickHouseDep, PlatinumDep
 from app.api.v1.intelligent_admin import (
+    AllowDirectionIn,
     CapitalIn,
     IntelligentHistoryPage,
     IntelligentPosition,
@@ -42,6 +43,7 @@ from app.api.v1.intelligent_admin import (
     StrategyParams,
 )
 from app.api.v1.managed_admin import (
+    AllowLongIn,
     BatchCloseResult,
     ManagedHistoryPage,
     ManagedPosition,
@@ -115,10 +117,12 @@ async def _intel_status(
     redis = await get_redis()
     enabled = await iguard.is_enabled(redis, me_id)  # ★per-user 开关(key={me_id})
     open_n = await iguard.count_open_positions(db, acc.id) if acc is not None else 0
-    # ★PR-7b 开仓参数 per-user(me_id · 决策③缺则回退全局)
+    # ★PR-7b 开仓参数 + ★PR-8 方向开关 per-user(me_id · 决策③缺则回退全局)
     open_margin = await iguard.get_open_margin(redis, me_id)
     open_leverage = await iguard.get_open_leverage(redis, me_id)
     max_positions = await iguard.get_max_positions(redis, me_id)
+    allow_long = await iguard.get_allow_long(redis, me_id)
+    allow_short = await iguard.get_allow_short(redis, me_id)
     account_value = 0.0
     if acc is not None:
         async def _fetch_mark(symbol: str) -> Decimal | None:
@@ -138,6 +142,8 @@ async def _intel_status(
         open_margin=float(open_margin),
         open_leverage=open_leverage,
         max_positions=max_positions,
+        allow_long=allow_long,
+        allow_short=allow_short,
     )
 
 
@@ -358,6 +364,21 @@ async def my_intelligent_capital(
     return await _intel_status(db, ch, acc, me.id)
 
 
+@router.post("/intelligent/allow-direction", summary="设我的智能方向过滤(which=long/short·on)")
+async def my_intelligent_allow_direction(
+    payload: AllowDirectionIn, me: PlatinumDep, db: DbDep, ch: ClickHouseDep,
+) -> IntelligentStatus:
+    """★方向过滤 per-user(user_id=me.id)· 只滤被禁方向不改策略 · 不建账户。"""
+    if payload.which not in ("long", "short"):
+        raise HTTPException(status_code=400, detail="which 必须是 long/short")
+    redis = await get_redis()
+    if payload.which == "long":
+        await iguard.set_allow_long(redis, payload.on, user_id=me.id)
+    else:
+        await iguard.set_allow_short(redis, payload.on, user_id=me.id)
+    return await _intel_status(db, ch, await _intel_shadow_acc(db, me.id), me.id)
+
+
 # ── 托管交易自助(/platinum/managed)─────────────────────────────────────
 async def _managed_status(
     db: AsyncSession, ch: ClickHouseDep, acc: VirtualAccount | None, me_id: UUID,
@@ -367,10 +388,11 @@ async def _managed_status(
     enabled = await mguard.is_enabled(redis, me_id)  # ★per-user 开关
     switches = await mguard.get_exit_switches(redis)  # ★平仓参数=全局(决策 B·admin-only)
     tp_pct = await mguard.get_tp_pct(redis)
-    # ★PR-7b 开仓参数 per-user(me_id · 决策③缺则回退全局)
+    # ★PR-7b 开仓参数 + ★PR-8 允许开多 per-user(me_id · 决策③缺则回退全局)
     open_margin = await mguard.get_open_margin(redis, me_id)
     open_leverage = await mguard.get_open_leverage(redis, me_id)
     max_positions = await mguard.get_max_positions(redis, me_id)
+    allow_long = await mguard.get_allow_long(redis, me_id)
     account_value = available = occupied = 0.0
     open_n = 0
     if acc is not None:
@@ -399,6 +421,7 @@ async def _managed_status(
         open_margin=float(open_margin),
         open_leverage=open_leverage,
         max_positions=max_positions,
+        allow_long=allow_long,
     )
 
 
@@ -610,3 +633,13 @@ async def my_managed_close_all(
     return BatchCloseResult(
         status="ok", closed=int(result["closed"]), total=int(result["total"]),
     )
+
+
+@router.post("/managed/allow-long", summary="设我的托管允许开多(on·恒做多·OFF=不开新仓)")
+async def my_managed_allow_long(
+    payload: AllowLongIn, me: PlatinumDep, db: DbDep, ch: ClickHouseDep,
+) -> ManagedStatus:
+    """★方向过滤 per-user(user_id=me.id)· 托管恒做多 → OFF=不开新仓 · 不建账户。"""
+    redis = await get_redis()
+    await mguard.set_allow_long(redis, payload.on, user_id=me.id)
+    return await _managed_status(db, ch, await _managed_shadow_acc(db, me.id), me.id)

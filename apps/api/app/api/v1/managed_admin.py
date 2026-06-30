@@ -66,6 +66,7 @@ class ManagedStatus(BaseModel):
     open_margin: float        # ★每单本金(U·可调 10-10000·默认 100)
     open_leverage: int        # ★杠杆(可调 1-20·默认 5)
     max_positions: int        # ★最大总持仓数(可调·默认 50·到上限不开新)
+    allow_long: bool          # ★PR-8 允许开多(默认 ON·托管恒做多·OFF=不开新仓)
 
 
 class ManagedToggleIn(BaseModel):
@@ -89,6 +90,7 @@ async def _status(db: AsyncSession, ch: ClickHouseDep) -> ManagedStatus:
     open_margin = await managed_guard.get_open_margin(redis)       # ★每单本金
     open_leverage = await managed_guard.get_open_leverage(redis)   # ★杠杆
     max_positions = await managed_guard.get_max_positions(redis)   # ★最大总持仓
+    allow_long = await managed_guard.get_allow_long(redis)         # ★PR-8 允许开多(全局)
     acc = await _managed_account_row(db)
     account_value = available = occupied = 0.0
     open_n = 0
@@ -122,6 +124,7 @@ async def _status(db: AsyncSession, ch: ClickHouseDep) -> ManagedStatus:
         open_margin=float(open_margin),
         open_leverage=open_leverage,
         max_positions=max_positions,
+        allow_long=allow_long,
     )
 
 
@@ -232,6 +235,20 @@ async def set_max_positions(
         raise HTTPException(status_code=400, detail="最大总持仓数必须 > 0")
     redis = await get_redis()
     await managed_guard.set_max_positions(redis, payload.max_positions)
+    return await _status(db, ch)
+
+
+# ── 方向过滤器(PR-8 · 托管恒做多·只 allow_long·OFF=不开新仓 · 默认 ON · 即时生效)──
+class AllowLongIn(BaseModel):
+    on: bool                  # True=允许开多 / False=不开新仓
+
+
+@router.post("/allow-long", summary="★设允许开多(on · 托管恒做多·OFF=不开新仓 · 即时生效)")
+async def set_allow_long(
+    payload: AllowLongIn, _admin: AdminDep, db: DbDep, ch: ClickHouseDep,
+) -> ManagedStatus:
+    redis = await get_redis()
+    await managed_guard.set_allow_long(redis, payload.on)
     return await _status(db, ch)
 
 

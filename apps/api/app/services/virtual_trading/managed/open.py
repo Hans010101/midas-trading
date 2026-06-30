@@ -80,6 +80,9 @@ async def run_managed_open(
     """
     if not await mguard.is_enabled(redis, enabled_user_id):
         return {"status": "skip", "reason": "disabled"}
+    # ★PR-8 方向过滤(托管恒做多):allow_long OFF → 不开新仓(只 gate 开仓·close 零碰)
+    if not await mguard.get_allow_long(redis, enabled_user_id):
+        return {"status": "skip", "reason": "long_disabled"}
 
     if account is None:
         account = await macc.ensure_managed_account(session)

@@ -183,6 +183,56 @@ async def test_strategy_weights_peruser() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("guard", "getter", "setter", "base_key"),
+    [
+        pytest.param(
+            iguard, "get_allow_long", "set_allow_long",
+            "intelligent:open:allow_long", id="i-long",
+        ),
+        pytest.param(
+            iguard, "get_allow_short", "set_allow_short",
+            "intelligent:open:allow_short", id="i-short",
+        ),
+        pytest.param(
+            mguard, "get_allow_long", "set_allow_long",
+            "managed:open:allow_long", id="m-long",
+        ),
+    ],
+)
+async def test_direction_switch_peruser(
+    guard: Any, getter: str, setter: str, base_key: str,
+) -> None:
+    """★PR-8 方向开关 per-user 全契约:★默认 ON(!= "0")· 决策③回退全局 · uid 隔离。"""
+    r = _FakeRedis()
+    get = getattr(guard, getter)
+    set_ = getattr(guard, setter)
+
+    # ① ★默认 ON(从未设过 = 现状·绝不能默认 OFF)
+    assert await get(r) is True
+    assert await get(r, _UID) is True
+
+    # ② 全局 set OFF → 只写全局 key
+    await set_(r, on=False)
+    assert r.kv[base_key] == "0"
+    assert list(r.kv.keys()) == [base_key]
+    assert await get(r) is False
+
+    # ③ ★决策③:uid 没单独设 → 回退全局当前值(现 OFF)
+    assert await get(r, _UID) is False
+
+    # ④ per-user set ON(uid)→ 只写 per-user key · 全局仍 OFF
+    await set_(r, on=True, user_id=_UID)
+    assert r.kv[f"{base_key}:{_UID}"] == "1"
+    assert r.kv[base_key] == "0"
+
+    # ⑤ 该 uid 自己 ON · 全局仍 OFF · 另一 uid 回退全局 OFF(不串户)
+    assert await get(r, _UID) is True
+    assert await get(r) is False
+    assert await get(r, _UID2) is False
+
+
+@pytest.mark.asyncio
 async def test_close_reads_global_not_peruser_decision_b() -> None:
     """★决策 B:close 调 getter 不传 uid → 永远读全局·不受铂金 per-user 设置影响(close.py 零改的依据)。
 
