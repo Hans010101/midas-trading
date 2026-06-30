@@ -126,7 +126,9 @@ class ClickHouseClient:
         return cls(client)
 
     async def close(self) -> None:
-        await self._client.close()
+        # clickhouse-connect 新版 close() 失类型 · 纯类型问题 · 不 pin(prod 已用新版运行正常)。
+        # unused-ignore:本地旧版 close() 有类型时该 ignore 未使用 · strict 下加它容忍两版。
+        await self._client.close()  # type: ignore[no-untyped-call, unused-ignore]
         logger.info("ClickHouse 客户端已关闭")
 
     # =====================
