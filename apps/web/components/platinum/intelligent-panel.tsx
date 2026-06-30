@@ -17,12 +17,20 @@ import { Pagination, StatCard } from '@/components/platinum/ui'
 import {
   INTELLIGENT_HISTORY_PAGE_SIZE,
   INTELLIGENT_POSITIONS_PAGE_SIZE,
+  type StrategyParams,
 } from '@/lib/api/intelligent'
 import {
   getMyIntelligentHistory,
   getMyIntelligentPositions,
   getMyIntelligentStats,
   getMyIntelligentStatus,
+  getMyIntelligentStrategyParams,
+  resetMyIntelligent,
+  setMyIntelligentCapital,
+  setMyIntelligentMaxPositions,
+  setMyIntelligentOpenLeverage,
+  setMyIntelligentOpenMargin,
+  setMyIntelligentStrategyParams,
   toggleMyIntelligent,
 } from '@/lib/api/platinum'
 import {
@@ -90,6 +98,83 @@ export function IntelligentPanel() {
     },
     onError: () => setNote('操作失败,请重试'),
   })
+
+  // ★账户操作(清零 / 改起始资金 · 决策④给铂金自助 · 二次确认)
+  const resetMut = useMutation({
+    mutationFn: () => resetMyIntelligent(token),
+    onSuccess: () => {
+      setNote('✓ 已清零重来 · 持仓 + 历史已清 · 现金重置起始资金')
+      invalidate()
+    },
+    onError: () => setNote('清零失败,请重试'),
+  })
+  const onReset = () => {
+    if (
+      window.confirm(
+        '确定清零重来?会删除你智能账户的【全部持仓 + 历史平仓记录】,现金重置为起始资金。不可撤销。',
+      )
+    )
+      resetMut.mutate()
+  }
+  const capitalMut = useMutation({
+    mutationFn: (amount: number) => setMyIntelligentCapital(token, amount),
+    onSuccess: (s) => {
+      setNote(`✓ 起始资金改为 ${s.initial_capital.toLocaleString()} U · 已清持仓重来`)
+      invalidate()
+    },
+    onError: () => setNote('起始资金更新失败,请重试'),
+  })
+
+  // ★开仓参数(每单本金 / 杠杆 / 最大单数 · 失焦保存 · 即时生效 · per-user)
+  const marginMut = useMutation({
+    mutationFn: (margin: number) => setMyIntelligentOpenMargin(token, margin),
+    onSuccess: (s) => {
+      setNote(`✓ 每单本金 ${s.open_margin} U`)
+      invalidate()
+    },
+    onError: () => setNote('每单本金更新失败(需 10-10000)'),
+  })
+  const leverageMut = useMutation({
+    mutationFn: (lev: number) => setMyIntelligentOpenLeverage(token, lev),
+    onSuccess: (s) => {
+      setNote(`✓ 杠杆 ${s.open_leverage}x(不影响 ATR 止损止盈价)`)
+      invalidate()
+    },
+    onError: () => setNote('杠杆更新失败(需 1-20)'),
+  })
+  const maxPosMut = useMutation({
+    mutationFn: (n: number) => setMyIntelligentMaxPositions(token, n),
+    onSuccess: (s) => {
+      setNote(`✓ 最大总持仓 ${s.max_positions} 单`)
+      invalidate()
+    },
+    onError: () => setNote('最大单数更新失败(需 > 0)'),
+  })
+
+  // ★策略参数(阈值/6权重/ATR倍数 · 折叠区 · 失焦保存 · per-user)
+  const [showStrat, setShowStrat] = useState(false)
+  const [strat, setStrat] = useState<StrategyParams | null>(null)
+  const stratQuery = useQuery({
+    queryKey: ['my-intelligent-strategy-params'],
+    queryFn: ({ signal }) => getMyIntelligentStrategyParams(token, signal),
+    enabled: on,
+    retry: 0,
+  })
+  useEffect(() => {
+    if (stratQuery.data) setStrat(stratQuery.data)
+  }, [stratQuery.data])
+  const stratMut = useMutation({
+    mutationFn: (p: StrategyParams) => setMyIntelligentStrategyParams(token, p),
+    onSuccess: (p) => {
+      setStrat(p)
+      setNote('✓ 策略参数已更新 · 下一轮按新参数算')
+      void qc.invalidateQueries({ queryKey: ['my-intelligent-strategy-params'] })
+    },
+    onError: () => setNote('策略参数更新失败(阈值/ATR>0 · 权重≥0)'),
+  })
+  const saveStrat = () => {
+    if (strat) stratMut.mutate(strat)
+  }
 
   const enabled = status.data?.enabled ?? false
   const onToggle = () => {
@@ -168,8 +253,179 @@ export function IntelligentPanel() {
             <span className="text-xs text-muted-foreground">关闭只停新开仓 · 已有持仓仍按策略平仓</span>
           )}
         </div>
+        {/* ★账户管理(清零 / 改起始资金 · 决策④给铂金 · 二次确认) */}
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-paper pt-3 text-xs">
+          <span className="text-muted-foreground">账户管理:</span>
+          <button
+            type="button"
+            onClick={onReset}
+            disabled={resetMut.isPending || !on}
+            className="rounded-md border border-paper px-3 py-1 font-medium text-midas-red hover:bg-midas-red/10 disabled:opacity-50"
+          >
+            清零重来
+          </button>
+          <span className="ml-2 text-muted-foreground">起始资金:</span>
+          <input
+            key={st?.initial_capital ?? 100000}
+            type="number"
+            min={1}
+            defaultValue={st?.initial_capital ?? 100000}
+            disabled={!on || capitalMut.isPending}
+            onBlur={(e) => {
+              const v = Number.parseFloat(e.currentTarget.value)
+              if (Number.isFinite(v) && v > 0 && v !== (st?.initial_capital ?? 100000)) capitalMut.mutate(v)
+            }}
+            className="w-28 rounded border border-paper bg-cream px-2 py-1 font-mono disabled:opacity-50"
+          />
+          <span className="text-muted-foreground">U(改则清持仓重来 · 失焦保存)</span>
+        </div>
+        {/* ★开仓参数(每单本金 / 杠杆 / 最大单数 · 失焦保存 · per-user) */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-paper pt-3 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground">每单本金:</span>
+            <input
+              key={`m${st?.open_margin ?? 100}`}
+              type="number"
+              min={10}
+              max={10000}
+              defaultValue={st?.open_margin ?? 100}
+              disabled={!on || marginMut.isPending}
+              onBlur={(e) => {
+                const v = Number.parseFloat(e.currentTarget.value)
+                if (Number.isFinite(v) && v >= 10 && v <= 10000 && v !== (st?.open_margin ?? 100))
+                  marginMut.mutate(v)
+              }}
+              className="w-20 rounded border border-paper bg-cream px-2 py-1 font-mono disabled:opacity-50"
+            />
+            <span className="text-muted-foreground">U(10-10000)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground">杠杆:</span>
+            <input
+              key={`l${st?.open_leverage ?? 5}`}
+              type="number"
+              min={1}
+              max={20}
+              defaultValue={st?.open_leverage ?? 5}
+              disabled={!on || leverageMut.isPending}
+              onBlur={(e) => {
+                const v = Number.parseInt(e.currentTarget.value, 10)
+                if (Number.isFinite(v) && v >= 1 && v <= 20 && v !== (st?.open_leverage ?? 5))
+                  leverageMut.mutate(v)
+              }}
+              className="w-16 rounded border border-paper bg-cream px-2 py-1 font-mono disabled:opacity-50"
+            />
+            <span className="text-muted-foreground">x(1-20)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground">最大单数:</span>
+            <input
+              key={`p${st?.max_positions ?? 50}`}
+              type="number"
+              min={1}
+              defaultValue={st?.max_positions ?? 50}
+              disabled={!on || maxPosMut.isPending}
+              onBlur={(e) => {
+                const v = Number.parseInt(e.currentTarget.value, 10)
+                if (Number.isFinite(v) && v > 0 && v !== (st?.max_positions ?? 50)) maxPosMut.mutate(v)
+              }}
+              className="w-20 rounded border border-paper bg-cream px-2 py-1 font-mono disabled:opacity-50"
+            />
+            <span className="text-muted-foreground">单(失焦保存)</span>
+          </div>
+        </div>
         {note && (
           <p className="mt-3 rounded-md bg-gold/10 px-3 py-2 text-xs text-muted-foreground">{note}</p>
+        )}
+      </div>
+
+      {/* ★策略参数(阈值/6权重/ATR倍数 · 折叠区 · per-user · 失焦保存) */}
+      <div className="mb-6 rounded-lg border border-paper bg-cream p-4 shadow-sm">
+        <button
+          type="button"
+          onClick={() => setShowStrat((v) => !v)}
+          className="flex w-full items-center gap-2 font-serif text-base font-bold"
+        >
+          <span>策略参数</span>
+          <span className="text-xs font-normal text-muted-foreground">
+            (阈值 {strat?.threshold ?? 3} · ATR {strat?.atr_stop_mult ?? 2}×/{strat?.atr_tp_mult ?? 4}× · 点击
+            {showStrat ? '收起' : '展开'}调参)
+          </span>
+          <span className="ml-auto text-muted-foreground">{showStrat ? '▲' : '▼'}</span>
+        </button>
+        {showStrat && strat && (
+          <div className="mt-3 space-y-3 border-t border-paper pt-3 text-xs">
+            <p className="text-muted-foreground">★改后失焦或点保存即时生效 · 下一轮开仓按新参数算</p>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <label className="flex items-center gap-2">
+                <span className="text-muted-foreground">开仓阈值(&gt;0):</span>
+                <input
+                  type="number" step="0.5" min={0.5}
+                  value={strat.threshold}
+                  disabled={!on || stratMut.isPending}
+                  onChange={(e) => setStrat({ ...strat, threshold: Number.parseFloat(e.currentTarget.value) || 0 })}
+                  onBlur={saveStrat}
+                  className="w-20 rounded border border-paper bg-cream px-2 py-1 font-mono disabled:opacity-50"
+                />
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="text-muted-foreground">ATR 止损倍数:</span>
+                <input
+                  type="number" step="0.5" min={0.5}
+                  value={strat.atr_stop_mult}
+                  disabled={!on || stratMut.isPending}
+                  onChange={(e) => setStrat({ ...strat, atr_stop_mult: Number.parseFloat(e.currentTarget.value) || 0 })}
+                  onBlur={saveStrat}
+                  className="w-16 rounded border border-paper bg-cream px-2 py-1 font-mono disabled:opacity-50"
+                />
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="text-muted-foreground">ATR 止盈倍数:</span>
+                <input
+                  type="number" step="0.5" min={0.5}
+                  value={strat.atr_tp_mult}
+                  disabled={!on || stratMut.isPending}
+                  onChange={(e) => setStrat({ ...strat, atr_tp_mult: Number.parseFloat(e.currentTarget.value) || 0 })}
+                  onBlur={saveStrat}
+                  className="w-16 rounded border border-paper bg-cream px-2 py-1 font-mono disabled:opacity-50"
+                />
+              </label>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <span className="text-muted-foreground">指标权重(≥0):</span>
+              {(
+                [
+                  ['boll', '布林'], ['macd', 'MACD'], ['ma', 'MA'],
+                  ['rsi', 'RSI'], ['kdj', 'KDJ'], ['extreme', '极端'],
+                ] as const
+              ).map(([key, label]) => (
+                <label key={key} className="flex items-center gap-1">
+                  <span className="text-muted-foreground">{label}</span>
+                  <input
+                    type="number" step="0.5" min={0}
+                    value={strat.weights[key]}
+                    disabled={!on || stratMut.isPending}
+                    onChange={(e) =>
+                      setStrat({
+                        ...strat,
+                        weights: { ...strat.weights, [key]: Number.parseFloat(e.currentTarget.value) || 0 },
+                      })
+                    }
+                    onBlur={saveStrat}
+                    className="w-14 rounded border border-paper bg-cream px-2 py-1 font-mono disabled:opacity-50"
+                  />
+                </label>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={saveStrat}
+              disabled={!on || stratMut.isPending}
+              className="rounded-md bg-midas-red px-4 py-1.5 text-xs font-medium text-white hover:bg-midas-red/90 disabled:opacity-50"
+            >
+              {stratMut.isPending ? '保存中…' : '保存策略参数'}
+            </button>
+          </div>
         )}
       </div>
 
