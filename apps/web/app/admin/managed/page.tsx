@@ -21,6 +21,7 @@ import {
   getManagedStatus,
   MANAGED_HISTORY_PAGE_SIZE,
   MANAGED_POSITIONS_PAGE_SIZE,
+  setManagedAllowLong,
   setManagedExitSwitch,
   setManagedMaxPositions,
   setManagedOpenLeverage,
@@ -219,6 +220,15 @@ export default function AdminManagedPage() {
     },
     onError: () => setNote('最大单数更新失败(需 > 0)'),
   })
+  // ★PR-8 允许开多(托管恒做多·OFF=不开新仓·即时生效)
+  const allowLongMut = useMutation({
+    mutationFn: (next: boolean) => setManagedAllowLong(token, next),
+    onSuccess: (s) => {
+      setNote(`✓ 允许开多 ${s.allow_long ? '开' : '关(不开新仓)'}`)
+      invalidate()
+    },
+    onError: () => setNote('允许开多更新失败,请重试'),
+  })
 
   const forbidden = status.isError
   const st = status.data
@@ -400,6 +410,23 @@ export default function AdminManagedPage() {
                     />
                     <span className="text-muted-foreground">单(到上限不开新 · 失焦保存)</span>
                   </div>
+                </div>
+                {/* ★PR-8 允许开多(托管恒做多·OFF=不开新仓·只 gate 开仓不碰平仓) */}
+                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-paper pt-3 text-xs">
+                  <span className="text-muted-foreground">方向过滤:</span>
+                  <button
+                    type="button"
+                    onClick={() => st && allowLongMut.mutate(!st.allow_long)}
+                    disabled={!on || allowLongMut.isPending || !st}
+                    className={
+                      st?.allow_long
+                        ? 'rounded-md bg-emerald-50 px-3 py-1 font-medium text-emerald-700 disabled:opacity-50'
+                        : 'rounded-md bg-muted px-3 py-1 font-medium text-muted-foreground disabled:opacity-50'
+                    }
+                  >
+                    允许做多 {st?.allow_long ? 'ON' : 'OFF'}
+                  </button>
+                  <span className="text-muted-foreground">(托管恒做多 · OFF=不开新仓 · 不碰平仓)</span>
                 </div>
                 {/* ★手动平单二次确认开关(纯前端偏好 · localStorage) */}
                 <div className="mt-2 flex items-center gap-2 text-xs">

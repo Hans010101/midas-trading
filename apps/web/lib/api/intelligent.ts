@@ -24,6 +24,8 @@ export interface IntelligentStatus {
   open_margin: number // ★每单本金(U·可调 10-10000·默认 100)
   open_leverage: number // ★杠杆(可调 1-20·默认 5·不影响 ATR 止损止盈价)
   max_positions: number // ★最大总持仓数(可调·默认 50·到上限不开新)
+  allow_long: boolean // ★PR-8 允许开多(默认 ON·OFF=滤掉做多信号)
+  allow_short: boolean // ★PR-8 允许开空(默认 ON·OFF=滤掉做空信号)
 }
 
 export interface IntelligentPosition {
@@ -162,3 +164,7 @@ export const getIntelligentStrategyParams = (t: string, s?: AbortSignal) =>
 /** ★设策略参数(批量·即时生效·后端范围校验)。 */
 export const setIntelligentStrategyParams = (token: string, params: StrategyParams) =>
   _post<StrategyParams>('/strategy-params', token, params)
+
+/** ★PR-8 设方向过滤(which=long/short · on · 即时生效 · 只滤方向不改策略)。 */
+export const setIntelligentAllowDirection = (token: string, which: 'long' | 'short', on: boolean) =>
+  _post<IntelligentStatus>('/allow-direction', token, { which, on })

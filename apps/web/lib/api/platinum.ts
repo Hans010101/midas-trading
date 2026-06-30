@@ -122,3 +122,12 @@ export const closeMyManagedPosition = (t: string, positionId: number) =>
 /** 一键平我的所有托管活仓(★调用方应二次确认)。 */
 export const closeAllMyManaged = (t: string) =>
   _post<BatchCloseResult>('/managed/positions/close-all', t)
+
+// ── 方向过滤器(PR-8 · per-user · 智能双开关 / 托管单开关)──────────────────
+/** ★设我的智能方向过滤(which=long/short · on)。 */
+export const setMyIntelligentAllowDirection = (
+  t: string, which: 'long' | 'short', on: boolean,
+) => _post<IntelligentStatus>('/intelligent/allow-direction', t, { which, on })
+/** ★设我的托管允许开多(on · 托管恒做多·OFF=不开新仓)。 */
+export const setMyManagedAllowLong = (t: string, on: boolean) =>
+  _post<ManagedStatus>('/managed/allow-long', t, { on })
