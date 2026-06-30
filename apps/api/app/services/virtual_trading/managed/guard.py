@@ -91,47 +91,63 @@ async def set_tp_pct(redis: Any, pct: int) -> None:
     await redis.set(_EXIT_TP_PCT, str(pct))
 
 
-# ── 开仓参数(margin/leverage/max_positions · open_scan 每轮读 · 即时生效)──
-async def get_open_margin(redis: Any) -> Decimal:
+# ── 开仓参数 per-user(PR-7a · margin/leverage/max_positions · open_scan 每轮读)──
+# ★user_id=None → 全局 key(现在跑的 + admin·一字不变)。给定 → 先读 per-user key·缺则回退全局
+#   当前值(决策③·非硬默认)·均无 → DEFAULT。set 给 uid 只写 per-user key(不动全局)。
+# ★只开仓参数 per-user;平仓参数(exit 开关/tp_pct)保持全局不动(决策 B·close.py 零改)。
+def _param_key(base: str, user_id: UUID | None) -> str:
+    return base if user_id is None else f"{base}:{user_id}"
+
+
+async def _read_param(redis: Any, base: str, user_id: UUID | None) -> Any:
+    """给 uid 先读 per-user key·缺则回退全局 key(决策③)·均无 → None(调用方用 DEFAULT)。"""
+    if user_id is not None:
+        per_user = await redis.get(f"{base}:{user_id}")
+        if per_user is not None:
+            return per_user
+    return await redis.get(base)
+
+
+async def get_open_margin(redis: Any, user_id: UUID | None = None) -> Decimal:
     """每单本金(U)· 默认 100 · 范围校验(10-10000)在端点。"""
-    raw = await redis.get(_OPEN_MARGIN)
+    raw = await _read_param(redis, _OPEN_MARGIN, user_id)
     try:
         return Decimal(raw) if raw is not None else DEFAULT_OPEN_MARGIN
     except (TypeError, ValueError, InvalidOperation):
         return DEFAULT_OPEN_MARGIN
 
 
-async def set_open_margin(redis: Any, margin: Decimal) -> None:
+async def set_open_margin(redis: Any, margin: Decimal, user_id: UUID | None = None) -> None:
     """设每单本金 · 调用方校验 10 ≤ margin ≤ 10000。"""
-    await redis.set(_OPEN_MARGIN, str(margin))
+    await redis.set(_param_key(_OPEN_MARGIN, user_id), str(margin))
 
 
-async def get_open_leverage(redis: Any) -> int:
+async def get_open_leverage(redis: Any, user_id: UUID | None = None) -> int:
     """杠杆 · 默认 5 · 范围校验(1-20)在端点。"""
-    raw = await redis.get(_OPEN_LEVERAGE)
+    raw = await _read_param(redis, _OPEN_LEVERAGE, user_id)
     try:
         return int(raw) if raw is not None else DEFAULT_OPEN_LEVERAGE
     except (TypeError, ValueError):
         return DEFAULT_OPEN_LEVERAGE
 
 
-async def set_open_leverage(redis: Any, leverage: int) -> None:
+async def set_open_leverage(redis: Any, leverage: int, user_id: UUID | None = None) -> None:
     """设杠杆 · 调用方校验 1 ≤ leverage ≤ 20。"""
-    await redis.set(_OPEN_LEVERAGE, str(leverage))
+    await redis.set(_param_key(_OPEN_LEVERAGE, user_id), str(leverage))
 
 
-async def get_max_positions(redis: Any) -> int:
+async def get_max_positions(redis: Any, user_id: UUID | None = None) -> int:
     """最大总持仓数 · 默认 50 · 到上限不开新(与每轮≤5 并存)· 校验 > 0 在端点。"""
-    raw = await redis.get(_MAX_POSITIONS)
+    raw = await _read_param(redis, _MAX_POSITIONS, user_id)
     try:
         return int(raw) if raw is not None else DEFAULT_MAX_POSITIONS
     except (TypeError, ValueError):
         return DEFAULT_MAX_POSITIONS
 
 
-async def set_max_positions(redis: Any, n: int) -> None:
+async def set_max_positions(redis: Any, n: int, user_id: UUID | None = None) -> None:
     """设最大总持仓数 · 调用方校验 n > 0。"""
-    await redis.set(_MAX_POSITIONS, str(n))
+    await redis.set(_param_key(_MAX_POSITIONS, user_id), str(n))
 
 
 # ── 仓位约束(PR-2 开仓编排用 · 只读 DB)─────────────────────────────

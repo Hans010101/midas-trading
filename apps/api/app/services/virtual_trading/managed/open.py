@@ -83,10 +83,10 @@ async def run_managed_open(
 
     if account is None:
         account = await macc.ensure_managed_account(session)
-    # ★三参数读 Redis(即时生效)· margin/leverage 传给 route(引擎零碰)· max_positions 限总持仓
-    margin = await mguard.get_open_margin(redis)
-    leverage = await mguard.get_open_leverage(redis)
-    max_positions = await mguard.get_max_positions(redis)
+    # ★PR-7a 透 enabled_user_id:全局=None 读全局 key、影子=uid 读 per-user key(即时生效)
+    margin = await mguard.get_open_margin(redis, enabled_user_id)
+    leverage = await mguard.get_open_leverage(redis, enabled_user_id)
+    max_positions = await mguard.get_max_positions(redis, enabled_user_id)
     current_open = await mguard.count_open_positions(session, account.id)
     # ★本轮可开 = min(每轮≤5, 总数上限剩余空间)· 两约束并存 · 负/0 → 不开(已达总上限)
     room = min(mguard.MAX_PER_ROUND, max_positions - current_open)

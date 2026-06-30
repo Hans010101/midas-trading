@@ -87,20 +87,20 @@ async def run_intelligent_open(
 
     if account is None:
         account = await iacc.ensure_intelligent_account(session)
-    # ★三参数读 Redis(即时生效)· margin/leverage 传 route(引擎零碰)· max_positions 限总持仓
-    margin = await iguard.get_open_margin(redis)
-    leverage = await iguard.get_open_leverage(redis)
-    max_positions = await iguard.get_max_positions(redis)
+    # ★PR-7a 透 enabled_user_id:全局=None 读全局 key、影子=uid 读 per-user key(即时生效)
+    margin = await iguard.get_open_margin(redis, enabled_user_id)
+    leverage = await iguard.get_open_leverage(redis, enabled_user_id)
+    max_positions = await iguard.get_max_positions(redis, enabled_user_id)
     current_open = await iguard.count_open_positions(session, account.id)
     # ★总数上限约束(智能原本并发不限·现加 total 上限)· room = 剩余空间 · ≤0 不开
     room = max_positions - current_open
     boll_items = await _read_items(redis, _BOLL_KEY)
     signal_items = await _read_items(redis, _SIGNALS_KEY)
-    # ★策略参数读 Redis(即时生效)· 传给纯函数 build_decisions/decide(保持可测)
-    threshold = await iguard.get_strategy_threshold(redis)
-    weights = await iguard.get_strategy_weights(redis)
-    atr_stop = await iguard.get_strategy_atr_stop_mult(redis)
-    atr_tp = await iguard.get_strategy_atr_tp_mult(redis)
+    # ★策略参数读 Redis(★PR-7a 透 enabled_user_id·开仓算分用·影子读 per-user/全局读全局)· 传纯函数
+    threshold = await iguard.get_strategy_threshold(redis, enabled_user_id)
+    weights = await iguard.get_strategy_weights(redis, enabled_user_id)
+    atr_stop = await iguard.get_strategy_atr_stop_mult(redis, enabled_user_id)
+    atr_tp = await iguard.get_strategy_atr_tp_mult(redis, enabled_user_id)
     decisions = istrategy.open_decisions(istrategy.build_decisions(
         boll_items, signal_items,
         threshold=threshold, weights=weights, atr_stop_mult=atr_stop, atr_tp_mult=atr_tp,
