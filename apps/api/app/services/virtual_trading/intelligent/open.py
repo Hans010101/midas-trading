@@ -16,8 +16,11 @@ import logging
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy.exc import IntegrityError
+
 from app.models.perp import MarginMode, PerpSide, VirtualPerpPosition
-from app.models.virtual import OrderStatus
+from app.models.virtual import OrderStatus, VirtualAccount
+from app.services.virtual_trading import platinum
 from app.services.virtual_trading.intelligent import account as iacc
 from app.services.virtual_trading.intelligent import guard as iguard
 from app.services.virtual_trading.intelligent import strategy as istrategy
@@ -25,6 +28,7 @@ from app.services.virtual_trading.perp_dispatcher import route_open_perp
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+    from uuid import UUID
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -67,16 +71,22 @@ async def run_intelligent_open(
     session: AsyncSession,
     redis: Any,
     get_mark_price: Callable[[str], Awaitable[Decimal | None]],
+    *,
+    account: VirtualAccount | None = None,
+    enabled_user_id: UUID | None = None,
 ) -> dict[str, Any]:
     """守卫 → 读两快照 → 打分共振决策 → route_open_perp 做多做空 → 标 intelligent + 记止损止盈。
 
     ★守卫第一行:开关 OFF → 立刻 return(空转零副作用 · 选币/下单在其后绝不执行)。
     ★同币不重复开 · 并发不限(Hans 定)· per-币 commit 隔离失败。
+    ★PR-4b per-user(路径 A · 向后兼容):account/enabled_user_id 默认 None = 旧全局路径一字不变
+      (全局账户 + 全局开关·现在跑的智能交易走这条);给定 = 某铂金用户的影子账户 + per-user 开关。
     """
-    if not await iguard.is_enabled(redis):
+    if not await iguard.is_enabled(redis, enabled_user_id):
         return {"status": "skip", "reason": "disabled"}
 
-    account = await iacc.ensure_intelligent_account(session)
+    if account is None:
+        account = await iacc.ensure_intelligent_account(session)
     # ★三参数读 Redis(即时生效)· margin/leverage 传 route(引擎零碰)· max_positions 限总持仓
     margin = await iguard.get_open_margin(redis)
     leverage = await iguard.get_open_leverage(redis)
@@ -134,3 +144,43 @@ async def run_intelligent_open(
     logger.info("[intelligent] 开仓编排 · 本轮新开 %d(并发不限):%s",
                 len(opened), [o["symbol"] for o in opened])
     return {"status": "ok", "opened": opened}
+
+
+# ── ★PR-4b:铂金 per-user 开仓(全局 loop 之外叠加 · 全局零影响)─────────────────
+async def _ensure_shadow_intelligent_account(
+    session: AsyncSession, user_id: UUID,
+) -> VirtualAccount:
+    """幂等建铂金用户智能影子账户 · 首建撞 User.email unique → rollback 重查兜底(不 500)。"""
+    try:
+        return await iacc.ensure_intelligent_account_for_user(session, user_id)
+    except IntegrityError:
+        await session.rollback()  # ★另一并发已建 → 回滚后重查(幂等收敛)
+        return await iacc.ensure_intelligent_account_for_user(session, user_id)
+
+
+async def run_intelligent_open_platinum(
+    session: AsyncSession,
+    redis: Any,
+    get_mark_price: Callable[[str], Awaitable[Decimal | None]],
+) -> list[dict[str, Any]]:
+    """★铂金 per-user 开仓:遍历铂金用户 → 各自影子账户 + per-user 开关开仓。
+
+    ★全局 loop 由 worker 先跑、本函数只【叠加】铂金,绝不碰全局(红线①)。
+    ★每 uid 独立 try/except + rollback 隔离(单用户失败不连累全局/其他铂金)。
+    ★每轮顶部先 ensure(撞 unique 兜底)→ session 干净后再开;开仓内 per-币 commit。
+    """
+    uids = await platinum.get_platinum_user_ids(session)
+    results: list[dict[str, Any]] = []
+    for uid in uids:
+        try:
+            account = await _ensure_shadow_intelligent_account(session, uid)
+            r = await run_intelligent_open(
+                session, redis, get_mark_price,
+                account=account, enabled_user_id=uid,
+            )
+            results.append({"uid": str(uid), **r})
+        except Exception:  # noqa: BLE001 · 单用户失败隔离(不连累全局/其他铂金)
+            await session.rollback()
+            logger.exception("[intelligent] per-user 开仓异常 uid=%s", uid)
+            results.append({"uid": str(uid), "status": "error"})
+    return results

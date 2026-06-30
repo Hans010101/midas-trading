@@ -7,20 +7,23 @@ DB(midas_test · CI)+ FakeRedis(两快照)+ ★mock route_open_perp(不碰真引
 from __future__ import annotations
 
 import json
+import uuid
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.perp import MarginMode, PerpSide, VirtualPerpPosition
-from app.models.virtual import OrderStatus
+from app.models.virtual import OrderStatus, VirtualAccount
 from app.services.virtual_trading.intelligent import account as iacc
 from app.services.virtual_trading.intelligent import guard as iguard
 from app.services.virtual_trading.intelligent import open as iopen
 from app.services.virtual_trading.perp_fees import q_money
+from tests.factories import make_user
 
 
 class _FakeRedis:
@@ -257,3 +260,101 @@ async def test_max_positions_reached_no_open(db_session: AsyncSession, monkeypat
     out = await iopen.run_intelligent_open(db_session, r, _mark)
     assert out["opened"] == []   # ★到上限不开
     assert captured == []
+
+
+# ── ★PR-4b 铂金 per-user 开仓(影子账户 + per-user 开关 + 遍历 + 并发兜底)──────────
+def _spy_open_by_user(captured: list[dict[str, Any]]):  # noqa: ANN202
+    """★mock route_open_perp:按 user_id 解析账户建仓(模拟引擎 user_id→account 路由)+ 捕获 user_id。"""
+    async def fake(
+        session: AsyncSession, *, user_id: Any, symbol: str, side: Any, leverage: int,
+        margin: Any, **_kw: Any,
+    ) -> Any:
+        captured.append({"symbol": symbol, "side": side, "user_id": user_id, "margin": margin})
+        acc = await session.scalar(select(VirtualAccount).where(
+            VirtualAccount.user_id == user_id, VirtualAccount.market == "crypto",
+        ))
+        assert acc is not None  # 影子账户应已 ensure
+        q, e = Decimal("1"), Decimal("100")
+        pos = VirtualPerpPosition(
+            account_id=acc.id, symbol=symbol, side=side,
+            margin_mode=MarginMode.CROSS, leverage=leverage, quantity=q, entry_price=e,
+            initial_margin=q_money(q * e / Decimal(leverage)),
+            maintenance_margin_rate=Decimal("0.005"), liquidation_price=Decimal("0"),
+            intelligent=False,
+        )
+        session.add(pos)
+        await session.flush()
+        return SimpleNamespace(status=OrderStatus.FILLED, position_id=pos.id, reject_reason=None)
+    return fake
+
+
+@pytest.mark.asyncio
+async def test_per_user_switch_gates_open(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★per-user 开关:即使全局 ON,该铂金用户开关 OFF → skip(不开);ON → 在影子账户用影子 uid 开。
+    r = _FakeRedis()
+    await iguard.set_enabled(r, enabled=True)  # 全局 ON(不影响 per-user 判定)
+    real_uid = uuid.UUID("cccccccc-0000-0000-0000-000000000001")
+    shadow = await iacc.ensure_intelligent_account_for_user(db_session, real_uid)
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(iopen, "route_open_perp", _spy_open_by_user(captured))
+    _seed_snapshots(r, boll=[{"symbol": "BTCUSDT", "bias": "偏多", "close": 100.0}],
+                    signals=[_bull("BTCUSDT")])
+    # per-user 开关默认 OFF → skip(全局 ON 不带开 per-user)
+    out = await iopen.run_intelligent_open(
+        db_session, r, _mark, account=shadow, enabled_user_id=real_uid)
+    assert out == {"status": "skip", "reason": "disabled"}
+    assert captured == []
+    # per-user 开关 ON → 开(在影子账户·route 用影子 uid)
+    await iguard.set_enabled(r, enabled=True, user_id=real_uid)
+    out = await iopen.run_intelligent_open(
+        db_session, r, _mark, account=shadow, enabled_user_id=real_uid)
+    assert out["status"] == "ok"
+    assert captured[0]["user_id"] == shadow.user_id  # ★用影子 uid 开(不是全局)
+
+
+@pytest.mark.asyncio
+async def test_open_platinum_loops_only_platinum_each_shadow(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★铂金 loop:遍历 is_platinum 用户 → 各自影子账户开仓;非铂金用户不被遍历。
+    r = _FakeRedis()
+    plat = await make_user(db_session)
+    plat.is_platinum = True
+    await make_user(db_session)  # 非铂金(不应被遍历)
+    await db_session.commit()
+    await iguard.set_enabled(r, enabled=True, user_id=plat.id)  # 该铂金用户 per-user 开关 ON
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(iopen, "route_open_perp", _spy_open_by_user(captured))
+    _seed_snapshots(r, boll=[{"symbol": "BTCUSDT", "bias": "偏多", "close": 100.0}],
+                    signals=[_bull("BTCUSDT")])
+    results = await iopen.run_intelligent_open_platinum(db_session, r, _mark)
+    assert len(results) == 1  # ★只遍历了铂金用户(非铂金不在内)
+    assert results[0]["uid"] == str(plat.id)
+    assert results[0]["status"] == "ok"
+    # ★开在该铂金用户的【影子账户】(影子 uid ≠ 真人 plat.id)· 真人自己名下不被开仓
+    shadow_uid = await iacc.get_intelligent_user_id_for_user(db_session, plat.id)
+    assert captured[0]["user_id"] == shadow_uid
+    assert shadow_uid != plat.id
+    real_cnt = await db_session.scalar(select(VirtualPerpPosition).where(
+        VirtualPerpPosition.account_id.in_(
+            select(VirtualAccount.id).where(VirtualAccount.user_id == plat.id)),
+    ))
+    assert real_cnt is None  # 真人 user_id 名下无影子仓(影子挂独立影子 user)
+
+
+@pytest.mark.asyncio
+async def test_ensure_shadow_retries_on_integrity_error(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★并发兜底:首建撞 User.email unique(IntegrityError)→ rollback 重查 → 第二次成功(不 500)。
+    real_uid = uuid.UUID("cccccccc-0000-0000-0000-000000000009")
+    real_ensure = iacc.ensure_intelligent_account_for_user
+    calls = {"n": 0}
+
+    async def flaky(session: AsyncSession, user_id: Any) -> Any:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise IntegrityError("dup email", None, Exception("unique"))  # 模拟并发首建撞 unique
+        return await real_ensure(session, user_id)
+
+    monkeypatch.setattr(iacc, "ensure_intelligent_account_for_user", flaky)
+    acc = await iopen._ensure_shadow_intelligent_account(db_session, real_uid)
+    assert calls["n"] == 2  # ★第一次撞 → 第二次重查成功
+    assert acc is not None
+    assert acc.user_id != real_uid  # 影子账户(独立影子 user)

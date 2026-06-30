@@ -27,7 +27,10 @@ from app.services.clickhouse_crypto import (
     select_tickers_by_symbols,
 )
 from app.services.virtual_trading.intelligent.close import run_intelligent_close
-from app.services.virtual_trading.intelligent.open import run_intelligent_open
+from app.services.virtual_trading.intelligent.open import (
+    run_intelligent_open,
+    run_intelligent_open_platinum,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +83,11 @@ async def _run(which: str) -> dict[str, Any]:
     try:
         async with session_maker() as session:
             if which == "open":
-                return await run_intelligent_open(session, redis, fetcher)
+                # ★全局账户开仓(现在跑的·无 account=旧全局路径一字不变)
+                global_result = await run_intelligent_open(session, redis, fetcher)
+                # ★PR-4b 铂金 per-user 开仓(遍历影子账户·全局零影响)
+                platinum_result = await run_intelligent_open_platinum(session, redis, fetcher)
+                return {"status": "ok", "global": global_result, "platinum": platinum_result}
             return await run_intelligent_close(session, redis, fetcher)
     finally:
         await redis.aclose()
