@@ -7,19 +7,23 @@ DB(midas_test · CI)+ FakeRedis(开关/快照)+ ★mock route_open_perp(不碰�
 from __future__ import annotations
 
 import json
+import uuid
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.perp import MarginMode, PerpSide, VirtualPerpPosition
-from app.models.virtual import OrderStatus
+from app.models.virtual import OrderStatus, VirtualAccount
 from app.services.virtual_trading.managed import account as macc
 from app.services.virtual_trading.managed import guard as mguard
 from app.services.virtual_trading.managed import open as mopen
 from app.services.virtual_trading.perp_fees import q_money
+from tests.factories import make_user
 
 
 class _FakeRedis:
@@ -263,3 +267,91 @@ async def test_both_constraints_per_round_and_max(db_session: AsyncSession, monk
     _seed_snapshot(r, [_item(f"N{i}USDT", "偏多", 9.0 - i, transition=True) for i in range(8)])
     out = await mopen.run_managed_open(db_session, r, _mark_price)
     assert len(out["opened"]) == mguard.MAX_PER_ROUND  # ★每轮≤5 生效(虽 max=100 够大)
+
+
+# ── ★PR-4b 铂金 per-user 开仓(影子账户 + per-user 开关 + 遍历 + 并发兜底)──────────
+def _spy_open_by_user(captured: list[dict[str, Any]]):  # noqa: ANN202
+    """★mock route_open_perp:按 user_id 解析账户建仓(模拟引擎 user_id→account 路由)+ 捕获 user_id。"""
+    async def fake(
+        session: AsyncSession, *, user_id: Any, symbol: str, side: Any, leverage: int,
+        preferred_mode: Any, **_kw: Any,
+    ) -> Any:
+        captured.append({"symbol": symbol, "side": side, "user_id": user_id})
+        acc = await session.scalar(select(VirtualAccount).where(
+            VirtualAccount.user_id == user_id, VirtualAccount.market == "crypto",
+        ))
+        assert acc is not None  # 影子账户应已 ensure
+        q, e = Decimal("1"), Decimal("100")
+        pos = VirtualPerpPosition(
+            account_id=acc.id, symbol=symbol, side=side,
+            margin_mode=preferred_mode, leverage=leverage, quantity=q, entry_price=e,
+            initial_margin=q_money(q * e / Decimal(leverage)),
+            maintenance_margin_rate=Decimal("0.005"), liquidation_price=Decimal("0"),
+            managed=False,
+        )
+        session.add(pos)
+        await session.flush()
+        return SimpleNamespace(status=OrderStatus.FILLED, position_id=pos.id, reject_reason=None)
+    return fake
+
+
+@pytest.mark.asyncio
+async def test_per_user_switch_gates_open(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★per-user 开关:全局 ON 但该铂金用户开关 OFF → skip;ON → 在影子账户用影子 uid 开。
+    r = _FakeRedis()
+    await mguard.set_enabled(r, enabled=True)  # 全局 ON(不影响 per-user 判定)
+    real_uid = uuid.UUID("dddddddd-0000-0000-0000-000000000001")
+    shadow = await macc.ensure_managed_account_for_user(db_session, real_uid)
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(mopen, "route_open_perp", _spy_open_by_user(captured))
+    _seed_snapshot(r, [_item("BTCUSDT", "偏多", 5.0, transition=True)])
+    out = await mopen.run_managed_open(
+        db_session, r, _mark_price, account=shadow, enabled_user_id=real_uid)
+    assert out == {"status": "skip", "reason": "disabled"}  # per-user 默认 OFF
+    assert captured == []
+    await mguard.set_enabled(r, enabled=True, user_id=real_uid)
+    out = await mopen.run_managed_open(
+        db_session, r, _mark_price, account=shadow, enabled_user_id=real_uid)
+    assert out["status"] == "ok"
+    assert captured[0]["user_id"] == shadow.user_id  # ★用影子 uid 开
+
+
+@pytest.mark.asyncio
+async def test_open_platinum_loops_only_platinum(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★铂金 loop:遍历 is_platinum 用户 → 各自影子账户开仓;非铂金不被遍历。
+    r = _FakeRedis()
+    plat = await make_user(db_session)
+    plat.is_platinum = True
+    await make_user(db_session)  # 非铂金
+    await db_session.commit()
+    await mguard.set_enabled(r, enabled=True, user_id=plat.id)
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(mopen, "route_open_perp", _spy_open_by_user(captured))
+    _seed_snapshot(r, [_item("BTCUSDT", "偏多", 5.0, transition=True)])
+    results = await mopen.run_managed_open_platinum(db_session, r, _mark_price)
+    assert len(results) == 1  # ★只遍历铂金用户
+    assert results[0]["uid"] == str(plat.id)
+    assert results[0]["status"] == "ok"
+    shadow_uid = await macc.get_managed_user_id_for_user(db_session, plat.id)
+    assert captured[0]["user_id"] == shadow_uid  # ★开在影子账户
+    assert shadow_uid != plat.id
+
+
+@pytest.mark.asyncio
+async def test_ensure_shadow_retries_on_integrity_error(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★并发兜底:首建撞 User.email unique(IntegrityError)→ rollback 重查 → 第二次成功(不 500)。
+    real_uid = uuid.UUID("dddddddd-0000-0000-0000-000000000009")
+    real_ensure = macc.ensure_managed_account_for_user
+    calls = {"n": 0}
+
+    async def flaky(session: AsyncSession, user_id: Any) -> Any:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise IntegrityError("dup email", None, Exception("unique"))
+        return await real_ensure(session, user_id)
+
+    monkeypatch.setattr(macc, "ensure_managed_account_for_user", flaky)
+    acc = await mopen._ensure_shadow_managed_account(db_session, real_uid)
+    assert calls["n"] == 2  # ★第一次撞 → 第二次重查成功
+    assert acc is not None
+    assert acc.user_id != real_uid

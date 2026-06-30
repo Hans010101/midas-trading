@@ -15,14 +15,18 @@ import logging
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy.exc import IntegrityError
+
 from app.models.perp import MarginMode, PerpSide, VirtualPerpPosition
-from app.models.virtual import OrderStatus
+from app.models.virtual import OrderStatus, VirtualAccount
+from app.services.virtual_trading import platinum
 from app.services.virtual_trading.managed import account as macc
 from app.services.virtual_trading.managed import guard as mguard
 from app.services.virtual_trading.perp_dispatcher import route_open_perp
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+    from uuid import UUID
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -63,16 +67,22 @@ async def run_managed_open(
     session: AsyncSession,
     redis: Any,
     get_mark_price: Callable[[str], Awaitable[Decimal | None]],
+    *,
+    account: VirtualAccount | None = None,
+    enabled_user_id: UUID | None = None,
 ) -> dict[str, Any]:
     """守卫 → 选偏多 transition → 去重 → 每轮≤5 ∧ 总数≤max → route_open_perp → 标 managed。
 
     ★三参数读 Redis(margin/leverage/max_positions · 即时生效)· ★本轮可开 = min(每轮≤5, max−当前活仓)
     两约束并存 · 任一守卫不过 → skip · per-币 commit 隔离失败。
+    ★PR-4b per-user(路径 A · 向后兼容):account/enabled_user_id 默认 None = 旧全局路径一字不变
+      (全局账户 + 全局开关·现在跑的托管交易走这条);给定 = 某铂金用户的影子账户 + per-user 开关。
     """
-    if not await mguard.is_enabled(redis):
+    if not await mguard.is_enabled(redis, enabled_user_id):
         return {"status": "skip", "reason": "disabled"}
 
-    account = await macc.ensure_managed_account(session)
+    if account is None:
+        account = await macc.ensure_managed_account(session)
     # ★三参数读 Redis(即时生效)· margin/leverage 传给 route(引擎零碰)· max_positions 限总持仓
     margin = await mguard.get_open_margin(redis)
     leverage = await mguard.get_open_leverage(redis)
@@ -118,3 +128,43 @@ async def run_managed_open(
         len(opened), mguard.MAX_PER_ROUND, opened,
     )
     return {"status": "ok", "opened": opened, "per_round_cap": mguard.MAX_PER_ROUND}
+
+
+# ── ★PR-4b:铂金 per-user 开仓(全局 loop 之外叠加 · 全局零影响)─────────────────
+async def _ensure_shadow_managed_account(
+    session: AsyncSession, user_id: UUID,
+) -> VirtualAccount:
+    """幂等建铂金用户托管影子账户 · 首建撞 User.email unique → rollback 重查兜底(不 500)。"""
+    try:
+        return await macc.ensure_managed_account_for_user(session, user_id)
+    except IntegrityError:
+        await session.rollback()  # ★另一并发已建 → 回滚后重查(幂等收敛)
+        return await macc.ensure_managed_account_for_user(session, user_id)
+
+
+async def run_managed_open_platinum(
+    session: AsyncSession,
+    redis: Any,
+    get_mark_price: Callable[[str], Awaitable[Decimal | None]],
+) -> list[dict[str, Any]]:
+    """★铂金 per-user 开仓:遍历铂金用户 → 各自影子账户 + per-user 开关开仓。
+
+    ★全局 loop 由 worker 先跑、本函数只【叠加】铂金,绝不碰全局(红线①)。
+    ★每 uid 独立 try/except + rollback 隔离(单用户失败不连累全局/其他铂金)。
+    ★每轮顶部先 ensure(撞 unique 兜底)→ session 干净后再开;开仓内 per-币 commit。
+    """
+    uids = await platinum.get_platinum_user_ids(session)
+    results: list[dict[str, Any]] = []
+    for uid in uids:
+        try:
+            account = await _ensure_shadow_managed_account(session, uid)
+            r = await run_managed_open(
+                session, redis, get_mark_price,
+                account=account, enabled_user_id=uid,
+            )
+            results.append({"uid": str(uid), **r})
+        except Exception:  # noqa: BLE001 · 单用户失败隔离(不连累全局/其他铂金)
+            await session.rollback()
+            logger.exception("[managed] per-user 开仓异常 uid=%s", uid)
+            results.append({"uid": str(uid), "status": "error"})
+    return results
