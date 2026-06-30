@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -17,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.perp import MarginMode, PerpSide, VirtualPerpPosition
-from app.models.virtual import OrderStatus
+from app.models.virtual import OrderStatus, VirtualAccount
 from app.services.virtual_trading.intelligent import account as iacc
 from app.services.virtual_trading.intelligent import close
 from app.services.virtual_trading.intelligent import strategy as istrategy
@@ -126,17 +127,27 @@ def _make_pos(account_id: int, symbol: str, side: PerpSide,
     )
 
 
-def _spy_close(captured: list[str]):  # noqa: ANN202
-    """★mock route_close_perp:标该 symbol 的 intelligent 活仓 closed_at(仿引擎平仓)+ 返 FILLED。"""
-    async def fake(session: AsyncSession, *, symbol: str, **_kw: Any) -> Any:
-        captured.append(symbol)
-        pos = (await session.scalars(select(VirtualPerpPosition).where(
-            VirtualPerpPosition.symbol == symbol,
-            VirtualPerpPosition.intelligent.is_(True),
-            VirtualPerpPosition.closed_at.is_(None),
-        ))).first()
-        if pos is not None:
-            pos.closed_at = datetime.now(tz=UTC)
+def _spy_close(captured: list[dict[str, Any]]):  # noqa: ANN202
+    """★mock route_close_perp:模拟引擎按 user_id→account→symbol 解析活仓(与真引擎一致)。
+
+    ★uid 错配(用别的账户 uid 平本仓)→ 解析不到 → REJECTED(=能抓 close uid 错配回归)。
+    捕获 user_id 供断言「每仓用自己 owner uid 平」。
+    """
+    async def fake(session: AsyncSession, *, user_id: Any, symbol: str, **_kw: Any) -> Any:
+        captured.append({"symbol": symbol, "user_id": user_id})
+        pos = await session.scalar(
+            select(VirtualPerpPosition)
+            .join(VirtualAccount, VirtualPerpPosition.account_id == VirtualAccount.id)
+            .where(
+                VirtualAccount.user_id == user_id,
+                VirtualPerpPosition.symbol == symbol,
+                VirtualPerpPosition.intelligent.is_(True),
+                VirtualPerpPosition.closed_at.is_(None),
+            ),
+        )
+        if pos is None:
+            return SimpleNamespace(status=OrderStatus.REJECTED, reject_reason="no active position")
+        pos.closed_at = datetime.now(tz=UTC)
         return SimpleNamespace(status=OrderStatus.FILLED, reject_reason=None)
     return fake
 
@@ -154,10 +165,10 @@ async def test_close_not_blocked_by_switch(db_session: AsyncSession, monkeypatch
     pos = _make_pos(acc.id, "BTCUSDT", PerpSide.LONG, Decimal("80"), Decimal("140"))
     db_session.add(pos)
     await db_session.flush()
-    captured: list[str] = []
+    captured: list[dict[str, Any]] = []
     monkeypatch.setattr(close, "route_close_perp", _spy_close(captured))
     out = await close.run_intelligent_close(db_session, _FakeRedis(), await _mark("79"))
-    assert captured == ["BTCUSDT"]
+    assert captured == [{"symbol": "BTCUSDT", "user_id": acc.user_id}]  # ★全局仓→全局 uid(行为不变)
     assert out["closed"] == [("BTCUSDT", "stop_loss")]
     await db_session.refresh(pos)
     assert pos.intelligent_close_reason == "stop_loss"
@@ -178,7 +189,7 @@ async def test_close_short_take_profit(db_session: AsyncSession, monkeypatch) ->
     pos = _make_pos(acc.id, "ETHUSDT", PerpSide.SHORT, Decimal("120"), Decimal("60"))
     db_session.add(pos)
     await db_session.flush()
-    captured: list[str] = []
+    captured: list[dict[str, Any]] = []
     monkeypatch.setattr(close, "route_close_perp", _spy_close(captured))
     out = await close.run_intelligent_close(db_session, _FakeRedis(), await _mark("59"))
     assert out["closed"] == [("ETHUSDT", "take_profit")]
@@ -194,7 +205,7 @@ async def test_close_long_signal_reversal(db_session: AsyncSession, monkeypatch)
     pos = _make_pos(acc.id, "BTCUSDT", PerpSide.LONG, Decimal("1"), Decimal("999999"))
     db_session.add(pos)
     await db_session.flush()
-    captured: list[str] = []
+    captured: list[dict[str, Any]] = []
     monkeypatch.setattr(close, "route_close_perp", _spy_close(captured))
     r = _FakeRedis()
     r.kv["boll:snapshot:latest"] = json.dumps(
@@ -207,3 +218,44 @@ async def test_close_long_signal_reversal(db_session: AsyncSession, monkeypatch)
     assert out["closed"] == [("BTCUSDT", "signal_reversal")]
     await db_session.refresh(pos)
     assert pos.intelligent_close_reason == "signal_reversal"
+
+
+# ── ★PR-4a close uid 修复:影子仓 + 混合场景(逐仓按 account 反查 owner uid)──────────
+@pytest.mark.asyncio
+async def test_close_shadow_position_uses_shadow_uid(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★影子仓:close 用【影子账户 uid】平(旧版对所有仓用全局 uid → 影子仓解析不到 → 只开不平)。
+    await iacc.ensure_intelligent_account(db_session)  # 全局账户存在(过存在性闸)
+    real_uid = uuid.UUID("aaaaaaaa-0000-0000-0000-000000000001")
+    shadow_acc = await iacc.ensure_intelligent_account_for_user(db_session, real_uid)
+    pos = _make_pos(shadow_acc.id, "BTCUSDT", PerpSide.LONG, Decimal("80"), Decimal("140"))
+    db_session.add(pos)
+    await db_session.flush()
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(close, "route_close_perp", _spy_close(captured))
+    out = await close.run_intelligent_close(db_session, _FakeRedis(), await _mark("79"))
+    assert captured == [{"symbol": "BTCUSDT", "user_id": shadow_acc.user_id}]  # ★影子 uid
+    assert out["closed"] == [("BTCUSDT", "stop_loss")]
+    await db_session.refresh(pos)
+    assert pos.closed_at is not None  # ★影子仓真平掉(不再只开不平)
+
+
+@pytest.mark.asyncio
+async def test_close_mixed_global_and_shadow_each_own_uid(db_session: AsyncSession, monkeypatch) -> None:  # noqa: ANN001
+    # ★混合:全局仓 + 影子仓同轮各用各自 owner uid 平,互不串(红线①③)。
+    g_acc = await iacc.ensure_intelligent_account(db_session)
+    real_uid = uuid.UUID("aaaaaaaa-0000-0000-0000-000000000002")
+    s_acc = await iacc.ensure_intelligent_account_for_user(db_session, real_uid)
+    g_pos = _make_pos(g_acc.id, "BTCUSDT", PerpSide.LONG, Decimal("80"), Decimal("140"))
+    s_pos = _make_pos(s_acc.id, "ETHUSDT", PerpSide.LONG, Decimal("80"), Decimal("140"))
+    db_session.add_all([g_pos, s_pos])
+    await db_session.flush()
+    captured: list[dict[str, Any]] = []
+    monkeypatch.setattr(close, "route_close_perp", _spy_close(captured))
+    out = await close.run_intelligent_close(db_session, _FakeRedis(), await _mark("79"))
+    by_symbol = {c["symbol"]: c["user_id"] for c in captured}
+    assert by_symbol == {"BTCUSDT": g_acc.user_id, "ETHUSDT": s_acc.user_id}  # ★各用各 uid·不串
+    assert {s for s, _ in out["closed"]} == {"BTCUSDT", "ETHUSDT"}
+    await db_session.refresh(g_pos)
+    await db_session.refresh(s_pos)
+    assert g_pos.closed_at is not None
+    assert s_pos.closed_at is not None
