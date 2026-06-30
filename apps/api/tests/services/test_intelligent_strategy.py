@@ -117,6 +117,30 @@ def test_open_decisions_filters_hold() -> None:
     assert opens[0].symbol == "BTCUSDT"
 
 
+def test_open_decisions_direction_filter() -> None:
+    """★PR-8 方向过滤四组合(只滤被禁方向·★不改 decide 算出的 action 本身)。"""
+    boll = [_boll("偏多", 100.0), {"symbol": "ETHUSDT", "bias": "偏空", "close": 50.0}]
+    signals = [
+        _sig(symbol="BTCUSDT", ma_dir=1, macd_dir=1, rsi_dir=1, kdj_dir=1, extreme_dir=1),
+        _sig(symbol="ETHUSDT", ma_dir=-1, macd_dir=-1, rsi_dir=-1, kdj_dir=-1, extreme_dir=-1),
+    ]
+    decisions = st.build_decisions(boll, signals)  # BTC=open_long · ETH=open_short
+    # 都 ON(默认)= 现状:多空都开 · 显式 True 与默认等价
+    both = st.open_decisions(decisions)
+    assert {o.symbol: o.action for o in both} == {"BTCUSDT": "open_long", "ETHUSDT": "open_short"}
+    assert st.open_decisions(decisions, allow_long=True, allow_short=True) == both
+    # 只多 → 滤掉 short
+    only_long = st.open_decisions(decisions, allow_long=True, allow_short=False)
+    assert {o.symbol for o in only_long} == {"BTCUSDT"}
+    assert only_long[0].action == "open_long"  # ★方向本身没被改
+    # 只空 → 滤掉 long
+    only_short = st.open_decisions(decisions, allow_long=False, allow_short=True)
+    assert {o.symbol for o in only_short} == {"ETHUSDT"}
+    assert only_short[0].action == "open_short"
+    # 都 OFF → 不开任何仓
+    assert st.open_decisions(decisions, allow_long=False, allow_short=False) == []
+
+
 def test_atr_stop_tp_independent_of_leverage() -> None:
     # ★★智能特殊点钉死:ATR 止损止盈是纯价格(entry∓N×ATR)· decide() 不接受 leverage 参数 ·
     # 杠杆可调【不影响】止损止盈价(与托管 tp_pct÷杠杆 不同)。entry=100 ATR=10 → 止损 80/止盈 140 恒定。

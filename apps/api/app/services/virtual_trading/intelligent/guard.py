@@ -32,6 +32,9 @@ _OPEN_LEVERAGE = "intelligent:open:leverage"
 DEFAULT_OPEN_LEVERAGE = 5
 _MAX_POSITIONS = "intelligent:open:max_positions"
 DEFAULT_MAX_POSITIONS = 50
+# ★PR-8 方向过滤器(开仓参数·默认 ON·智能做多做空两开关)· 缺省 key 不存在 → ON(!= "0")
+_ALLOW_LONG = "intelligent:open:allow_long"
+_ALLOW_SHORT = "intelligent:open:allow_short"
 
 # ★策略参数(Hans 可调·前向测试迭代调)· open/close 每轮读传给 decide(纯函数入参)· 即时生效。
 #   阈值 · 6 权重 · ATR 止损/止盈倍数 · 默认对齐 strategy.py 常量。
@@ -197,3 +200,23 @@ async def get_strategy_atr_tp_mult(redis: Any, user_id: UUID | None = None) -> f
 
 async def set_strategy_atr_tp_mult(redis: Any, v: float, user_id: UUID | None = None) -> None:
     await redis.set(_param_key(_STRAT_ATR_TP, user_id), str(v))
+
+
+# ── 方向过滤器 per-user(PR-8 · 开仓参数 · ★默认 ON · != "0" 范式 · 绝不用 == "1")──
+# user_id=None → 全局 key;给定 → 先读 per-user 缺则回退全局(决策③)· 从未设过 → ON(现状不变)。
+async def get_allow_long(redis: Any, user_id: UUID | None = None) -> bool:
+    """允许开多(默认 ON)· open_decisions 滤被禁方向用。"""
+    return bool((await _read_param(redis, _ALLOW_LONG, user_id)) != "0")
+
+
+async def set_allow_long(redis: Any, on: bool, user_id: UUID | None = None) -> None:  # noqa: FBT001
+    await redis.set(_param_key(_ALLOW_LONG, user_id), "1" if on else "0")
+
+
+async def get_allow_short(redis: Any, user_id: UUID | None = None) -> bool:
+    """允许开空(默认 ON)· open_decisions 滤被禁方向用。"""
+    return bool((await _read_param(redis, _ALLOW_SHORT, user_id)) != "0")
+
+
+async def set_allow_short(redis: Any, on: bool, user_id: UUID | None = None) -> None:  # noqa: FBT001
+    await redis.set(_param_key(_ALLOW_SHORT, user_id), "1" if on else "0")

@@ -43,6 +43,8 @@ _OPEN_LEVERAGE = "managed:open:leverage"
 DEFAULT_OPEN_LEVERAGE = 5
 _MAX_POSITIONS = "managed:open:max_positions"
 DEFAULT_MAX_POSITIONS = 50
+# ★PR-8 方向过滤器(托管恒做多·只 allow_long 单开关·OFF=不开新仓)· 缺省 → ON(!= "0")
+_ALLOW_LONG = "managed:open:allow_long"
 
 
 # ── 开关(默认 OFF · worker beat 读)─────────────────────────────────
@@ -174,3 +176,14 @@ async def has_open_position(session: AsyncSession, account_id: int, symbol: str)
         ),
     )
     return pos is not None
+
+
+# ── 方向过滤器(PR-8 · 托管恒做多 · 只 allow_long 单开关 · OFF=不开新仓)· ★默认 ON · != "0" ──
+# user_id=None → 全局 key;给定 → 先读 per-user 缺则回退全局(决策③)· 从未设过 → ON(现状不变)。
+async def get_allow_long(redis: Any, user_id: UUID | None = None) -> bool:
+    """允许开多(默认 ON)· 托管恒做多 → OFF=不开新仓 · open 选币循环前判。"""
+    return bool((await _read_param(redis, _ALLOW_LONG, user_id)) != "0")
+
+
+async def set_allow_long(redis: Any, on: bool, user_id: UUID | None = None) -> None:  # noqa: FBT001
+    await redis.set(_param_key(_ALLOW_LONG, user_id), "1" if on else "0")

@@ -113,6 +113,24 @@ def build_decisions(
     return out
 
 
-def open_decisions(decisions: list[StrategyDecision]) -> list[StrategyDecision]:
-    """只取要开仓的(action ≠ hold)· PR-4 开仓编排用。"""
-    return [d for d in decisions if d.action != "hold"]
+def open_decisions(
+    decisions: list[StrategyDecision],
+    *,
+    allow_long: bool = True,
+    allow_short: bool = True,
+) -> list[StrategyDecision]:
+    """只取要开仓的(action ≠ hold)· PR-4 开仓编排用。
+
+    ★PR-8 方向过滤(只过滤不改方向):allow_long/allow_short 默认 True(=现状·不滤)。
+    禁某方向 → 滤掉该方向的 decision · ★绝不改 decide 算出的 action/side/score 本身。
+    """
+    out: list[StrategyDecision] = []
+    for d in decisions:
+        if d.action == "hold":
+            continue
+        if d.action == "open_long" and not allow_long:
+            continue
+        if d.action == "open_short" and not allow_short:
+            continue
+        out.append(d)
+    return out
