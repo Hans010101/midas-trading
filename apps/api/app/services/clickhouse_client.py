@@ -293,6 +293,64 @@ class ClickHouseClient:
         klines.reverse()
         return klines
 
+    async def select_klines_batch(
+        self,
+        *,
+        symbols: list[str],
+        market: Market,
+        period: Period,
+        limit: int = 120,
+        instrument: str = KLINE_INSTRUMENT_DEFAULT,
+    ) -> dict[str, list[Kline]]:
+        """批量查多标的【最近】`limit` 根 K 线 · 单 query `LIMIT N BY symbol`(方案C)。
+
+        把"逐标的 select_kline"的 N 次往返压成 1 次(筛选器按需算指标用)。返回
+        `{symbol: [Kline...]}`,每标的 ts 升序(同 select_kline 契约)· 缺数据的
+        symbol 不在 dict 里(调用方 `.get(sym, [])`)· 空 symbols → 空 dict(不打 DB)。
+
+        symbol 经 normalize_kline_symbol 归一(与 select_kline 同口径)· 返回 dict 的
+        key 是归一后 symbol。GROUP BY 去重(K2 读端无害化 · 同 select_kline)· DESC 拿
+        最新 N 根 → 每组 reverse 还原 ASC。
+        """
+        if not symbols:
+            return {}
+        norm = [normalize_kline_symbol(s, market, instrument) for s in symbols]
+        sql = (
+            "SELECT symbol, ts, any(open) AS open, any(high) AS high, "
+            "any(low) AS low, any(close) AS close, any(volume) AS volume, "
+            "any(amount) AS amount "
+            "FROM kline "
+            "WHERE symbol IN %(symbols)s AND market = %(market)s "
+            "AND instrument = %(instrument)s AND period = %(period)s "
+            "GROUP BY symbol, ts ORDER BY symbol, ts DESC "
+            "LIMIT %(limit)s BY symbol"
+        )
+        params: dict[str, Any] = {
+            "symbols": norm,
+            "market": market,
+            "instrument": instrument,
+            "period": period,
+            "limit": limit,
+        }
+        result = await self._client.query(sql, parameters=params)
+        out: dict[str, list[Kline]] = {}
+        for row in result.result_rows:
+            out.setdefault(row[0], []).append(
+                Kline(
+                    ts=row[1].replace(tzinfo=UTC),
+                    open=row[2],
+                    high=row[3],
+                    low=row[4],
+                    close=row[5],
+                    volume=row[6],
+                    amount=row[7] if row[7] > 0 else None,
+                ),
+            )
+        # 每标的 DB 返回 ts DESC → reverse 还原 ASC(保持 select_kline 契约)
+        for ks in out.values():
+            ks.reverse()
+        return out
+
     async def symbol_exists(
         self, market: str, symbol: str, instrument: str = KLINE_INSTRUMENT_DEFAULT,
     ) -> bool:
