@@ -56,6 +56,10 @@ export default function ScreenerPage() {
   const [rsiMin, setRsiMin] = useState('')
   const [rsiMax, setRsiMax] = useState('')
   const [maBull, setMaBull] = useState(false)
+  const [macdGolden, setMacdGolden] = useState(false)
+  const [kdjGolden, setKdjGolden] = useState(false)
+  const [bollBwMax, setBollBwMax] = useState('')
+  const [volRatioMin, setVolRatioMin] = useState('')
   const screener = useScreener()
 
   function buildFilters(): ScreenerFilters {
@@ -67,6 +71,10 @@ export default function ScreenerPage() {
       rsi_min: toNum(rsiMin),
       rsi_max: toNum(rsiMax),
       ma_bull_aligned: maBull ? true : undefined,
+      macd_golden_cross: macdGolden ? true : undefined,
+      kdj_golden_cross: kdjGolden ? true : undefined,
+      boll_bandwidth_max: toNum(bollBwMax),
+      volume_ratio_min: toNum(volRatioMin),
     }
   }
 
@@ -137,6 +145,37 @@ export default function ScreenerPage() {
           />
           均线多头排列(MA5 &gt; MA20 &gt; MA60)
         </label>
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={macdGolden}
+              onChange={(e) => setMacdGolden(e.target.checked)}
+              className="h-4 w-4 accent-midas-red"
+            />
+            MACD 金叉
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={kdjGolden}
+              onChange={(e) => setKdjGolden(e.target.checked)}
+              className="h-4 w-4 accent-midas-red"
+            />
+            KDJ 金叉
+          </label>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="w-20 text-sm text-foreground">布林带宽</span>
+          <span className="text-sm text-muted-foreground">≤</span>
+          <NumInput value={bollBwMax} onChange={setBollBwMax} placeholder="如 10" />
+          <span className="text-sm text-muted-foreground">%(收窄)</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="w-20 text-sm text-foreground">量比</span>
+          <span className="text-sm text-muted-foreground">≥</span>
+          <NumInput value={volRatioMin} onChange={setVolRatioMin} placeholder="如 1.5" />
+        </div>
         <button
           type="button"
           onClick={onSubmit}
@@ -187,6 +226,12 @@ export default function ScreenerPage() {
                       </span>
                       {h.rsi_14 !== null && (
                         <span className="text-muted-foreground">RSI {h.rsi_14.toFixed(0)}</span>
+                      )}
+                      {h.volume_ratio !== null && (
+                        <span className="text-muted-foreground">量比 {h.volume_ratio.toFixed(1)}</span>
+                      )}
+                      {(h.macd_golden === true || h.kdj_golden === true) && (
+                        <span style={{ color: UP }}>金叉</span>
                       )}
                     </span>
                   </Link>

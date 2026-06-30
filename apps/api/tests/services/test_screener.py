@@ -18,6 +18,7 @@ import pytest
 from app.schemas.market import Kline
 from app.schemas.screener import ScreenerFilters
 from app.services import screener
+from app.services.ai import strategy_signals
 from app.services.clickhouse_client import ClickHouseClient
 
 
@@ -51,6 +52,10 @@ def test_filters_needs_kline():
     assert ScreenerFilters(price_min=10).needs_kline() is False
     assert ScreenerFilters(rsi_min=30).needs_kline() is True
     assert ScreenerFilters(ma_bull_aligned=True).needs_kline() is True
+    assert ScreenerFilters(macd_golden_cross=True).needs_kline() is True
+    assert ScreenerFilters(kdj_golden_cross=True).needs_kline() is True
+    assert ScreenerFilters(boll_bandwidth_max=10).needs_kline() is True
+    assert ScreenerFilters(volume_ratio_min=2).needs_kline() is True
 
 
 # ── 预筛 / 技术过滤纯函数 ────────────────────────────────────────────
@@ -67,11 +72,43 @@ def test_spot_pass_price_change():
 def test_tech_pass_rsi_and_ma():
     ma_bull = {5: 12.0, 20: 11.0, 60: 10.0}  # 多头排列
     ma_flat = {5: 10.0, 20: 11.0, 60: 12.0}  # 空头(非多头)
-    assert screener._tech_pass(70.0, ma_bull, ScreenerFilters(rsi_min=60)) is True
-    assert screener._tech_pass(50.0, ma_bull, ScreenerFilters(rsi_min=60)) is False
-    assert screener._tech_pass(None, ma_bull, ScreenerFilters(rsi_min=60)) is False
-    assert screener._tech_pass(70.0, ma_bull, ScreenerFilters(ma_bull_aligned=True)) is True
-    assert screener._tech_pass(70.0, ma_flat, ScreenerFilters(ma_bull_aligned=True)) is False
+
+    def call(f: ScreenerFilters, rsi: float | None, ma: dict[int, float]) -> bool:
+        return screener._tech_pass(f, rsi=rsi, ma=ma, macd_g=False, kdj_g=False, bw=None, vr=1.0)
+
+    assert call(ScreenerFilters(rsi_min=60), 70.0, ma_bull) is True
+    assert call(ScreenerFilters(rsi_min=60), 50.0, ma_bull) is False
+    assert call(ScreenerFilters(rsi_min=60), None, ma_bull) is False
+    assert call(ScreenerFilters(ma_bull_aligned=True), 70.0, ma_bull) is True
+    assert call(ScreenerFilters(ma_bull_aligned=True), 70.0, ma_flat) is False
+
+
+def test_tech_pass_1b_conditions():
+    ma = {5: 12.0, 20: 11.0, 60: 10.0}
+    f_macd = ScreenerFilters(macd_golden_cross=True)
+    assert screener._tech_pass(f_macd, rsi=50.0, ma=ma, macd_g=True, kdj_g=False, bw=None, vr=1.0) is True
+    assert screener._tech_pass(f_macd, rsi=50.0, ma=ma, macd_g=False, kdj_g=False, bw=None, vr=1.0) is False
+    f_kdj = ScreenerFilters(kdj_golden_cross=True)
+    assert screener._tech_pass(f_kdj, rsi=50.0, ma=ma, macd_g=False, kdj_g=True, bw=None, vr=1.0) is True
+    f_bw = ScreenerFilters(boll_bandwidth_max=10)  # 带宽 ≤ 10% 收窄
+    assert screener._tech_pass(f_bw, rsi=50.0, ma=ma, macd_g=False, kdj_g=False, bw=8.0, vr=1.0) is True
+    assert screener._tech_pass(f_bw, rsi=50.0, ma=ma, macd_g=False, kdj_g=False, bw=15.0, vr=1.0) is False
+    f_vr = ScreenerFilters(volume_ratio_min=2)
+    assert screener._tech_pass(f_vr, rsi=50.0, ma=ma, macd_g=False, kdj_g=False, bw=None, vr=2.5) is True
+    assert screener._tech_pass(f_vr, rsi=50.0, ma=ma, macd_g=False, kdj_g=False, bw=None, vr=1.5) is False
+
+
+def test_latest_golden_cross_helpers():
+    # 数据不足 → False
+    assert strategy_signals.latest_macd_golden_cross([]) is False
+    assert strategy_signals.latest_kdj_golden_cross([]) is False
+    # 长平盘后末根跳涨 → DIF/K 上穿 → 金叉 True
+    spike = _klines([100.0] * 40 + [120.0])
+    assert strategy_signals.latest_macd_golden_cross(spike) is True
+    assert strategy_signals.latest_kdj_golden_cross(spike) is True
+    # 全平盘 → 无穿越 → False
+    flat = _klines([100.0] * 41)
+    assert strategy_signals.latest_macd_golden_cross(flat) is False
 
 
 # ── select_klines_batch 分组 + reverse ──────────────────────────────

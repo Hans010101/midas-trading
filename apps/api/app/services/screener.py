@@ -19,7 +19,7 @@ from app.services import (
     clickhouse_hk_market,
     clickhouse_us_market,
 )
-from app.services.ai import indicators
+from app.services.ai import indicators, strategy_signals
 from app.services.clickhouse_client import normalize_kline_symbol
 
 if TYPE_CHECKING:
@@ -82,18 +82,31 @@ def _spot_pass(row: _SpotLike, f: ScreenerFilters) -> bool:
     return not (f.change_pct_max is not None and row.change_pct > f.change_pct_max)
 
 
-def _tech_pass(rsi: float | None, ma: dict[int, float], f: ScreenerFilters) -> bool:
+def _tech_pass(
+    f: ScreenerFilters,
+    *,
+    rsi: float | None,
+    ma: dict[int, float],
+    macd_g: bool,
+    kdj_g: bool,
+    bw: float | None,
+    vr: float,
+) -> bool:
     if f.rsi_min is not None and (rsi is None or rsi < f.rsi_min):
         return False
     if f.rsi_max is not None and (rsi is None or rsi > f.rsi_max):
         return False
     if f.ma_bull_aligned:
         m5, m20, m60 = ma.get(5), ma.get(20), ma.get(60)
-        if m5 is None or m20 is None or m60 is None:
+        if m5 is None or m20 is None or m60 is None or not (m5 > m20 > m60):
             return False
-        if not (m5 > m20 > m60):
-            return False
-    return True
+    if f.macd_golden_cross and not macd_g:
+        return False
+    if f.kdj_golden_cross and not kdj_g:
+        return False
+    if f.boll_bandwidth_max is not None and (bw is None or bw > f.boll_bandwidth_max):
+        return False
+    return not (f.volume_ratio_min is not None and vr < f.volume_ratio_min)
 
 
 async def run_screener(
@@ -129,13 +142,28 @@ async def run_screener(
                 continue
             rsi = indicators.compute_rsi(ks).get(14)
             ma = indicators.compute_ma(ks)
-            if not _tech_pass(rsi, ma, filters):
+            macd_g = strategy_signals.latest_macd_golden_cross(ks)
+            kdj_g = strategy_signals.latest_kdj_golden_cross(ks)
+            boll = indicators.compute_boll(ks)
+            bw = (boll["upper"] - boll["lower"]) / boll["mid"] * 100 if boll["mid"] > 0 else None
+            vr = indicators.compute_volume_ratio(ks)
+            if not _tech_pass(
+                filters, rsi=rsi, ma=ma, macd_g=macd_g, kdj_g=kdj_g, bw=bw, vr=vr,
+            ):
                 continue
             hits.append(
                 ScreenerHit(
                     symbol=r.symbol, name=r.name,
                     last_price=r.last_price, change_pct=r.change_pct,
                     rsi_14=rsi, ma_5=ma.get(5), ma_20=ma.get(20), ma_60=ma.get(60),
+                    macd_golden=macd_g if filters.macd_golden_cross else None,
+                    kdj_golden=kdj_g if filters.kdj_golden_cross else None,
+                    boll_bandwidth=(
+                        round(bw, 2)
+                        if filters.boll_bandwidth_max is not None and bw is not None
+                        else None
+                    ),
+                    volume_ratio=round(vr, 2) if filters.volume_ratio_min is not None else None,
                 ),
             )
         scanned = len(cand)

@@ -21,13 +21,21 @@ class ScreenerFilters(BaseModel):
     rsi_min: float | None = Field(default=None, ge=0, le=100)
     rsi_max: float | None = Field(default=None, ge=0, le=100)
     ma_bull_aligned: bool | None = None  # 多头排列 MA5 > MA20 > MA60
+    # 1b 穿越类(算法复用 strategy_signals / indicators · 都需 K线)
+    macd_golden_cross: bool | None = None  # 最近一根 MACD 金叉(DIF 上穿 DEA)
+    kdj_golden_cross: bool | None = None   # 最近一根 KDJ 金叉(K 上穿 D)
+    boll_bandwidth_max: float | None = Field(default=None, ge=0)  # 布林带宽 ≤ 此值 %(收窄)
+    volume_ratio_min: float | None = Field(default=None, ge=0)    # 量比 ≥ 此值
 
     def needs_kline(self) -> bool:
-        """是否需 K线算技术指标(RSI / 均线排列)→ 决定是否走批量算指标分支。"""
-        return (
-            self.rsi_min is not None
-            or self.rsi_max is not None
-            or self.ma_bull_aligned is not None
+        """是否需 K线算技术指标(RSI / 均线 / 金叉 / 带宽 / 量比)→ 决定是否走批量算指标分支。"""
+        return any(
+            v is not None
+            for v in (
+                self.rsi_min, self.rsi_max, self.ma_bull_aligned,
+                self.macd_golden_cross, self.kdj_golden_cross,
+                self.boll_bandwidth_max, self.volume_ratio_min,
+            )
         )
 
     def is_empty(self) -> bool:
@@ -37,6 +45,8 @@ class ScreenerFilters(BaseModel):
             for v in (
                 self.price_min, self.price_max, self.change_pct_min,
                 self.change_pct_max, self.rsi_min, self.rsi_max, self.ma_bull_aligned,
+                self.macd_golden_cross, self.kdj_golden_cross,
+                self.boll_bandwidth_max, self.volume_ratio_min,
             )
         )
 
@@ -54,6 +64,10 @@ class ScreenerHit(BaseModel):
     ma_5: float | None = None
     ma_20: float | None = None
     ma_60: float | None = None
+    macd_golden: bool | None = None
+    kdj_golden: bool | None = None
+    boll_bandwidth: float | None = None
+    volume_ratio: float | None = None
 
 
 class ScreenerResponse(BaseModel):

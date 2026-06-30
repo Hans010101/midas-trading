@@ -17,6 +17,10 @@ export interface ScreenerFilters {
   rsi_min?: number | null
   rsi_max?: number | null
   ma_bull_aligned?: boolean | null
+  macd_golden_cross?: boolean | null
+  kdj_golden_cross?: boolean | null
+  boll_bandwidth_max?: number | null
+  volume_ratio_min?: number | null
 }
 
 export interface ScreenerHit {
@@ -28,6 +32,10 @@ export interface ScreenerHit {
   ma_5: number | null
   ma_20: number | null
   ma_60: number | null
+  macd_golden: boolean | null
+  kdj_golden: boolean | null
+  boll_bandwidth: number | null
+  volume_ratio: number | null
 }
 
 export interface ScreenerResponse {
