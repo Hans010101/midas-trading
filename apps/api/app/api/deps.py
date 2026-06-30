@@ -136,6 +136,22 @@ async def get_current_admin(
     return current_user
 
 
+async def get_current_platinum(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """铂金用户鉴权(多账户 PR-5)· 🔴 自助端点唯一安全边界,每个端点必挂(集中=新端点不漏挂)。
+
+    ★面向铂金用户的功能,403 文案明确「需铂金权限」(Hans 定:清楚提示 > 防探测)。
+    ★越权红线:user_id 只从这里(token 反查的 current_user.id)取,端点签名绝不接受前端传入的 user_id。
+    """
+    if not current_user.is_platinum:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需铂金权限",
+        )
+    return current_user
+
+
 ClickHouseDep = Annotated[ClickHouseClient, Depends(get_clickhouse)]
 OptionalClickHouseDep = Annotated[
     ClickHouseClient | None, Depends(get_clickhouse_optional),
@@ -149,3 +165,5 @@ CurrentUserDep = Annotated[User, Depends(get_current_user)]
 # 可选登录(公开端点门控用 · None=未登录,不抛 401)
 OptionalCurrentUserDep = Annotated[User | None, Depends(get_optional_current_user)]
 AdminDep = Annotated[User, Depends(get_current_admin)]
+# 铂金用户(登录 + is_platinum 门)· 多账户自助端点用(PR-5)
+PlatinumDep = Annotated[User, Depends(get_current_platinum)]

@@ -20,6 +20,7 @@ from app.api.v1.notifications import router as notifications_router
 from app.api.v1.overview import router as overview_router
 from app.api.v1.payment import router as payment_router
 from app.api.v1.perp import router as perp_router
+from app.api.v1.platinum_self import router as platinum_self_router
 from app.api.v1.quota import router as quota_router
 from app.api.v1.redeem import router as redeem_router
 from app.api.v1.structure import router as structure_router
@@ -35,6 +36,8 @@ router = APIRouter()
 router.include_router(auth_router)
 router.include_router(managed_admin_router)  # 托管交易 admin(独立于 admin 域 · 见 managed_admin.py)
 router.include_router(intelligent_admin_router)  # 智能交易 admin(独立模块)
+# 多账户 PR-5 · 铂金自助端点(PlatinumDep · 越权结构杜绝 · 不被 admin.py import)
+router.include_router(platinum_self_router)
 router.include_router(market_router)
 router.include_router(watchlist_router)
 router.include_router(virtual_router)
