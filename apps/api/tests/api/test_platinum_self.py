@@ -147,3 +147,111 @@ def test_openapi_platinum_paths_have_no_user_id() -> None:
             for param in method.get("parameters", []):
                 assert param.get("name") != "user_id"  # ★query/path 参数无 user_id
     # toggle body 只有 enabled(IntelligentToggleIn/ManagedToggleIn)· 无 user_id → 结构上 A 指定不了 B
+
+
+# ── ⑤ 参数自助 per-user 隔离 + 校验(PR-7b · 决策 B 只开仓参数)──────────────
+@pytest.mark.asyncio
+async def test_open_margin_isolated_per_user(client: AsyncClient, db_session: AsyncSession) -> None:
+    """A/B 各设各的每单本金 · 互不串(per-user key={uid}·设参数不建账户)。"""
+    _a, ha = await _platinum_headers(db_session)
+    _b, hb = await _platinum_headers(db_session)
+    ra = await client.post(
+        "/api/v1/platinum/intelligent/open-margin", json={"margin": 250}, headers=ha)
+    rb = await client.post(
+        "/api/v1/platinum/intelligent/open-margin", json={"margin": 300}, headers=hb)
+    assert ra.status_code == 200
+    assert ra.json()["open_margin"] == 250.0
+    assert ra.json()["account_ready"] is False  # ★设参数不建账户
+    assert rb.json()["open_margin"] == 300.0
+    # ★交叉:A 再查仍 250(B 设 300 不影响 A)
+    sa = await client.get("/api/v1/platinum/intelligent/status", headers=ha)
+    assert sa.json()["open_margin"] == 250.0
+
+
+@pytest.mark.asyncio
+async def test_managed_open_leverage_isolated_per_user(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    _a, ha = await _platinum_headers(db_session)
+    _b, hb = await _platinum_headers(db_session)
+    ra = await client.post(
+        "/api/v1/platinum/managed/open-leverage", json={"leverage": 12}, headers=ha)
+    rb = await client.post(
+        "/api/v1/platinum/managed/open-leverage", json={"leverage": 3}, headers=hb)
+    assert ra.json()["open_leverage"] == 12
+    assert rb.json()["open_leverage"] == 3
+
+
+@pytest.mark.asyncio
+async def test_strategy_params_isolated_per_user(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    """智能策略参数 per-user:A 设自己的阈值/权重 · B 读到的是 B 自己的(不串)。"""
+    _a, ha = await _platinum_headers(db_session)
+    _b, hb = await _platinum_headers(db_session)
+    pa = {"threshold": 5.0, "atr_stop_mult": 2.5, "atr_tp_mult": 5.0,
+          "weights": {"boll": 3, "macd": 1, "ma": 1, "rsi": 1, "kdj": 1, "extreme": 1}}
+    pb = {"threshold": 6.0, "atr_stop_mult": 3.0, "atr_tp_mult": 6.0,
+          "weights": {"boll": 4, "macd": 2, "ma": 2, "rsi": 2, "kdj": 2, "extreme": 2}}
+    ra = await client.post("/api/v1/platinum/intelligent/strategy-params", json=pa, headers=ha)
+    rb = await client.post("/api/v1/platinum/intelligent/strategy-params", json=pb, headers=hb)
+    assert ra.status_code == 200
+    assert ra.json()["threshold"] == 5.0
+    assert ra.json()["weights"]["boll"] == 3.0
+    assert rb.json()["threshold"] == 6.0
+    # ★A 读回自己的 5.0(B 设 6.0 不影响)
+    sa = await client.get("/api/v1/platinum/intelligent/strategy-params", headers=ha)
+    assert sa.json()["threshold"] == 5.0
+    assert sa.json()["weights"]["boll"] == 3.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        ("/api/v1/platinum/intelligent/open-margin", {"margin": 5}),        # < 10
+        ("/api/v1/platinum/intelligent/open-margin", {"margin": 99999}),    # > 10000
+        ("/api/v1/platinum/intelligent/open-leverage", {"leverage": 0}),    # < 1
+        ("/api/v1/platinum/intelligent/open-leverage", {"leverage": 99}),   # > 20
+        ("/api/v1/platinum/intelligent/max-positions", {"max_positions": 0}),
+        ("/api/v1/platinum/managed/open-margin", {"margin": 5}),
+        ("/api/v1/platinum/managed/max-positions", {"max_positions": -1}),
+    ],
+)
+async def test_param_validation_400(
+    client: AsyncClient, db_session: AsyncSession, path: str, body: dict[str, Any],
+) -> None:
+    _a, ha = await _platinum_headers(db_session)
+    r = await client.post(path, json=body, headers=ha)
+    assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_strategy_params_bad_weights_400(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    _a, ha = await _platinum_headers(db_session)
+    # 缺指标
+    bad = {"threshold": 3, "atr_stop_mult": 2, "atr_tp_mult": 4, "weights": {"boll": 1}}
+    r = await client.post("/api/v1/platinum/intelligent/strategy-params", json=bad, headers=ha)
+    assert r.status_code == 400
+    # 负权重
+    neg = {"threshold": 3, "atr_stop_mult": 2, "atr_tp_mult": 4,
+           "weights": {"boll": -1, "macd": 1, "ma": 1, "rsi": 1, "kdj": 1, "extreme": 1}}
+    r2 = await client.post("/api/v1/platinum/intelligent/strategy-params", json=neg, headers=ha)
+    assert r2.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_param_set_non_platinum_403(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    """★参数 set 端点同样挂 PlatinumDep:非铂金调 → 403(不只 GET 被拦)。"""
+    user = await make_user(db_session, role="user")
+    token = await issue_session(db_session, user_id=user.id)
+    await db_session.commit()
+    r = await client.post(
+        "/api/v1/platinum/intelligent/open-margin", json={"margin": 250},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 403

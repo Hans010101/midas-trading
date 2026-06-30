@@ -9,9 +9,13 @@
   · 影子账户用 ensure_*_for_user(me.id) 推导(绝不收前端 user_id)· 开关 key={me.id}。
   · 看板 WHERE account_id==影子acc.id + 标志 双重收窄 → 天然只返回自己的仓。
 
-★范围(Hans 拍板):只 toggle + 只读 status/positions/history/stats;不含参数调/手动平/reset/capital。
-★复用 admin 响应 schema + 服务层(guard/_cross_available_margin/unrealized_pnl/stats)· 引擎零碰 ·
-  GET 只读不隐式建账户(get_*_user_id_for_user)· 仅 toggle(on) 才 ensure 建账户。
+★范围:toggle + 只读 status/positions/history/stats(PR-5a)+ ★开仓参数自助调(PR-7b)。
+★PR-7b 参数自助(决策 B·只【开仓参数】per-user·user_id=me.id):
+  · 智能:open-margin/leverage/max-positions + strategy-params(阈值/6权重/2 ATR 倍数·开仓算分用)
+  · 托管:open-margin/leverage/max-positions
+  · ★平仓参数(托管 exit 开关/tp_pct)是全局(决策 B)·不下放铂金自助(admin-only)· 影子平仓跟全局。
+★复用 admin In/响应 schema + 服务层(guard/_cross_available_margin/unrealized_pnl/stats)· 引擎零碰 ·
+  GET 只读不隐式建账户(get_*_user_id_for_user)· 仅 toggle(on) 才 ensure 建账户 · 参数 set 不建账户。
 """
 
 from __future__ import annotations
@@ -19,7 +23,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +35,10 @@ from app.api.v1.intelligent_admin import (
     IntelligentStatus,
     IntelligentToggleIn,
     IntelligentTrade,
+    MaxPositionsIn,
+    OpenLeverageIn,
+    OpenMarginIn,
+    StrategyParams,
 )
 from app.api.v1.managed_admin import (
     ManagedHistoryPage,
@@ -60,6 +68,9 @@ if TYPE_CHECKING:
 router = APIRouter(prefix="/platinum", tags=["platinum"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
+
+# 智能策略 6 指标(= intelligent_admin._INDICATORS · 域常量稳定)· strategy-params 校验用
+_STRAT_INDICATORS = ("boll", "macd", "ma", "rsi", "kdj", "extreme")
 
 
 # ── 影子账户只读解析(GET 用 · 不隐式建账户 · 未建返 None)─────────────────
@@ -95,9 +106,10 @@ async def _intel_status(
     redis = await get_redis()
     enabled = await iguard.is_enabled(redis, me_id)  # ★per-user 开关(key={me_id})
     open_n = await iguard.count_open_positions(db, acc.id) if acc is not None else 0
-    open_margin = await iguard.get_open_margin(redis)        # 全局参数(也适用影子账户开仓)
-    open_leverage = await iguard.get_open_leverage(redis)
-    max_positions = await iguard.get_max_positions(redis)
+    # ★PR-7b 开仓参数 per-user(me_id · 决策③缺则回退全局)
+    open_margin = await iguard.get_open_margin(redis, me_id)
+    open_leverage = await iguard.get_open_leverage(redis, me_id)
+    max_positions = await iguard.get_max_positions(redis, me_id)
     account_value = 0.0
     if acc is not None:
         async def _fetch_mark(symbol: str) -> Decimal | None:
@@ -247,6 +259,74 @@ async def my_intelligent_stats(
     return istats.compute_intelligent_stats(trades)
 
 
+# ── 智能交易开仓参数自助(PR-7b · per-user · user_id=me.id · 决策 B 只开仓参数)──────
+@router.post("/intelligent/open-margin", summary="设我的智能每单本金(U·10-10000)")
+async def my_intelligent_open_margin(
+    payload: OpenMarginIn, me: PlatinumDep, db: DbDep, ch: ClickHouseDep,
+) -> IntelligentStatus:
+    if not (10 <= payload.margin <= 10000):  # noqa: PLR2004
+        raise HTTPException(status_code=400, detail="每单本金必须在 10-10000 U")
+    await iguard.set_open_margin(await get_redis(), Decimal(str(payload.margin)), user_id=me.id)
+    return await _intel_status(db, ch, await _intel_shadow_acc(db, me.id), me.id)
+
+
+@router.post("/intelligent/open-leverage", summary="设我的智能杠杆(1-20)")
+async def my_intelligent_open_leverage(
+    payload: OpenLeverageIn, me: PlatinumDep, db: DbDep, ch: ClickHouseDep,
+) -> IntelligentStatus:
+    if not (1 <= payload.leverage <= 20):  # noqa: PLR2004
+        raise HTTPException(status_code=400, detail="杠杆必须在 1-20 倍")
+    await iguard.set_open_leverage(await get_redis(), payload.leverage, user_id=me.id)
+    return await _intel_status(db, ch, await _intel_shadow_acc(db, me.id), me.id)
+
+
+@router.post("/intelligent/max-positions", summary="设我的智能最大总持仓数(>0)")
+async def my_intelligent_max_positions(
+    payload: MaxPositionsIn, me: PlatinumDep, db: DbDep, ch: ClickHouseDep,
+) -> IntelligentStatus:
+    if payload.max_positions <= 0:
+        raise HTTPException(status_code=400, detail="最大总持仓数必须 > 0")
+    await iguard.set_max_positions(await get_redis(), payload.max_positions, user_id=me.id)
+    return await _intel_status(db, ch, await _intel_shadow_acc(db, me.id), me.id)
+
+
+async def _my_intel_strategy_params(me_id: UUID) -> StrategyParams:
+    redis = await get_redis()
+    return StrategyParams(
+        threshold=await iguard.get_strategy_threshold(redis, me_id),
+        weights=await iguard.get_strategy_weights(redis, me_id),
+        atr_stop_mult=await iguard.get_strategy_atr_stop_mult(redis, me_id),
+        atr_tp_mult=await iguard.get_strategy_atr_tp_mult(redis, me_id),
+    )
+
+
+@router.get("/intelligent/strategy-params", summary="读我的智能策略参数")
+async def my_intelligent_strategy_params(me: PlatinumDep) -> StrategyParams:
+    return await _my_intel_strategy_params(me.id)
+
+
+@router.post("/intelligent/strategy-params", summary="★设我的智能策略参数(per-user)")
+async def my_intelligent_set_strategy_params(
+    payload: StrategyParams, me: PlatinumDep,
+) -> StrategyParams:
+    """前向测试迭代调参 · 范围校验后逐项写 per-user key(user_id=me.id)。"""
+    if payload.threshold <= 0:
+        raise HTTPException(status_code=400, detail="阈值必须 > 0")
+    if payload.atr_stop_mult <= 0 or payload.atr_tp_mult <= 0:
+        raise HTTPException(status_code=400, detail="ATR 倍数必须 > 0")
+    if set(payload.weights) != set(_STRAT_INDICATORS):
+        raise HTTPException(status_code=400, detail=f"权重必须含且仅含 {_STRAT_INDICATORS}")
+    if any(v < 0 for v in payload.weights.values()):
+        raise HTTPException(status_code=400, detail="权重必须 ≥ 0")
+    redis = await get_redis()
+    await iguard.set_strategy_threshold(redis, payload.threshold, user_id=me.id)
+    await iguard.set_strategy_atr_stop_mult(redis, payload.atr_stop_mult, user_id=me.id)
+    await iguard.set_strategy_atr_tp_mult(redis, payload.atr_tp_mult, user_id=me.id)
+    for ind, v in payload.weights.items():
+        await iguard.set_strategy_weight(redis, ind, v, user_id=me.id)
+    return await _my_intel_strategy_params(me.id)
+
+
 # ── 托管交易自助(/platinum/managed)─────────────────────────────────────
 async def _managed_status(
     db: AsyncSession, ch: ClickHouseDep, acc: VirtualAccount | None, me_id: UUID,
@@ -254,11 +334,12 @@ async def _managed_status(
     """组装托管影子账户状态(enabled=per-user 开关·退出开关/参数仍全局·盈亏复用引擎·零碰引擎)。"""
     redis = await get_redis()
     enabled = await mguard.is_enabled(redis, me_id)  # ★per-user 开关
-    switches = await mguard.get_exit_switches(redis)  # 全局退出开关(也适用影子账户平仓)
+    switches = await mguard.get_exit_switches(redis)  # ★平仓参数=全局(决策 B·admin-only)
     tp_pct = await mguard.get_tp_pct(redis)
-    open_margin = await mguard.get_open_margin(redis)
-    open_leverage = await mguard.get_open_leverage(redis)
-    max_positions = await mguard.get_max_positions(redis)
+    # ★PR-7b 开仓参数 per-user(me_id · 决策③缺则回退全局)
+    open_margin = await mguard.get_open_margin(redis, me_id)
+    open_leverage = await mguard.get_open_leverage(redis, me_id)
+    max_positions = await mguard.get_max_positions(redis, me_id)
     account_value = available = occupied = 0.0
     open_n = 0
     if acc is not None:
@@ -407,3 +488,35 @@ async def my_managed_stats(
     trades = [ClosedTrade(realized_pnl=r.realized_pnl, close_reason=r.managed_close_reason)
               for r in rows]
     return compute_managed_stats(trades)
+
+
+# ── 托管交易开仓参数自助(PR-7b · per-user · ★不含平仓参数 exit/tp_pct·决策 B 全局 admin-only)──
+# In schema 复用 intelligent_admin 的 OpenMarginIn/OpenLeverageIn/MaxPositionsIn(body 形状一致)。
+@router.post("/managed/open-margin", summary="设我的托管每单本金(U·10-10000)")
+async def my_managed_open_margin(
+    payload: OpenMarginIn, me: PlatinumDep, db: DbDep, ch: ClickHouseDep,
+) -> ManagedStatus:
+    if not (10 <= payload.margin <= 10000):  # noqa: PLR2004
+        raise HTTPException(status_code=400, detail="每单本金必须在 10-10000 U")
+    await mguard.set_open_margin(await get_redis(), Decimal(str(payload.margin)), user_id=me.id)
+    return await _managed_status(db, ch, await _managed_shadow_acc(db, me.id), me.id)
+
+
+@router.post("/managed/open-leverage", summary="设我的托管杠杆(1-20)")
+async def my_managed_open_leverage(
+    payload: OpenLeverageIn, me: PlatinumDep, db: DbDep, ch: ClickHouseDep,
+) -> ManagedStatus:
+    if not (1 <= payload.leverage <= 20):  # noqa: PLR2004
+        raise HTTPException(status_code=400, detail="杠杆必须在 1-20 倍")
+    await mguard.set_open_leverage(await get_redis(), payload.leverage, user_id=me.id)
+    return await _managed_status(db, ch, await _managed_shadow_acc(db, me.id), me.id)
+
+
+@router.post("/managed/max-positions", summary="设我的托管最大总持仓数(>0)")
+async def my_managed_max_positions(
+    payload: MaxPositionsIn, me: PlatinumDep, db: DbDep, ch: ClickHouseDep,
+) -> ManagedStatus:
+    if payload.max_positions <= 0:
+        raise HTTPException(status_code=400, detail="最大总持仓数必须 > 0")
+    await mguard.set_max_positions(await get_redis(), payload.max_positions, user_id=me.id)
+    return await _managed_status(db, ch, await _managed_shadow_acc(db, me.id), me.id)
