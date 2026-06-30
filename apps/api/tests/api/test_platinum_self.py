@@ -16,11 +16,17 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_clickhouse
+from app.api.v1 import platinum_self
 from app.main import app
 from app.models.perp import MarginMode, PerpSide, VirtualPerpPosition
 from app.services.auth import issue_session
 from app.services.virtual_trading.intelligent import account as iacc
 from tests.factories import make_user
+
+
+async def _no_marks(_client: Any, _symbols: list[str]) -> dict[str, Any]:
+    """假 marks(无活 CH)· 返空 → 浮盈 None · 持仓仍出现(隔离测试只关心哪些仓出现)。"""
+    return {}
 
 
 @pytest.fixture(autouse=True)
@@ -93,8 +99,9 @@ async def test_managed_toggle_isolated_per_user(client: AsyncClient, db_session:
 # ── ③ 看板隔离:A 看不到 B 的影子仓 ───────────────────────────────────
 @pytest.mark.asyncio
 async def test_positions_isolated_cannot_see_others(
-    client: AsyncClient, db_session: AsyncSession,
+    client: AsyncClient, db_session: AsyncSession, monkeypatch,  # noqa: ANN001
 ) -> None:
+    monkeypatch.setattr(platinum_self, "select_premium_index_marks", _no_marks)  # 无活 CH
     _a, ha = await _platinum_headers(db_session)
     b_user, _hb = await _platinum_headers(db_session)
     # 在 B 的影子账户建一仓
