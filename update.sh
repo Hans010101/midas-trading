@@ -281,31 +281,42 @@ fi
 
 if [ ${#RECREATE_SVCS[@]} -gt 0 ]; then
   section "强制重建有代码改动的无状态服务:${RECREATE_SVCS[*]}"
-  # ── 2026-06-19 翻车修:构建【前】清陈旧 buildkit 缓存(失败时下方 line ~402 的 post 清理到不了)──
-  #   force-rebuild 三镜像 + pip 重试曾把 build cache 堆到 17.91GB(9.6GB 可回收)· 压盘加剧超时/OOM。
-  #   --keep-storage 10GB 保留近期层缓存(含 pip 依赖层)· 只清陈旧 · 避免重下 flaky 阿里云镜像 · 不动在用镜像。
+  # ── 2026-06-19 翻车修:构建【前】清陈旧 buildkit 缓存(失败时下方 post 清理到不了)──
+  #   force-rebuild 三镜像 + pip 重试曾把 build cache 堆到 17.91GB · 压盘加剧超时/OOM。
+  #   --keep-storage 10GB 保留近期层缓存(含 pip 依赖层)· 只清陈旧 · 不动在用镜像。
   echo "  ${MAGENTA}▸${NC} 构建前清陈旧 buildkit 缓存(--keep-storage 10GB · 保留依赖层)"
   docker builder prune -f --keep-storage 10GB 2>&1 | tail -3 || warn "pre-build prune 失败 · 不阻塞"
-  # --build         重建镜像
-  # --force-recreate 即使 Docker 层缓存命中、镜像未变,也用新镜像重建容器
-  #                  → 根治"代码已在 main / 已在主机磁盘,但运行容器还是旧码"(2026-05-27 故障)
-  # --no-deps       只动列出的无状态服务,绝不触碰它们的依赖(postgres/clickhouse/redis 不重建、数据卷不动)
-  # ── ADR 0029 DP2 静默护栏三件套 ──
-  # · timeout 2700 · 硬上限 45min · 防 docker build 卡死无限挂(2026-05 #57 故障根因 = 无超时)
-  #   ⚠️ 2026-05-28:900s→1500s;2026-06-19 再调 1500s→2700s —— force_rebuild 同 build api+worker+web,
-  #     遇 pip 阿里云镜像 ReadTimeout 重试时 api/worker wheel 各拖到 ~12/19min,1500s(25min)在 web
-  #     next build 中途被砍 → 容器没 recreate(假成功翻车)· 见访问看板部署三连坑。
-  #     新值 2700s (45min) 给 flaky 镜像足够余量 · 仍在外层 GitHub timeout-minutes 50 之内(DP7 兜底)
-  # · BUILDKIT_PROGRESS=plain env · 流式 build log(替代原 `2>&1 | tail -40` 后置吞输出)
-  #   ⚠️ 注:`docker compose up` 不支持 --progress flag(只 `docker compose build` 支持)
-  #        → 走 BuildKit 客户端层 env var · 对 compose up --build 内部 build 也生效 · Docker 19.03+ 支持
-  # · 失败诊断 · trap on_err 自动打出磁盘/缓存/进程快照
-  # ✅ 正常路径不变 · 仅在【失败 / 卡死】时显著提速排障
+
   # 暴露 BuildKit · DOCKER_BUILDKIT=1 是 cache mount + syntax 1.7 必需
+  # BUILDKIT_PROGRESS=plain · 流式 build log(失败时易排障)
   export DOCKER_BUILDKIT=1
   export BUILDKIT_PROGRESS=plain
-  timeout 2700 $COMPOSE up -d --build --force-recreate --no-deps "${RECREATE_SVCS[@]}"
-  ok "force-recreate 完成:${RECREATE_SVCS[*]}(有状态容器未触碰)"
+
+  # ════════════════════════════════════════════════════════════════════
+  # ── 2026-06-30 事故修(#91 部署 OOM · 整站宕机)· 顺序 build · 绝不并行 ──
+  # 旧版:`timeout 2700 $COMPOSE up -d --build --force-recreate --no-deps <api worker web>`
+  #   docker compose 对多 service 默认【并行 build】· api(pip)+worker(pip)+web(next build)
+  #   同时抢 7G 内存 → OOM → build 失败 → 回滚但容器没重起 → 整站宕机(事故根因)。
+  #   服务器静息只剩 ~2.6Gi available,连单个重 build 都贴天花板,三并行必 OOM。
+  # 修法:一个一个 build(任意时刻只 1 个 build 占内存峰值 · Hans 实证 api 638s→
+  #   worker 370s→web 229s 全程不 OOM)· 全部 build 成功后再一次性 --no-build 重建容器。
+  #   · 用 `docker compose build <svc>`(非裸 docker build):自动带 compose 里的 build args
+  #     (web 的 NEXT_PUBLIC_API_URL · 0016 ADR)· 绝不漏。
+  #   · 每 build 单独 timeout 1800s(30min):realistic 最坏 api ~19min(pip 阿里云重试)< 30min。
+  #   · build 期间老容器仍在跑 → 最后 --force-recreate 才切换 → 几乎零停机。
+  # ════════════════════════════════════════════════════════════════════
+  for svc in "${RECREATE_SVCS[@]}"; do
+    section "顺序 build:${svc}(独占内存峰值 · 防并行 OOM)"
+    timeout 1800 $COMPOSE build "$svc"
+    ok "${svc} 镜像 build 完成"
+  done
+
+  section "全部镜像就绪 · 一次性重建容器(--no-build 不再 build · 秒级切换)"
+  # --no-build      镜像已在上面顺序 build 好 · 这步绝不再 build(否则又触发并行 build OOM)
+  # --force-recreate 即使层缓存命中也用新镜像重建容器(根治"代码已 main 但容器跑旧码")
+  # --no-deps       只动无状态服务 · 绝不触碰 postgres/clickhouse/redis(数据卷不动 · 红线)
+  $COMPOSE up -d --no-build --force-recreate --no-deps "${RECREATE_SVCS[@]}"
+  ok "force-recreate 完成:${RECREATE_SVCS[*]}(有状态容器未触碰 · 顺序 build 全程无 OOM)"
 elif [ "$NEED_COMPOSE_UP" = "true" ]; then
   # 仅 compose yaml 改动(无后端/前端代码改动)→ 普通 up -d 应用配置差异。
   # 不 --build、不 --force-recreate:compose 只重建"配置确实变了"的服务,有状态容器不会被无故重建。

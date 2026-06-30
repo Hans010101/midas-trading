@@ -31,7 +31,7 @@ jobs:
   deploy:
     name: SSH 部署 + 健康检查
     runs-on: ubuntu-latest
-    timeout-minutes: 50   # 全 force-rebuild(api+worker+web)+ pip 阿里云镜像重试实测可达 ~28min(2026-06-19 翻车)· 留余量到 50(内层 update.sh timeout 2700s 兜底)
+    timeout-minutes: 60   # 全 force-rebuild(api+worker+web)+ pip 阿里云镜像重试实测可达 ~28min(2026-06-19 翻车)· 2026-06-30 改顺序 build 后串行不重叠、时长严格累加,50→60 留余量防 flaky pip 顶到 50 被 SIGKILL 砍在半截 build(那会复现"回滚没重起")
 
     steps:
       # ────────────────────────────────────────────────
