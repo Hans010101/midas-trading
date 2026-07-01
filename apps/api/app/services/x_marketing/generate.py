@@ -10,8 +10,14 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
+from app.services.clickhouse_crypto import (
+    select_futures_metrics_batch,
+    select_long_short,
+    select_open_interest,
+)
 from app.services.x_marketing.compliance import validate_tweet
 from app.services.x_marketing.store import create_tweet
 from app.services.x_marketing.tweet_gen import (
@@ -26,6 +32,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from app.models.x_tweet import XTweet
+    from app.services.clickhouse_client import ClickHouseClient
 
 logger = logging.getLogger(__name__)
 
@@ -78,16 +85,74 @@ def _to_context(row: dict[str, Any]) -> TweetContext:
     )
 
 
+async def fetch_extra_metrics(
+    ch: ClickHouseClient, contexts: list[TweetContext],
+) -> list[TweetContext]:
+    """★刀2(路线①)· 对【已选中的少量币】查 ClickHouse 富化 5 扩字段 → 返回富化后的 contexts。
+
+    ★做T零碰(只读 CH · 不动 boll_scan/boll:snapshot)· ★优雅降级(任一字段查不到=None=不喂·不报错)。
+    只对已选中的币(手动 ≤14 / 自动 ≤2)查,不全量 · 富化:OI 绝对值 / OI 24h 变化% /
+    全市场多空比 / 15m 涨跌% / 15m 量比。
+    """
+    if not contexts:
+        return contexts
+    symbols = [c.symbol for c in contexts]
+    batch: dict[str, dict[str, float]] = {}
+    try:
+        batch = await select_futures_metrics_batch(ch._client, symbols=symbols)  # noqa: SLF001
+    except Exception as exc:  # noqa: BLE001 · OI 变化批量失败 → 降级不喂
+        logger.warning("[x-tweets] OI 变化批量查失败 · 降级: %s", exc)
+
+    out: list[TweetContext] = []
+    for ctx in contexts:
+        extra: dict[str, float] = {}
+        if ( oi_chg := (batch.get(ctx.symbol) or {}).get("oi_change_pct_24h") ) is not None:
+            extra["oi_change_pct_24h"] = oi_chg
+        try:
+            oi_rows = await select_open_interest(ch._client, ctx.symbol, limit=1)  # noqa: SLF001
+            if oi_rows:
+                extra["oi_usd"] = oi_rows[-1].oi_usd
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[x-tweets] OI 查失败 %s: %s", ctx.symbol, exc)
+        try:
+            ls_rows = await select_long_short(ch._client, ctx.symbol, limit=1)  # noqa: SLF001
+            if ls_rows and ls_rows[-1].global_account_ratio > 0:
+                extra["long_short_ratio"] = ls_rows[-1].global_account_ratio
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[x-tweets] 多空比查失败 %s: %s", ctx.symbol, exc)
+        try:
+            kl = await ch.select_kline(
+                symbol=ctx.symbol, market="crypto", period="15m", limit=21, instrument="perp",
+            )
+            if len(kl) >= 2 and kl[-2].close > 0:  # noqa: PLR2004
+                extra["change_pct_15m"] = (kl[-1].close - kl[-2].close) / kl[-2].close * 100
+            if len(kl) >= 6:  # noqa: PLR2004 · 至少几根才有均量意义
+                prior = kl[-21:-1]
+                avg_vol = sum(k.volume for k in prior) / len(prior)
+                if avg_vol > 0:
+                    extra["volume_ratio"] = kl[-1].volume / avg_vol
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[x-tweets] 15m kline 查失败 %s: %s", ctx.symbol, exc)
+        out.append(replace(ctx, **extra) if extra else ctx)  # type: ignore[arg-type]
+    return out
+
+
 async def generate_and_store(
     session: AsyncSession, contexts: list[TweetContext], *, generated_by: UUID | None,
-    auto_drafted: bool = False,
+    auto_drafted: bool = False, ch: ClickHouseClient | None = None,
 ) -> list[XTweet]:
     """逐币:DeepSeek 生成 → 拼标签 → 门禁 → 存行(★门禁不过也存+reason)· 返回创建的行。
 
     返回行(含 id+symbol)供 worker 逐条 enqueue 截图(image_path 后续由截图回调填)。
     单币失败(LLM 异常)隔离:log + 跳过,不影响其他币(批量稳健)。
     auto_drafted=True:自动托管起草(待补发素材 + 计入 30 日配额)· 默认 False(手动)。
+    ★ch 给定(刀2):先富化 5 扩字段(做T零碰·失败整体降级到基础字段);None=不富化(向后兼容)。
     """
+    if ch is not None:
+        try:
+            contexts = await fetch_extra_metrics(ch, contexts)
+        except Exception as exc:  # noqa: BLE001 · 富化整体失败 → 用基础字段(绝不阻塞生成)
+            logger.warning("[x-tweets] 扩数据富化失败 · 用基础字段: %s", exc)
     created: list[XTweet] = []
     for ctx in contexts:
         try:
