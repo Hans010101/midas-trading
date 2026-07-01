@@ -20,6 +20,7 @@ from redis import asyncio as aioredis
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.services.clickhouse_client import ClickHouseClient
 from app.services.x_marketing.generate import generate_and_store, pick_contexts
 from app.services.x_marketing.store import cleanup_expired, set_image_path
 
@@ -75,13 +76,21 @@ async def _generate(generated_by: str | None) -> tuple[dict[str, int], list[tupl
     by = UUID(generated_by) if generated_by else None
     engine = create_async_engine(os.environ["DATABASE_URL"], future=True, poolclass=NullPool)
     session_maker = async_sessionmaker(engine, expire_on_commit=False)
+    # ★刀2:建 ClickHouse 客户端富化扩数据(做T零碰·CH 建连失败→None→基础字段照常生成)
+    try:
+        ch: ClickHouseClient | None = await ClickHouseClient.create()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[x-tweets] ClickHouse 建连失败 · 不富化: %s", exc)
+        ch = None
     try:
         async with session_maker() as session:
-            rows = await generate_and_store(session, contexts, generated_by=by)
+            rows = await generate_and_store(session, contexts, generated_by=by, ch=ch)
             # expire_on_commit=False → 关 session 后 id/symbol 仍可读 · 收集供 enqueue 截图
             targets = [(r.id, r.symbol) for r in rows]
             passed = sum(1 for r in rows if r.compliance_passed)
     finally:
+        if ch is not None:
+            await ch.close()
         await engine.dispose()
     counts = {"generated": len(targets), "passed": passed, "rejected": len(targets) - passed}
     return counts, targets

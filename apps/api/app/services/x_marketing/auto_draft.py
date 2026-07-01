@@ -22,6 +22,8 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from app.services.clickhouse_client import ClickHouseClient
+
 logger = logging.getLogger(__name__)
 
 _SNAPSHOT_KEY = "boll:snapshot:latest"  # boll_scan 落 · 本任务只读挑币
@@ -39,6 +41,7 @@ async def _read_snapshot_items(redis: Any) -> list[dict[str, Any]]:
 
 async def run_auto_draft(
     session: AsyncSession, redis: Any, *, now: datetime | None = None,
+    ch: ClickHouseClient | None = None,
 ) -> dict[str, Any]:
     """守卫 → 选币(口径 b)→ 两条都起草存后台 → 只标 rows[0] 为自动发目标(频率调整)。
 
@@ -65,7 +68,9 @@ async def run_auto_draft(
         return {"status": "skip", "reason": "no_candidates"}
 
     # ★两条都起草存后台(不在起草层去重)· auto_drafted=True(待补发素材 + 计入日配额)
-    rows = await generate_and_store(session, contexts, generated_by=None, auto_drafted=True)
+    rows = await generate_and_store(
+        session, contexts, generated_by=None, auto_drafted=True, ch=ch,
+    )
     drafted = [(r.id, r.symbol) for r in rows]  # 全部供截图
 
     # ★理解B(Hans 定):按 rows 顺序(|change| 降序)找第一个「门禁过 且 6h 内没发过」的 → 只发它。

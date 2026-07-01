@@ -20,6 +20,7 @@ from redis import asyncio as aioredis
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.services.clickhouse_client import ClickHouseClient
 from app.services.x_marketing.auto_draft import run_auto_draft
 from app.services.x_marketing.auto_publish import (
     notify_circuit_open,
@@ -48,10 +49,18 @@ async def _draft() -> dict[str, Any]:
     redis = _redis()
     engine = _engine()
     session_maker = async_sessionmaker(engine, expire_on_commit=False)
+    # ★刀2:建 ClickHouse 客户端富化扩数据(做T零碰·建连失败→None→基础字段照常)
+    try:
+        ch: ClickHouseClient | None = await ClickHouseClient.create()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[x-auto] ClickHouse 建连失败 · 不富化: %s", exc)
+        ch = None
     try:
         async with session_maker() as session:
-            return await run_auto_draft(session, redis)
+            return await run_auto_draft(session, redis, ch=ch)
     finally:
+        if ch is not None:
+            await ch.close()
         await redis.aclose()
         await engine.dispose()
 

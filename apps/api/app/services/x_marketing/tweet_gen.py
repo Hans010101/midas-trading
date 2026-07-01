@@ -25,6 +25,12 @@ class TweetContext:
     zone_label: str     # 近上轨 / 破下轨 等(布林通道位置)
     pct_b: float | None
     funding_rate: float | None = None  # 永续资金费率(可选)
+    # ★刀2(B 阶段)扩数据(全可选·取不到=None=不喂·优雅降级·路线①从 ClickHouse 查)
+    oi_usd: float | None = None            # OI 持仓量(USD·crypto_open_interest.oi_usd)
+    oi_change_pct_24h: float | None = None  # OI 24h 变化%(select_futures_metrics_batch)
+    long_short_ratio: float | None = None   # 全市场账户多空比(global_account_ratio·>1 多头人多)
+    change_pct_15m: float | None = None      # 15m 短周期涨跌%(kline 近 2 根 close)
+    volume_ratio: float | None = None        # 15m 成交量倍数(最新一根 vs 近 20 根均量)
 
 
 _SYSTEM = (
@@ -41,9 +47,19 @@ _SYSTEM = (
     "『24 小时涨了 5% 左右,走得挺稳』)· ★数字必须照抄给定值,绝不许自己编;\n"
     "· 资金费率:正费率 = 多头持仓成本偏高(多头在付空头,说『资金费率还是正的,多头成本偏高』);"
     "负费率 = 空头成本偏高(空头付多头)· ★只说『多头/空头』,不用『做多/做空』字样。\n"
+    "· OI 持仓量 / OI 24h 变化:说『持仓量在缩 / 仓单降了约 X% / OI 在增』"
+    "(★用「仓单降 / 持仓在缩」别用「减仓 / 加仓」——那俩是买卖禁词);"
+    "OI 缩 = 资金在离场,说『合约资金在流出』,★别说『多头扛不住了?』(那是揣测);\n"
+    "· 多空比(全市场账户人数):>1 多头账户人多、<1 空头账户人多"
+    "(如 0.70 说『空头人数占优 / 空头账户偏多』)· ★陈述人数占比不揣测方向,"
+    "只说『多头/空头』不用『做多/做空』;\n"
+    "· 15 分钟短周期涨跌:如实报『15 分钟跌了 3.5% / 15 分钟涨了 2%』(★数字照抄);\n"
+    "· 15 分钟成交量倍数:说『成交量放大到近期约 X 倍 / 量能爆了 X 倍』"
+    "(★报倍数、数字照抄、别带「要爆了 / 要拉」这种揣测);\n"
+    "· ★『资金跑了 X 万刀』这种没真实数据、绝不编,只用『OI 变化% + 资金费率』说资金动向;\n"
     "【风格】短句为主、口语、有网感;开头一句大白话结论让人秒懂现在啥状态;"
-    "再自然带出布林 / %B / 涨跌 / 费率这几点(★给了才说,没给的别提也别说『没数据』);"
-    "中文,约 280–460 字。\n"
+    "再自然带出布林 / %B / 涨跌 / 费率 / OI / 多空比 / 短周期 这几点"
+    "(★给了才说,没给的别提也别说『没数据』);中文,约 300–500 字。\n"
     "【红线 · 违者作废 · ★生成时就避开,别指望后面兜底】:\n"
     "1. 只说【此刻/当前】的状态,★绝不预测之后会怎样——不写『会不会 / 能不能撑住 / 接下来 / 后市 / "
     "有望 / 即将 / 将会 / 预计』;★不用反问揣测方向(别写『多头扛不住了?』『还能撑住吗?』);\n"
@@ -71,6 +87,15 @@ def _fmt(v: float | None, suffix: str = "", pct: bool = False) -> str:
     return f"{s}{suffix}"
 
 
+def _fmt_usd(v: float) -> str:
+    """大额 USD 口语化(OI 持仓量)· 亿/万 单位。"""
+    if v >= 1e8:  # noqa: PLR2004
+        return f"{v / 1e8:.2f} 亿美元"
+    if v >= 1e4:  # noqa: PLR2004
+        return f"{v / 1e4:.0f} 万美元"
+    return f"{v:.0f} 美元"
+
+
 def build_user_prompt(ctx: TweetContext) -> str:
     """user prompt(纯函数 · 可单测)· 只喂【当前】结构事实,不喂任何预测倾向。
 
@@ -89,6 +114,20 @@ def build_user_prompt(ctx: TweetContext) -> str:
     ]
     if ctx.funding_rate is not None:
         lines.append(f"资金费率:{ctx.funding_rate * 100:+.4f}%(正=多头成本高 / 负=空头成本高)")
+    # ★刀2 扩数据(取不到=不喂那条·优雅降级·不显「—」)
+    if ctx.oi_usd is not None:
+        lines.append(f"OI 持仓量:{_fmt_usd(ctx.oi_usd)}")
+    if ctx.oi_change_pct_24h is not None:
+        lines.append(
+            f"OI 24h 变化:{ctx.oi_change_pct_24h:+.1f}%"
+            "(缩=资金离场·说仓单降/持仓缩·★别用「减仓/加仓」是禁词)",
+        )
+    if ctx.long_short_ratio is not None:
+        lines.append(f"多空比(全市场人数):{ctx.long_short_ratio:.2f}(>1 多头人多 / <1 空头人多)")
+    if ctx.change_pct_15m is not None:
+        lines.append(f"15 分钟涨跌:{ctx.change_pct_15m:+.2f}%(如实报 · 别编)")
+    if ctx.volume_ratio is not None:
+        lines.append(f"15 分钟成交量:约近期均量的 {ctx.volume_ratio:.1f} 倍")
     lines.append(
         "\n把以上【当前】状态写成一条散户秒懂的口语盯盘短帖:说人话、带点情绪、只讲此刻、"
         "不揣测之后、不暗示操作、结尾带『仅供参考,不构成投资建议』(遵守 system 全部规则)。",

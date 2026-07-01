@@ -192,3 +192,89 @@ def test_prompt_builders() -> None:
     assert "偏多" in user
     assert "三线齐上·上升结构" in user
     assert "+3.20%" in user
+
+
+# ── 刀2:扩数据(5 新字段)prompt 渲染 + 优雅降级 ──────────────────────────
+def test_build_user_prompt_extra_fields() -> None:
+    """5 扩字段有值 → prompt 各自渲染(OI 亿/万单位·OI变化%·多空比·15m涨跌·量比)。"""
+    ctx = TweetContext(
+        symbol="GWEIUSDT", price=0.09, change_pct_24h=-28.0, bias="偏空",
+        state_label="三线齐跌·下降结构", zone_label="近下轨", pct_b=0.08, funding_rate=0.00005,
+        oi_usd=123_450_000, oi_change_pct_24h=-2.1, long_short_ratio=0.70,
+        change_pct_15m=-3.5, volume_ratio=5.2,
+    )
+    u = build_user_prompt(ctx)
+    assert "OI 持仓量:1.23 亿美元" in u
+    assert "-2.1%" in u                          # OI 24h 变化
+    assert "多空比(全市场人数):0.70" in u
+    assert "15 分钟涨跌:-3.50%" in u
+    assert "5.2 倍" in u
+
+
+def test_build_user_prompt_extra_none_graceful() -> None:
+    """★扩字段全 None → 不喂那几行(优雅降级·不显「—」·不报错)。"""
+    ctx = TweetContext(
+        symbol="XUSDT", price=1.0, change_pct_24h=1.0, bias="中性",
+        state_label="三线走平·震荡结构", zone_label="中间", pct_b=0.5,
+    )
+    u = build_user_prompt(ctx)
+    assert "OI 持仓量" not in u
+    assert "多空比" not in u
+    assert "15 分钟" not in u
+
+
+@pytest.mark.asyncio
+async def test_fetch_extra_metrics_enrich_and_graceful(monkeypatch) -> None:  # noqa: ANN001
+    """★刀2 富化:A 币全查到 → 5 字段齐;B 币全查不到 → 原样(优雅降级·不崩)。做T零碰。"""
+    from datetime import UTC, datetime  # noqa: PLC0415
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    from app.schemas.market import Kline  # noqa: PLC0415
+    from app.services.x_marketing import generate as gen  # noqa: PLC0415
+
+    async def _batch(
+        _client: object, *, symbols: list[str],
+    ) -> dict[str, dict[str, float]]:
+        return {s: {"oi_change_pct_24h": -2.1} for s in symbols if s == "AUSDT"}  # A 有 · B 无
+
+    async def _oi(_client: object, symbol: str, *, limit: int = 1) -> list[object]:  # noqa: ARG001
+        if symbol == "AUSDT":
+            return [SimpleNamespace(oi_usd=1.0e8)]
+        raise RuntimeError("no oi")  # B 查失败 → 降级
+
+    async def _ls(_client: object, symbol: str, *, limit: int = 1) -> list[object]:  # noqa: ARG001
+        return [SimpleNamespace(global_account_ratio=0.7)] if symbol == "AUSDT" else []
+
+    monkeypatch.setattr(gen, "select_futures_metrics_batch", _batch)
+    monkeypatch.setattr(gen, "select_open_interest", _oi)
+    monkeypatch.setattr(gen, "select_long_short", _ls)
+
+    def _k(close: float, vol: float) -> Kline:
+        return Kline(
+            ts=datetime(2026, 1, 1, tzinfo=UTC),
+            open=close, high=close, low=close, close=close, volume=vol,
+        )
+    klines = [_k(100.0 + i, 10.0) for i in range(20)] + [_k(103.5, 50.0)]  # 21 根·末根量 5×
+
+    class _FakeCH:
+        _client = object()
+
+        async def select_kline(self, **kw: object) -> list[Kline]:
+            return klines if kw.get("symbol") == "AUSDT" else []
+
+    a = TweetContext(symbol="AUSDT", price=1.0, change_pct_24h=0.0, bias="偏空",
+                     state_label="s", zone_label="z", pct_b=0.1)
+    b = TweetContext(symbol="BUSDT", price=1.0, change_pct_24h=0.0, bias="中性",
+                     state_label="s", zone_label="z", pct_b=0.5)
+    out = await gen.fetch_extra_metrics(_FakeCH(), [a, b])
+
+    assert out[0].oi_usd == 1.0e8
+    assert out[0].oi_change_pct_24h == -2.1
+    assert out[0].long_short_ratio == 0.7
+    assert out[0].change_pct_15m is not None
+    assert round(out[0].volume_ratio, 1) == 5.0    # 50 / (20 根均量 10)
+    # ★B 全查不到 → 原样 None(优雅降级·不崩)
+    assert out[1].oi_usd is None
+    assert out[1].long_short_ratio is None
+    assert out[1].change_pct_15m is None
+    assert out[1].volume_ratio is None
