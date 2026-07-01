@@ -64,7 +64,11 @@ def build_system_prompt() -> str:
 def _fmt(v: float | None, suffix: str = "", pct: bool = False) -> str:
     if v is None:
         return "—"
-    return f"{v:+.2f}%" if pct else f"{v:g}{suffix}"
+    if pct:
+        return f"{v:+.2f}%"
+    # ★价格避免科学计数法(极小价 1.2e-05 → 0.000012·口语文案不出戏):<1 定点去尾零、≥1 用 g
+    s = f"{v:.10f}".rstrip("0").rstrip(".") if abs(v) < 1 else f"{v:g}"
+    return f"{s}{suffix}"
 
 
 def build_user_prompt(ctx: TweetContext) -> str:
