@@ -23,6 +23,7 @@ from app.api.v1.perp import router as perp_router
 from app.api.v1.platinum_self import router as platinum_self_router
 from app.api.v1.quota import router as quota_router
 from app.api.v1.redeem import router as redeem_router
+from app.api.v1.screener import router as screener_router
 from app.api.v1.structure import router as structure_router
 from app.api.v1.support import router as support_router
 from app.api.v1.telegram import router as telegram_router
@@ -57,6 +58,9 @@ router.include_router(cn_router)
 router.include_router(us_router)
 # 港股首页全市场 · 状态 + 大盘指数(恒生/国企)+ 全市场榜单 + 涨跌家数(新浪源)
 router.include_router(hk_router)
+# 选股筛选器 1a · cn/us/hk 现货按价格/涨跌幅/RSI/均线排列筛选(只读 · 复用指标引擎)
+# 🔴 红线:结果"符合条件的标的"客观列表 + 免责 · 非荐股 · 加密第一批不做 · 不碰 crypto perp/智能/托管
+router.include_router(screener_router)
 # ADR 0035 阶段 A · 全球指标概览(只读 · 不涉及交易)
 router.include_router(overview_router)
 # P1-4c.5(ADR 0038)· 研究室回测 full-data 读端点(只读 · authed-only 按 user 过滤 · 不涉及交易)

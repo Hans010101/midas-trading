@@ -193,6 +193,29 @@ def _crosses_down(prev_a: float, prev_b: float, cur_a: float, cur_b: float) -> b
     return prev_a >= prev_b and cur_a < cur_b
 
 
+# ===== 最近一根穿越判定(选股筛选器 1b 复用 · 复用上面的序列 + 穿越工具,不另算一套)=====
+
+
+def latest_macd_golden_cross(klines: list[Kline]) -> bool:
+    """最近一根 K 是否 MACD 金叉(DIF 上穿 DEA)· 数据不足 → False。"""
+    s = _macd_series([float(k.close) for k in klines])
+    if len(s) < 2 or s[-1] is None or s[-2] is None:  # noqa: PLR2004
+        return False
+    p_dif, p_dea = s[-2]
+    c_dif, c_dea = s[-1]
+    return _crosses_up(p_dif, p_dea, c_dif, c_dea)
+
+
+def latest_kdj_golden_cross(klines: list[Kline]) -> bool:
+    """最近一根 K 是否 KDJ 金叉(K 上穿 D)· 数据不足 → False。"""
+    s = _kdj_series(klines)
+    if len(s) < 2 or s[-1] is None or s[-2] is None:  # noqa: PLR2004
+        return False
+    p_k, p_d, _ = s[-2]
+    c_k, c_d, _ = s[-1]
+    return _crosses_up(p_k, p_d, c_k, c_d)
+
+
 # ===== 三策略扫描器 =====
 
 
