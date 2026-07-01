@@ -11,6 +11,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query'
+import Link from 'next/link'
 
 import { TopNav } from '@/components/layout/top-nav'
 import { CnSections } from '@/components/market-home/cn-sections'
@@ -37,7 +38,17 @@ export function MarketHomePage({ market }: { market: MarketKind }) {
 
       <main className="flex-1">
         <div className="mx-auto max-w-[1600px] px-6 py-5">
-          <h2 className="mb-3 font-serif text-sm font-bold text-foreground">大盘指数</h2>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-serif text-sm font-bold text-foreground">大盘指数</h2>
+            {/* 选股入口 · ★MarketKind 类型仅 cn/us/hk(加密是独立页面 crypto-market·不走本组件)→
+                此入口【类型层面】只在股票市场出现,加密天然不含。筛选器第一版只做股票。 */}
+            <Link
+              href="/screener"
+              className="inline-flex items-center gap-1 rounded-md border border-midas-red/40 bg-midas-red/[0.06] px-3 py-1 text-xs font-medium text-midas-red transition-colors hover:bg-midas-red/[0.12]"
+            >
+              选股筛选器 →
+            </Link>
+          </div>
           {q.isPending && <LoadingNote className="py-10" />}
           {q.isError && (
             <EmptyState title="暂时无法读取行情" hint="后端不可达 · 稍后自动重试" />
