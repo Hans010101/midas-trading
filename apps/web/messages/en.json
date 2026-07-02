@@ -137,8 +137,8 @@
     },
     "footer": {
       "brand": "Midas / Product / Markets / AI sandbox assistant / Strategy research lab / Membership / Legal / Terms of Service / Privacy Policy / Risk Disclosure / Contact Us",
-      "disclaimer_main": "Midas: For paper trading only and does not constitute investment advice. All data from public market feeds; AI analysis output for reference.",
-      "disclaimer_secondary": "For paper trading only and does not constitute investment advice."
+      "disclaimer_main": "Midas: For informational purposes only and does not constitute investment advice. All data from public market feeds; AI analysis output for reference.",
+      "disclaimer_secondary": "For informational purposes only and does not constitute investment advice."
     },
     "hero": {
       "cta_primary": "Start analyzing",
