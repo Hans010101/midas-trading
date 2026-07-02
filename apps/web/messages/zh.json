@@ -1,0 +1,16 @@
+{
+  "common": {
+    "appName": "点金 Midas",
+    "loading": "载入中…",
+    "retry": "重试",
+    "error": "出错了",
+    "confirm": "确认",
+    "cancel": "取消"
+  },
+  "nav": {
+    "screener": "选股筛选器"
+  },
+  "disclaimer": {
+    "advisory": "仅供参考,不构成投资建议。"
+  }
+}
