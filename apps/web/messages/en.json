@@ -1,16 +1,994 @@
 {
+  "academy": {
+    "academy": {
+      "badge": "Graduated",
+      "celebration": "Got it",
+      "exam": "Graduated · Retake Available",
+      "glossary": "For informational purposes only and does not constitute investment advice.",
+      "home": "Glossary",
+      "nav": "Glossary",
+      "practice": "Practice Trading",
+      "progress": "Completed {done}/{total}",
+      "promo": "Limited Time Free · Answer to Win Membership",
+      "quiz": "In-Article Quiz",
+      "stage": "Stage does not exist"
+    }
+  },
+  "backendErrors": {
+    "admin_asset_not_found": "Asset/material not found",
+    "admin_file_empty": "File is empty",
+    "admin_file_upload_both_required": "Both PDF and markdown files must be uploaded and non-empty",
+    "admin_report_not_found": "Report not found",
+    "admin_screenshot_not_found": "Screenshot not found",
+    "admin_tweet_not_found": "Tweet not found or expired",
+    "admin_user_not_found": "User not found",
+    "admin_weekly_report_not_found": "Weekly report submission not found",
+    "intelligent_admin_atr_multiplier": "ATR multiplier must be > 0",
+    "intelligent_admin_capital": "Initial capital must be > 0",
+    "intelligent_admin_direction": "'which' must be one of: long/short",
+    "intelligent_admin_leverage": "Leverage must be between 1-20x",
+    "intelligent_admin_max_positions": "Max total positions must be > 0",
+    "intelligent_admin_position_size": "Position size must be between 10-10000 U",
+    "intelligent_admin_threshold": "Threshold must be > 0",
+    "intelligent_admin_weight": "Weight must be >= 0",
+    "managed_trading_capital": "Initial capital must be > 0",
+    "managed_trading_exit_type": "'which' must be one of: tp/signal/timeout",
+    "managed_trading_leverage": "Leverage must be between 1-20x",
+    "managed_trading_max_positions": "Max total positions must be > 0",
+    "managed_trading_position_size": "Position size must be between 10-10000 U",
+    "managed_trading_tp_target": "Take-profit target (profit %) must be > 0",
+    "payment_order_not_found": "Order not found",
+    "platinum_self_atr_multiplier": "ATR multiplier must be > 0",
+    "platinum_self_capital": "Initial capital must be > 0",
+    "platinum_self_direction": "'which' must be one of: long/short",
+    "platinum_self_leverage": "Leverage must be between 1-20x",
+    "platinum_self_max_positions": "Max total positions must be > 0",
+    "platinum_self_position_size": "Position size must be between 10-10000 U",
+    "platinum_self_threshold": "Threshold must be > 0",
+    "platinum_self_weight": "Weight must be >= 0",
+    "support_ticket_description_empty": "Problem description cannot be empty",
+    "support_ticket_email_invalid": "Contact email format is invalid",
+    "support_ticket_image_format": "Images only support JPEG / PNG formats",
+    "support_ticket_unknown_type": "Unknown ticket type"
+  },
+  "backendLabels": {
+    "actionable_direction": "buy",
+    "actionable_hint": "Open long reference",
+    "actionable_size_note": "Default position sizing",
+    "ai_decision_composite_label": "Strong Long",
+    "indicator_label": "Last Price",
+    "plan_direction": "long",
+    "strategy_recommend_reason": "Uptrend in last 5 days · MA cross ideal for trend tracking",
+    "strategy_signal_reason": "MA5 crosses above MA20 (Golden Cross)",
+    "strength_note": "Oversold depth · RSI dipped to"
+  },
   "common": {
-    "appName": "点金 Midas",
-    "loading": "Loading…",
-    "retry": "Retry",
-    "error": "Something went wrong",
-    "confirm": "Confirm",
-    "cancel": "Cancel"
+    "account": {
+      "_": "Account Center",
+      "tab": "Current Positions"
+    },
+    "conditional": {
+      "error": "Please enter trigger price",
+      "status": "Pending",
+      "type": "Limit buy"
+    },
+    "market": "A-shares",
+    "nav": {
+      "market": "Market Switcher",
+      "palette": "Search symbols (600519 / NVDA / BTC / Tencent) or navigate…",
+      "theme": "Switch to light theme",
+      "top": "Search symbols (⌘K)"
+    },
+    "palette": "Terminal",
+    "payment": {
+      "_": "No auto-renewal, no hidden fees. Your subscription directly supports Midas development, not ads or data sales.",
+      "benefit": "AI Sandbox Diagnosis",
+      "plan": "Monthly"
+    },
+    "redeem": {
+      "_": "Monthly card",
+      "error": "Invalid redemption code",
+      "status": "Unused"
+    },
+    "reward": "Granted 7 days Pro trial · Referral reward +15 days credited",
+    "ui": {
+      "direction": "Long",
+      "state": "Loading…"
+    }
   },
-  "nav": {
-    "screener": "Stock Screener"
+  "landing": {
+    "academy": {
+      "caveat": "Educational content for learning reference only and does not constitute investment advice.",
+      "cta_button": "Win membership through quizzes",
+      "cta_hint": "Free entry, zero real-money risk",
+      "description": "Free illustrated courses progressing from candlesticks, longs/shorts, to leverage, Chan theory, and futures—six modules to guide you step by step through market fundamentals. Plus 88-word glossary for instant lookup.",
+      "eyebrow": "Trading Academy",
+      "incentive_description": "Finish a module, pass the capstone—unlock 1 week membership. Six modules, up to 6 weeks total.",
+      "incentive_title": "Learn and earn membership",
+      "stats": "Major modules / Practice questions / Glossary",
+      "title": "System tutorial from intro to Chan theory and futures"
+    },
+    "bot": {
+      "description": "Once linked, query markets, check positions, trade, and get real-time fill and alert pushes in Telegram—no need to watch the web tab constantly.",
+      "email_description": "Weekly curated report (PDF included) to your inbox: sector strength, key conclusions, next week's focus. Subscribe with one click in Notifications after login.",
+      "email_eyebrow": "Another way to stay connected, no bot needed",
+      "email_title": "Email digest: global markets and sector opportunity weekly",
+      "eyebrow": "Midas remote control",
+      "features": "Check quotes: four markets (crypto, US stocks, A-shares, HK stocks), symbol codes and Chinese names all recognized / View candlestick charts in Telegram / Check watchlist and positions (spot + perpetual) / Trade: two-step confirmation / Live pushes: fills, price moves (±5%), alert triggers, liquidation warnings / Toggle alerts and quiet hours",
+      "title": "Telegram bot: bring trading into your chat"
+    },
+    "contact": {
+      "contact_us": "Contact us",
+      "login_prompt": "Please log in to submit a ticket (or email support@midastrade.asia)"
+    },
+    "cta_bottom": {
+      "button": "Enter Terminal",
+      "subtitle": "Zero risk, zero cost, no real money needed—just hone your judgment",
+      "title": "Make your first virtual trade"
+    },
+    "features": {
+      "alerts": "Smart alerts / Telegram, email—price swings + fills + custom thresholds",
+      "candlestick": "Candlestick workbench / MA, MACD, RSI, Bollinger Bands indicators + multi-timeframe (1m → 1w) + four-market symbol search",
+      "chan_description": "CZSC-based identification: Strokes (imperial golden lines), top fractals (dark green▽), bottom fractals (red△), central hubs (light blue-gray rectangles), 1st/2nd/3rd-type buy/sell points. Plotted on familiar candlestick charts without cluttering the main view.",
+      "chan_title": "Chan auto-annotation",
+      "more_title": "Plus these, ready to go",
+      "signals": "Strategy signals / Multi-pattern shape-scan, key levels and signal confidence, real-time main-chart markup across four markets. For informational purposes only and does not constitute investment advice.",
+      "virtual_trading": "Virtual trading / Four-market independent wallets, USDT/USD/CNY/HKD settle in original currency, never touching real orders"
+    },
+    "footer": {
+      "brand": "Midas / Product / Markets / AI sandbox assistant / Strategy research lab / Membership / Legal / Terms of Service / Privacy Policy / Risk Disclosure / Contact Us",
+      "disclaimer_main": "Midas: For paper trading only and does not constitute investment advice. All data from public market feeds; AI analysis output for reference.",
+      "disclaimer_secondary": "For paper trading only and does not constitute investment advice."
+    },
+    "hero": {
+      "cta_primary": "Start analyzing",
+      "cta_secondary": "View features",
+      "description": "Cover crypto, US stocks, A-shares, and HK stocks across four markets—AI decision cards to gauge momentum, sandboxes to understand structure, research labs to backtest ideas, virtual capital for risk-free trading practice.",
+      "eyebrow": "AI-native financial analytics terminal",
+      "stats": "AI decision cards / 11-factor structure sandbox / Backtest lab / Virtual capital, zero risk",
+      "title": "Global markets at a glance, turning insight into gold"
+    },
+    "lab": {
+      "caveat": "Past performance does not indicate future results. Backtest results for reference only and does not constitute investment advice.",
+      "description": "\"Feels right\" doesn't count. Pick a strategy, symbol, and timeframe—the lab runs it against historical data end-to-end: P&L curve, win rate, max drawdown, all laid out in the report.",
+      "eyebrow": "Strategy Research Lab",
+      "features": "One-click backtest: strategy × symbol × timeframe, full report in minutes / P&L curve + full trade log, see exactly where you won and lost / AI hit rate retrospective: how often was it right? System keeps score, transparent to audit",
+      "title": "Test your idea against the data first"
+    },
+    "markets": {
+      "a_shares": "A-shares / Full Shanghai and Shenzhen markets, transparent adjustment methodology / 600519, 000001, 300750",
+      "crypto": "Crypto / Binance data source, all major tokens covered / BTC/USDT, ETH/USDT, SOL/USDT",
+      "hk_stocks": "HK stocks / Hang Seng Index, Mainland Enterprises Index, HKEX main board / 00700, 09988, 03690",
+      "subtitle": "One terminal covering the world's leading trading markets",
+      "title": "Four markets, unified experience",
+      "us_stocks": "US stocks / Nasdaq, NYSE, adjusted prices / NVDA, AAPL, TSLA"
+    },
+    "membership": {
+      "footer_note": "Expires and downgrades to free, no auto-renew. For informational purposes only and does not constitute investment advice.",
+      "free_badge": "Free",
+      "free_cta": "Start free",
+      "free_features": "AI sandbox diagnosis 5x/month / Strategy backtest 3x/month / Crypto, US stocks, A-shares, HK stocks—four markets, candlesticks and quotes / Futures dimension chart, Chan auto-annotation / Virtual trading and conditional orders, Telegram pushes",
+      "free_title": "Zero-cost start",
+      "pro_badge": "Pro member",
+      "pro_badge_exclusive": "Exclusive",
+      "pro_coming": "More exclusive features rolling out",
+      "pro_cta": "Learn more",
+      "pro_features": "AI sandbox diagnosis 300x/month / Strategy backtest 150x/month / AI decision cards: composite score + momentum call + key levels (exclusive) / Live strategy playbook: executable setups as they trigger (exclusive)",
+      "pro_title": "Unlock full AI decision power",
+      "subtitle": "Free tier with four-market quotes and Chan annotations; Pro unlocks high-volume AI and decision cards",
+      "title": "Membership system"
+    },
+    "nav": "Markets / Sandbox / Strategy Lab / Academy / Bot / Membership / Log in / Enter Terminal",
+    "practice": {
+      "description": "AI decision cards give structured judgment and key levels; if you like the setup, one-click mock order; add stop-loss/take-profit triggers for auto-execute—a full trading loop without spending a dime.",
+      "eyebrow": "Virtual practice trading",
+      "steps": "AI decision card: score and key levels / One-click mock order: virtual capital / Conditional orders: execute on stop",
+      "title": "AI judgment to order to risk management, fully simulated"
+    },
+    "sandbox": {
+      "caveat": "Currently covers crypto markets; more markets rolling in. Structure description is not price prediction and does not constitute investment advice.",
+      "description": "Markets are more than price. The sandbox assistant maps 11 market structure factors—longs vs shorts, whale positions, capital sentiment—into one correlation matrix. Which factors corroborate each other, which are diverging? See at a glance. Then AI explains the current structure in plain English: who's buying now, who's exiting, where's the crowding.",
+      "eyebrow": "AI Sandbox Assistant",
+      "features": "11 structure factors, values and judgments shown separately, no mixing / Factor correlation map: divergence and resonance auto-detected, rules interpretable / Conclusions-first Chinese structure diagnosis with data methodology notes",
+      "title": "Understand structure first, act second"
+    },
+    "showcase": {
+      "subtitle": "Global four-market overview at a glance—crypto, US stocks, A-shares, HK stocks, live index digest",
+      "title": "Professional terminal from the moment you open it"
+    }
   },
-  "disclaimer": {
-    "advisory": "For informational purposes only and does not constitute investment advice."
+  "market": {
+    "breadth": {
+      "down": "Down",
+      "flat": "Flat",
+      "limit_down": "Limit Down",
+      "limit_up": "Limit Up",
+      "threshold_note": "(estimated by change% threshold)",
+      "total_turnover": "Total Market Turnover",
+      "up": "Up"
+    },
+    "cn": {
+      "board_error": "Unable to load rankings",
+      "board_error_hint": "Backend unavailable. Retrying automatically.",
+      "board_pending": "Ranking data pending collection",
+      "board_pending_hint": "Auto-collected during A-shares trading hours (every 3 min)",
+      "ranking_footer": "Top 100 shown. Search for more.",
+      "search_mode_result": "Full market search results",
+      "search_placeholder": "Search A-shares market (code/name · ~5500)",
+      "search_result_count": "Matched {count} · Click for details",
+      "sector_hint": "Volume-weighted. Top 24 sectors. Color depth = change% strength. Hover to see leader/count/turnover.",
+      "sector_title": "Sectors",
+      "sentiment_title": "Market Sentiment"
+    },
+    "hk": {
+      "board_error": "Unable to load rankings",
+      "board_error_hint": "Backend unavailable. Retrying automatically.",
+      "board_pending": "Ranking data pending collection",
+      "board_pending_hint": "Auto-collected during HK trading hours (every 3 min)",
+      "breadth_total_turnover": "Key Constituents Turnover",
+      "no_data": "No data",
+      "no_match": "No HK stock matches",
+      "ranking_footer": "Top 100 shown. Search for more.",
+      "row_tooltip": "Click for details (Candlestick + Chan Analysis)",
+      "search_placeholder": "Search HK stocks (key constituents)",
+      "search_result_count": "Matched {count} · Showing {display}",
+      "sector_hint": "Selected 900 stocks. Color depth = change% strength. Hover to see leader/count/turnover.",
+      "sector_title": "Sectors",
+      "sentiment_subtitle": "Selected 900 stocks · not full market",
+      "sentiment_title": "Market Sentiment · Key Constituents"
+    },
+    "market": {
+      "screener_button": "Stock Screener →",
+      "title": "Market Indices"
+    },
+    "row": {
+      "tooltip": "Click for details & trading"
+    },
+    "sector": {
+      "heatmap_tooltip": "{name} · Change {change_pct} · Count {count} · Turnover {amount}",
+      "heatmap_tooltip_with_leader": "{base} · Leader {leader_name} {leader_change_pct}",
+      "stock_count": "stocks"
+    },
+    "state": {
+      "indices_pending": "Index data pending collection",
+      "indices_pending_hint": "Snapshot will be captured during trading hours",
+      "loading_quote": "Unable to load quote data",
+      "no_data": "No data",
+      "no_match": "No matches (try code or name)",
+      "quote_error_hint": "Backend unavailable. Retrying automatically.",
+      "searching": "Searching…"
+    },
+    "tab": {
+      "amount": "Top Volume",
+      "gainers": "Top Gainers",
+      "losers": "Top Losers"
+    },
+    "table": {
+      "change_pct": "Change %",
+      "code": "Code",
+      "last_price": "Last Price",
+      "name": "Name",
+      "sector": "Sector",
+      "turnover": "Turnover"
+    },
+    "us": {
+      "board_error": "Unable to load rankings",
+      "board_error_hint": "Backend unavailable. Retrying automatically.",
+      "board_pending": "Ranking data pending collection",
+      "board_pending_hint": "Auto-collected during US trading hours (every 5 min)",
+      "hot_stocks_title": "Hot US Stocks · Watchlist",
+      "no_data": "No data",
+      "no_match": "No matches (pool: 128 stocks only)",
+      "pool_size_hint": "Pool: {size} stocks. Curated, not full market.",
+      "ranking_footer": "Top 100 shown. Search for more.",
+      "row_tooltip": "Click for details & long/short trading",
+      "search_mode_result": "Watchlist search results",
+      "search_placeholder": "Search watchlist (128 curated · not full US market)",
+      "search_result_count": "Matched {count} · Click for details",
+      "sector_hint": "Equal-weighted. Color depth = change% strength. Hover to see leader/count/turnover.",
+      "sector_title": "Sectors & China Tech"
+    }
+  },
+  "screener": {
+    "account": {
+      "alerts": {
+        "title": "Notifications & Alerts"
+      }
+    },
+    "action": {
+      "copy_failure": "Copy failed · Select text manually",
+      "test_disabled": "Available after binding {channel}",
+      "test_error": "Request failed",
+      "test_failure": "Push failed · {error}",
+      "test_success": "{channel} test message sent"
+    },
+    "input": {
+      "boll_example": "e.g. 10",
+      "max": "Max",
+      "min": "Min",
+      "rsi_max": "100",
+      "rsi_min": "0",
+      "volume_example": "e.g. 1.5"
+    },
+    "market": {
+      "cn": "A-shares",
+      "crypto": "Crypto",
+      "hk": "HK stocks",
+      "us": "US stocks"
+    },
+    "nav": {
+      "screener": "Stock Screener"
+    },
+    "operator": {
+      "gt": ">",
+      "gte": ">=",
+      "lt": "<",
+      "lte": "<="
+    },
+    "screener": {
+      "boll_suffix": "% (narrowing)",
+      "button": {
+        "filter": "Screen",
+        "filtering": "Screening..."
+      },
+      "error": "Screening failed. Please try again later.",
+      "filter": {
+        "boll_bandwidth": "Bollinger Bands Bandwidth",
+        "change": "Change %",
+        "kdj_golden": "KDJ Golden Cross",
+        "ma_bull": "MA Bullish Alignment (MA5 > MA20 > MA60)",
+        "macd_golden": "MACD Golden Cross",
+        "price": "Current Price",
+        "rsi": "RSI(14)",
+        "volume_ratio": "Volume Ratio"
+      },
+      "market": {
+        "cn": "A-shares",
+        "hk": "HK stocks",
+        "us": "US stocks"
+      },
+      "results": {
+        "capped_warning": "Technical indicator filtering covers the most actively traded securities (HK stocks include candle history for major constituents only). Results may not include the full market.",
+        "empty": "No matching securities. Try relaxing your filters.",
+        "scanned": "Scanned {count} securities",
+        "title": "Matching Securities"
+      },
+      "subtitle": "Filter by price, change%, RSI, and MA alignment to find matching securities across A-shares, US stocks, and HK stocks (spot only; for informational purposes only)."
+    },
+    "settings": {
+      "alerts": {
+        "add_error": "Add failed",
+        "add_success": "Rule added",
+        "apply_error": "Apply failed",
+        "apply_success": "Recommended rules applied: {created} created · {skipped} skipped",
+        "delete_aria": "Delete rule",
+        "disabled": "Disable",
+        "empty": "No rules yet. Use \"Apply Recommended Rules\" above or add one below.",
+        "enabled": "Enable",
+        "form": {
+          "button": "Add",
+          "select_indicator": "Select Indicator...",
+          "symbol_placeholder": "Symbol e.g. NVDA",
+          "threshold_placeholder": "Threshold",
+          "timeframe_hint": "This indicator is calculated on daily (1d) timeframe",
+          "title": "Add Rule"
+        },
+        "limit_reached": "Reached {max} rule limit · Delete some rules to add more.",
+        "loading": "Loading...",
+        "recommended": {
+          "button": "✨ Apply Recommended Rules",
+          "intro": "Not sure where to start? Apply a recommended rule set with one click (fear/greed extremes / A-share market crash / leader RSI overbought/oversold)."
+        },
+        "subtitle": "Matching rules trigger Telegram notifications (binding required) · Max {max} rules",
+        "title": "Alert Rules",
+        "validation": {
+          "missing_indicator": "Select both indicator and market",
+          "missing_symbol": "This indicator requires a security symbol",
+          "missing_threshold": "Enter a threshold value"
+        }
+      },
+      "notifications": {
+        "dott_alert": {
+          "badge": "Pro exclusive",
+          "digest": {
+            "hint": "Hourly overview of long/neutral/short leaders (top 5 each)",
+            "label": "Grid Digest"
+          },
+          "disclaimer": "Bollinger grid signals (crypto perpetual) notify your bound Telegram · For informational purposes only and does not constitute investment advice.",
+          "pro_hint": "Pro member exclusive · Subscribe after upgrading",
+          "pro_title": "Grid Digest / Structure Transitions",
+          "saving": "Saving...",
+          "title": "Grid Trading Signals",
+          "toggle_error": "Save failed",
+          "toggle_off": "{label} disabled",
+          "toggle_on": "{label} enabled",
+          "transition": {
+            "hint": "Alert when Bollinger structure changes (state transition)",
+            "label": "Structure Transitions"
+          },
+          "unlock_button": "Upgrade to Pro",
+          "warning": " · ⚠ Bind Telegram above to actually receive notifications"
+        },
+        "email": {
+          "price": {
+            "hint": "Watchlist ±5% · 5-min dedup per security",
+            "label": "Price Movement Alerts"
+          },
+          "title": "Email Notifications",
+          "trade": {
+            "hint": "Notify after orders fill",
+            "label": "Trade Notifications"
+          },
+          "weekly": {
+            "hint": "Full market report every Monday to email (w/ PDF) · TG/Feishu notifies when sent",
+            "label": "Weekly Market Report"
+          }
+        },
+        "feishu": {
+          "alt_method": "(Or send \"/bind {token}\" · direct paste also works)",
+          "bind_button": "Bind Feishu",
+          "bind_confirm": "I've completed binding · Refresh status",
+          "bind_expires": "Code valid {minutes} min · Copy first · Click \"Open in Feishu\" to jump to chat · Paste & send · Refresh below when done",
+          "bound_text": "Bound to your Feishu · Trades, price alerts, and rules will notify here.",
+          "copy_label": "Binding code copied",
+          "deep_link_button": "🪶 Open in Feishu → Paste code",
+          "manual_title": "Open 点金Midas in Feishu and send this binding code:",
+          "status": {
+            "bound": "✓ Bound",
+            "unbound": "Not bound"
+          },
+          "test_button": "Send Test",
+          "title": "Feishu",
+          "unavailable": "Feishu binding coming soon (awaiting app setup) · Check back later.",
+          "unbind_button": "Unbind",
+          "unbind_error": "Unbind failed",
+          "unbind_success": "Feishu unbound"
+        },
+        "loading": "Loading...",
+        "quiet_hours": {
+          "cross_night_hint": "ⓘ Start time later than end time → Overnight window (e.g., 23:00 silent until next 07:00)",
+          "description": "During this window, watchlist changes and rule alerts are silenced.",
+          "end_label": "End Time",
+          "end_label_next_day": "End Time (Next Day)",
+          "exception": "Trades / liquidations and critical events still notify",
+          "exception_suffix": "and notify at night as usual.",
+          "save_button": "Save Schedule",
+          "save_success": "Do Not Disturb schedule saved",
+          "start_label": "Start Time",
+          "status": {
+            "disabled": "Disabled",
+            "enabled": "Enabled"
+          },
+          "title": "Do Not Disturb for Alerts",
+          "toggle": {
+            "hint_disabled": "When off, all hours notify (nights not silenced)",
+            "hint_enabled": "Active: {start} – {end}{cross:' (next day)':''} · {tz}",
+            "label": "Enable Do Not Disturb"
+          },
+          "tz_label": "Timezone"
+        },
+        "save_button": "Save Preferences",
+        "save_error": "Save failed",
+        "save_success": "Notification preferences saved",
+        "subtitle": "After binding Telegram{admin:' / Feishu'}, trade notifications and price alerts will be pushed to the channel · If not bound, only in-app messages",
+        "telegram": {
+          "bind_button": "Bind Telegram",
+          "bind_confirm": "I've completed binding · Refresh status",
+          "bind_expires": "Link valid for {minutes} minutes · Complete /start in bot then refresh below",
+          "bound_text": "Bound to your Telegram · Trades, price alerts, and rules will notify here.",
+          "copy_button": "Copy",
+          "copy_label": "Bind instruction copied",
+          "deep_link_button": "Open in Telegram",
+          "manual_title": "Send in the official bot:",
+          "qr_hint": "Scan with Telegram on your phone, or",
+          "rebind_detail": "Notifications upgraded to official unified bot. If you bound before, that binding has expired—rebind now. First time? Just bind directly.",
+          "rebind_notice": "Please bind or rebind Telegram",
+          "status": {
+            "bound": "✓ Bound",
+            "unbound": "Not bound"
+          },
+          "test_button": "Send Test",
+          "title": "Telegram",
+          "unavailable": "Binding coming soon (awaiting bot setup) · Check back later.",
+          "unbind_button": "Unbind",
+          "unbind_error": "Unbind failed",
+          "unbind_success": "Telegram unbound"
+        },
+        "title": "Message Notifications"
+      }
+    },
+    "state": {
+      "off": "Off",
+      "on": "On"
+    }
+  },
+  "settings": {
+    "account": {
+      "identity": {
+        "_": "Account Info",
+        "avatar_error": "Avatar update failed, please retry",
+        "avatar_picker": "Select Avatar",
+        "avatar_success": "Avatar updated",
+        "change_avatar": "Change Avatar",
+        "change_password": "Change Password",
+        "default_avatar": "Default · Email initial",
+        "default_avatar_aria": "Default avatar (initial)",
+        "oauth_note": "You signed in via Google, security managed by Google (no password setup needed).",
+        "password": {
+          "cancel": "Cancel",
+          "confirm": "Confirm New Password",
+          "current": "Current Password",
+          "error": "Change failed, please retry later",
+          "error_empty": "Please enter current password",
+          "error_mismatch": "Password confirmation mismatch",
+          "error_short": "New password min {MIN_PW} chars",
+          "new": "New Password (min {MIN_PW})",
+          "save": "Save",
+          "success": "Password changed"
+        }
+      },
+      "membership": {
+        "_": "Membership · Supporter Plan",
+        "benefits_feature": "Feature",
+        "benefits_free": "Free",
+        "benefits_pro": "Pro",
+        "benefits_title": "Pro Unlocks Higher Limits",
+        "best_value": "Best Value",
+        "contact_support": "Contact Support",
+        "cta_renew": "Renew",
+        "cta_upgrade": "Upgrade to Pro",
+        "current": "Current Plan",
+        "free": "Free",
+        "monthly_avg": "{monthly} USDT/month avg",
+        "pro_expires": "Pro · expires {date}",
+        "redeem": "Redeem Code",
+        "redeem_button": "Redeem",
+        "redeem_button_pending": "Redeeming…",
+        "redeem_desc": "Enter code to activate / renew Pro",
+        "redeem_placeholder": "Enter redemption code",
+        "savings": "· save {save}%",
+        "support": "Payment issues? (not received / double charge / activation failed)"
+      },
+      "nav": {
+        "alerts": "Notifications & Alerts",
+        "aria": "Account Center Navigation",
+        "center": "Account Center",
+        "overview": "Assets Overview",
+        "positions": "Positions & Orders",
+        "profile": "Preferences"
+      },
+      "payment": {
+        "activated": "Pro Activated",
+        "close": "Close",
+        "done": "Done",
+        "error_generate": "Order generation failed",
+        "generating": "Generating order…",
+        "order_id": "Order {id}…",
+        "oxapay_desc": "Go to OxaPay secure payment page · supports USDT multi-chain (select chain/coin there)",
+        "pay_button": "Go to Payment Page",
+        "retry": "Retry",
+        "success": "Pro activated · thank you for supporting Midas",
+        "success_message": "{tier} Pro activated · all higher limits active",
+        "title": "Upgrade to Pro · {tier}",
+        "waiting": "Awaiting payment · chain confirmation ~minutes, auto-activates (keep page open)"
+      },
+      "profile": "Preferences",
+      "support": {
+        "activation_failed": "Activation Failed",
+        "category_label": "Issue Type",
+        "close": "Close",
+        "description_label": "Description",
+        "description_placeholder": "Describe the issue (order ID, payment time, amount, chain tx hash, etc.) to help us verify.",
+        "done": "Done",
+        "duplicate_charge": "Double Charge",
+        "email_label": "Contact Email",
+        "error_empty": "Please enter description",
+        "error_image_size": "Max {MAX_MB}MB per image",
+        "error_image_type": "Only JPEG / PNG supported",
+        "error_max_images": "Max {MAX_IMAGES} images",
+        "error_too_long": "Description too long (max {MAX_DESC})",
+        "not_received": "Not Received",
+        "other": "Other",
+        "remove_image_aria": "Remove image",
+        "screenshots_label": "Screenshots (optional · max {MAX_IMAGES} · JPEG/PNG · ≤{MAX_MB}MB)",
+        "submit": "Submit Ticket",
+        "submit_note": "We'll respond within 0-3 days",
+        "submitted": "Ticket Submitted",
+        "success_message": "Ticket submitted, we'll contact you by email",
+        "ticket_id": "Ticket #{id}",
+        "title": "Contact Support"
+      },
+      "wallet": {
+        "_": "Account Funding",
+        "activate_button": "Activate & Save",
+        "activated": "✓ Active · initial {amount}",
+        "cash": "Available",
+        "description": "Each market uses own currency, never consolidated · unsettled markets cannot trade",
+        "error_empty": "Please enter initial capital amount",
+        "error_invalid": "Amount must be positive",
+        "error_limit": "Market limit 999.99M",
+        "input_placeholder_edit": "Changing amount resets this market",
+        "input_placeholder_new": "Enter initial capital",
+        "not_set": "⚠ Not set · setup required to trade {market}",
+        "positions": "Positions",
+        "realized_pnl": "Realized P&L",
+        "reset_balance": "Account balance set to {amount}",
+        "reset_button": "Reset Market",
+        "reset_cancel": "Cancel",
+        "reset_confirm": "Confirm Reset",
+        "reset_desc": "This will clear:",
+        "reset_positions": "Current positions (all closed)",
+        "reset_preserved": "Orders + history preserved · view trades in table below",
+        "reset_snapshot": "Equity curve snapshot",
+        "reset_title": "Reset {market} account?",
+        "submitting": "Submitting…"
+      }
+    },
+    "settings": {
+      "alerts": {
+        "_": "Alert Rules",
+        "add_button": "Add",
+        "add_rule_title": "Add Rule",
+        "apply_button": "✨ One-Click Apply Recommended Rules",
+        "at_limit": "Reached {MAX_RULES} rule limit · Delete some rules to add more.",
+        "daily_note": "This indicator calculated on daily (1d) timeframe",
+        "delete_aria": "Delete rule",
+        "description": "Rules matched will be pushed via Telegram (bind first) · Max {MAX_RULES} rules",
+        "disabled": "Disabled",
+        "empty": "No rules yet. Use one-click apply above, or add below.",
+        "enabled": "Enabled",
+        "error_add": "Add failed",
+        "error_apply": "Application failed",
+        "error_select": "Please select indicator and market",
+        "error_symbol": "This indicator requires a symbol",
+        "error_threshold": "Please enter a threshold",
+        "loading": "Loading…",
+        "market_cn": "A-Shares",
+        "market_crypto": "Crypto",
+        "market_hk": "HK Stocks",
+        "market_us": "US Stocks",
+        "recommended": "New to this? One-click apply recommended rules (fear & greed extremes / A-shares plunge / leader RSI overbought/oversold).",
+        "select_indicator": "Select indicator…",
+        "success_add": "Rule added",
+        "success_message": "Applied recommended rules: {created} new · {skipped} skipped",
+        "symbol_placeholder": "Symbol, e.g. NVDA",
+        "threshold_placeholder": "Threshold"
+      },
+      "bot_preset": {
+        "_": "Bot Order Default Parameters",
+        "cross": "Cross",
+        "description": "Use these defaults when placing orders in Telegram bot (perpetual 'long/short' · spot 'buy/sell')",
+        "error_leverage": "Leverage must be 1–20x",
+        "error_notional": "Notional per order must be > 0",
+        "isolated": "Isolated",
+        "leverage": "Perpetual Leverage (1–20x)",
+        "margin_mode": "Margin Mode",
+        "margin_note": "(cannot mix for same symbol · close positions before switching modes)",
+        "perp_notional": "Perpetual Notional per Order (USDT)",
+        "save_button": "Save Defaults",
+        "spot_cny": "A-Shares Notional per Order (CNY)",
+        "spot_usd": "US Stocks Notional per Order (USD)",
+        "success": "Bot order defaults saved"
+      },
+      "color_pref": {
+        "_": "Gain/Loss Color Preference",
+        "description": "Choose gain/loss color convention · instantly applies across A-shares / US stocks / Crypto charts, rankings, K-lines",
+        "green_up": "Green up / Red down",
+        "green_up_note": "Western / HK stocks convention",
+        "note": "Saved per browser (not synced to account) · other colors like central hub gray-blue unaffected",
+        "red_up": "Red up / Green down",
+        "red_up_note": "Default · A-shares convention"
+      },
+      "detail_prefs": {
+        "_": "Detail Page Default Display",
+        "boll": "Bollinger Bands",
+        "chan": "Chan Theory Annotations",
+        "description": "Configure which layers and timeframe show by default when opening asset detail pages",
+        "macd": "MACD",
+        "note": "Saved per browser (not synced to account) · detail pages show defaults on load (adjustable after opening)",
+        "period": "Default Timeframe"
+      },
+      "notifications": {
+        "_": "Message Notifications",
+        "description": "Bind Telegram{isAdmin ? ' / Feishu' : ''}, then trade notifications / price alerts push to that channel · unbound only shows in-app alerts",
+        "dott": {
+          "badge": "Pro Only",
+          "description": "Bollinger day trade signals (crypto perpetual) to your bound Telegram. For informational purposes only and does not constitute investment advice.",
+          "digest": "Day Trade Hourly Digest",
+          "digest_hint": "Hourly top 5 bullish/neutral/bearish overview",
+          "pro_only": "Pro member only · upgrade to subscribe",
+          "saving": "Saving…",
+          "title": "Day Trade Signal Notifications",
+          "transition": "Day Trade Transition Alert",
+          "transition_hint": "Pushed when Bollinger structure shifts (state change alert)",
+          "unbound_warning": "⚠ Bind Telegram above first to actually receive",
+          "upgrade": "Upgrade to Pro"
+        },
+        "email": {
+          "price": "Price Alert",
+          "price_hint": "Watchlist ±5% · 5-min dedup per symbol",
+          "save": "Save",
+          "success": "Notification switches saved",
+          "trade": "Trade Notification",
+          "trade_hint": "Pushed when order fills",
+          "weekly": "Market Weekly Report",
+          "weekly_hint": "Full market report every Monday to email (PDF included) · Telegram/Feishu notifies sent"
+        },
+        "feishu": {
+          "bound": "✓ Bound",
+          "bound_desc": "Bound to your Feishu · trade notifications / price alerts / rules push here.",
+          "unbound": "Not bound"
+        },
+        "telegram": {
+          "bind_button": "Bind Telegram",
+          "bound": "✓ Bound",
+          "bound_desc": "Bound to your Telegram · trade notifications / price alerts / rules push here.",
+          "copy_label": "Binding command copied",
+          "link_expiry": "Link valid for {minutes} min · click refresh below after completing /start in bot",
+          "open_link": "Open in Telegram",
+          "rebind_desc": "Notifications upgraded to unified official bot. If previously bound, old binding expired—rebind. New users can bind directly.",
+          "rebind_title": "Bind / Re-bind Telegram",
+          "refresh_button": "Binding Complete · Refresh Status",
+          "scan": "Scan with mobile Telegram, or",
+          "send_text": "Send to official bot:",
+          "unavailable": "Binding coming soon (awaiting bot setup) · check back later.",
+          "unbind": "Unbind",
+          "unbound": "Not bound"
+        },
+        "tz_beijing": "Beijing / Shanghai (UTC+8)",
+        "tz_london": "London (UTC+0/+1)",
+        "tz_newyork": "New York (UTC-5/-4)",
+        "tz_singapore": "Singapore (UTC+8)",
+        "tz_tokyo": "Tokyo (UTC+9)"
+      },
+      "theme": {
+        "_": "Theme",
+        "dark": "Dark",
+        "dark_note": "Nighttime",
+        "description": "Toggle light/dark theme · instant effect · darkens background/text/containers only, trading gains/losses colors unchanged",
+        "light": "Light",
+        "light_note": "Daytime",
+        "note": "Saved per browser (not synced to account) · independent from gain/loss color preference",
+        "system": "System",
+        "system_note": "Default · follows OS setting"
+      }
+    }
+  },
+  "workbench": {
+    "ai": {
+      "decisionCard": {
+        "actionableAdvice": "Action Plan",
+        "cached": "· Cached",
+        "chanSignals": "Chan Theory Signals",
+        "error": "Unable to generate decision card",
+        "keyLevels": "Key Levels",
+        "realtime": "· Real-time",
+        "resistance": "Resistance",
+        "retry": "Retry",
+        "support": "Support",
+        "technicalAnalysis": "Technical Analysis",
+        "thinking": "AI thinking…",
+        "title": "AI Decision Card"
+      },
+      "orderConfirm": {
+        "title": "Confirm AI-Suggested Trade"
+      },
+      "proLock": {
+        "title": "AI Signal"
+      }
+    },
+    "button": {
+      "cancel": "Cancel",
+      "confirm": "Confirm {direction}",
+      "submitting": "Submitting…"
+    },
+    "chan": {
+      "toggle": {
+        "close": "Disable Chan Theory labels",
+        "open": "Enable Chan Theory labels (strokes/central hubs/fractals)"
+      }
+    },
+    "composite": {
+      "strongLong": "Strongly Bullish",
+      "strongShort": "Strongly Bearish",
+      "weakLong": "Weakly Bullish",
+      "weakShort": "Weakly Bearish"
+    },
+    "direction": {
+      "buy": "Buy",
+      "openLong": "Open Long",
+      "openShort": "Open Short",
+      "sell": "Sell"
+    },
+    "header": {
+      "accountNotActivated": "⚠ {market} account not set up",
+      "buy": "Buy",
+      "goSetup": "[Set up]",
+      "loading": "Loading…",
+      "loginRegister": "[Login / Register]",
+      "sell": "Sell",
+      "walletMode": "Not logged in. Chart-only mode."
+    },
+    "indicator": {
+      "BOLL": "Bollinger Bands",
+      "MA": "MA 5/10/20/60",
+      "MACD": "MACD (separate panel)",
+      "RSI": "RSI (separate panel)"
+    },
+    "kline": {
+      "contextMenu": {
+        "_": "K-line order context menu",
+        "buy": "Buy {symbol}",
+        "sell": "Sell {symbol}",
+        "shortcuts": "Or: top buttons / ⌘B buy / ⌘S sell",
+        "warning": {
+          "noAccount": "⚠ {market} account not activated. Go to /account to set it up.",
+          "notLoggedIn": "⚠ Not logged in. Clicking to order will guide you to login."
+        }
+      }
+    },
+    "order": {
+      "closeAll": "(Close all)",
+      "confirm": {
+        "title": "Confirm Order"
+      },
+      "error": {
+        "insufficientBalance": "Insufficient balance. Short by {amount}."
+      },
+      "note": {
+        "filledByPreset": "Trade size follows your order preset."
+      },
+      "row": {
+        "aiReason": "AI Basis",
+        "availableBalance": "Available Balance",
+        "direction": "Direction",
+        "estimatedCost": "Estimated Total Cost",
+        "estimatedFee": "Estimated Fee",
+        "estimatedFillPrice": "Estimated Fill Price",
+        "estimatedProceeds": "Estimated Proceeds",
+        "marketPrice": "Market Price",
+        "position": "Position",
+        "quantity": "Quantity",
+        "slippage": "(incl. slippage)",
+        "slippageCost": "Slippage Cost",
+        "symbol": "Symbol"
+      }
+    },
+    "period": {
+      "15m": "15m",
+      "1d": "Daily",
+      "1h": "1h",
+      "1w": "Weekly"
+    },
+    "position": {
+      "card": {
+        "held": "Holding"
+      },
+      "closeAll": "Close All",
+      "row": {
+        "avgPrice": "Avg. Price",
+        "currentPrice": "Current Price",
+        "quantity": "Quantity",
+        "unrealizedPnl": "Unrealized P&L"
+      },
+      "sltp": "Stop Loss / Take Profit"
+    },
+    "signal": {
+      "analyzing": "Analyzing…",
+      "confidence": "Confidence {percent}%",
+      "label": "AI Signal",
+      "noSignal": "No signal",
+      "recent": "Recent"
+    },
+    "spot": {
+      "confirm": {
+        "buy": "Buy (Long)",
+        "canCloseQuantity": "Max Closeable",
+        "closeShort": "Buy (Close Short)",
+        "estimatedCost": "Estimated Cost",
+        "hkNotEnoughLots": "Insufficient shares. HK minimum 1 lot ({boardLot} shares).",
+        "insufficientMargin": "Insufficient collateral",
+        "lockMargin": "Collateral Locked",
+        "openShort": "Sell (Open Short)",
+        "operation": "Action",
+        "positionInsufficient": "Position insufficient",
+        "roundedToLots": "· Rounded to lots ({boardLot} ea.)",
+        "sell": "Sell (Close Long)",
+        "shortPositionInsufficient": "Short position insufficient",
+        "shortSettleNote": "Close short: collateral returned + realized P&L settled at entry average price."
+      },
+      "header": {
+        "currentMarket": "Daily Change",
+        "spot": "Spot"
+      },
+      "mainChart": {
+        "params": "BOLL(20,2) · MACD(12,26,9) · Strokes(Gold) / Fractals / Hubs",
+        "title": "Main Chart: K-line + Bollinger Bands + MACD + Chan Theory"
+      },
+      "order": {
+        "accountHint": "Go to Assets to set initial account balance for this market first.",
+        "accountNotActivated": "{market} account not activated",
+        "buyButton": "Buy",
+        "buyCloseShort": "Close Short",
+        "cnNote": "A-shares T+1: buy today, sell from tomorrow · ±10%/20% daily limits · market order execution.",
+        "conditional": "Limit (trigger on arrival)",
+        "currentPosition": "Current Position",
+        "currentShort": "Current Short",
+        "goActivate": "Set Up",
+        "goLogin": "Go Login",
+        "hkBoardLot": "Board lot: {boardLot} shares. Orders rounded to whole lots (min 1 lot).",
+        "hkNotInPool": "Symbol not available for trading",
+        "hkNotInPoolHint": "Only HK main board HKD (~2,406 symbols) available for trading. This symbol is not in the pool (market data still viewable).",
+        "hkNote": "HK stocks T+0: trade same day · no daily limits · board lots ({boardLot} shares) · fee 0.1% stamp + 0.1% commission · market execution.",
+        "limitBuyButton": "Limit Buy",
+        "limitSellButton": "Limit Sell",
+        "loadingBoardLot": "Loading board lot…",
+        "loginHint": "Log in to trade with your Midas account.",
+        "loginRequired": "Login to Order",
+        "long": "Long",
+        "market": "Market",
+        "noPosition": "None",
+        "panel": {
+          "title": "Order"
+        },
+        "quantity": "Quantity",
+        "sellButton": "Sell",
+        "sellOpenShort": "Open Short",
+        "short": "Short",
+        "usLongNote": "US long · spot trading · market execution.",
+        "usShortNote": "Short = negative position record · 1:1 no-leverage with cash collateral · no forced liquidation or funding."
+      }
+    },
+    "symbol": {
+      "search": {
+        "duplicate": "{symbol} already in watchlist",
+        "error": "Failed to add. Please try again.",
+        "noResults": "No matching symbols",
+        "placeholder": "Enter keyword to search all markets",
+        "title": "Search 600519 / NVDA / BTC…"
+      },
+      "switcher": {
+        "hint": "Click or type to search {market} symbols",
+        "hint2": "Type keyword · Current market: {market}",
+        "noResults": "No matching symbols",
+        "placeholder": "Search {market} (code / name)…",
+        "results": "{market} · {count} result(s)"
+      }
+    },
+    "toggle": {
+      "off": "Off",
+      "on": "On"
+    },
+    "toolbar": {
+      "chartNotReady": "Chart not ready",
+      "clearAnnotations": "Annotations cleared",
+      "clearHint": "Clear all drawings (excludes Chan Theory labels)",
+      "drawFailed": "Drawing failed. Please try again.",
+      "fibonacci": "Fibonacci / Channels",
+      "horizontalLine": "Horizontal Line",
+      "rectangle": "Rectangle",
+      "textAnnotation": "Text Annotation",
+      "trendLine": "Trend Line",
+      "verticalLine": "Vertical Line"
+    },
+    "wallet": {
+      "available": "Available",
+      "position": "Position",
+      "totalPnl": "Cumulative P&L"
+    },
+    "watchlist": {
+      "add": "Add",
+      "addHint": "Search symbols (⌘K / Ctrl+K)",
+      "current": "Current",
+      "deleteLabel": "Remove {symbol}",
+      "drag": "Drag to reorder",
+      "empty": {
+        "cta": "Search Symbols",
+        "hint": "Search for a symbol to get started",
+        "title": "No watchlist yet"
+      },
+      "loading": "Loading…",
+      "title": "Watchlist"
+    }
   }
 }
