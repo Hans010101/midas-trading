@@ -60,6 +60,9 @@ class User(Base):
     is_platinum: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false"), default=False,
     )
+    # 语言偏好(i18n Phase 0)· NULL = 跟随浏览器/cookie · 'zh'/'en'(第一批)。
+    # ★双层:cookie 即时生效(复用涨跌色范式)+ 此字段登录后跨设备同步。nullable 不破存量。
+    language_pref: Mapped[str | None] = mapped_column(String(8), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

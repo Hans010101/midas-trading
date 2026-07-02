@@ -108,6 +108,8 @@ class MeOut(BaseModel):
     avatar_id: int | None = None
     # 铂金标记(superadmin 手动设)· 前端据此显/隐铂金自助入口(PR-6 门控 · 真边界仍在后端 PlatinumDep)
     is_platinum: bool = False
+    # 语言偏好(i18n)· NULL = 前端跟随浏览器/cookie · 'zh'/'en'
+    language_pref: str | None = None
 
 
 class ChangePasswordIn(BaseModel):
@@ -478,6 +480,7 @@ async def me(current_user: CurrentUserDep) -> MeOut:
         has_password=current_user.password_hash is not None,
         avatar_id=current_user.avatar_id,
         is_platinum=current_user.is_platinum,
+        language_pref=current_user.language_pref,
     )
 
 
