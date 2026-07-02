@@ -2,6 +2,7 @@ import type { Config } from 'tailwindcss'
 import animate from 'tailwindcss-animate'
 
 const config: Config = {
+  darkMode: 'class',
   content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}'],
   theme: {
     extend: {
@@ -59,10 +60,11 @@ const config: Config = {
           dim: '#5A5A62',
           faint: '#94949C',
         },
-        paper: '#F7F6F1',
-        cream: '#FCFCF9',
-        bull: '#DC143C',
-        bear: '#0F6E5F',
+        // ★暗黑 P0:容器/涨跌 primitives 转 CSS 变量(:root=原 light 值不变,.dark 补明度微调)
+        paper: 'var(--midas-paper)',   // 原 #F7F6F1
+        cream: 'var(--midas-cream)',   // 原 #FCFCF9
+        bull: 'var(--midas-bull)',     // 原 #DC143C(涨朱红·暗底微调不翻转)
+        bear: 'var(--midas-bear)',     // 原 #0F6E5F(跌墨绿·暗底微调不翻转)
         warn: '#B45309',
 
         // ===== 0022 语义层(业务代码引用这层;primitives 不再直接用)=====
@@ -73,9 +75,9 @@ const config: Config = {
         'action-primary': '#C8102E',
         'action-hover': '#9E1024',
         'action-danger': '#C8102E', // 现与 primary 同值 · 独立命名留未来分色余地
-        // 表面(收敛 cream 随机透明度 → 两档)
-        'surface-card': '#FCFCF9', // = cream · 卡片/面板/弹窗实色
-        'surface-subtle': '#F7F6F1', // = paper · 表头/信号条/次级面板
+        // 表面(收敛 cream 随机透明度 → 两档)· ★暗黑 P0 转变量(= cream/paper 同源)
+        'surface-card': 'var(--midas-cream)', // = cream · 卡片/面板/弹窗实色
+        'surface-subtle': 'var(--midas-paper)', // = paper · 表头/信号条/次级面板
         // 文字弱提示 / 状态
         faint: '#94949C', // = ink-faint · 占位/「—」/弱提示
         success: '#0F6E5F', // 独立成功绿(与 down 解耦,不随涨跌翻转)

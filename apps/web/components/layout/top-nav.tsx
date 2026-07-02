@@ -20,6 +20,7 @@ import { useEffect, useState } from 'react'
 import { UserAvatar } from '@/components/account/user-avatar'
 import { CommandPalette } from '@/components/layout/command-palette'
 import { MarketSwitcher } from '@/components/layout/market-switcher'
+import { ThemeToggle } from '@/components/layout/theme-toggle'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -62,8 +63,10 @@ export function TopNav() {
           <MarketSwitcher />
         </div>
 
-        {/* 右:Cmd+K 搜索入口 + 用户头像下拉(登录态)/ 登录入口(未登录)/ loading 占位 */}
+        {/* 右:主题切换 + Cmd+K 搜索入口 + 用户头像下拉(登录态)/ 登录入口(未登录)/ loading 占位 */}
         <div className="flex items-center gap-3">
+          {/* ★暗黑模式 P0:浅↔深 一键切(与用户菜单里的设置页三档独立·都能用) */}
+          <ThemeToggle />
           {/* Cmd+K 命令面板入口(搜品种 / 跳功能页)· 移动端只显 🔍 图标 */}
           <button
             type="button"
