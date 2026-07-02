@@ -1,16 +1,994 @@
 {
+  "academy": {
+    "academy": {
+      "badge": "已结业",
+      "celebration": "知道了",
+      "exam": "已结业 · 可重考",
+      "glossary": "教学内容,仅供学习参考,不构成投资建议。",
+      "home": "名词词典",
+      "nav": "名词词典",
+      "practice": "去实战练",
+      "progress": "已学 {done}/{total}",
+      "promo": "限时免费 · 答题赢会员",
+      "quiz": "随堂小测",
+      "stage": "阶段不存在"
+    }
+  },
+  "backendErrors": {
+    "admin_asset_not_found": "素材不存在",
+    "admin_file_empty": "文件为空",
+    "admin_file_upload_both_required": "PDF 与 md 文件都必须上传且非空",
+    "admin_report_not_found": "报告不存在",
+    "admin_screenshot_not_found": "截图不存在",
+    "admin_tweet_not_found": "推文不存在或已过期",
+    "admin_user_not_found": "用户不存在",
+    "admin_weekly_report_not_found": "周报投递不存在",
+    "intelligent_admin_atr_multiplier": "ATR 倍数必须 > 0",
+    "intelligent_admin_capital": "起始资金必须 > 0",
+    "intelligent_admin_direction": "which 必须是 long/short",
+    "intelligent_admin_leverage": "杠杆必须在 1-20 倍",
+    "intelligent_admin_max_positions": "最大总持仓数必须 > 0",
+    "intelligent_admin_position_size": "每单本金必须在 10-10000 U",
+    "intelligent_admin_threshold": "阈值必须 > 0",
+    "intelligent_admin_weight": "权重必须 ≥ 0",
+    "managed_trading_capital": "起始资金必须 > 0",
+    "managed_trading_exit_type": "which 必须是 tp/signal/timeout",
+    "managed_trading_leverage": "杠杆必须在 1-20 倍",
+    "managed_trading_max_positions": "最大总持仓数必须 > 0",
+    "managed_trading_position_size": "每单本金必须在 10-10000 U",
+    "managed_trading_tp_target": "止盈目标(盈利%)必须 > 0",
+    "payment_order_not_found": "订单不存在",
+    "platinum_self_atr_multiplier": "ATR 倍数必须 > 0",
+    "platinum_self_capital": "起始资金必须 > 0",
+    "platinum_self_direction": "which 必须是 long/short",
+    "platinum_self_leverage": "杠杆必须在 1-20 倍",
+    "platinum_self_max_positions": "最大总持仓数必须 > 0",
+    "platinum_self_position_size": "每单本金必须在 10-10000 U",
+    "platinum_self_threshold": "阈值必须 > 0",
+    "platinum_self_weight": "权重必须 ≥ 0",
+    "support_ticket_description_empty": "问题描述不能为空",
+    "support_ticket_email_invalid": "联系邮箱格式不正确",
+    "support_ticket_image_format": "图片仅支持 JPEG / PNG",
+    "support_ticket_unknown_type": "未知工单类型"
+  },
+  "backendLabels": {
+    "actionable_direction": "buy",
+    "actionable_hint": "开多参考",
+    "actionable_size_note": "默认下单预设仓位",
+    "ai_decision_composite_label": "强多",
+    "indicator_label": "最新价",
+    "plan_direction": "long",
+    "strategy_recommend_reason": "近 5 日上行趋势 · 适合均线金叉跟踪趋势",
+    "strategy_signal_reason": "MA5 上穿 MA20(金叉)",
+    "strength_note": "超卖深度 · RSI 探至"
+  },
   "common": {
-    "appName": "点金 Midas",
-    "loading": "载入中…",
-    "retry": "重试",
-    "error": "出错了",
-    "confirm": "确认",
-    "cancel": "取消"
+    "account": {
+      "_": "个人中心",
+      "tab": "当前持仓"
+    },
+    "conditional": {
+      "error": "请填写触发价",
+      "status": "待触发",
+      "type": "限价买入"
+    },
+    "market": "A 股",
+    "nav": {
+      "market": "市场切换",
+      "palette": "搜品种(600519 / NVDA / BTC / 腾讯)· 或跳功能页…",
+      "theme": "切换到浅色主题",
+      "top": "搜索品种(⌘K)"
+    },
+    "palette": "终端",
+    "payment": {
+      "_": "无自动续费、无隐藏条款。你的订阅直接支持点金持续打磨,而非广告或卖数据。",
+      "benefit": "AI 沙盘诊断",
+      "plan": "月度"
+    },
+    "redeem": {
+      "_": "月卡",
+      "error": "兑换码无效",
+      "status": "未用"
+    },
+    "reward": "已获赠 7 天 Pro 试用 · 邀请奖励 +15 天已到账",
+    "ui": {
+      "direction": "多",
+      "state": "载入中…"
+    }
   },
-  "nav": {
-    "screener": "选股筛选器"
+  "landing": {
+    "academy": {
+      "caveat": "教学内容,仅供学习参考,不构成投资建议。",
+      "cta_button": "答题赢会员",
+      "cta_hint": "免费进入 · 零真金风险",
+      "description": "由浅入深的免费图文课程,从 K 线、做多做空到杠杆、缠论、合约,六大模块带你一步步看懂市场。配 88 条名词词典,随时查、随时学。",
+      "eyebrow": "交易训练营",
+      "incentive_description": "学完一个模块、通过结业测验,就送 1 周会员;六大模块全部通关,最多领 6 周。",
+      "incentive_title": "边学边赢会员",
+      "stats": "大模块 / 练习题 / 词典",
+      "title": "从入门到缠论、合约的系统教程"
+    },
+    "bot": {
+      "description": "绑定后,在 Telegram 里就能远程查行情、看持仓、下单,并实时收到成交与预警推送——不用一直盯着网页。",
+      "email_description": "每周一份精排周报(含 PDF)直达邮箱:行业强弱、核心结论、下周关注一览。登录后在「通知与提醒」设置页一键订阅。",
+      "email_eyebrow": "另一种触达 · 无需机器人",
+      "email_title": "邮件订阅 · 全球市场与行业机会周报",
+      "eyebrow": "点金 MIDAS · 远程控制",
+      "features": "查行情:四市场(加密 / 美股 / A股 / 港股),字母代码、数字代码、中文名都能认 / 看 K 线图(Telegram) / 查自选、查持仓(现货 + 永续) / 交易下单:支持二次确认 / 实时推送:成交、价格异动(±5%)、告警触发、强平提醒 / 告警规则启停、安静时段设置",
+      "title": "Telegram 机器人 · 把交易装进你的聊天软件"
+    },
+    "contact": {
+      "contact_us": "联系我们",
+      "login_prompt": "请先登录后提交工单(或直接邮件 support@midastrade.asia)"
+    },
+    "cta_bottom": {
+      "button": "进入终端",
+      "subtitle": "0 风险 · 0 成本 · 不需要真金白银,只磨练你的判断",
+      "title": "开始你的第一笔虚拟交易"
+    },
+    "features": {
+      "alerts": "智能推送 / Telegram / 邮件 · 价格异动 + 成交提醒 + 自定义阈值",
+      "candlestick": "K 线工作台 / MA / MACD / RSI / BOLL 指标 + 多周期(1m → 1w)+ 四市场标的搜索",
+      "chan_description": "基于 czsc 库识别:笔(帝王金连线)· 顶分型(墨绿▽)· 底分型(朱红△)· 中枢(淡灰蓝矩形)· 一/二/三类买卖点。画在你熟悉的 K 线上,不打扰主图阅读。",
+      "chan_title": "缠论自动标注",
+      "more_title": "还有这些,开箱即用",
+      "signals": "策略信号 / 多策略形态扫描 · 关键价位与信号成色 · 四市场主图实时标注 · 仅供参考,不构成投资建议",
+      "virtual_trading": "虚拟交易 / 四市场独立钱包 · USDT / USD / CNY / HKD 原币结算 · 永远不接真实交易"
+    },
+    "footer": {
+      "brand": "点金 Midas / 产品 / 市场 / AI 沙盘助手 / 策略研究室 / 会员 / 法务 / 服务条款 / 隐私政策 / 风险提示 / 联系我们",
+      "disclaimer_main": "点金 Midas · 仅供模拟交易,不构成投资建议。所有数据来自公开行情接口,AI 分析输出仅作参考。",
+      "disclaimer_secondary": "仅供模拟交易,不构成投资建议"
+    },
+    "hero": {
+      "cta_primary": "开始分析",
+      "cta_secondary": "查看功能",
+      "description": "覆盖加密货币、美股、A 股与港股四大市场——AI 决策卡研判多空,沙盘看懂结构,研究室回测验证想法,虚拟资金零风险磨练交易直觉。",
+      "eyebrow": "AI 原生金融分析终端",
+      "stats": "AI 决策卡 / 11 因子结构沙盘 / 回测研究室 / 虚拟资金 0 风险",
+      "title": "四市通览 · 点石成金"
+    },
+    "lab": {
+      "caveat": "历史表现不代表未来收益,回测结果仅供参考,不构成投资建议。",
+      "description": "「感觉能行」不算数。选好策略、标的与时间段,研究室用历史行情把这条想法完整跑一遍——收益曲线、胜率、最大回撤,清清楚楚摆在报告里。",
+      "eyebrow": "策略研究室",
+      "features": "一键回测:策略 × 标的 × 区间,几分钟出完整报告 / 收益曲线 + 每笔交易明细,赚在哪亏在哪都能复盘 / AI 判断命中率回看:它说对了多少,系统自己记账,敢被检验",
+      "title": "想法,先过数据这一关"
+    },
+    "markets": {
+      "a_shares": "A 股 / 沪深全市场 · 复权口径透明 / 600519 · 000001 · 300750",
+      "crypto": "加密 / Binance 行情源 · 主流币种全覆盖 / BTC/USDT · ETH/USDT · SOL/USDT",
+      "hk_stocks": "港股 / 恒生指数 · 国企指数 · 港交所主板 / 00700 · 09988 · 03690",
+      "subtitle": "一个终端,覆盖全球主流交易市场",
+      "title": "四市场统一体验",
+      "us_stocks": "美股 / 纳斯达克 · NYSE · 后复权 / NVDA · AAPL · TSLA"
+    },
+    "membership": {
+      "footer_note": "到期自动回落免费版 · 无自动续费 · 仅供模拟交易,不构成投资建议",
+      "free_badge": "免费版",
+      "free_cta": "免费开始",
+      "free_features": "AI 沙盘诊断 5 次 / 月 / 策略回测 3 次 / 月 / 加密 · 美股 · A 股 · 港股 四市场 K 线与行情 / 合约维度图 · 缠论自动标注 / 虚拟交易与条件单 · Telegram 推送",
+      "free_title": "零成本起步",
+      "pro_badge": "Pro 会员",
+      "pro_badge_exclusive": "专属",
+      "pro_coming": "更多专属功能陆续上线",
+      "pro_cta": "了解会员",
+      "pro_features": "AI 沙盘诊断 300 次 / 月 / 策略回测 150 次 / 月 / AI 决策卡 · 综合评分 + 多空研判 + 关键位(专属) / 实战策略清单 · 命中即提示的可执行策略(专属)",
+      "pro_title": "解锁全部 AI 决策能力",
+      "subtitle": "免费起步,四市场行情与缠论标注随时看;Pro 解锁高额度 AI 与决策卡",
+      "title": "会员体系"
+    },
+    "nav": "市场 / 沙盘 / 策略室 / 训练营 / 机器人 / 会员 / 登录 / 进入终端",
+    "practice": {
+      "description": "AI 决策卡给出结构化研判与关键位;看好就一键模拟下单;再挂上止盈止损,触发自动执行——一条完整的交易闭环,不花一分真钱。",
+      "eyebrow": "虚拟实战",
+      "steps": "① AI 决策卡 · 评分与关键位 / ② 一键模拟下单 · 虚拟资金 / ③ 条件单守仓 · 触发自动执行",
+      "title": "从 AI 研判到下单守仓,全程虚拟"
+    },
+    "sandbox": {
+      "caveat": "当前覆盖加密市场,更多市场逐步接入。结构描述非价格预测,不构成投资建议。",
+      "description": "市场不止有价格。沙盘助手把多空人数、大户持仓、资金情绪等 11 项市场结构因子放进一张关联图谱——哪些因子互相印证、哪些正在背离,一眼看清;AI 再用中文把当前结构讲明白:现在是谁在买、谁在撤、拥挤在哪边。",
+      "eyebrow": "AI 沙盘助手",
+      "features": "11 项结构因子,数值与判定分开呈现,不混为一谈 / 因子关联图谱:背离与共振自动识别、规则可解释 / 结论先行的中文结构诊断,附数据口径说明",
+      "title": "先看懂结构,再出手"
+    },
+    "showcase": {
+      "subtitle": "全球四市场一屏俯瞰 · 加密 · 美股 · A 股 · 港股 · 实时指数纵览",
+      "title": "打开即是专业终端"
+    }
   },
-  "disclaimer": {
-    "advisory": "仅供参考,不构成投资建议。"
+  "market": {
+    "breadth": {
+      "down": "跌",
+      "flat": "平",
+      "limit_down": "跌停",
+      "limit_up": "涨停",
+      "threshold_note": "(按涨跌幅阈值估算)",
+      "total_turnover": "两市成交额",
+      "up": "涨"
+    },
+    "cn": {
+      "board_error": "暂时无法读取榜单",
+      "board_error_hint": "后端不可达 · 稍后自动重试",
+      "board_pending": "榜单数据待采集",
+      "board_pending_hint": "A股交易时段自动采集(每 3 分钟)",
+      "ranking_footer": "榜单显示前 100 · 更多请搜索查询",
+      "search_mode_result": "全市场搜索结果",
+      "search_placeholder": "搜索 A股全市场(代码 / 名称 · ~5500)",
+      "search_result_count": "命中 {count} 只 · 点击看详情",
+      "sector_hint": "成交额加权 · 取主要 24 板块 · 色深=涨跌幅强弱 · 悬停看领涨/家数/成交额",
+      "sector_title": "行业板块",
+      "sentiment_title": "市场情绪"
+    },
+    "hk": {
+      "board_error": "暂时无法读取榜单",
+      "board_error_hint": "后端不可达 · 稍后自动重试",
+      "board_pending": "榜单数据待采集",
+      "board_pending_hint": "港股交易时段自动采集(每 3 分钟)",
+      "breadth_total_turnover": "主要成分股成交额",
+      "no_data": "暂无数据",
+      "no_match": "无匹配港股",
+      "ranking_footer": "榜单显示前 100 · 更多请搜索查询",
+      "row_tooltip": "点击查看详情(K线 + 缠论)",
+      "search_placeholder": "搜索港股(主要成分股)",
+      "search_result_count": "命中 {count} 只 · 显示前 {display}",
+      "sector_hint": "活跃精选 ~900 只 · 色深=涨跌幅强弱 · 悬停看领涨/家数/成交",
+      "sector_title": "行业板块",
+      "sentiment_subtitle": "活跃精选 ~900 只 · 非全市场",
+      "sentiment_title": "市场情绪 · 主要成分股"
+    },
+    "market": {
+      "screener_button": "选股筛选器 →",
+      "title": "大盘指数"
+    },
+    "row": {
+      "tooltip": "点击查看详情 · 下单"
+    },
+    "sector": {
+      "heatmap_tooltip": "{name} · 涨跌 {change_pct} · 家数 {count} · 成交额 {amount}",
+      "heatmap_tooltip_with_leader": "{base} · 领涨 {leader_name} {leader_change_pct}",
+      "stock_count": "只"
+    },
+    "state": {
+      "indices_pending": "指数数据待采集",
+      "indices_pending_hint": "采集任务将在交易时段写入快照",
+      "loading_quote": "暂时无法读取行情",
+      "no_data": "暂无数据",
+      "no_match": "无匹配标的(试试代码或名称)",
+      "quote_error_hint": "后端不可达 · 稍后自动重试",
+      "searching": "搜索中…"
+    },
+    "tab": {
+      "amount": "成交额榜",
+      "gainers": "涨幅榜",
+      "losers": "跌幅榜"
+    },
+    "table": {
+      "change_pct": "涨跌幅",
+      "code": "代码",
+      "last_price": "最新价",
+      "name": "名称",
+      "sector": "板块",
+      "turnover": "成交额"
+    },
+    "us": {
+      "board_error": "暂时无法读取榜单",
+      "board_error_hint": "后端不可达 · 稍后自动重试",
+      "board_pending": "榜单数据待采集",
+      "board_pending_hint": "美股交易时段自动采集(每 5 分钟)",
+      "hot_stocks_title": "热门美股 · 重点关注池",
+      "no_data": "暂无数据",
+      "no_match": "无匹配(池内仅策展 128 只 · 池外搜不到)",
+      "pool_size_hint": "池内 {size} 只 · 策展非全市场",
+      "ranking_footer": "榜单显示前 100 · 更多请搜索查询",
+      "row_tooltip": "点击查看详情 · 做多 / 卖空下单",
+      "search_mode_result": "重点关注池搜索结果",
+      "search_placeholder": "搜索重点关注池(策展 128 · 非全美股)",
+      "search_result_count": "命中 {count} 只 · 点击看详情",
+      "sector_hint": "等权均值 · 色深=涨跌幅强弱 · 悬停看领涨/家数/成交额",
+      "sector_title": "行业板块 · 中概股板块"
+    }
+  },
+  "screener": {
+    "account": {
+      "alerts": {
+        "title": "通知与提醒"
+      }
+    },
+    "action": {
+      "copy_failure": "复制失败 · 请手动选择复制",
+      "test_disabled": "绑定 {channel} 后可用",
+      "test_error": "请求失败",
+      "test_failure": "推送失败 · {error}",
+      "test_success": "{channel} 测试消息已发送"
+    },
+    "input": {
+      "boll_example": "如 10",
+      "max": "最高",
+      "min": "最低",
+      "rsi_max": "100",
+      "rsi_min": "0",
+      "volume_example": "如 1.5"
+    },
+    "market": {
+      "cn": "A股",
+      "crypto": "加密",
+      "hk": "港股",
+      "us": "美股"
+    },
+    "nav": {
+      "screener": "选股筛选器"
+    },
+    "operator": {
+      "gt": ">",
+      "gte": "≥",
+      "lt": "<",
+      "lte": "≤"
+    },
+    "screener": {
+      "boll_suffix": "%(收窄)",
+      "button": {
+        "filter": "筛选",
+        "filtering": "筛选中…"
+      },
+      "error": "筛选失败,请稍后重试。",
+      "filter": {
+        "boll_bandwidth": "布林带宽",
+        "change": "涨跌幅 %",
+        "kdj_golden": "KDJ 金叉",
+        "ma_bull": "均线多头排列(MA5 > MA20 > MA60)",
+        "macd_golden": "MACD 金叉",
+        "price": "现价",
+        "rsi": "RSI(14)",
+        "volume_ratio": "量比"
+      },
+      "market": {
+        "cn": "A股",
+        "hk": "港股",
+        "us": "美股"
+      },
+      "results": {
+        "capped_warning": "技术指标筛选覆盖成交最活跃的部分标的(港股仅主要成分股有 K线深度)· 结果可能未含全市场。",
+        "empty": "没有符合条件的标的,试试放宽条件。",
+        "scanned": "扫描 {count} 只",
+        "title": "符合条件的标的"
+      },
+      "subtitle": "按价格 / 涨跌幅 / RSI / 均线排列,筛选符合条件的标的(A股 / 美股 / 港股现货 · 仅供参考)。"
+    },
+    "settings": {
+      "alerts": {
+        "add_error": "添加失败",
+        "add_success": "规则已添加",
+        "apply_error": "应用失败",
+        "apply_success": "已应用推荐规则:新增 {created} 条 · 跳过 {skipped} 条",
+        "delete_aria": "删除规则",
+        "disabled": "停用",
+        "empty": "还没有规则。用上方一键应用,或在下方添加。",
+        "enabled": "启用",
+        "form": {
+          "button": "添加",
+          "select_indicator": "选指标…",
+          "symbol_placeholder": "代码 如 NVDA",
+          "threshold_placeholder": "阈值",
+          "timeframe_hint": "该指标按日线(1d)计算",
+          "title": "添加规则"
+        },
+        "limit_reached": "已达 {max} 条上限 · 删除部分规则后可继续添加。",
+        "loading": "载入中…",
+        "recommended": {
+          "button": "✨ 一键应用推荐规则",
+          "intro": "新手不知从何下手?一键应用一套推荐规则(恐贪极值 / A股普跌 / 龙头 RSI 超买超卖)。"
+        },
+        "subtitle": "命中规则会经 Telegram 推送(需先绑定)· 上限 {max} 条",
+        "title": "告警规则",
+        "validation": {
+          "missing_indicator": "请选择指标和市场",
+          "missing_symbol": "该指标需要标的代码",
+          "missing_threshold": "请输入阈值"
+        }
+      },
+      "notifications": {
+        "dott_alert": {
+          "badge": "Pro 专属",
+          "digest": {
+            "hint": "每小时推送多空分类概览(偏多/中性/偏空各前 5)",
+            "label": "做T定时全景"
+          },
+          "disclaimer": "布林做T 信号(加密永续)推送到你绑定的 Telegram · 仅供参考,不构成投资建议",
+          "pro_hint": "Pro 会员专属 · 点此开通后可订阅",
+          "pro_title": "做T定时全景 / 做T行情转换",
+          "saving": "保存中…",
+          "title": "做T信号推送",
+          "toggle_error": "保存失败",
+          "toggle_off": "已关闭{label}",
+          "toggle_on": "已开启{label}",
+          "transition": {
+            "hint": "布林结构发生转换时推送(状态转换提醒)",
+            "label": "做T行情转换"
+          },
+          "unlock_button": "开通 Pro",
+          "warning": "· ⚠ 需先绑定 Telegram(上方)才会真正收到"
+        },
+        "email": {
+          "price": {
+            "hint": "自选股 ±5% · 5 分钟同标的去重",
+            "label": "价格异动通知"
+          },
+          "title": "邮件推送/订阅",
+          "trade": {
+            "hint": "下单成交后推送",
+            "label": "成交通知"
+          },
+          "weekly": {
+            "hint": "每周一全市场周报发到邮箱(含 PDF)· TG/飞书提示已发邮箱",
+            "label": "订阅市场周报"
+          }
+        },
+        "feishu": {
+          "alt_method": "(也可发「/bind {token}」· 直接粘贴绑定码同样可绑)",
+          "bind_button": "绑定飞书",
+          "bind_confirm": "我已完成绑定 · 刷新状态",
+          "bind_expires": "绑定码 {minutes} 分钟内有效 · 先复制 · 点「在飞书中打开」直达会话 · 粘贴发送 · 完成后点下方刷新",
+          "bound_text": "已绑定到你的飞书 · 成交 / 价格异动 / 告警会推送到这里。",
+          "copy_label": "已复制绑定码",
+          "deep_link_button": "🪶 在飞书中打开 → 粘贴绑定码",
+          "manual_title": "在飞书里打开点金 Midas 应用,发送下面这串绑定码:",
+          "status": {
+            "bound": "✓ 已绑定",
+            "unbound": "未绑定"
+          },
+          "test_button": "发送测试",
+          "title": "飞书",
+          "unavailable": "飞书绑定即将开放(等待应用配置)· 稍后再来。",
+          "unbind_button": "解绑",
+          "unbind_error": "解绑失败",
+          "unbind_success": "已解绑飞书"
+        },
+        "loading": "载入中…",
+        "quiet_hours": {
+          "cross_night_hint": "ⓘ 起始时间晚于结束时间 → 跨夜窗口(如 23:00 静默到次日 07:00)",
+          "description": "在此时段内,自选异动 / 规则告警等普通推送会被静默。",
+          "end_label": "结束时间",
+          "end_label_next_day": "结束时间(次日)",
+          "exception": "成交 / 强平等关键事件不受影响",
+          "exception_suffix": ",夜间也会照常推送。",
+          "save_button": "保存安静时段",
+          "save_success": "安静时段已保存",
+          "start_label": "起始时间",
+          "status": {
+            "disabled": "已关闭",
+            "enabled": "已启用"
+          },
+          "title": "告警安静时段",
+          "toggle": {
+            "hint_disabled": "关闭后所有时段都会推送(夜间不静默)",
+            "hint_enabled": "当前 {start} – {end}{cross:' (次日)':''} · {tz}",
+            "label": "启用安静时段"
+          },
+          "tz_label": "时区"
+        },
+        "save_button": "保存开关",
+        "save_error": "保存失败",
+        "save_success": "推送开关已保存",
+        "subtitle": "绑定 Telegram{admin:' / 飞书'} 后,成交通知 / 价格异动会推送到对应渠道 · 未绑定只有站内提示",
+        "telegram": {
+          "bind_button": "绑定 Telegram",
+          "bind_confirm": "我已完成绑定 · 刷新状态",
+          "bind_expires": "链接 {minutes} 分钟内有效 · 在 bot 里完成 /start 后点下方刷新",
+          "bound_text": "已绑定到你的 Telegram · 成交 / 价格异动 / 告警会推送到这里。",
+          "copy_button": "复制",
+          "copy_label": "已复制绑定指令",
+          "deep_link_button": "在 Telegram 中打开",
+          "manual_title": "在官方 bot 里发送:",
+          "qr_hint": "用手机 Telegram 扫码,或",
+          "rebind_detail": "推送已升级为统一官方 bot。若你此前绑定过,旧绑定已失效,请重新绑定;首次使用直接绑定即可。",
+          "rebind_notice": "请绑定 / 重新绑定 Telegram",
+          "status": {
+            "bound": "✓ 已绑定",
+            "unbound": "未绑定"
+          },
+          "test_button": "发送测试",
+          "title": "Telegram",
+          "unavailable": "绑定功能即将开放(等待 bot 配置)· 稍后再来。",
+          "unbind_button": "解绑",
+          "unbind_error": "解绑失败",
+          "unbind_success": "已解绑 Telegram"
+        },
+        "title": "消息推送"
+      }
+    },
+    "state": {
+      "off": "关",
+      "on": "开"
+    }
+  },
+  "settings": {
+    "account": {
+      "identity": {
+        "_": "账户基本信息",
+        "avatar_error": "头像更新失败,请重试",
+        "avatar_picker": "选择头像",
+        "avatar_success": "头像已更新",
+        "change_avatar": "更换头像",
+        "change_password": "修改密码",
+        "default_avatar": "默认 · 邮箱首字母",
+        "default_avatar_aria": "默认头像(首字母)",
+        "oauth_note": "你通过 Google 登录,账户安全由 Google 管理(无需在此设置密码)。",
+        "password": {
+          "cancel": "取消",
+          "confirm": "确认新密码",
+          "current": "当前密码",
+          "error": "修改失败,请稍后重试",
+          "error_empty": "请输入当前密码",
+          "error_mismatch": "两次输入的新密码不一致",
+          "error_short": "新密码至少 {MIN_PW} 位",
+          "new": "新密码(至少 {MIN_PW} 位)",
+          "save": "保存",
+          "success": "密码已修改"
+        }
+      },
+      "membership": {
+        "_": "会员 · 支持者计划",
+        "benefits_feature": "权益",
+        "benefits_free": "免费版",
+        "benefits_pro": "Pro",
+        "benefits_title": "Pro 解锁更高额度",
+        "best_value": "最划算",
+        "contact_support": "联系客服",
+        "cta_renew": "续费",
+        "cta_upgrade": "开通 Pro",
+        "current": "当前会员",
+        "free": "免费版",
+        "monthly_avg": "月均 {monthly} USDT",
+        "pro_expires": "Pro · 到期 {date}",
+        "redeem": "兑换码",
+        "redeem_button": "兑换",
+        "redeem_button_pending": "兑换中…",
+        "redeem_desc": "输入兑换码开通 / 续期 Pro",
+        "redeem_placeholder": "输入兑换码",
+        "savings": "· 省 {save}%",
+        "support": "支付遇到问题?(未到账 / 重复扣款 / 开通失败)"
+      },
+      "nav": {
+        "alerts": "通知与提醒",
+        "aria": "用户中心导航",
+        "center": "个人中心",
+        "overview": "资产总览",
+        "positions": "持仓与订单",
+        "profile": "偏好设置"
+      },
+      "payment": {
+        "activated": "Pro 已开通",
+        "close": "关闭",
+        "done": "完成",
+        "error_generate": "生成收款单失败",
+        "generating": "生成收款单…",
+        "order_id": "订单号 {id}…",
+        "oxapay_desc": "前往 OxaPay 安全收款页完成付款 · 支持 USDT 等多链(在收款页内选择链与币种)",
+        "pay_button": "前往收款页付款",
+        "retry": "重试",
+        "success": "Pro 已开通 · 感谢支持点金",
+        "success_message": "{tier} Pro 已开通 · 全部更高额度已生效",
+        "title": "开通 Pro · {tier}",
+        "waiting": "等待到账 · 链上确认约几分钟,确认后自动开通(本页可保持打开)"
+      },
+      "profile": "偏好设置",
+      "support": {
+        "activation_failed": "开通失败",
+        "category_label": "问题类型",
+        "close": "关闭",
+        "description_label": "问题描述",
+        "description_placeholder": "请描述你遇到的问题(如订单号、付款时间、付了多少、链上交易哈希等),便于我们核查。",
+        "done": "完成",
+        "duplicate_charge": "重复扣款",
+        "email_label": "联系邮箱",
+        "error_empty": "请填写问题描述",
+        "error_image_size": "单张图片不得超过 {MAX_MB}MB",
+        "error_image_type": "图片仅支持 JPEG / PNG",
+        "error_max_images": "最多上传 {MAX_IMAGES} 张图片",
+        "error_too_long": "问题描述过长(上限 {MAX_DESC} 字)",
+        "not_received": "未到账",
+        "other": "其他问题",
+        "remove_image_aria": "移除图片",
+        "screenshots_label": "截图(可选 · 最多 {MAX_IMAGES} 张 · JPEG/PNG · ≤{MAX_MB}MB)",
+        "submit": "提交工单",
+        "submit_note": "我们预计会在 0-3 天内给您回复解决",
+        "submitted": "工单已提交",
+        "success_message": "工单已提交,我们会通过邮件与你联系",
+        "ticket_id": "工单号 #{id}",
+        "title": "联系客服"
+      },
+      "wallet": {
+        "_": "账户资金设置",
+        "activate_button": "激活并保存",
+        "activated": "✓ 已激活 · 初始 {amount}",
+        "cash": "可用",
+        "description": "三个市场各用各的货币,绝不折算合计 · 没设置的市场无法下单",
+        "error_empty": "请填写初始资金金额",
+        "error_invalid": "金额必须是正数",
+        "error_limit": "单市场金额上限 9.99 亿",
+        "input_placeholder_edit": "改金额会重置该市场",
+        "input_placeholder_new": "输入初始资金",
+        "not_set": "⚠ 未设置 · 设置后才能在 {market} 下单",
+        "positions": "持仓",
+        "realized_pnl": "累计已实现",
+        "reset_balance": "账户余额改为 {amount}",
+        "reset_button": "重置该市场",
+        "reset_cancel": "取消",
+        "reset_confirm": "确认重置",
+        "reset_desc": "这会清空该市场的:",
+        "reset_positions": "当前持仓(活仓全部清零)",
+        "reset_preserved": "订单流水 + 历史持仓会保留 · 你可以在下方表格查看复盘",
+        "reset_snapshot": "权益曲线快照",
+        "reset_title": "重置{market}账户资金?",
+        "submitting": "提交中…"
+      }
+    },
+    "settings": {
+      "alerts": {
+        "_": "告警规则",
+        "add_button": "添加",
+        "add_rule_title": "添加规则",
+        "apply_button": "✨ 一键应用推荐规则",
+        "at_limit": "已达 {MAX_RULES} 条上限 · 删除部分规则后可继续添加。",
+        "daily_note": "该指标按日线(1d)计算",
+        "delete_aria": "删除规则",
+        "description": "命中规则会经 Telegram 推送(需先绑定)· 上限 {MAX_RULES} 条",
+        "disabled": "停用",
+        "empty": "还没有规则。用上方一键应用,或在下方添加。",
+        "enabled": "启用",
+        "error_add": "添加失败",
+        "error_apply": "应用失败",
+        "error_select": "请选择指标和市场",
+        "error_symbol": "该指标需要标的代码",
+        "error_threshold": "请输入阈值",
+        "loading": "载入中…",
+        "market_cn": "A股",
+        "market_crypto": "加密",
+        "market_hk": "港股",
+        "market_us": "美股",
+        "recommended": "新手不知从何下手?一键应用一套推荐规则(恐贪极值 / A股普跌 / 龙头 RSI 超买超卖)。",
+        "select_indicator": "选指标…",
+        "success_add": "规则已添加",
+        "success_message": "已应用推荐规则:新增 {created} 条 · 跳过 {skipped} 条",
+        "symbol_placeholder": "代码 如 NVDA",
+        "threshold_placeholder": "阈值"
+      },
+      "bot_preset": {
+        "_": "Bot 下单默认参数",
+        "cross": "全仓",
+        "description": "在 Telegram bot 里下单时套用这套默认参数(永续「开多/开空」· 现货「买入/卖出」)",
+        "error_leverage": "杠杆需在 1–20x",
+        "error_notional": "每单名义额需大于 0",
+        "isolated": "逐仓",
+        "leverage": "永续杠杆(1–20x)",
+        "margin_mode": "保证金模式",
+        "margin_note": "(同 symbol 不可混用 · 切模式前需先平掉该 symbol 活仓)",
+        "perp_notional": "永续每单名义额(USDT)",
+        "save_button": "保存默认参数",
+        "spot_cny": "A股每单名义额(CNY)",
+        "spot_usd": "美股每单名义额(USD)",
+        "success": "Bot 下单默认参数已保存"
+      },
+      "color_pref": {
+        "_": "涨跌色偏好",
+        "description": "选择涨跌的颜色习惯 · 即时生效于全站 A股 / 美股 / 加密的行情、榜单、K 线",
+        "green_up": "绿涨红跌",
+        "green_up_note": "欧美 / 港股习惯",
+        "note": "偏好按浏览器保存(非账号同步)· 中枢淡灰蓝等其它配色不受影响",
+        "red_up": "红涨绿跌",
+        "red_up_note": "默认 · A股传统"
+      },
+      "detail_prefs": {
+        "_": "详情页默认显示",
+        "boll": "布林带",
+        "chan": "缠论标注",
+        "description": "设置打开币种详情页时,默认显示哪些图层、用哪个周期",
+        "macd": "MACD",
+        "note": "偏好按浏览器保存(非账号同步)· 详情页打开时按此默认显示(进页面后仍可临时调整)",
+        "period": "默认周期"
+      },
+      "notifications": {
+        "_": "消息推送",
+        "description": "绑定 Telegram{isAdmin ? ' / 飞书' : ''}后,成交通知 / 价格异动会推送到对应渠道 · 未绑定只有站内提示",
+        "dott": {
+          "badge": "Pro 专属",
+          "description": "布林做T 信号(加密永续)推送到你绑定的 Telegram · 仅供参考,不构成投资建议",
+          "digest": "做T定时全景",
+          "digest_hint": "每小时推送多空分类概览(偏多/中性/偏空各前 5)",
+          "pro_only": "Pro 会员专属 · 点此开通后可订阅",
+          "saving": "保存中…",
+          "title": "做T信号推送",
+          "transition": "做T行情转换",
+          "transition_hint": "布林结构发生转换时推送(状态转换提醒)",
+          "unbound_warning": "⚠ 需先绑定 Telegram(上方)才会真正收到",
+          "upgrade": "开通 Pro"
+        },
+        "email": {
+          "price": "价格异动通知",
+          "price_hint": "自选股 ±5% · 5 分钟同标的去重",
+          "save": "保存开关",
+          "success": "推送开关已保存",
+          "trade": "成交通知",
+          "trade_hint": "下单成交后推送",
+          "weekly": "订阅市场周报",
+          "weekly_hint": "每周一全市场周报发到邮箱(含 PDF)· TG/飞书提示已发邮箱"
+        },
+        "feishu": {
+          "bound": "✓ 已绑定",
+          "bound_desc": "已绑定到你的飞书 · 成交 / 价格异动 / 告警会推送到这里。",
+          "unbound": "未绑定"
+        },
+        "telegram": {
+          "bind_button": "绑定 Telegram",
+          "bound": "✓ 已绑定",
+          "bound_desc": "已绑定到你的 Telegram · 成交 / 价格异动 / 告警会推送到这里。",
+          "copy_label": "已复制绑定指令",
+          "link_expiry": "链接 {minutes} 分钟内有效 · 在 bot 里完成 /start 后点下方刷新",
+          "open_link": "在 Telegram 中打开",
+          "rebind_desc": "推送已升级为统一官方 bot。若你此前绑定过,旧绑定已失效,请重新绑定;首次使用直接绑定即可。",
+          "rebind_title": "请绑定 / 重新绑定 Telegram",
+          "refresh_button": "我已完成绑定 · 刷新状态",
+          "scan": "用手机 Telegram 扫码,或",
+          "send_text": "在官方 bot 里发送:",
+          "unavailable": "绑定功能即将开放(等待 bot 配置)· 稍后再来。",
+          "unbind": "解绑",
+          "unbound": "未绑定"
+        },
+        "tz_beijing": "北京 / 上海 (UTC+8)",
+        "tz_london": "伦敦 (UTC+0/+1)",
+        "tz_newyork": "纽约 (UTC-5/-4)",
+        "tz_singapore": "新加坡 (UTC+8)",
+        "tz_tokyo": "东京 (UTC+9)"
+      },
+      "theme": {
+        "_": "主题外观",
+        "dark": "深色",
+        "dark_note": "夜晚版",
+        "description": "明暗主题切换 · 即时生效 · ★只暗化背景 / 文字 / 容器,交易涨跌色语义不变",
+        "light": "浅色",
+        "light_note": "白天版",
+        "note": "偏好按浏览器保存(非账号同步)· 与涨跌色偏好独立设置,互不影响",
+        "system": "跟随系统",
+        "system_note": "默认 · 跟 OS 明暗"
+      }
+    }
+  },
+  "workbench": {
+    "ai": {
+      "decisionCard": {
+        "actionableAdvice": "操作建议",
+        "cached": "· 缓存命中",
+        "chanSignals": "缠论买卖点",
+        "error": "暂时无法生成决策卡",
+        "keyLevels": "关键位",
+        "realtime": "· 实时计算",
+        "resistance": "阻力",
+        "retry": "重试",
+        "support": "支撑",
+        "technicalAnalysis": "技术面分析",
+        "thinking": "AI 思考中...",
+        "title": "AI 决策卡"
+      },
+      "orderConfirm": {
+        "title": "确认按 AI 建议下单"
+      },
+      "proLock": {
+        "title": "AI 信号"
+      }
+    },
+    "button": {
+      "cancel": "取消",
+      "confirm": "确认{direction}",
+      "submitting": "提交中…"
+    },
+    "chan": {
+      "toggle": {
+        "close": "关闭缠论标注(笔/中枢/分型)",
+        "open": "开启缠论标注(笔/中枢/分型)"
+      }
+    },
+    "composite": {
+      "strongLong": "强多",
+      "strongShort": "强空",
+      "weakLong": "弱多",
+      "weakShort": "弱空"
+    },
+    "direction": {
+      "buy": "买入",
+      "openLong": "开多",
+      "openShort": "开空",
+      "sell": "卖出"
+    },
+    "header": {
+      "accountNotActivated": "⚠ 未设置 {market} 账户资金",
+      "buy": "买入",
+      "goSetup": "[去设置]",
+      "loading": "载入中…",
+      "loginRegister": "[登录 / 注册]",
+      "sell": "卖出",
+      "walletMode": "未登录 · 仅看图模式"
+    },
+    "indicator": {
+      "BOLL": "布林带",
+      "MA": "均线 5/10/20/60",
+      "MACD": "副图 · 异同移动平均",
+      "RSI": "副图 · 相对强弱"
+    },
+    "kline": {
+      "contextMenu": {
+        "_": "K 线下单菜单",
+        "buy": "买入 {symbol}",
+        "sell": "卖出 {symbol}",
+        "shortcuts": "或:顶部按钮 / ⌘B 买 / ⌘S 卖",
+        "warning": {
+          "noAccount": "⚠ 未设置 {market} 账户资金 · 去 /account 激活",
+          "notLoggedIn": "⚠ 未登录 · 点击下单将引导登录"
+        }
+      }
+    },
+    "order": {
+      "closeAll": "(全部平仓)",
+      "confirm": {
+        "title": "确认下单"
+      },
+      "error": {
+        "insufficientBalance": "余额不足 · 差 {amount}"
+      },
+      "note": {
+        "filledByPreset": "成交数量按你的下单预设"
+      },
+      "row": {
+        "aiReason": "AI 依据",
+        "availableBalance": "可用余额",
+        "direction": "方向",
+        "estimatedCost": "预估总成本",
+        "estimatedFee": "预估手续费",
+        "estimatedFillPrice": "预估成交价",
+        "estimatedProceeds": "预估收到",
+        "marketPrice": "市场价",
+        "position": "仓位",
+        "quantity": "数量",
+        "slippage": "(含滑点)",
+        "slippageCost": "滑点成本",
+        "symbol": "标的"
+      }
+    },
+    "period": {
+      "15m": "15 分",
+      "1d": "日 K",
+      "1h": "1 小时",
+      "1w": "周 K"
+    },
+    "position": {
+      "card": {
+        "held": "持仓中"
+      },
+      "closeAll": "一键平仓",
+      "row": {
+        "avgPrice": "均价",
+        "currentPrice": "现价",
+        "quantity": "数量",
+        "unrealizedPnl": "浮盈亏"
+      },
+      "sltp": "止损/止盈"
+    },
+    "signal": {
+      "analyzing": "分析中...",
+      "confidence": "置信度 {percent}%",
+      "label": "AI 信号",
+      "noSignal": "暂无信号",
+      "recent": "最近"
+    },
+    "spot": {
+      "confirm": {
+        "buy": "买入(做多)",
+        "canCloseQuantity": "可平数量",
+        "closeShort": "买入(平空)",
+        "estimatedCost": "预估成本",
+        "hkNotEnoughLots": "不足一手 · 港股每手 {boardLot} 股,最少下单 1 手",
+        "insufficientMargin": "现金担保不足",
+        "lockMargin": "锁定担保",
+        "openShort": "卖出(开空)",
+        "operation": "操作",
+        "positionInsufficient": "持仓不足",
+        "roundedToLots": "· 按手取整(每手 {boardLot})",
+        "sell": "卖出(平多)",
+        "shortPositionInsufficient": "空头持仓不足",
+        "shortSettleNote": "平空返还担保 + 已实现盈亏(成交后按开仓均价结算)"
+      },
+      "header": {
+        "currentMarket": "日涨跌",
+        "spot": "现货"
+      },
+      "mainChart": {
+        "params": "BOLL(20,2)· MACD(12,26,9)· 笔(金)/ 分型 / 中枢",
+        "title": "主图:K 线 + 布林带 + MACD + 缠论"
+      },
+      "order": {
+        "accountHint": "先到「资产总览」设定该市场的初始账户资金,再来下单。",
+        "accountNotActivated": "{market}账户资金未激活",
+        "buyButton": "买入",
+        "buyCloseShort": "买入平空",
+        "cnNote": "A股 T+1:当日买入次日方可卖出 · ±10%/20% 涨跌停限制 · 按最新价成交,不强制 T+1 / 涨跌停。",
+        "conditional": "限价(到价触发)",
+        "currentPosition": "当前持仓",
+        "currentShort": "当前空头",
+        "goActivate": "去激活",
+        "goLogin": "去登录",
+        "hkBoardLot": "每手 {boardLot} 股 · 实际下单按手取整(不足一手不可下单)",
+        "hkNotInPool": "该标的暂不可下单",
+        "hkNotInPoolHint": "仅港股主板 HKD(~2406 只)支持下单 · 该标的不在下单池(行情仍可正常查看)。",
+        "hkNote": "港股 T+0:当日可买卖 · 无涨跌停 · 按手交易(每手 {boardLot} 股) · 费率含印花税 0.1% + 佣金 0.1% · 按最新价成交。",
+        "limitBuyButton": "限价买入",
+        "limitSellButton": "限价卖出",
+        "loadingBoardLot": "载入每手股数…",
+        "loginHint": "点金全程账户资金,登录即可买卖。",
+        "loginRequired": "登录后可下单",
+        "long": "做多",
+        "market": "市价",
+        "noPosition": "无",
+        "panel": {
+          "title": "下单"
+        },
+        "quantity": "数量",
+        "sellButton": "卖出",
+        "sellOpenShort": "卖出开空",
+        "short": "卖空",
+        "usLongNote": "美股做多 · 现货买卖 · 按最新价成交。",
+        "usShortNote": "卖空 = 负持仓记账 · 无杠杆 1:1 锁定等额现金担保 · 无强平/资金费。"
+      }
+    },
+    "symbol": {
+      "search": {
+        "duplicate": "{symbol} 已在自选列表",
+        "error": "添加失败,请重试",
+        "noResults": "没有匹配标的",
+        "placeholder": "输入关键词搜索三市场标的",
+        "title": "搜索 600519 / NVDA / BTC..."
+      },
+      "switcher": {
+        "hint": "点击或聚焦后输入搜索 {market} 标的",
+        "hint2": "输入关键词 · 当前市场 {market}",
+        "noResults": "没有匹配标的",
+        "placeholder": "在 {market} 中搜索标的(代码 / 名称)...",
+        "results": "{market} · {count} 个结果"
+      }
+    },
+    "toggle": {
+      "off": "关",
+      "on": "开"
+    },
+    "toolbar": {
+      "chartNotReady": "K 线未就绪",
+      "clearAnnotations": "已清空标注",
+      "clearHint": "清空所有手动绘图(不影响缠论标注)",
+      "drawFailed": "绘图失败 · 请重试",
+      "fibonacci": "斐波 / 通道",
+      "horizontalLine": "水平线",
+      "rectangle": "矩形",
+      "textAnnotation": "文字标注",
+      "trendLine": "趋势线",
+      "verticalLine": "垂直线"
+    },
+    "wallet": {
+      "available": "可用",
+      "position": "持仓",
+      "totalPnl": "累计盈亏"
+    },
+    "watchlist": {
+      "add": "添加",
+      "addHint": "搜索标的 (⌘K / Ctrl+K)",
+      "current": "当前",
+      "deleteLabel": "删除 {symbol}",
+      "drag": "拖拽排序",
+      "empty": {
+        "cta": "搜索标的",
+        "hint": "搜索一只标的开始关注",
+        "title": "还没有自选股"
+      },
+      "loading": "载入中…",
+      "title": "自选股"
+    }
   }
 }
