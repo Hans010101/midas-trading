@@ -22,7 +22,39 @@ import type { Market, Period } from '@midas/shared'
 import { EmptyKline } from '@/components/chart/empty-kline'
 import { useKline } from '@/hooks/use-kline'
 import { MarketApiError } from '@/lib/api/market'
+import { type ChartColors, useChartColors } from '@/lib/chart-colors'
 import type { IndicatorName } from '@/lib/store/workbench-store'
+
+// ★暗黑 P1:klinecharts 全量色板(明暗两套)· 涨跌读 CSS 变量(theme×color_pref 感知)·
+//   网格/坐标轴/文字/十字线/tooltip 随主题切换 · 浅色值 = 原硬编码(零回归)。
+function buildKlineStyles(c: ChartColors, isMobile: boolean): Record<string, unknown> {
+  const crossText = { color: '#FFFFFF', backgroundColor: c.crosshair, borderColor: c.crosshair }
+  return {
+    candle: {
+      bar: {
+        upColor: c.up,
+        downColor: c.down,
+        upBorderColor: c.up,
+        downBorderColor: c.down,
+        upWickColor: c.up,
+        downWickColor: c.down,
+        noChangeColor: '#94949C',
+      },
+      tooltip: {
+        legend: { color: c.axisText },
+        ...(isMobile ? { showRule: 'follow_cross' as const } : {}),
+      },
+    },
+    indicator: { tooltip: { legend: { color: c.axisText } } },
+    grid: { horizontal: { color: c.grid }, vertical: { color: c.grid } },
+    crosshair: {
+      horizontal: { line: { color: c.crosshair }, text: crossText },
+      vertical: { line: { color: c.crosshair }, text: crossText },
+    },
+    xAxis: { axisLine: { color: c.axisLine }, tickLine: { color: c.axisLine }, tickText: { color: c.axisText } },
+    yAxis: { axisLine: { color: c.axisLine }, tickLine: { color: c.axisLine }, tickText: { color: c.axisText } },
+  }
+}
 
 const PERIOD_TO_KL: Record<Period, KLPeriod> = {
   '1m': { type: 'minute', span: 1 },
@@ -69,6 +101,7 @@ export function KlineChart({
   const dataRef = useRef<KLineData[]>([])
 
   const query = useKline({ symbol, market, period, instrument })
+  const colors = useChartColors() // ★暗黑 P1:明暗切换 / 涨跌偏好 → setStyles 重套色板
 
   // 1. dataRef 始终保持最新查询数据(getBars 用闭包读取)
   useEffect(() => {
@@ -96,40 +129,8 @@ export function KlineChart({
     if (!chart) return
     chartRef.current = chart
 
-    // 涨跌色读 CSS 变量 --color-up/--color-down(0022)· 跟随用户「涨跌色偏好」翻转,
-    // 不再硬编码;默认红涨绿跌,取不到时回退默认值。
-    const rootStyle = getComputedStyle(document.documentElement)
-    const upColor = rootStyle.getPropertyValue('--color-up').trim() || '#DC143C'
-    const downColor = rootStyle.getPropertyValue('--color-down').trim() || '#0F6E5F'
-
-    // 移动刀C(B1):窄屏 OHLC 浮层改「触摸十字线才显示」(klinecharts 原生
-    // showRule:'follow_cross'),桌面保持常驻('always' 默认)。init 时一次性判定
-    // (lg 断点 1024 · 转屏不重配,可接受)· 只动展示,指标计算/缠论零碰。
-    const isMobile = window.matchMedia('(max-width: 1023px)').matches
-
-    // 视觉 token · 04 文档 + CLAUDE.md 视觉系统
-    chart.setStyles({
-      candle: {
-        bar: {
-          upColor,
-          downColor,
-          upBorderColor: upColor,
-          downBorderColor: downColor,
-          upWickColor: upColor,
-          downWickColor: downColor,
-          noChangeColor: '#94949C', // ink-faint
-        },
-        ...(isMobile ? { tooltip: { showRule: 'follow_cross' as const } } : {}),
-      },
-      crosshair: {
-        horizontal: { line: { color: '#C8102E' } }, // 中国红
-        vertical: { line: { color: '#C8102E' } },
-      },
-      grid: {
-        horizontal: { color: '#F0EEE8' },
-        vertical: { color: '#F0EEE8' },
-      },
-    })
+    // ★setStyles(涨跌色 + 网格/坐标轴/文字/十字线)移到下方 theme 反应式 effect,
+    //   明暗切换 / 涨跌偏好变化时重套色板(不重建 chart)· 移动端 tooltip showRule 也在那处理。
 
     chart.setDataLoader({
       getBars: ({ type, callback }) => {
@@ -149,6 +150,15 @@ export function KlineChart({
       chartRef.current = null
     }
   }, [onChartReady])
+
+  // ★暗黑 P1:色板 theme 反应式(明暗切换 / 涨跌偏好 → 重套 setStyles · 不重建 chart)。
+  //   ★浅色值 = 原硬编码(零回归)· 涨跌读 CSS 变量(暗色 #F0495E/#1FA588 · color_pref 翻转)。
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+    const isMobile = window.matchMedia('(max-width: 1023px)').matches
+    chart.setStyles(buildKlineStyles(colors, isMobile))
+  }, [colors])
 
   // 3. props 变化(symbol/market/period) → 同步给 chart
   useEffect(() => {

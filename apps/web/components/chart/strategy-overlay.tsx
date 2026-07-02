@@ -19,6 +19,7 @@
 import type { Chart } from 'klinecharts'
 import { useEffect } from 'react'
 
+import { useChartColors } from '@/lib/chart-colors'
 import { useStrategySignals } from '@/hooks/use-strategy'
 import type { Instrument, StrategyKind } from '@/lib/api/strategy'
 import { ensureMidasOverlays } from '@/lib/klinecharts-extensions'
@@ -35,8 +36,7 @@ interface Props {
 }
 
 const STRATEGY_GROUP_ID = 'midas-strategy-overlay'
-const COLOR_BUY = '#DC143C' // 朱红 · 买点(同缠论买点 / 产品涨色)
-const COLOR_SELL = '#0F6E5F' // 墨绿 · 卖点(同缠论卖点 / 产品跌色)
+// ★暗黑 P1:买/卖点走 useChartColors(买=涨色 up / 卖=跌色 down)· 暗底微调 + color_pref 翻转都对。
 
 export function StrategyOverlay({
   chart,
@@ -47,6 +47,7 @@ export function StrategyOverlay({
   instrument,
   enabled = false,
 }: Props) {
+  const c = useChartColors() // ★暗黑 P1:买卖点涨跌色随主题 + color_pref
   const { data } = useStrategySignals({
     symbol, market, period, strategy, instrument, enabled,
   })
@@ -83,7 +84,7 @@ export function StrategyOverlay({
         }`,
         styles: {
           text: {
-            color: isBuy ? COLOR_BUY : COLOR_SELL,
+            color: isBuy ? c.up : c.down, // 买点=涨色 / 卖点=跌色
             size: 12,
             family: 'JetBrains Mono, Consolas, monospace',
             weight: 'bold',
@@ -106,7 +107,7 @@ export function StrategyOverlay({
     } catch (e) {
       console.warn('[strategy-overlay] createOverlay failed:', e)
     }
-  }, [chart, enabled, data])
+  }, [chart, enabled, data, c]) // ★c 入 deps:明暗/涨跌偏好切换时重绘买卖点
 
   return null
 }

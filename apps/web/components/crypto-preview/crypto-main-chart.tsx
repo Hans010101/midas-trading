@@ -25,17 +25,16 @@ import { KlineChart } from '@/components/chart/kline-chart'
 import { StrategyOverlay } from '@/components/chart/strategy-overlay'
 import { StrategyPanel } from '@/components/chart/strategy-panel'
 import type { StrategyKind } from '@/lib/api/strategy'
+import { useChartColors } from '@/lib/chart-colors'
 import { readDisplayPrefs } from '@/lib/display-prefs'
 import { cn } from '@/lib/utils'
 import type { IndicatorName } from '@/lib/store/workbench-store'
 import type { Period } from '@midas/shared'
 
-// MACD 样式覆盖 · 红涨绿跌 + DIF 帝王金 / DEA 中国红(CLAUDE.md 视觉系统)
+// MACD 柱 = 红涨绿跌(★暗黑 P1:柱的涨跌色改读 useChartColors 的 up/down·和 K 线蜡烛/页面 .dark
+// token 一套色·color_pref 翻转 + 暗色微调都对)· DIF 帝王金 / DEA 中国红(线保持品牌色)。
 // MACD 只有一个柱图 figure,bars[0] 控制柱的涨跌色,跟 figure 顺序无关 · 稳。
-const MACD_STYLES = {
-  bars: [{ upColor: '#DC143C', downColor: '#0F6E5F', noChangeColor: '#94949C' }],
-  lines: [{ color: '#B8860B' }, { color: '#C8102E' }], // DIF 帝王金 / DEA 中国红
-}
+const MACD_LINES = [{ color: '#B8860B' }, { color: '#C8102E' }] // DIF 帝王金 / DEA 中国红
 
 // 布林带叠在主图 K 线上 · 跟缠论标注(笔=金 / 中枢=淡灰蓝 / 分型=红绿三角)同框,
 // 刻意避开缠论用色:不用帝王金(=笔)· 不用 #6482A0 蓝灰(=中枢保留色)· 不用红绿(=分型/涨跌)。
@@ -56,6 +55,7 @@ interface CryptoMainChartProps {
 
 export function CryptoMainChart({ symbol, period }: CryptoMainChartProps) {
   const [chart, setChart] = useState<Chart | null>(null)
+  const colors = useChartColors() // ★暗黑 P1:MACD 柱涨跌色跟主题/涨跌偏好
   // ★刀2:指标开关初值读 display_prefs(同步 lazy init · 客户端渲染无 SSR mismatch · 无闪烁)·
   //   临时拨开关只 setState、★不回写 cookie(偏好默认值只在设置页改)。
   const [chanEnabled, setChanEnabled] = useState(() => readDisplayPrefs().indicators.chan)
@@ -73,10 +73,13 @@ export function CryptoMainChart({ symbol, period }: CryptoMainChartProps) {
   )
   const indicatorStyles = useMemo(
     () => ({
-      MACD: MACD_STYLES as Record<string, unknown>,
+      MACD: {
+        bars: [{ upColor: colors.up, downColor: colors.down, noChangeColor: '#94949C' }],
+        lines: MACD_LINES,
+      } as Record<string, unknown>,
       BOLL: BOLL_STYLES as Record<string, unknown>,
     }),
-    [],
+    [colors],
   )
 
   return (
