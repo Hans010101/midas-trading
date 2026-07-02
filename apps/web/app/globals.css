@@ -58,7 +58,7 @@
     --color-down: #DC143C;
   }
 
-  /* Dark theme token 预留（M0 不实现切换） */
+  /* ★暗黑模式(P0 启用)· shadcn 基础 token 翻转 */
   .dark {
     --background: 0 0% 7%;
     --foreground: 0 0% 95%;
@@ -79,6 +79,22 @@
     --border: 0 0% 18%;
     --input: 0 0% 18%;
     --ring: 350 88% 43%;
+
+    /* ★品牌/容器 token 暗色变体(P0·只调明度·色相不动)·midas-red 主色锁死不改(:root 继承 #C8102E) */
+    --midas-cream: #1A1A1A;  /* 卡片实色暗表面(比 background 略亮 = 层次) */
+    --midas-paper: #212121;  /* 次级面板/表头暗表面(比 card 略亮) */
+    /* ★交易语义色暗底微调(★语义/色相绝不动:红仍红、绿仍绿·只调明度降刺眼/提可读) */
+    --midas-bull: #F0495E;   /* 涨朱红·暗底降刺眼(不翻转) */
+    --midas-bear: #1FA588;   /* 跌墨绿·暗底提亮(#0F6E5F 太暗) */
+    --color-up: #F0495E;     /* 涨(默认红涨)·暗底微调 */
+    --color-down: #1FA588;   /* 跌(默认绿跌)·暗底微调 */
+  }
+
+  /* ★暗黑 × 涨跌偏好【正交】:暗底下「绿涨红跌」翻转也用暗色微调值(否则会落回 :root 亮色值)·
+     specificity 与 :root[data-color-pref] 同(0,2,0)· 靠源码顺序在后覆盖 */
+  .dark[data-color-pref="green-up"] {
+    --color-up: #1FA588;
+    --color-down: #F0495E;
   }
 }
 
