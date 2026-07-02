@@ -1,0 +1,16 @@
+{
+  "common": {
+    "appName": "点金 Midas",
+    "loading": "Loading…",
+    "retry": "Retry",
+    "error": "Something went wrong",
+    "confirm": "Confirm",
+    "cancel": "Cancel"
+  },
+  "nav": {
+    "screener": "Stock Screener"
+  },
+  "disclaimer": {
+    "advisory": "For informational purposes only and does not constitute investment advice."
+  }
+}

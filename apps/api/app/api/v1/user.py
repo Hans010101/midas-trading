@@ -45,3 +45,23 @@ async def set_avatar(
     await db.commit()
     logger.info("[user.avatar] user_id=%s avatar_id=%s", current_user.id, stored)
     return AvatarOut(avatar_id=stored)
+
+
+class LanguageIn(BaseModel):
+    # 第一批仅中/英 · 范围外 → 422(pydantic pattern 校验)。
+    language: str = Field(pattern="^(zh|en)$")
+
+
+class LanguageOut(BaseModel):
+    language: str
+
+
+@router.patch("/language", response_model=LanguageOut)
+async def set_language(
+    payload: LanguageIn, current_user: CurrentUserDep, db: DbDep,
+) -> LanguageOut:
+    """设语言偏好(i18n Phase 0)· 跨设备同步层 · 前端 cookie 是即时生效层。"""
+    current_user.language_pref = payload.language
+    await db.commit()
+    logger.info("[user.language] user_id=%s language=%s", current_user.id, payload.language)
+    return LanguageOut(language=payload.language)
