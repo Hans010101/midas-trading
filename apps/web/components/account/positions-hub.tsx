@@ -10,9 +10,7 @@
  * 🔴 三条操作链(spot 平仓 / perp 平仓 / 撤条件单)随各自组件整体迁移,链路零改动。
  */
 
-import { useSearchParams } from 'next/navigation'
-
-import { usePathname, useRouter } from '@/i18n/navigation' // ★i18n:locale 感知(useSearchParams 与 locale 无关·留 next/navigation)
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import { PerpActivePositions } from '@/components/account/perp-active-positions'
 import { PerpClosedPositions } from '@/components/account/perp-closed-positions'

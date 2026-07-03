@@ -305,25 +305,6 @@ if [ ${#RECREATE_SVCS[@]} -gt 0 ]; then
   #   · 每 build 单独 timeout 1800s(30min):realistic 最坏 api ~19min(pip 阿里云重试)< 30min。
   #   · build 期间老容器仍在跑 → 最后 --force-recreate 才切换 → 几乎零停机。
   # ════════════════════════════════════════════════════════════════════
-  # ── ★构建内存护栏(deploy-build-memory-wall · 2026-07-03 i18n 批0 翻车修)─────────────
-  #   翻车:i18n 批0 让 web SSG 页翻倍(45→90)→ 生产 next build 内存压满整机(web+api 000
-  #   ~15min·非 OOM 杀是压满)。三重护栏:① 主修 = generateStaticParams 只预渲染默认 locale
-  #   (build SSG 回基线页数)② web Dockerfile ENV NODE_OPTIONS 堆限 → 跑飞时 next build 干净
-  #   报「heap out of memory」非零退出 → 下方 build 失败 → set -e/ERR trap 回滚、绝不 recreate
-  #   → 站点留旧容器活着(而非 box thrash)③ 这里 build 前确保 swap 在 + 记录可用内存兜峰值。
-  #   ★docker compose build 的内存跑在 dockerd 内、无法直接 --memory;真护栏是 ①②(fail-clean)。
-  section "构建内存护栏:记录可用内存 + 确保 swap(deploy-build-memory-wall)"
-  free -h 2>/dev/null || true
-  if ! swapon --show 2>/dev/null | grep -q .; then
-    if [ -f /swapfile ]; then
-      swapon /swapfile 2>/dev/null && ok "已启用 /swapfile swap(兜 build 峰值)" || warn "swapon /swapfile 失败(可能已在)"
-    else
-      warn "无 swap 且无 /swapfile · 建议配 4G swap 兜 build 内存峰值"
-    fi
-  else
-    ok "swap 已在 · build 峰值有兜底"
-  fi
-
   for svc in "${RECREATE_SVCS[@]}"; do
     section "顺序 build:${svc}(独占内存峰值 · 防并行 OOM)"
     timeout 1800 $COMPOSE build "$svc"
