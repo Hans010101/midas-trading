@@ -74,8 +74,10 @@
     },
     "market": "A 股",
     "nav": {
+      "login": "登录",
       "market": "市场切换",
       "palette": "搜品种(600519 / NVDA / BTC / 腾讯)· 或跳功能页…",
+      "search": "搜索品种…",
       "theme": "切换到浅色主题",
       "top": "搜索品种(⌘K)"
     },
@@ -687,6 +689,15 @@
         "macd": "MACD",
         "note": "偏好按浏览器保存(非账号同步)· 详情页打开时按此默认显示(进页面后仍可临时调整)",
         "period": "默认周期"
+      },
+      "language": {
+        "_": "语言 / Language",
+        "description": "界面语言 · 即时切换 · 登录后跨设备保持",
+        "en": "English",
+        "en_note": "US English",
+        "note": "登录后偏好跨设备保持;未登录仅本浏览器",
+        "zh": "中文",
+        "zh_note": "默认 · 简体中文"
       },
       "notifications": {
         "_": "消息推送",
