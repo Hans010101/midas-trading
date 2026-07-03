@@ -47,7 +47,10 @@ _SYSTEM_HK = (
 )
 
 
-def _system_prompt(market: Market) -> str:
+def _system_prompt(market: Market, language: str = "zh") -> str:
+    # ★i18n Phase4 刀1:language 分发骨架(接线管道)· zh 走现有中文常量【一字不动】;
+    #   en 常量刀2 补(见 docs/i18n 接线方案)· 刀1 en 回退 zh(功能等价现状·en 内容刀2 才上)。
+    _ = language  # 刀1 占位:保留入参供刀2 选 zh/en 常量(同 plan_note 的 _ = market 习惯)
     return {
         "cn": _SYSTEM_CN,
         "us": _SYSTEM_US,
@@ -95,14 +98,16 @@ def _format_snapshot(snapshot: TechnicalSnapshot) -> str:
 
 
 async def analyze_technical(
-    snapshot: TechnicalSnapshot, market: Market,
+    snapshot: TechnicalSnapshot, market: Market, *, language: str = "zh",
 ) -> tuple[AgentScore, int, int, int]:
     """跑技术面 Agent · 返回 (AgentScore, prompt_tokens, completion_tokens, total_tokens)。
 
     mock 模式时 llm.ainvoke 返回随机化假 JSON · 接口签名不变。
     解析失败时降级为中性评分 + 解释 · 永远不抛异常(0012 § 失败回退)。
+
+    ★i18n Phase4 刀1:language 默认 zh(走现有中文 prompt·逐字节不变)· en 分发刀2 接。
     """
-    system = _system_prompt(market)
+    system = _system_prompt(market, language)
     prompt = _format_snapshot(snapshot)
 
     resp = await ainvoke(
