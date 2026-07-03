@@ -12,13 +12,6 @@ export const routing = defineRouting({
   locales: ['zh', 'en'],
   defaultLocale: 'zh',
   localePrefix: 'as-needed',
-  // ★localeDetection: false(批0 v2 生产 redirect loop 修 · 决定性):默认开时 next-intl 会对
-  //   `/` 按 cookie/Accept-Language 重定向(首访无 NEXT_LOCALE cookie → 307 带 Set-Cookie),
-  //   不持久化 cookie 的客户端(curl / 爬虫 / 健康检查 / 监控)每次都触发 → 撞成【`/`→307→`/`
-  //   无限 loop】→ 中文站崩(生产 Caddy 反代下暴露·本地 next start 未复现)。关掉检测:
-  //   `/` 恒服务默认 zh、永不因检测重定向(★中文零破坏最安全)· 英文只走显式 `/en`(语言切换器
-  //   router.replace({locale}) 导航)· 初始 locale 由 URL 定,不做魔法自动跳转。
-  localeDetection: false,
 })
 
 export type Locale = (typeof routing.locales)[number]
