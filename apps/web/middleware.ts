@@ -1,40 +1,28 @@
 /**
- * Next.js middleware · ★i18n locale 检测/重写 + 路由保护 + 访问埋点(三合一)。
- *
- * 顺序(不可乱):next-intl createMiddleware 最先(locale 检测/重写:as-needed 下 `/` 命中
- *   中文 [locale] 段、`/en/*` 校验),再叠 auth 路由保护,最后 PV/UV 埋点 —— 后两步都要读
- *   【剥掉 locale 前缀后】的路径判定(否则 /en/account 的 startsWith('/account') 失效 = 安全洞)。
+ * Next.js middleware · 路由保护 + 访问埋点(服务端 · 非浏览器 JS)。
  *
  * 路由保护(0006 ADR § 8 + M1 第三波):
- *  - /workbench 匿名可访问 · /account /settings /portfolio /admin 强制登录 · 已登录访问 /login·/register → /global
- *  - ★i18n 激活:PROTECTED/AUTH_PAGES 判定走【剥 locale 前缀后】的路径,重定向目标带回当前 locale 前缀。
+ *  - /workbench 匿名可访问(未登录看 K 线 / 缠论 / AI 决策卡)· 需登录操作由组件 useRequireAuth() 弹引导
+ *  - /account / /settings / /portfolio / /admin 强制登录;已登录访问 /login·/register → /global
  *
- * 访问埋点(网站访问看板 · PV/UV):服务端 Edge · 匿名 vid cookie · waitUntil fire-and-forget。
+ * 访问埋点(网站访问看板 · PV/UV):
+ *  - 页面请求只到 web(Next)容器(Caddy 把 /api 路由到 FastAPI)→ ★只有这层看得到页面访问,
+ *    故埋点放此(服务端 Edge · 非浏览器 JS · 关 JS / 拦截不失真)。
+ *  - matcher 已天然排除 api / _next / 所有带扩展名的静态资源(js/css/png/woff/map);此处再补:
+ *    仅 GET · 非重定向(<300)· 排除已知 bot UA。
+ *  - UV 去重靠匿名 cookie mid_vid(随机 hex · 无个人信息 · 1 年)· 首访下发。
+ *  - 性能红线:只读 cookie + 判定;beacon 用 event.waitUntil fire-and-forget(响应返回后后台发,
+ *    绝不阻塞页面)→ 内网 POST /track/visit,FastAPI 侧只 bump Redis(O(1))。隐私:只送匿名 vid。
  */
 
 import { auth } from '@/auth'
-import createMiddleware from 'next-intl/middleware'
 import { NextResponse } from 'next/server'
 import type { NextFetchEvent, NextRequest } from 'next/server'
 
-import { routing } from '@/i18n/routing'
-
-// ★localeDetection 关闭见 i18n/routing.ts(批0 v2 生产 redirect loop 修)· 属 routing 配置。
-const intlMiddleware = createMiddleware(routing)
-
 // /workbench 不在保护列表 · 匿名可访问看图
-// /admin:未登录跳登录(仅 UX · 真正边界 = 后端 AdminDep 403)
+// /admin:未登录跳登录(仅 UX · 真正边界 = 后端 AdminDep 403,普通用户进页也只看到无权限提示)
 const PROTECTED = ['/account', '/settings', '/portfolio', '/dashboard', '/admin']
 const AUTH_PAGES = ['/login', '/register']
-
-// ★as-needed:中文无前缀,只有英文带 /en 前缀。剥出 { prefix, path } 供 locale 感知判定。
-//   '/en/account' → {prefix:'/en', path:'/account'};'/account' → {prefix:'', path:'/account'}
-function localeInfo(pathname: string): { prefix: string; path: string } {
-  if (pathname === '/en' || pathname.startsWith('/en/')) {
-    return { prefix: '/en', path: pathname.slice(3) || '/' }
-  }
-  return { prefix: '', path: pathname }
-}
 
 const VID_COOKIE = 'mid_vid'
 const VID_MAX_AGE = 60 * 60 * 24 * 365 // 1 年
@@ -42,28 +30,25 @@ const VID_MAX_AGE = 60 * 60 * 24 * 365 // 1 年
 const BOT_RE =
   /bot|crawl|spider|slurp|bing|baidu|yandex|duckduck|facebookexternalhit|embedly|quora|pinterest|slackbot|telegram|whatsapp|headless|lighthouse|monitor|uptime|pingdom|curl|wget|python-requests|go-http|axios|okhttp|java\//i
 
-// 路由保护逻辑(auth 包装 · 提供 req.auth)· 通过校验后委托 next-intl 做 locale 重写。
+// 原路由保护逻辑(auth 包装 · 提供 req.auth)
 const runAuth = auth((req) => {
   const url = req.nextUrl
   const isAuthed = !!req.auth
-  const { prefix, path } = localeInfo(url.pathname) // ★locale 感知
 
-  const isProtected = PROTECTED.some((p) => path.startsWith(p))
-  const isAuthPage = AUTH_PAGES.some((p) => path.startsWith(p))
+  const isProtected = PROTECTED.some((p) => url.pathname.startsWith(p))
+  const isAuthPage = AUTH_PAGES.some((p) => url.pathname.startsWith(p))
 
   if (isProtected && !isAuthed) {
-    // 保留当前 locale 前缀跳登录(英文用户跳 /en/login)· next 带原始含前缀路径
-    const loginUrl = new URL(`${prefix}/login`, url.origin)
+    const loginUrl = new URL('/login', req.nextUrl.origin)
     loginUrl.searchParams.set('next', url.pathname + url.search)
     return NextResponse.redirect(loginUrl)
   }
 
   if (isAuthPage && isAuthed) {
-    return NextResponse.redirect(new URL(`${prefix}/global`, url.origin))
+    return NextResponse.redirect(new URL('/global', req.nextUrl.origin))
   }
 
-  // 未拦截 → 交给 next-intl 做 locale 检测/重写(as-needed:`/` → 内部中文段、`/en/*` 校验)
-  return intlMiddleware(req)
+  return NextResponse.next()
 })
 
 function randomVid(): string {
@@ -79,7 +64,7 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
         r: NextRequest,
         e: NextFetchEvent,
       ) => Promise<NextResponse | undefined>
-    )(req, event)) ?? intlMiddleware(req)
+    )(req, event)) ?? NextResponse.next()
 
   // ── 访问埋点 · 仅页面文档 GET · 非重定向(<300)· 排除 bot ──
   const ua = req.headers.get('user-agent') ?? ''
@@ -118,7 +103,7 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
   return res
 }
 
-// 不拦截静态资源 / API 路由 / _next 内部 · 已覆盖 next-intl 需拦的 `/` 与 `/en/*`
+// 不拦截静态资源 / API 路由 / _next 内部(带扩展名的静态资源由 .*\..* 排除)
 export const config = {
   matcher: ['/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)'],
 }
