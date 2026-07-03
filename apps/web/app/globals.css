@@ -45,6 +45,10 @@
     --midas-cream: #FCFCF9;
     --midas-bull: #DC143C;
     --midas-bear: #0F6E5F;
+    /* ★P4:独立状态色 success(成功绿)/ warn(警示琥珀)转 CSS 变量 · :root=原值(浅色零回归)·
+       .dark 提亮(P0 给 bull/bear 补暗变体时漏了这对孪生色 → academy 答对/进度/结业态暗底发糊) */
+    --midas-success: #0F6E5F;
+    --midas-warn: #B45309;
 
     /* 涨跌色语义 token(0022 §2)· 默认红涨绿跌 · 偏好开关翻转见 [data-color-pref] */
     --color-up: #DC143C;   /* 涨 = 朱红 */
@@ -88,6 +92,9 @@
     --midas-bear: #1FA588;   /* 跌墨绿·暗底提亮(#0F6E5F 太暗) */
     --color-up: #F0495E;     /* 涨(默认红涨)·暗底微调 */
     --color-down: #1FA588;   /* 跌(默认绿跌)·暗底微调 */
+    /* ★P4:独立状态色暗底提亮(与 bear/warn 家族一致·色相不动只调明度·不随 color_pref 翻转) */
+    --midas-success: #1FA588; /* 成功绿·暗底提亮(原 #0F6E5F 暗底发糊·对齐 bear 暗变体) */
+    --midas-warn: #D97706;    /* 警示琥珀·暗底提亮(原 #B45309 暗底偏闷) */
   }
 
   /* ★暗黑 × 涨跌偏好【正交】:暗底下「绿涨红跌」翻转也用暗色微调值(否则会落回 :root 亮色值)·
