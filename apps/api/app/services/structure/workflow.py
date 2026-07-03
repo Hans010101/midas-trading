@@ -26,10 +26,22 @@ from app.schemas.structure import (
     StructureSnapshot,
 )
 from app.services.ai.cache import compute_trading_day
+from app.services.ai.language_lock import LANGUAGE_LOCK_RETRY_PREFIX, contains_cjk
 from app.services.ai.llm import ainvoke, is_mock_mode
 from app.services.ai.usage import log_usage
-from app.services.ai.validator import has_imperative, rewrite_imperatives
-from app.services.structure.prompts import SYSTEM_PROMPT, build_diagnose_prompt
+from app.services.ai.validator import (
+    ADVISORY_DISCLAIMER_EN,
+    ensure_advisory_disclaimer_en,
+    has_imperative,
+    rewrite_imperatives,
+    scrub_marketing,
+)
+from app.services.structure.prompts import (
+    SYSTEM_PROMPT,
+    SYSTEM_PROMPT_EN,
+    build_diagnose_prompt,
+    build_diagnose_prompt_en,
+)
 from app.services.structure.snapshot import build_structure_snapshot, normalize_symbol
 
 if TYPE_CHECKING:
@@ -129,18 +141,71 @@ async def _node_snapshot(state: DiagnoseState) -> dict[str, Any]:
     return {"snapshot": snapshot}
 
 
-async def _node_diagnose(state: DiagnoseState) -> dict[str, Any]:
-    """单次 LLM:问题 + 全因子快照一次喂 · JSON 输出 · 解析失败明确 raise(不缓存坏结果)。"""
-    snapshot = state["snapshot"]
-    prompt = build_diagnose_prompt(
-        state["question"], state["intent"], snapshot.model_dump(mode="json"),
+def _parse_diagnosis(content: str) -> tuple[str, list[FactorFinding], str | None]:
+    """解析结构诊断 JSON · 失败明确 raise ValueError(不产兜底假诊断·端点转 502)。"""
+    try:
+        data = json.loads(content)
+        conclusion = str(data["conclusion"]).strip()
+        findings = [
+            FactorFinding(
+                factor=str(f["factor"])[:32],
+                state=str(f["state"])[:40],
+                detail=str(f["detail"])[:300],
+                window=str(f.get("window", "latest"))[:16],
+            )
+            for f in data.get("factor_findings", [])
+        ]
+        raw_note = data.get("unsupported_note")
+        note = str(raw_note)[:200] if raw_note else None
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
+        msg = f"structure diagnose: LLM 输出解析失败({e});content 前 80 字={content[:80]!r}"
+        raise ValueError(msg) from e
+    if not conclusion:
+        msg = "structure diagnose: LLM 输出 conclusion 为空"
+        raise ValueError(msg)
+    return conclusion, findings, note
+
+
+def _diagnosis_has_cjk(
+    conclusion: str, findings: list[FactorFinding], note: str | None,
+) -> bool:
+    """诊断产出【全字段】是否混入中文(en 串台检测)· 结论/说明 + 各因子 detail/state/factor/window。
+
+    ★对抗审查教训(同刀2 finding4「红线门覆盖不全」):漏检 factor/window 会让 LLM 只在这俩字段
+      串台(如 window='近7天'/factor='账户多空比')时中文漏给英文用户 —— 检测必须覆盖【所有 LLM
+      产出字段】,不只 prose 字段。
+    """
+    if contains_cjk(conclusion) or (note is not None and contains_cjk(note)):
+        return True
+    return any(
+        contains_cjk(f.detail) or contains_cjk(f.state)
+        or contains_cjk(f.factor) or contains_cjk(f.window)
+        for f in findings
     )
-    # ★i18n Phase4 刀1:zh 走现有 SYSTEM_PROMPT 中文常量【一字不动·prompts.py 零改】;
-    #   刀3 en 时改选 SYSTEM_PROMPT_EN(见 docs/i18n 接线方案)· 刀1 en 回退 zh(功能等价现状)。
-    _ = state.get("language", "zh")  # 刀1 占位:language 已随 state 流入(刀3 选 zh/en 结构 prompt)
+
+
+async def _node_diagnose(state: DiagnoseState) -> dict[str, Any]:
+    """单次 LLM:问题 + 全因子快照一次喂 · JSON 输出 · 解析失败明确 raise(不缓存坏结果)。
+
+    ★i18n Phase4 刀3:en 走 SYSTEM_PROMPT_EN + 英文 user prompt + 语言锁双层
+      (prompt LANGUAGE LOCK + 这里 CJK 检测)· en 串台重试一次仍中文 → raise(端点 502·
+      ★与结构「失败不造假」哲学一致·不产中文兜底假诊断)。zh 走原路径逐字节不变。
+    """
+    snapshot = state["snapshot"]
+    lang = state.get("language", "zh")
+    if lang == "en":
+        prompt = build_diagnose_prompt_en(
+            state["question"], state["intent"], snapshot.model_dump(mode="json"),
+        )
+        system = SYSTEM_PROMPT_EN
+    else:
+        prompt = build_diagnose_prompt(
+            state["question"], state["intent"], snapshot.model_dump(mode="json"),
+        )
+        system = SYSTEM_PROMPT
     resp = await ainvoke(
         prompt,
-        system=SYSTEM_PROMPT,
+        system=system,
         response_format_json=True,
         max_tokens=_DIAGNOSE_MAX_TOKENS,
         temperature=0.2,
@@ -160,35 +225,94 @@ async def _node_diagnose(state: DiagnoseState) -> dict[str, Any]:
             user_id=state.get("user_id"),
         )
 
-    try:
-        data = json.loads(resp.content)
-        conclusion = str(data["conclusion"]).strip()
-        findings = [
-            FactorFinding(
-                factor=str(f["factor"])[:32],
-                state=str(f["state"])[:40],
-                detail=str(f["detail"])[:300],
-                window=str(f.get("window", "latest"))[:16],
-            )
-            for f in data.get("factor_findings", [])
-        ]
-        raw_note = data.get("unsupported_note")
-        note = str(raw_note)[:200] if raw_note else None
-    except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
-        # 明确失败,不产兜底假诊断(避免被缓存层存 1h 的坏结果);端点转 502 让用户重试。
-        msg = f"structure diagnose: LLM 输出解析失败({e});content 前 80 字={resp.content[:80]!r}"
-        raise ValueError(msg) from e
+    conclusion, findings, note = _parse_diagnosis(resp.content)
 
-    if not conclusion:
-        msg = "structure diagnose: LLM 输出 conclusion 为空"
-        raise ValueError(msg)
+    # ★语言锁第二层(仅 en):CJK 检出 → 加强语言锁重试一次 → 仍中文则 raise(502·不造假)。
+    if lang == "en" and _diagnosis_has_cjk(conclusion, findings, note):
+        logger.warning("[structure.workflow.diagnose] en 输出含中文(串台)· 加强语言锁重试一次")
+        resp2 = await ainvoke(
+            LANGUAGE_LOCK_RETRY_PREFIX + prompt,
+            system=system,
+            response_format_json=True,
+            max_tokens=_DIAGNOSE_MAX_TOKENS,
+            temperature=0.2,
+        )
+        if not is_mock_mode():
+            await log_usage(
+                market="crypto",
+                symbol=state["symbol"],
+                period="1d",
+                model=settings.llm_model,
+                prompt_tokens=resp2.prompt_tokens,
+                completion_tokens=resp2.completion_tokens,
+                total_tokens=resp2.total_tokens,
+                node="structure_diagnose",
+                status="success",
+                user_id=state.get("user_id"),
+            )
+        conclusion, findings, note = _parse_diagnosis(resp2.content)
+        if _diagnosis_has_cjk(conclusion, findings, note):
+            msg = "structure diagnose: en 重试后仍含中文(串台)· 不产中文兜底 · 端点 502 重试"
+            raise ValueError(msg)
+
     return {"conclusion": conclusion, "factor_findings": findings, "unsupported_note": note}
 
 
+_CONCLUSION_MAX = 400  # 对齐 StructureDiagnosis.conclusion max_length
+_DETAIL_MAX = 300      # 对齐 FactorFinding.detail max_length
+_STATE_MAX = 40        # 对齐 FactorFinding.state max_length
+_NOTE_MAX = 200        # 对齐 StructureDiagnosis.unsupported_note max_length
+
+
+def _finalize_conclusion_en(text: str) -> str:
+    """en 结论:祈使改写 + 营销 scrub + 英文免责固定串兜底 · ★保证 ≤400(免责纳入预算·不截免责)。
+
+    ★与决策卡 plan_note._finalize_note_en 同款长度兜底 —— 否则 StructureDiagnosis.conclusion
+      max_length=400 在端点 response_model 再校验时 string_too_long → 500。
+    """
+    text = rewrite_imperatives(text, language="en")
+    text = scrub_marketing(text, language="en")
+    out = ensure_advisory_disclaimer_en(text)
+    if len(out) <= _CONCLUSION_MAX:
+        return out
+    budget = _CONCLUSION_MAX - len(ADVISORY_DISCLAIMER_EN) - 1
+    return ensure_advisory_disclaimer_en(text[:budget].rstrip())
+
+
+def _scrub_en_field(text: str, max_len: int) -> str:
+    """en prose 字段红线清洗:祈使改写 + 营销 scrub · ★re-truncate ≤max_len(改写可能变长·防 500)。
+
+    ★对抗审查闭合:detail / state / unsupported_note 三个 prose 字段都走这里(此前只洗 detail,
+      state/note 绕过营销/祈使清洗)· factor/window 是 key/label 非 prose · 不 scrub(只 CJK 检测)。
+    """
+    text = rewrite_imperatives(text, language="en")
+    text = scrub_marketing(text, language="en")
+    return text[:max_len]
+
+
 async def _node_validator(state: DiagnoseState) -> dict[str, Any]:
-    """祈使句 → 陈述句改写(复用 ai/validator · 0012 红线②同款)· 结论与各因子 detail 都过。"""
+    """祈使句 → 陈述句改写(复用 ai/validator · 0012 红线②同款)· 结论与各因子 detail 都过。
+
+    ★i18n Phase4 刀3:en 无条件改写(不依赖 has_imperative 门控·防 validator 关键词覆盖缺口)
+      + 营销 scrub + 结论英文免责固定串兜底(≤400)+ detail re-truncate(≤300)· zh 走原逻辑不变。
+    """
     lang = state.get("language", "zh")
     conclusion = state["conclusion"]
+    if lang == "en":
+        conclusion = _finalize_conclusion_en(conclusion)
+        findings = [
+            f.model_copy(update={
+                "detail": _scrub_en_field(f.detail, _DETAIL_MAX),
+                "state": _scrub_en_field(f.state, _STATE_MAX),
+            })
+            for f in state["factor_findings"]
+        ]
+        note = state.get("unsupported_note")
+        result: dict[str, Any] = {"conclusion": conclusion, "factor_findings": findings}
+        if note is not None:
+            result["unsupported_note"] = _scrub_en_field(note, _NOTE_MAX)
+        return result
+    # ===== zh 路径(逐字节不变)=====
     if has_imperative(conclusion, language=lang):
         logger.warning("[structure.workflow.validator] 结论含祈使句 · 改写 · %r", conclusion[:60])
         conclusion = rewrite_imperatives(conclusion, language=lang)
