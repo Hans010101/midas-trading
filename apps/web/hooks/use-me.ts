@@ -12,7 +12,6 @@ import {
   changePassword,
   fetchMe,
   setAvatar,
-  setLanguage,
   type MeResponse,
 } from '@/lib/api/me'
 
@@ -44,18 +43,6 @@ export function useSetAvatar() {
   const qc = useQueryClient()
   return useMutation<number | null, Error, number>({
     mutationFn: (avatarId) => setAvatar(token, avatarId),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ME_QUERY_KEY }),
-  })
-}
-
-// ★i18n:写回语言偏好(登录用户跨设备同步)· 即时切 locale 走 next-intl 导航(cookie),
-//   这里只做后端持久化 · 成功后 invalidate ME 让 language_pref 回显最新。
-export function useSetLanguage() {
-  const { data: session } = useSession()
-  const token = session?.accessToken ?? ''
-  const qc = useQueryClient()
-  return useMutation<string, Error, 'zh' | 'en'>({
-    mutationFn: (language) => setLanguage(token, language),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ME_QUERY_KEY }),
   })
 }

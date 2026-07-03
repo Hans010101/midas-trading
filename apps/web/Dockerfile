@@ -38,12 +38,6 @@ RUN echo "[build] NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL"
 # 路径绝对 · 必须跟 next build 写入的 .next/cache 一致(/repo/apps/web/.next/cache)
 # 增量编译(webpack/swc cache · 文件级 hash 复用)· sharing=locked 串行写
 # 预期:rebuild 时 next build 4-5min → 1-2min(.next/cache 命中)
-# ★构建内存护栏(deploy-build-memory-wall · 批0 翻车修):cap next build 主进程 V8 堆 →
-#   构建产物膨胀 / 内存跑飞时 next build 干净报「JavaScript heap out of memory」非零退出 →
-#   build 失败 → update.sh ERR trap 回滚、绝不 recreate → 站点留旧容器活着(而非 box thrash
-#   整机压满 15min)。值可由 update.sh / compose 传 build-arg NODE_MAX_OLD_SPACE 覆盖。
-ARG NODE_MAX_OLD_SPACE=3072
-ENV NODE_OPTIONS="--max-old-space-size=${NODE_MAX_OLD_SPACE}"
 RUN --mount=type=cache,target=/repo/apps/web/.next/cache,sharing=locked \
     cd apps/web && pnpm build
 
