@@ -2,8 +2,7 @@
 
 /** /admin 内部导航(兑换码刀2:用户管理 / 兑换码 两 tab · 平级)。 */
 
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { Link, usePathname } from '@/i18n/navigation' // ★i18n:locale 感知导航 + 剥前缀高亮
 
 const ADMIN_TABS = [
   { href: '/admin', label: '用户管理', exact: true },
