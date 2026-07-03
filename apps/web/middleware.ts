@@ -19,6 +19,7 @@ import type { NextFetchEvent, NextRequest } from 'next/server'
 
 import { routing } from '@/i18n/routing'
 
+// ★localeDetection 关闭见 i18n/routing.ts(批0 v2 生产 redirect loop 修)· 属 routing 配置。
 const intlMiddleware = createMiddleware(routing)
 
 // /workbench 不在保护列表 · 匿名可访问看图
