@@ -25,6 +25,7 @@ from app.services.data_sources.cn_source import AKShareCnSource
 from app.services.data_sources.crypto_source import CcxtBinanceCryptoSource
 from app.services.data_sources.hk_source import AKShareHkSource
 from app.services.data_sources.us_source import YFinanceUsSource
+from app.services.i18n import resolve_lang, translate
 
 
 def get_clickhouse(request: Request) -> ClickHouseClient:
@@ -71,6 +72,7 @@ _oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=
 
 
 async def get_current_user(
+    request: Request,
     token: Annotated[str | None, Depends(_oauth2_scheme)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
@@ -78,11 +80,14 @@ async def get_current_user(
 
     旧 JWT token 已不在 session 表 · 查询不到 · 用户被迫重新登录(产品负责人指令)。
     成功路径副作用:verify_session 续 7 天 TTL + 写 last_used_at。
+
+    ★i18n Phase3 刀1:鉴权错误发生在 user 加载【之前】,语言只能从 request 头取
+      (resolve_lang 无 language_pref → 走 X-Lang / Accept-Language / zh)· zh 逐字节不变。
     """
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="未携带 Bearer session token",
+            detail=translate("auth.no_token", resolve_lang(request)),
             headers={"WWW-Authenticate": "Bearer"},
         )
     user = await verify_session(db, token=token)
@@ -90,7 +95,7 @@ async def get_current_user(
         # session 不存在 / 已过期 / 用户已删除 · 也涵盖旧 JWT 迁移场景
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="session 无效或已过期 · 请重新登录",
+            detail=translate("auth.session_invalid", resolve_lang(request)),
             headers={"WWW-Authenticate": "Bearer"},
         )
     # 刀3b-2:封禁全站立即失效点 —— banned 用户即使持有效 session,任何受保护请求即被拒。
@@ -98,7 +103,8 @@ async def get_current_user(
     if user.banned_at is not None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="账号已被停用",
+            # user 已加载 → 优先其 language_pref(仍受 X-Lang 头覆盖)
+            detail=translate("auth.account_disabled", resolve_lang(request, user.language_pref)),
         )
     return user
 
@@ -137,6 +143,7 @@ async def get_current_admin(
 
 
 async def get_current_platinum(
+    request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:
     """铂金用户鉴权(多账户 PR-5)· 🔴 自助端点唯一安全边界,每个端点必挂(集中=新端点不漏挂)。
@@ -145,11 +152,27 @@ async def get_current_platinum(
     ★越权红线:user_id 只从这里(token 反查的 current_user.id)取,端点签名绝不接受前端传入的 user_id。
     """
     if not current_user.is_platinum:
+        lang = resolve_lang(request, current_user.language_pref)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="需铂金权限",
+            detail=translate("auth.platinum_required", lang),
         )
     return current_user
+
+
+async def _resolve_request_lang(
+    request: Request,
+    user: Annotated[User | None, Depends(get_optional_current_user)],
+) -> str:
+    """端点侧请求语言 Dep(i18n Phase3 刀1)· 四级优先级见 resolve_lang。
+
+    用于【已进入端点体】的本地化(错误/label/reason)· 未登录返 None language_pref 自然走 header/zh。
+    鉴权层(get_current_user)的 pre-auth 错误【不】用它(那时还没 user)· 直接 resolve_lang(request)。
+    """
+    return resolve_lang(request, user.language_pref if user else None)
+
+
+RequestLangDep = Annotated[str, Depends(_resolve_request_lang)]
 
 
 ClickHouseDep = Annotated[ClickHouseClient, Depends(get_clickhouse)]

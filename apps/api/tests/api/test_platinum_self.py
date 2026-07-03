@@ -60,6 +60,20 @@ async def test_non_platinum_403(client: AsyncClient, db_session: AsyncSession) -
 
 
 @pytest.mark.asyncio
+async def test_non_platinum_403_en(client: AsyncClient, db_session: AsyncSession) -> None:
+    """★i18n Phase3 刀1:Accept-Language=en → 403 文案英文(后端本地化端到端 · 前端零查表)。"""
+    user = await make_user(db_session, role="user")
+    token = await issue_session(db_session, user_id=user.id)
+    await db_session.commit()
+    r = await client.get(
+        "/api/v1/platinum/intelligent/status",
+        headers={"Authorization": f"Bearer {token}", "Accept-Language": "en-US,en;q=0.9"},
+    )
+    assert r.status_code == 403
+    assert r.json()["detail"] == "Platinum access required"
+
+
+@pytest.mark.asyncio
 async def test_unauthenticated_401(client: AsyncClient) -> None:
     r = await client.get("/api/v1/platinum/intelligent/status")
     assert r.status_code == 401
