@@ -52,8 +52,9 @@ export function AcademyEntry() {
           </div>
         </div>
 
-        {/* 边学边赢会员 · 激励块(白底 + 金边 · 卡内)*/}
-        <div className="mt-8 rounded-xl border border-[#F0D9A8] bg-white p-5 shadow-sm sm:p-6">
+        {/* 边学边赢会员 · 激励块(白底 + 金边 · 卡内)· ★暗黑 P3:dark: 变体避免暗底白岛,
+            浅色零回归(bg-white / 浅金边不变)· 暗底改暗表面 + 金token 描边(gold 锁定色两态通用) */}
+        <div className="mt-8 rounded-xl border border-[#F0D9A8] bg-white p-5 shadow-sm dark:border-gold/30 dark:bg-surface-subtle sm:p-6">
           <h3 className="flex items-center gap-2 font-serif text-lg font-bold text-midas-red">
             <Gift className="h-5 w-5" />
             边学边赢会员
@@ -62,7 +63,7 @@ export function AcademyEntry() {
             学完一个模块、通过结业测验,就送 <strong className="font-bold text-midas-red">1 周会员</strong>
             ;六大模块全部通关,最多领 <strong className="font-bold text-midas-red">6 周</strong>。
           </p>
-          <div className="mt-4 grid grid-cols-3 gap-3 border-t border-[#F0D9A8]/70 pt-4 sm:gap-4">
+          <div className="mt-4 grid grid-cols-3 gap-3 border-t border-[#F0D9A8]/70 pt-4 dark:border-gold/20 sm:gap-4">
             {STATS.map((s) => (
               <div key={s.label} className="text-center">
                 <div className="font-serif text-2xl font-bold text-gold sm:text-3xl">{s.num}</div>

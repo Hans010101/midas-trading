@@ -16,6 +16,7 @@
  *   只留标记点 + 地理分散的 priority 1 标签,避免糊成一团。
  */
 
+import { useChartColors } from '@/lib/chart-colors'
 import { cn } from '@/lib/utils'
 
 import { WORLD_DOTS } from './world-dots'
@@ -34,8 +35,11 @@ const VB_Y = 26
 const VB_W = 1000
 const VB_H = 388
 
-// 陆地点 = 浅红「灰粉」(与品牌红 #C8102E / 红涨 #DC143C 同色系 · 但极低饱和 + 高明度),退到背景。
-const LAND = '#e7d3d6'
+// 陆地点 = 退到背景的低饱和暖灰。★暗黑 P3:两态给两值(色相不动·只调明度)——
+//   浅色 #e7d3d6(浅灰粉·高明度退白底);暗色 #332E2E(暖深灰·略高于 bg #121212,
+//   退暗底而非「不降反升变亮粉」)。isDark 走 useChartColors(切主题即时跟随)。
+const LAND_LIGHT = '#e7d3d6'
+const LAND_DARK = '#332E2E'
 
 /**
  * 市场地理配置(静态 · 前端)。
@@ -86,6 +90,10 @@ export type MapQuote = { name: string; changePct: number }
 type Marker = MarketGeo & { changePct: number; x: number; y: number }
 
 export function WorldMap({ quotes }: { quotes: Map<string, MapQuote> }) {
+  // ★暗黑 P3:陆地色 + 标记点描边按明暗取值(色相不动·只调明度)。
+  const { isDark } = useChartColors()
+  const land = isDark ? LAND_DARK : LAND_LIGHT
+  const dotStroke = isDark ? '#121212' : '#fff' // 描边=与底同色勾边(浅:白底 / 暗:bg #121212)
   const markers: Marker[] = []
   for (const g of MARKET_GEO) {
     const q = quotes.get(g.symbol)
@@ -101,8 +109,8 @@ export function WorldMap({ quotes }: { quotes: Map<string, MapQuote> }) {
         role="img"
         aria-label="全球主要股指地理分布"
       >
-        {/* 陆地点阵(浅红灰粉 · 退到背景) */}
-        <g fill={LAND}>
+        {/* 陆地点阵(低饱和暖灰 · 退到背景 · 明暗两态取值) */}
+        <g fill={land}>
           {WORLD_DOTS.map(([x, y], i) => (
             <circle key={i} cx={x} cy={y} r={1.5} />
           ))}
@@ -127,7 +135,7 @@ export function WorldMap({ quotes }: { quotes: Map<string, MapQuote> }) {
                 />
               )}
               <circle cx={m.x} cy={m.y} r={6.5} fill={color} opacity={0.16} />
-              <circle cx={m.x} cy={m.y} r={3} fill={color} stroke="#fff" strokeWidth={0.9} />
+              <circle cx={m.x} cy={m.y} r={3} fill={color} stroke={dotStroke} strokeWidth={0.9} />
             </g>
           )
         })}
