@@ -9,7 +9,7 @@
  * 顶部导航 MarketSwitcher 的 onLab=startsWith('/lab') 已天然覆盖子页,这里零联动。
  */
 
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter } from '@/i18n/navigation' // ★i18n:locale 感知(剥前缀)
 
 import { cn } from '@/lib/utils'
 
