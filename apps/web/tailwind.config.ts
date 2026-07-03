@@ -65,7 +65,7 @@ const config: Config = {
         cream: 'var(--midas-cream)',   // 原 #FCFCF9
         bull: 'var(--midas-bull)',     // 原 #DC143C(涨朱红·暗底微调不翻转)
         bear: 'var(--midas-bear)',     // 原 #0F6E5F(跌墨绿·暗底微调不翻转)
-        warn: '#B45309',
+        warn: 'var(--midas-warn)',     // 原 #B45309(警示琥珀·★P4 暗底提亮不翻转)
 
         // ===== 0022 语义层(业务代码引用这层;primitives 不再直接用)=====
         // 涨跌:只有 up/down 走 CSS 变量,支持「偏好开关」一处翻转全产品(0022 §2)
@@ -80,7 +80,7 @@ const config: Config = {
         'surface-subtle': 'var(--midas-paper)', // = paper · 表头/信号条/次级面板
         // 文字弱提示 / 状态
         faint: '#94949C', // = ink-faint · 占位/「—」/弱提示
-        success: '#0F6E5F', // 独立成功绿(与 down 解耦,不随涨跌翻转)
+        success: 'var(--midas-success)', // 原 #0F6E5F 独立成功绿(与 down 解耦不翻转·★P4 暗底提亮)
       },
       fontFamily: {
         serif: ['"Noto Serif SC"', 'serif'],
