@@ -14,7 +14,9 @@ from typing import Literal
 
 from app.schemas.ai_decision import AgentScore, TechnicalSnapshot
 from app.schemas.market import Market
+from app.services.ai.language_lock import LANGUAGE_LOCK_RETRY_PREFIX, contains_cjk
 from app.services.ai.llm import ainvoke
+from app.services.ai.prompts_en import TECHNICAL_SYSTEM_EN
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +50,10 @@ _SYSTEM_HK = (
 
 
 def _system_prompt(market: Market, language: str = "zh") -> str:
-    # ★i18n Phase4 刀1:language 分发骨架(接线管道)· zh 走现有中文常量【一字不动】;
-    #   en 常量刀2 补(见 docs/i18n 接线方案)· 刀1 en 回退 zh(功能等价现状·en 内容刀2 才上)。
-    _ = language  # 刀1 占位:保留入参供刀2 选 zh/en 常量(同 plan_note 的 _ = market 习惯)
+    # ★i18n Phase4:language 分发 · zh 走现有中文常量【一字不动】;en 走 prompts_en(新增常量)。
+    #   默认 zh → 命中的永远是逐字节相同的中文常量(zh 零变化红线)。
+    if language == "en":
+        return TECHNICAL_SYSTEM_EN[market]
     return {
         "cn": _SYSTEM_CN,
         "us": _SYSTEM_US,
@@ -94,6 +97,42 @@ def _format_snapshot(snapshot: TechnicalSnapshot) -> str:
     return "\n".join(lines)
 
 
+def _format_snapshot_en(snapshot: TechnicalSnapshot) -> str:
+    """英文标签版 snapshot(i18n Phase4 刀2)· 数字与 zh 版一字不差,只英文化标签。
+
+    ★为什么单独一版:zh _format_snapshot 全中文标签,喂给英文 system prompt = 串台诱因。
+    英文标签的输入 + 英文 system = 全英文管道,降低 DeepSeek 回中文的概率(语言锁第一层的配套)。
+    """
+    lines = [
+        f"Last price: {snapshot.last_close:.4f}",
+        f"5-day trend: {snapshot.trend_5d}",
+        "",
+        "## MA",
+        f"  MA5={snapshot.ma[5]:.4f}  MA20={snapshot.ma[20]:.4f}  MA60={snapshot.ma[60]:.4f}",
+        "## MACD(12,26,9)",
+        f"  DIF={snapshot.macd['dif']:.4f}  DEA={snapshot.macd['dea']:.4f}  "
+        f"MACD={snapshot.macd['macd']:.4f}",
+        "## RSI",
+        f"  RSI14={snapshot.rsi.get(14, 0):.2f}",
+        "## Bollinger Bands (20, 2σ)",
+        f"  upper={snapshot.boll['upper']:.4f}  mid={snapshot.boll['mid']:.4f}"
+        f"  lower={snapshot.boll['lower']:.4f}",
+        "",
+        "## Chan Theory structure",
+        f"  Stroke count: {snapshot.chan_bi_count}",
+        f"  Last stroke direction: {snapshot.chan_last_bi_direction or 'none'}",
+        f"  Central Hub count: {snapshot.chan_zhongshu_count}",
+    ]
+    if snapshot.chan_recent_buy_sell_points:
+        lines.append("## Recent buy/sell points (czsc)")
+        for p in snapshot.chan_recent_buy_sell_points:
+            kind = p.get("kind", "?")
+            price = p.get("price", 0.0)
+            desc = p.get("description", "")
+            lines.append(f"  {kind} @ {price:.2f} · {desc}")
+    return "\n".join(lines)
+
+
 # ===== Agent 调用 =====
 
 
@@ -105,10 +144,10 @@ async def analyze_technical(
     mock 模式时 llm.ainvoke 返回随机化假 JSON · 接口签名不变。
     解析失败时降级为中性评分 + 解释 · 永远不抛异常(0012 § 失败回退)。
 
-    ★i18n Phase4 刀1:language 默认 zh(走现有中文 prompt·逐字节不变)· en 分发刀2 接。
+    ★i18n Phase4:language 默认 zh(走现有中文 prompt·逐字节不变)· en 走英文 prompt + 语言锁双层。
     """
     system = _system_prompt(market, language)
-    prompt = _format_snapshot(snapshot)
+    prompt = _format_snapshot_en(snapshot) if language == "en" else _format_snapshot(snapshot)
 
     resp = await ainvoke(
         prompt=prompt,
@@ -118,6 +157,30 @@ async def analyze_technical(
     )
 
     score, confidence, rationale, key_levels = _parse_response(resp.content)
+    prompt_tokens, completion_tokens, total_tokens = (
+        resp.prompt_tokens, resp.completion_tokens, resp.total_tokens,
+    )
+
+    # ★语言锁第二层(仅 en · zh 不进此分支 = 零变化):CJK 检出 → 重试一次 → 仍中文则降级英文兜底。
+    if language == "en" and contains_cjk(rationale):
+        logger.warning("[ai.agent.technical] en 输出含中文(串台)· 加强语言锁重试一次")
+        resp2 = await ainvoke(
+            prompt=LANGUAGE_LOCK_RETRY_PREFIX + prompt,
+            system=system,
+            response_format_json=True,
+            temperature=0.3,
+        )
+        s2, c2, r2, k2 = _parse_response(resp2.content)
+        prompt_tokens += resp2.prompt_tokens
+        completion_tokens += resp2.completion_tokens
+        total_tokens += resp2.total_tokens
+        if contains_cjk(r2):
+            # 重试仍串台 → 降级:数值(评分/价位)语言中立保留,自由文本换英文兜底(标记)。
+            logger.warning("[ai.agent.technical] en 重试仍含中文 · 降级英文兜底 rationale")
+            score, confidence, key_levels = s2, c2, k2
+            rationale = _en_degrade_rationale(s2)
+        else:
+            score, confidence, rationale, key_levels = s2, c2, r2, k2
 
     return (
         AgentScore(
@@ -127,9 +190,30 @@ async def analyze_technical(
             rationale=rationale,
             key_levels=key_levels,
         ),
-        resp.prompt_tokens,
-        resp.completion_tokens,
-        resp.total_tokens,
+        prompt_tokens,
+        completion_tokens,
+        total_tokens,
+    )
+
+
+def _score_to_label_en(score: int) -> str:
+    """评分 → 5 档英文标签(仅用于串台降级兜底 rationale · 不改卡片 composite_label)。"""
+    if score >= 60:
+        return "Strong-Long"
+    if score >= 20:
+        return "Mild-Long"
+    if score > -20:
+        return "Neutral"
+    if score > -60:
+        return "Mild-Short"
+    return "Strong-Short"
+
+
+def _en_degrade_rationale(score: int) -> str:
+    """串台降级时的安全英文 rationale(数值仍有效 · 免责由 workflow validator 兜底追加)。"""
+    return (
+        f"Composite technical read: {_score_to_label_en(score)}. Derived from MA / MACD / RSI / "
+        "Bollinger Bands and Chan Theory structure signals."
     )
 
 

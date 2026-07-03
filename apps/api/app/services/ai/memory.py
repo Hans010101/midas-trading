@@ -57,6 +57,7 @@ async def record_decision(
     card: DecisionCardResponse,
     instrument: str,
     price_at: Decimal,
+    language: str = "zh",
 ) -> None:
     """旁路写一行 AIAnalysisMemory · best-effort · 永不抛 / 永不阻塞调用方。
 
@@ -83,6 +84,7 @@ async def record_decision(
             composite_confidence=Decimal(str(card.composite_confidence)),
             price_at=price_at,
             llm_mode=card.llm_mode,
+            language=language,  # i18n Phase4 刀2:存实际生成语言(默认 zh 向后兼容)
         )
         db.add(row)
         await db.commit()

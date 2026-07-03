@@ -140,6 +140,36 @@ async def test_record_decision_writes_row_with_all_fields(
 
 
 @pytest.mark.asyncio
+async def test_record_decision_default_language_zh(db_session: AsyncSession) -> None:
+    """i18n Phase4 刀2:不传 language → 默认 'zh'(向后兼容 · server_default 兜底)。"""
+    card = _make_card(symbol="ZHDEF", market="us", period="1d")
+    await record_decision(
+        db_session, card=card, instrument="spot", price_at=Decimal("100.0"),
+    )
+    row = (
+        await db_session.scalars(
+            select(AIAnalysisMemory).where(AIAnalysisMemory.symbol == "ZHDEF"),
+        )
+    ).one()
+    assert row.language == "zh"
+
+
+@pytest.mark.asyncio
+async def test_record_decision_stores_en_language(db_session: AsyncSession) -> None:
+    """i18n Phase4 刀2:显式 language='en' → 存实际生成语言 'en'。"""
+    card = _make_card(symbol="ENGEN", market="us", period="1d")
+    await record_decision(
+        db_session, card=card, instrument="spot", price_at=Decimal("100.0"), language="en",
+    )
+    row = (
+        await db_session.scalars(
+            select(AIAnalysisMemory).where(AIAnalysisMemory.symbol == "ENGEN"),
+        )
+    ).one()
+    assert row.language == "en"
+
+
+@pytest.mark.asyncio
 async def test_record_decision_spot_default_instrument(
     db_session: AsyncSession,
 ) -> None:

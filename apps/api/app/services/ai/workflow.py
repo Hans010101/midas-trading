@@ -36,7 +36,12 @@ from app.services.ai.agents.technical import analyze_technical, score_to_label
 from app.services.ai.llm import is_mock_mode
 from app.services.ai.trading_plan import compute_trading_plan
 from app.services.ai.usage import log_usage
-from app.services.ai.validator import has_imperative, rewrite_imperatives
+from app.services.ai.validator import (
+    ensure_advisory_disclaimer_en,
+    has_imperative,
+    rewrite_imperatives,
+    scrub_marketing,
+)
 from app.services.analysis import chan as chan_service
 from app.services.analysis.chan import ChanAnalysisResult
 
@@ -209,10 +214,20 @@ async def _node_decision_card(state: DecisionState) -> dict[str, Any]:
 
 
 async def _node_validator(state: DecisionState) -> dict[str, Any]:
-    """ValidatorNode · 祈使句 → 陈述句改写 · 0012 红线 ②。"""
+    """ValidatorNode · 祈使句 → 陈述句改写 · 0012 红线 ②。
+
+    ★i18n Phase4 刀2:en narrative 额外过营销 scrub + 英文免责固定串兜底(en 红线对等·
+      与中文同等强度)· zh 不进 en 分支 = 逐字节零变化。
+    """
     narrative = state["narrative"]
     lang = state.get("language", "zh")
-    if has_imperative(narrative, language=lang):
+    if lang == "en":
+        # ★en 无条件改写(不经 has_imperative 门控)· 防 validator 关键词表覆盖缺口漏改
+        #   (与 plan_note._finalize_note_en 同款无条件策略)· 再 scrub 营销 + 免责固定串兜底。
+        narrative = rewrite_imperatives(narrative, language="en")
+        narrative = scrub_marketing(narrative, language="en")
+        narrative = ensure_advisory_disclaimer_en(narrative)
+    elif has_imperative(narrative, language=lang):
         logger.warning(
             "[ai.workflow.validator] imperative detected · rewriting · before=%r",
             narrative[:80],

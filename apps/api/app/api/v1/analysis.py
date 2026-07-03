@@ -314,6 +314,7 @@ async def get_decision_card(
     # 失败已在 record_decision 内吞掉(只记 warning),此处不需 try/except。
     await record_decision(
         db, card=card, instrument=instrument, price_at=Decimal(str(klines[-1].close)),
+        language=lang,
     )
 
     # 6. 派生 actionable 可下单建议(0036 批次甲 · API 层 · 不改 AI 管线)

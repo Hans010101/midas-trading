@@ -134,6 +134,8 @@ _IMPERATIVE_KEYWORDS_EN: tuple[str, ...] = (
     "sell now",
     "buy immediately",
     "sell immediately",
+    "buy right now",
+    "sell right now",
     "time to buy",
     "time to sell",
     "go long now",
