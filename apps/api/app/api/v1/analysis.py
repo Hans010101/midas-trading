@@ -249,6 +249,10 @@ async def get_decision_card(
     if plan != "pro":
         return _locked_decision_card(symbol, market, period)
 
+    # ★i18n Phase4 刀1:取用户语言偏好(Pro 已过 → user 必非空 · 仍写死兜底 zh)· 穿给 workflow/cache。
+    # ★zh 用户 lang="zh" → 全链路走原代码行、缓存原 key(无后缀),行为逐字节零变化。
+    lang = (user.language_pref or "zh") if user else "zh"
+
     # M2-B 校验
     if instrument == "perp" and market != "crypto":
         raise HTTPException(
@@ -258,7 +262,7 @@ async def get_decision_card(
 
     # 1. 缓存命中检查 · 注:cache key 暂用 (market, symbol, period) · M2-D 加 instrument
     # WIP:M2-D 联调时如果发现 spot/perp 缓存串扰 · 改 set_cached_card 接口加 instrument
-    cached = await get_cached_card(market, symbol, period)
+    cached = await get_cached_card(market, symbol, period, language=lang)
     if cached is not None:
         logger.info(
             "[decision-card] CACHE HIT symbol=%s market=%s instrument=%s period=%s",
@@ -293,7 +297,7 @@ async def get_decision_card(
                 ) from e
 
     # 3. 跑 LangGraph workflow(mock 或 real,workflow 不关心)
-    card = await run_decision_workflow(symbol, market, period, klines)
+    card = await run_decision_workflow(symbol, market, period, klines, language=lang)
 
     logger.info(
         "[decision-card] symbol=%s market=%s period=%s score=%d label=%s"
@@ -303,7 +307,7 @@ async def get_decision_card(
     )
 
     # 4. 写缓存(不含 actionable · 由下方派生)· 失败不阻塞
-    await set_cached_card(card)
+    await set_cached_card(card, language=lang)
 
     # 5. 旁路记录决策卡历史(0036 批次乙 · best-effort · 永不阻塞响应)
     # price_at 用 klines[-1].close · 跟 workflow 内部 last_close 同源;

@@ -47,12 +47,17 @@ def _format_plan_prompt(plan: TradingPlan) -> str:
     )
 
 
-async def generate_plan_note(plan: TradingPlan, market: Market) -> tuple[str, int]:
+async def generate_plan_note(
+    plan: TradingPlan, market: Market, *, language: str = "zh",
+) -> tuple[str, int]:
     """生成 plan_note(解释文字)· 返回 (note, total_tokens)。
 
     mock 模式直接走规则模板(确定性 · 不烧 token);真实模式调 LLM,失败回退模板。
+
+    ★i18n Phase4 刀1:language 默认 zh(走现有 PLAN_NOTE_SYSTEM 中文·逐字节不变)· en 常量刀2 接。
     """
     _ = market  # 当前解释不分市场;保留入参以便后续按市场定制语气
+    _ = language  # 刀1 占位:保留入参供刀2 选 zh/en plan_note prompt 常量
     if plan.direction == "neutral" or plan.entry_low is None:
         return template_note(plan), 0
     if is_mock_mode():

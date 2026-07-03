@@ -61,6 +61,8 @@ async def post_diagnose(
     current_user: Annotated[User, Depends(require_quota("diagnose"))],
 ) -> StructureDiagnosis:
     raw_client = ch._client  # noqa: SLF001 — 房规:读层收裸 AsyncClient(同上)
+    # i18n Phase4 刀1:取用户语言偏好穿进诊断链路(默认 zh · zh 走原路径逐字节不变)。
+    lang = current_user.language_pref or "zh"
     try:
         return await get_structure_diagnosis(
             raw_client,
@@ -68,6 +70,7 @@ async def post_diagnose(
             payload.question,
             user_id=str(current_user.id),
             on_llm_run=make_quota_consumer(current_user.id, "diagnose"),
+            language=lang,
         )
     except NoFactorDataError as e:
         # 友好闸:无效 symbol / 非 USDT 永续 → 422(用户输入面 · 未进 LLM 零成本)

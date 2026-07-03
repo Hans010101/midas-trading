@@ -55,6 +55,7 @@ class DecisionState(TypedDict, total=False):
     market: Market
     period: Period
     klines: list[Kline]
+    language: str  # i18n Phase4 刀1:'zh'(默认)/'en' · 穿给 agent prompt 分发 + validator
 
     # DataPrepareNode 产出
     chan_result: ChanAnalysisResult
@@ -148,7 +149,7 @@ async def _node_technical_agent(state: DecisionState) -> dict[str, Any]:
     snapshot = state["snapshot"]
     market = state["market"]
     score, prompt_tokens, completion_tokens, total_tokens = await analyze_technical(
-        snapshot, market,
+        snapshot, market, language=state.get("language", "zh"),
     )
 
     # 真实调用时记 ai_usage_log · mock 不记(避免污染统计)
@@ -184,7 +185,9 @@ async def _node_trading_plan(state: DecisionState) -> dict[str, Any]:
         zhongshu_high=snapshot.zhongshu_high,
         zhongshu_low=snapshot.zhongshu_low,
     )
-    note, note_tokens = await generate_plan_note(plan, state["market"])
+    note, note_tokens = await generate_plan_note(
+        plan, state["market"], language=state.get("language", "zh"),
+    )
     plan = plan.model_copy(update={"plan_note": note})
     return {
         "trading_plan": plan,
@@ -208,12 +211,13 @@ async def _node_decision_card(state: DecisionState) -> dict[str, Any]:
 async def _node_validator(state: DecisionState) -> dict[str, Any]:
     """ValidatorNode · 祈使句 → 陈述句改写 · 0012 红线 ②。"""
     narrative = state["narrative"]
-    if has_imperative(narrative):
+    lang = state.get("language", "zh")
+    if has_imperative(narrative, language=lang):
         logger.warning(
             "[ai.workflow.validator] imperative detected · rewriting · before=%r",
             narrative[:80],
         )
-        narrative = rewrite_imperatives(narrative)
+        narrative = rewrite_imperatives(narrative, language=lang)
     return {"validated_narrative": narrative}
 
 
@@ -292,13 +296,18 @@ _compiled = _build_workflow()
 
 async def run_decision_workflow(
     symbol: str, market: Market, period: Period, klines: list[Kline],
+    *, language: str = "zh",
 ) -> DecisionCardResponse:
-    """跑完整 workflow · 返回 DecisionCardResponse。"""
+    """跑完整 workflow · 返回 DecisionCardResponse。
+
+    ★i18n Phase4 刀1:language 穿进 state → agent prompt 分发 + validator(默认 zh · zh 走原路径)。
+    """
     state: DecisionState = {
         "symbol": symbol,
         "market": market,
         "period": period,
         "klines": klines,
+        "language": language,
     }
     final_state = await _compiled.ainvoke(state)
     return cast("DecisionCardResponse", final_state["card"])

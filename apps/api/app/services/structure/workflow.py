@@ -83,6 +83,7 @@ class DiagnoseState(TypedDict, total=False):
     symbol: str
     question: str
     user_id: str | None              # 会员刀1 · ai_usage_log 审计归属(不参与诊断)
+    language: str                    # i18n Phase4 刀1:'zh'(默认)/'en' · 穿 prompt 分发 + validator
     # IntentParse 产出
     intent: IntentKind
     # Snapshot 产出
@@ -134,6 +135,9 @@ async def _node_diagnose(state: DiagnoseState) -> dict[str, Any]:
     prompt = build_diagnose_prompt(
         state["question"], state["intent"], snapshot.model_dump(mode="json"),
     )
+    # ★i18n Phase4 刀1:zh 走现有 SYSTEM_PROMPT 中文常量【一字不动·prompts.py 零改】;
+    #   刀3 en 时改选 SYSTEM_PROMPT_EN(见 docs/i18n 接线方案)· 刀1 en 回退 zh(功能等价现状)。
+    _ = state.get("language", "zh")  # 刀1 占位:language 已随 state 流入(刀3 选 zh/en 结构 prompt)
     resp = await ainvoke(
         prompt,
         system=SYSTEM_PROMPT,
@@ -183,13 +187,14 @@ async def _node_diagnose(state: DiagnoseState) -> dict[str, Any]:
 
 async def _node_validator(state: DiagnoseState) -> dict[str, Any]:
     """祈使句 → 陈述句改写(复用 ai/validator · 0012 红线②同款)· 结论与各因子 detail 都过。"""
+    lang = state.get("language", "zh")
     conclusion = state["conclusion"]
-    if has_imperative(conclusion):
+    if has_imperative(conclusion, language=lang):
         logger.warning("[structure.workflow.validator] 结论含祈使句 · 改写 · %r", conclusion[:60])
-        conclusion = rewrite_imperatives(conclusion)
+        conclusion = rewrite_imperatives(conclusion, language=lang)
     findings = [
-        f.model_copy(update={"detail": rewrite_imperatives(f.detail)})
-        if has_imperative(f.detail)
+        f.model_copy(update={"detail": rewrite_imperatives(f.detail, language=lang)})
+        if has_imperative(f.detail, language=lang)
         else f
         for f in state["factor_findings"]
     ]
@@ -238,20 +243,28 @@ _compiled = _build_workflow()
 
 async def run_structure_diagnosis(
     client: AsyncClient, symbol: str, question: str, user_id: str | None = None,
+    *, language: str = "zh",
 ) -> StructureDiagnosis:
-    """跑完整诊断 workflow(无缓存 · 缓存在 get_structure_diagnosis)。"""
+    """跑完整诊断 workflow(无缓存 · 缓存在 get_structure_diagnosis)。
+
+    ★i18n Phase4 刀1:language 默认 zh(走现有中文路径·逐字节不变)· en 分发刀3 接。
+    """
     state: DiagnoseState = {
         "client": client,
         "symbol": normalize_symbol(symbol),
         "question": question,
         "user_id": user_id,
+        "language": language,
     }
     final_state = await _compiled.ainvoke(state)
     return cast("StructureDiagnosis", final_state["diagnosis"])
 
 
-def _cache_key(symbol: str, intent: IntentKind) -> str:
-    return f"ai:structure:diagnose:{symbol}:{intent}:{compute_trading_day('crypto')}"
+def _cache_key(symbol: str, intent: IntentKind, language: str = "zh") -> str:
+    # ★i18n Phase4 刀1:加 language 分桶。★zh 用【无后缀原 key】—— 现有缓存命中逐字节不变、
+    #   零回归;en 才加 `:en` 后缀独立命名空间(同决策卡 make_cache_key 规则)。
+    suffix = "" if language == "zh" else f":{language}"
+    return f"ai:structure:diagnose:{symbol}:{intent}:{compute_trading_day('crypto')}{suffix}"
 
 
 async def get_structure_diagnosis(
@@ -261,6 +274,7 @@ async def get_structure_diagnosis(
     *,
     user_id: str | None = None,
     on_llm_run: Callable[[], Awaitable[None]] | None = None,
+    language: str = "zh",
 ) -> StructureDiagnosis:
     """缓存优先(key 含归一意图 · 同 symbol+意图+6h 桶共享)· Redis 异常降级直跑。
 
@@ -270,7 +284,7 @@ async def get_structure_diagnosis(
     """
     sym = normalize_symbol(symbol)
     intent = parse_intent(question)
-    key = _cache_key(sym, intent)
+    key = _cache_key(sym, intent, language)
     try:
         redis = await get_redis()
         raw = await redis.get(key)
@@ -279,7 +293,9 @@ async def get_structure_diagnosis(
     except Exception as e:  # noqa: BLE001 — 缓存读失败不阻塞主链路
         logger.warning("[structure.diagnose.cache] get failed key=%s err=%s", key, e)
 
-    diagnosis = await run_structure_diagnosis(client, sym, question, user_id=user_id)
+    diagnosis = await run_structure_diagnosis(
+        client, sym, question, user_id=user_id, language=language,
+    )
     if on_llm_run is not None:
         try:
             await on_llm_run()

@@ -50,19 +50,25 @@ def compute_trading_day(market: Market, now: datetime | None = None) -> str:
 
 def make_cache_key(
     market: Market, symbol: str, period: Period, trading_day: str,
+    *, language: str = "zh",
 ) -> str:
-    """生成 Redis cache key · 详见 0012 § Cache Key 设计。"""
+    """生成 Redis cache key · 详见 0012 § Cache Key 设计。
+
+    ★i18n Phase4 刀1:加 language 分桶(zh/en 不串)。★zh 用【无后缀原 key】—— 现有中文用户
+      缓存命中【逐字节不变、零回归】;en 才加 `:en` 后缀,独立命名空间。默认 zh 向后兼容。
+    """
     # symbol 里可能有 / 之类的字符,Redis 接受但 url 不友好 · 这里保留原样
     # (Redis 不要 url 化,key 字符集随意)
-    return f"ai:decision:{market}:{symbol}:{period}:{trading_day}"
+    suffix = "" if language == "zh" else f":{language}"
+    return f"ai:decision:{market}:{symbol}:{period}:{trading_day}{suffix}"
 
 
 async def get_cached_card(
-    market: Market, symbol: str, period: Period,
+    market: Market, symbol: str, period: Period, *, language: str = "zh",
 ) -> DecisionCardResponse | None:
     """命中返回 DecisionCardResponse(cached=True),未命中返回 None。"""
     trading_day = compute_trading_day(market)
-    key = make_cache_key(market, symbol, period, trading_day)
+    key = make_cache_key(market, symbol, period, trading_day, language=language)
     try:
         redis = await get_redis()
         raw = await redis.get(key)
@@ -84,10 +90,10 @@ async def get_cached_card(
     return DecisionCardResponse.model_validate(data)
 
 
-async def set_cached_card(card: DecisionCardResponse) -> None:
-    """写 Redis · TTL 按市场配置。"""
+async def set_cached_card(card: DecisionCardResponse, *, language: str = "zh") -> None:
+    """写 Redis · TTL 按市场配置。language 分桶(zh 无后缀原 key · en 独立)。"""
     trading_day = compute_trading_day(card.market)
-    key = make_cache_key(card.market, card.symbol, card.period, trading_day)
+    key = make_cache_key(card.market, card.symbol, card.period, trading_day, language=language)
     ttl = _TTL_BY_MARKET[card.market]
 
     # cached 字段写入时强制 False · 命中读出时 get_cached_card 翻 True
@@ -104,11 +110,11 @@ async def set_cached_card(card: DecisionCardResponse) -> None:
 
 
 async def delete_cached_card(
-    market: Market, symbol: str, period: Period,
+    market: Market, symbol: str, period: Period, *, language: str = "zh",
 ) -> int:
     """主动失效 cache · M2+ 用 · 当前未挂调用方。"""
     trading_day = compute_trading_day(market)
-    key = make_cache_key(market, symbol, period, trading_day)
+    key = make_cache_key(market, symbol, period, trading_day, language=language)
     try:
         redis = await get_redis()
         return int(await redis.delete(key))
