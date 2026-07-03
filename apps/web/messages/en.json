@@ -74,10 +74,8 @@
     },
     "market": "A-shares",
     "nav": {
-      "login": "Log in",
       "market": "Market Switcher",
       "palette": "Search symbols (600519 / NVDA / BTC / Tencent) or navigate…",
-      "search": "Search…",
       "theme": "Switch to light theme",
       "top": "Search symbols (⌘K)"
     },
@@ -689,15 +687,6 @@
         "macd": "MACD",
         "note": "Saved per browser (not synced to account) · detail pages show defaults on load (adjustable after opening)",
         "period": "Default Timeframe"
-      },
-      "language": {
-        "_": "Language / 语言",
-        "description": "Interface language · applies instantly · synced across devices when signed in",
-        "en": "English",
-        "en_note": "US English",
-        "note": "Signed in: syncs across devices; signed out: this browser only",
-        "zh": "中文",
-        "zh_note": "Simplified Chinese"
       },
       "notifications": {
         "_": "Message Notifications",
