@@ -49,9 +49,12 @@ const jetbrainsMono = localFont({
   ],
 })
 
-// ★i18n 激活:预渲染两 locale(保 landing 等 force-static 页仍 SSG)
+// ★i18n 激活 + 构建内存修复(deploy-build-memory-wall):【只预渲染默认 locale zh】。
+//   原返双 locale → 每页 SSG ×2(45→90)→ 生产 web build 静态生成内存压满整机(批0 翻车)。
+//   改只返 zh:build SSG 数 = pre-批0 基线(45 页·已知能过的构建内存);英文页 dynamicParams
+//   默认允许 → 按需 SSR 渲染(首访即时·不占构建内存)。中文=静态零回归,英文=按需。
 export function generateStaticParams() {
-  return routing.locales.map((locale) => ({ locale }))
+  return [{ locale: routing.defaultLocale }]
 }
 
 // 官网刀1:description 重写 + openGraph / twitter 卡。
