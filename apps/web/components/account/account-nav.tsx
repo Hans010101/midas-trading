@@ -6,8 +6,7 @@
  *   lg 以下 → 顶部水平 scrollable tab(照 lab-nav framed-segment 范式)
  */
 
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { Link, usePathname } from '@/i18n/navigation' // ★i18n:locale 感知导航 + 剥前缀高亮
 
 import { ACCOUNT_NAV_ITEMS, isActiveNavItem } from '@/lib/account-nav'
 import { cn } from '@/lib/utils'
