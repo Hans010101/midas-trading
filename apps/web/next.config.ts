@@ -1,9 +1,4 @@
-import createNextIntlPlugin from 'next-intl/plugin'
 import type { NextConfig } from 'next'
-
-// ★Phase 0 激活:挂 next-intl 插件,指向就绪的 i18n/request.ts(getRequestConfig 按 locale 载 messages)。
-//   这是让 request.ts / routing.ts 骨架真正生效的唯一开关(未挂时它们是死骨架)。
-const withNextIntl = createNextIntlPlugin('./i18n/request.ts')
 
 const nextConfig: NextConfig = {
   transpilePackages: ['@midas/shared'],
@@ -21,4 +16,4 @@ const nextConfig: NextConfig = {
   },
 }
 
-export default withNextIntl(nextConfig)
+export default nextConfig
