@@ -32,16 +32,15 @@ import {
 } from 'recharts'
 
 import { useBasisSeries, useLongShortRatio, useOpenInterest } from '@/hooks/use-crypto'
+import { type ChartColors, useChartColors } from '@/lib/chart-colors'
 
-// 视觉 token(recharts 需 hex)
-const C_LONG = '#1FA383' // 青绿 · 多 / 买
+// 视觉 token(recharts 需 hex)· ★数据系列色固定(多空/OI/基差·中饱和·暗底也够清晰·不随主题)。
+// ★暗黑 P1:容器色(网格/坐标轴/比值线/tooltip)改走 useChartColors 两套值(暗底不糊)。
+const C_LONG = '#1FA383' // 青绿 · 多 / 买(多空≠涨跌 · 不随 color_pref 翻转)
 const C_SHORT = '#E8918C' // 浅红 · 空 / 卖
-const C_RATIO = '#2A2A2A' // 深色 · 比值线
-const C_GOLD = '#B8860B' // 帝王金
-const C_RED = '#C8102E' // 中国红
+const C_GOLD = '#B8860B' // 帝王金 · OI 量 / 合约价
+const C_RED = '#C8102E' // 中国红 · OI 价值 / 指数价
 const C_ORANGE = '#D97706' // 橙 · 基差率
-const C_GRID = '#F0EEE8'
-const C_AXIS = '#94949C'
 
 const CHART_H = 'h-52'
 
@@ -73,12 +72,16 @@ const padMax = (m: number): number => (m >= 0 ? m * 1.003 : m * 0.997)
 // 给 recharts domain 用的函数对(成熟终端式紧凑量程)
 const TIGHT_DOMAIN: [typeof padMin, typeof padMax] = [padMin, padMax]
 
-const tooltipStyle = {
-  fontSize: 11,
-  borderRadius: 6,
-  border: '1px solid #F0EEE8',
-  padding: '4px 8px',
-} as const
+// ★暗黑 P1:tooltip 背景/边框/文字随主题(暗底不再白底刺眼)
+const TOOLTIP_BASE = { fontSize: 11, borderRadius: 6, padding: '4px 8px' } as const
+function tipStyle(c: ChartColors) {
+  return {
+    ...TOOLTIP_BASE,
+    backgroundColor: c.tooltipBg,
+    border: `1px solid ${c.tooltipBorder}`,
+    color: c.isDark ? '#E5E5E5' : '#1A1A1A',
+  }
+}
 const legendStyle = { fontSize: 10 } as const
 
 interface DimensionSectionProps {
@@ -177,15 +180,16 @@ export function DimensionSection({ futuresSymbol }: DimensionSectionProps) {
 
 // ── ① OI · 持仓量(币)实线 + 持仓价值(USD)虚线 · 双 Y 轴 ──────────────────
 function OiChart({ data }: { data: { t: string; full: string; oi_coin: number; oi_usd: number }[] }) {
+  const c = useChartColors()
   return (
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-        <CartesianGrid stroke={C_GRID} vertical={false} />
-        <XAxis dataKey="t" tick={{ fontSize: 9, fill: C_AXIS }} interval={xInterval(data.length)} minTickGap={36} tickLine={false} />
-        <YAxis yAxisId="coin" width={42} tick={{ fontSize: 9, fill: C_AXIS }} tickFormatter={fmtCompact} domain={TIGHT_DOMAIN} />
-        <YAxis yAxisId="usd" orientation="right" width={42} tick={{ fontSize: 9, fill: C_AXIS }} tickFormatter={fmtCompact} domain={TIGHT_DOMAIN} />
+        <CartesianGrid stroke={c.grid} vertical={false} />
+        <XAxis dataKey="t" tick={{ fontSize: 9, fill: c.axisText }} interval={xInterval(data.length)} minTickGap={36} tickLine={false} />
+        <YAxis yAxisId="coin" width={42} tick={{ fontSize: 9, fill: c.axisText }} tickFormatter={fmtCompact} domain={TIGHT_DOMAIN} />
+        <YAxis yAxisId="usd" orientation="right" width={42} tick={{ fontSize: 9, fill: c.axisText }} tickFormatter={fmtCompact} domain={TIGHT_DOMAIN} />
         <Tooltip
-          contentStyle={tooltipStyle}
+          contentStyle={tipStyle(c)}
           labelFormatter={(_l, p) => (p?.[0]?.payload?.full ?? '')}
           formatter={(v, name) => [name === '持仓量(币)' ? fmtCompact(Number(v)) : `$${fmtCompact(Number(v))}`, name]}
         />
@@ -199,23 +203,24 @@ function OiChart({ data }: { data: { t: string; full: string; oi_coin: number; o
 
 // ── ②③④ · 多/空 堆叠柱(归一 100%)+ 比值线(右轴)──────────────────────────
 function RatioStackChart({ data }: { data: { t: string; full: string; long: number; short: number; ratio: number }[] }) {
+  const c = useChartColors()
   return (
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }} barCategoryGap={0}>
-        <CartesianGrid stroke={C_GRID} vertical={false} />
-        <XAxis dataKey="t" tick={{ fontSize: 9, fill: C_AXIS }} interval={xInterval(data.length)} minTickGap={36} tickLine={false} />
-        <YAxis yAxisId="pct" width={32} tick={{ fontSize: 9, fill: C_AXIS }} domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} />
-        <YAxis yAxisId="ratio" orientation="right" width={34} tick={{ fontSize: 9, fill: C_AXIS }} domain={TIGHT_DOMAIN} tickFormatter={(v: number) => v.toFixed(2)} />
+        <CartesianGrid stroke={c.grid} vertical={false} />
+        <XAxis dataKey="t" tick={{ fontSize: 9, fill: c.axisText }} interval={xInterval(data.length)} minTickGap={36} tickLine={false} />
+        <YAxis yAxisId="pct" width={32} tick={{ fontSize: 9, fill: c.axisText }} domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} />
+        <YAxis yAxisId="ratio" orientation="right" width={34} tick={{ fontSize: 9, fill: c.axisText }} domain={TIGHT_DOMAIN} tickFormatter={(v: number) => v.toFixed(2)} />
         <Tooltip
-          contentStyle={tooltipStyle}
+          contentStyle={tipStyle(c)}
           labelFormatter={(_l, p) => (p?.[0]?.payload?.full ?? '')}
           formatter={(v, name) => [name === '比值' ? Number(v).toFixed(3) : `${Number(v).toFixed(1)}%`, name]}
         />
         <Legend wrapperStyle={legendStyle} iconSize={8} />
-        <ReferenceLine yAxisId="ratio" y={1} stroke={C_AXIS} strokeDasharray="3 3" />
+        <ReferenceLine yAxisId="ratio" y={1} stroke={c.axisText} strokeDasharray="3 3" />
         <Bar yAxisId="pct" dataKey="long" name="多" stackId="ls" fill={C_LONG} />
         <Bar yAxisId="pct" dataKey="short" name="空" stackId="ls" fill={C_SHORT} />
-        <Line yAxisId="ratio" type="monotone" dataKey="ratio" name="比值" stroke={C_RATIO} strokeWidth={1} dot={false} />
+        <Line yAxisId="ratio" type="monotone" dataKey="ratio" name="比值" stroke={c.neutral} strokeWidth={1} dot={false} />
       </ComposedChart>
     </ResponsiveContainer>
   )
@@ -223,19 +228,20 @@ function RatioStackChart({ data }: { data: { t: string; full: string; long: numb
 
 // ── ⑤ 主动买卖量 · 对称双色柱(buy 正 / sell 负)─────────────────────────────
 function TakerChart({ data }: { data: { t: string; full: string; buy: number; sell: number }[] }) {
+  const c = useChartColors()
   return (
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }} barCategoryGap={0} stackOffset="sign">
-        <CartesianGrid stroke={C_GRID} vertical={false} />
-        <XAxis dataKey="t" tick={{ fontSize: 9, fill: C_AXIS }} interval={xInterval(data.length)} minTickGap={36} tickLine={false} />
-        <YAxis width={42} tick={{ fontSize: 9, fill: C_AXIS }} tickFormatter={(v: number) => fmtCompact(Math.abs(v))} domain={TIGHT_DOMAIN} />
+        <CartesianGrid stroke={c.grid} vertical={false} />
+        <XAxis dataKey="t" tick={{ fontSize: 9, fill: c.axisText }} interval={xInterval(data.length)} minTickGap={36} tickLine={false} />
+        <YAxis width={42} tick={{ fontSize: 9, fill: c.axisText }} tickFormatter={(v: number) => fmtCompact(Math.abs(v))} domain={TIGHT_DOMAIN} />
         <Tooltip
-          contentStyle={tooltipStyle}
+          contentStyle={tipStyle(c)}
           labelFormatter={(_l, p) => (p?.[0]?.payload?.full ?? '')}
           formatter={(v, name) => [fmtCompact(Math.abs(Number(v))), name]}
         />
         <Legend wrapperStyle={legendStyle} iconSize={8} />
-        <ReferenceLine y={0} stroke={C_AXIS} />
+        <ReferenceLine y={0} stroke={c.axisText} />
         <Bar dataKey="buy" name="主买" fill={C_LONG} stackId="taker" />
         <Bar dataKey="sell" name="主卖" fill={C_SHORT} stackId="taker" />
       </ComposedChart>
@@ -245,13 +251,14 @@ function TakerChart({ data }: { data: { t: string; full: string; buy: number; se
 
 // ── ⑥ 基差 · 合约价 + 指数价 + 基差率(右轴橙线)· 占位示意 ────────────────────
 function BasisChart({ data }: { data: { t: string; full: string; mark: number; index: number; basisPct: number }[] }) {
+  const c = useChartColors()
   return (
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-        <CartesianGrid stroke={C_GRID} vertical={false} />
-        <XAxis dataKey="t" tick={{ fontSize: 9, fill: C_AXIS }} interval={xInterval(data.length)} minTickGap={36} tickLine={false} />
-        <YAxis yAxisId="price" width={44} tick={{ fontSize: 9, fill: C_AXIS }} domain={TIGHT_DOMAIN} tickFormatter={fmtCompact} />
-        <YAxis yAxisId="pct" orientation="right" width={36} tick={{ fontSize: 9, fill: C_AXIS }} domain={TIGHT_DOMAIN} tickFormatter={(v: number) => `${v.toFixed(2)}%`} />
+        <CartesianGrid stroke={c.grid} vertical={false} />
+        <XAxis dataKey="t" tick={{ fontSize: 9, fill: c.axisText }} interval={xInterval(data.length)} minTickGap={36} tickLine={false} />
+        <YAxis yAxisId="price" width={44} tick={{ fontSize: 9, fill: c.axisText }} domain={TIGHT_DOMAIN} tickFormatter={fmtCompact} />
+        <YAxis yAxisId="pct" orientation="right" width={36} tick={{ fontSize: 9, fill: c.axisText }} domain={TIGHT_DOMAIN} tickFormatter={(v: number) => `${v.toFixed(2)}%`} />
         <Legend wrapperStyle={legendStyle} iconSize={8} />
         <Line yAxisId="price" type="monotone" dataKey="mark" name="合约价" stroke={C_GOLD} strokeWidth={1.2} dot={false} />
         <Line yAxisId="price" type="monotone" dataKey="index" name="指数价" stroke={C_RED} strokeWidth={1} strokeDasharray="4 3" dot={false} />

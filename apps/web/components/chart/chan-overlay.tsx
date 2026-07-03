@@ -31,6 +31,7 @@ import type { Chart } from 'klinecharts'
 import { useEffect } from 'react'
 
 import { useChan } from '@/hooks/use-chan'
+import { useChartColors } from '@/lib/chart-colors'
 import { ensureMidasOverlays } from '@/lib/klinecharts-extensions'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
 
@@ -51,14 +52,11 @@ interface Props {
 const CHAN_GROUP_ID = 'midas-chan-overlay'
 
 // 配色 token(本组件常量 · 跟 CLAUDE.md 视觉系统对齐)
+// ★暗黑 P1:笔金 / 中枢淡灰蓝固定(暗底够清晰·中枢为锁定色);分型/买卖点的涨跌红绿改走
+//   useChartColors(顶分型/卖点=跌色 down、底分型/买点=涨色 up)· 暗底微调 + color_pref 翻转都对。
 const COLOR_BI = '#B8860B'                          // 帝王金 · 笔连线
-const COLOR_ZS_FILL = 'rgba(100, 130, 160, 0.18)'   // 淡灰蓝填充
+const COLOR_ZS_FILL = 'rgba(100, 130, 160, 0.18)'   // 淡灰蓝填充(中枢·锁定色)
 const COLOR_ZS_BORDER = '#6482A0'                   // 淡灰蓝实线边
-const COLOR_FX_TOP = '#0F6E5F'                      // 墨绿 · 顶分型(预示转跌)
-const COLOR_FX_BOTTOM = '#DC143C'                   // 朱红 · 底分型(预示转涨)
-// 0012 二波 · 买卖点 · 买点用「涨色」朱红 / 卖点用「跌色」墨绿
-const COLOR_BSP_BUY = '#DC143C'                     // B1/B2/B3
-const COLOR_BSP_SELL = '#0F6E5F'                    // S1/S2/S3
 
 // 自定义 overlay 注册位于 lib/klinecharts-extensions.ts(midas-rect + midas-fractal)·
 // 任何需要的组件 import 即触发注册副作用,幂等。
@@ -81,6 +79,7 @@ export function ChanOverlay({
   const market = marketProp ?? storeMarket
   const period = periodProp ?? storePeriod
   const chanEnabled = enabledProp ?? storeChanEnabled
+  const c = useChartColors() // ★暗黑 P1:分型/买卖点涨跌色随主题 + color_pref
 
   const { data } = useChan({
     symbol, market, period, instrument,
@@ -163,7 +162,7 @@ export function ChanOverlay({
         extendData: isTop ? '▽' : '△',
         styles: {
           text: {
-            color: isTop ? COLOR_FX_TOP : COLOR_FX_BOTTOM,
+            color: isTop ? c.down : c.up, // 顶分型=转跌(跌色)/ 底分型=转涨(涨色)
             size: 14,
             family: 'Helvetica Neue, Arial, sans-serif',
             weight: 'bold',
@@ -199,7 +198,7 @@ export function ChanOverlay({
         extendData: bsp.kind,
         styles: {
           text: {
-            color: isBuy ? COLOR_BSP_BUY : COLOR_BSP_SELL,
+            color: isBuy ? c.up : c.down, // 买点=涨色 / 卖点=跌色
             size: 11,                  // 字符标签 · 比分型小一点 · 不喧宾夺主
             family: 'JetBrains Mono, Consolas, monospace',
             weight: 'bold',
@@ -220,7 +219,7 @@ export function ChanOverlay({
     } catch (e) {
       console.warn('[chan-overlay] createOverlay failed:', e)
     }
-  }, [chart, chanEnabled, data])
+  }, [chart, chanEnabled, data, c]) // ★c 入 deps:明暗/涨跌偏好切换时重绘分型/买卖点
 
   return null
 }
