@@ -76,6 +76,12 @@ class AIAnalysisMemory(Base):
 
     llm_mode: Mapped[str] = mapped_column(String(8), nullable=False)  # mock/real
 
+    # i18n Phase4 刀2:存【实际生成语言】(zh/en · 非用户偏好 · 同一用户切语言历史反映当时生成语言)。
+    # server_default='zh':历史行 + 现有 zh 用户零感知(向后兼容)。命中率可按语言拆桶用。
+    language: Mapped[str] = mapped_column(
+        String(8), nullable=False, server_default=text("'zh'"),
+    )
+
     # ===== Reflection 回填(初写时全部 NULL · Celery beat 5d 后回填)=====
     reflected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # horizon 后实测 close 价

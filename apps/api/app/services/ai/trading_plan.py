@@ -128,4 +128,27 @@ def template_note(plan: TradingPlan) -> str:
     )
 
 
-__all__ = ["compute_trading_plan", "template_note"]
+def template_note_en(plan: TradingPlan) -> str:
+    """英文规则模板兜底(i18n Phase4 刀2)· en 用户在 mock / LLM 失败 / 串台降级时用。
+
+    ★为什么要 en 版:zh template_note 是中文,en 用户回退到它就【中文漏给英文用户】=破红线。
+    价位数字与 zh 版一字不差(纯规则算)· 陈述句不含祈使 · 免责由 ensure_advisory_disclaimer_en 兜底。
+    """
+    if plan.direction == "neutral" or plan.entry_low is None:
+        return (
+            "Long/short signals are neutral; the structure offers no clear "
+            "trend-following entry, so staying on the sidelines is the read."
+        )
+    side = "Long" if plan.direction == "long" else "Short"
+    verb = "a pullback to" if plan.direction == "long" else "a bounce to"
+    invalid = "breaks below" if plan.direction == "long" else "reclaims"
+    return (
+        f"{side} plan: rather than chasing price, the structure is framed around {verb} the "
+        f"{plan.entry_low}–{plan.entry_high} zone; it is invalidated if price {invalid} "
+        f"{plan.stop}; targets sit at {plan.target1} / {plan.target2} "
+        f"(risk-reward about {plan.risk_reward}). These are rule-computed reference levels, "
+        "not a trading instruction."
+    )
+
+
+__all__ = ["compute_trading_plan", "template_note", "template_note_en"]
