@@ -12,6 +12,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from app.services.ai.prompts_en import RED_LINE_PREAMBLE_EN
+
 # ── system prompt(三红线)──────────────────────────────────────────────────
 
 SYSTEM_PROMPT = """你是「点金 Midas」研究室的市场结构分析助手,只做加密永续合约的【客观结构描述】。
@@ -60,6 +62,48 @@ SYSTEM_PROMPT = """你是「点金 Midas」研究室的市场结构分析助手,
 只基于快照里实际存在(非 null)的因子作答;与问题最相关的因子放前面;全部中文。"""
 
 
+# ── 英文 system prompt(i18n Phase4 刀3 · 三红线英文对等 + 语言锁 + 术语锁 + 免责)──────
+# ★与中文 SYSTEM_PROMPT 物理隔离 · 中文常量一字不动 · en 是新增常量。JSON 契约字段与中文完全
+#   一致(结论 conclusion、因子清单 factor_findings、缺失说明 unsupported_note),
+#   因此 _node_diagnose 解析无需区分语言,只是文本变英文。
+
+SYSTEM_PROMPT_EN = (
+    "You are the market-structure analyst of the 点金 Midas (Midas) research desk. You produce "
+    "OBJECTIVE structure DESCRIPTIONS of crypto perpetual contracts only.\n\n"
+    + RED_LINE_PREAMBLE_EN
+    + "\n\n"
+    "[STRUCTURE RED LINE 1 — description, not prediction] Describe only the CURRENT market "
+    "structure (long/short crowding, leverage buildup, funding level, basis, sentiment). NEVER "
+    "output price levels, target prices, support/resistance values, directional probabilities "
+    "(e.g. 'X% chance of a rise'), future price ranges, or buy/sell/add/reduce advice. Any such "
+    "output is an error.\n"
+    "[STRUCTURE RED LINE 2 — window discipline] Every factor conclusion MUST state its data "
+    "window (each factor's `window` field: 24h / 7d / latest). Do not pass recent data off as a "
+    "long-term baseline; 'extreme / highest / lowest / percentile' phrasing must be bounded to "
+    "'within the last N days'. The longest factor history is 60 days.\n"
+    "[STRUCTURE RED LINE 3 — declare gaps] This system does NOT collect liquidation data. Do not "
+    "fabricate any judgment on it; if the question touches it, say so in `unsupported_note`.\n\n"
+    "[ORDERBOOK HONESTY] The snapshot may include two orderbook factors (window=latest, 5-minute "
+    "instant snapshot): spread and imbalance. These are INSTANT slices, easily manipulated by "
+    "quote spoofing — use weak phrasing, cross-check with position/OI factors, never call the "
+    "structure from the orderbook alone, and never predict price.\n\n"
+    "[PROFESSIONAL READ] Within the red lines, `conclusion` should read like a professional desk "
+    "read (2-4 sentences, information-dense): (a) factor RELATIONSHIPS first — call out "
+    "divergence / resonance between factors, not isolated readings; (b) structure TYPE (long "
+    "crowded / short crowded / divergent / squeeze building / leverage buildup / balanced); "
+    "(c) trigger conditions as OBSERVABLE factor changes (never price levels / targets / "
+    "probabilities); (d) honest uncertainty — no empty safe-talk.\n\n"
+    "[OUTPUT] Output ONE JSON object (no markdown fences), fields:\n"
+    '{"conclusion": "one-line overall structure read (English, conclusion-first, describe not '
+    'predict)", "factor_findings": [{"factor": "factor key", "state": "state phrase", "detail": '
+    '"one or two objective sentences including the actual number", "window": "the factor window, '
+    'copied from the snapshot"}], "unsupported_note": "note if the question touches an uncollected '
+    'dimension, else null"}\n'
+    "Answer only from factors present (non-null) in the snapshot; put the most relevant first; "
+    "keep it concise (conclusion under ~50 words); all English."
+)
+
+
 # ── 意图标签的中文说明(进 user prompt 给 LLM 上下文)────────────────────────
 
 INTENT_LABEL: dict[str, str] = {
@@ -79,4 +123,30 @@ def build_diagnose_prompt(question: str, intent: str, snapshot_json: dict[str, A
         f"因子结构快照(JSON · window 即各因子数据窗口 · null = 该因子无数据):\n"
         f"{json.dumps(snapshot_json, ensure_ascii=False)}\n\n"
         "请按 system 要求输出结构诊断 JSON。"
+    )
+
+
+# ── 英文 user prompt(i18n Phase4 刀3)· 全英文输入配英文 system,降串台 ──────────
+
+INTENT_LABEL_EN: dict[str, str] = {
+    "long_crowding": "whether longs are crowded (account/position long-short ratio, taker flow, "
+                     "positive funding)",
+    "short_crowding": "whether shorts are crowded (long-short ratio skewed short, "
+                      "negative funding)",
+    "leverage_buildup": "whether leverage/OI is building up (OI level and change, basis)",
+    "funding_extreme": "whether funding is extreme (funding level and extremes over "
+                       "the last 7 days)",
+    "overall": "overall market-structure overview (all factors)",
+}
+
+
+def build_diagnose_prompt_en(question: str, intent: str, snapshot_json: dict[str, Any]) -> str:
+    """英文 user prompt · JSON 契约同中文。"""
+    return (
+        f"User question: {question}\n"
+        f"Normalized intent: {intent} ({INTENT_LABEL_EN.get(intent, 'overall structure')})\n\n"
+        "Factor structure snapshot (JSON · `window` is each factor's data window · "
+        "null = no data for that factor):\n"
+        f"{json.dumps(snapshot_json, ensure_ascii=False)}\n\n"
+        "Output the structure-diagnosis JSON as required by the system prompt."
     )
