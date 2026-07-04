@@ -1,16 +1,17 @@
 'use client'
 
 /**
- * 某阶文章列表 · 薄 server 壳的 'use client' 内层(stage/page.tsx 用 Suspense 包它)。
- * useSearchParams 读 ?s={stageSlug};仅用 manifest(纯数据 · 无 fs)过滤 + 按 order 排序。
- * ⛔ 不读 md 文件(那是文章页 server 端的事),所以可安全留在 client。
+ * 某阶文章列表 · 'use client' 内层(stage/[s]/page.tsx server 页传 props slug · SEO 批2)。
+ * ★去 useSearchParams 改 props:消除 client bailout → SSG 预渲染出完整 HTML(阶描述 + 文章
+ *   <a> 列表进初始 HTML=打通「首页→阶→文章」纯 HTML 爬行链 · 修审计 critical「stage 空壳」)。
+ * 仅用 manifest(纯数据 · 无 fs)过滤 + 按 order 排序;学习进度打勾(useAcademyProgress·登录态)
+ * 留 client · SSR 首帧为未打勾态 · hydration 后补——这正是保留 'use client' 的唯一原因。
  *
  * UI 修补:删二级标签行 + 「‹ 训练营首页」返回链接;改为常驻左侧导航 AcademySideNav(active=当前阶 slug)。
  */
 
 import { ArrowRight, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
 
 import { AcademySideNav } from '@/components/academy/academy-side-nav'
 import { StageExamEntry } from '@/components/academy/stage-exam-entry'
@@ -19,9 +20,7 @@ import { TopNav } from '@/components/layout/top-nav'
 import { ACADEMY_ARTICLES, ACADEMY_STAGES } from '@/content/academy/manifest'
 import { useAcademyProgress } from '@/hooks/use-academy-progress'
 
-export function StageList() {
-  const params = useSearchParams()
-  const slug = params.get('s') ?? ''
+export function StageList({ slug }: { slug: string }) {
   const stage = ACADEMY_STAGES.find((s) => s.slug === slug)
   const articles = ACADEMY_ARTICLES.filter((a) => a.stage === slug).sort(
     (a, b) => a.order - b.order,
@@ -58,7 +57,7 @@ export function StageList() {
                     {articles.map((a) => (
                       <li key={a.slug}>
                         <Link
-                          href={`/academy/article?slug=${a.slug}`}
+                          href={`/academy/article/${a.slug}`}
                           className="group flex items-start gap-3 rounded-lg border border-paper bg-cream p-4 shadow-sm transition-colors hover:border-midas-red/40"
                         >
                           {completedSet.has(a.slug) ? (

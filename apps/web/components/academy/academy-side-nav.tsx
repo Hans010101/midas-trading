@@ -21,7 +21,7 @@ function navItems() {
   return [
     ...ACADEMY_STAGES.map((s) => ({
       key: s.slug,
-      href: `/academy/stage?s=${s.slug}`,
+      href: `/academy/stage/${s.slug}`,
       label: `${s.stageLabel} ${s.name}`,
     })),
     { key: GLOSSARY_KEY, href: '/academy/glossary', label: '名词词典' },

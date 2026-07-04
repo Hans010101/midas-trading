@@ -10,7 +10,8 @@ import { ACADEMY_ARTICLES, ACADEMY_STAGES } from '@/content/academy/manifest'
  *   文章页 SSR 全文 · 此前是爬虫孤岛,sitemap 是让非 JS 爬虫拿到文章 URL 的最快通道)。
  * ★不进 sitemap:4 个 preview 详情页(?symbol= 变体是字节级相同的空壳,批7 做语义壳后再分批进)·
  *   login/register/verify-email(noindex 卫生页)· /academy/exam(纯交互)· admin/account(登录墙)。
- * ★文章 URL 现为 ?slug= 形式(批2 迁移路径段后此处同步改一行模板 · 旧 URL 届时 308 兜底)。
+ * ★文章/阶段 URL 已迁路径段(SEO 批2 · docs/decisions/0045):/academy/article/{slug} ·
+ *   /academy/stage/{s} · 旧 ?slug=/?s= 由薄壳 308 兜底。
  * lastModified 不填(无可靠日期源 · D7 git 回填是批3 的事 · 宁缺毋假)。
  */
 
@@ -46,13 +47,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
   }))
 
   const stageEntries: MetadataRoute.Sitemap = ACADEMY_STAGES.map((s) => ({
-    url: `${BASE}/academy/stage?s=${s.slug}`,
+    url: `${BASE}/academy/stage/${s.slug}`,
     priority: 0.7,
     changeFrequency: 'monthly',
   }))
 
   const articleEntries: MetadataRoute.Sitemap = ACADEMY_ARTICLES.map((a) => ({
-    url: `${BASE}/academy/article?slug=${a.slug}`,
+    url: `${BASE}/academy/article/${a.slug}`,
     priority: 0.8,
     changeFrequency: 'monthly',
   }))

@@ -79,7 +79,7 @@ export function ExamRunner() {
               <>
                 <ChevronRight className="h-3 w-3 text-muted-foreground/50" />
                 <Link
-                  href={`/academy/stage?s=${stage.slug}`}
+                  href={`/academy/stage/${stage.slug}`}
                   className="transition-colors hover:text-midas-red"
                 >
                   {stage.name}
