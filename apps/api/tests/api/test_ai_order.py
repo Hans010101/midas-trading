@@ -54,6 +54,7 @@ async def test_ai_order_spot_buy_tags_ai_signal(db_session: AsyncSession) -> Non
         ch,  # type: ignore[arg-type]
         user,  # type: ignore[arg-type]
         db_session,
+        "zh",  # lang(i18n Phase3 刀2 · 直接调用端点函数需显式传)
     )
     assert resp.filled is True
     assert resp.source == "ai_signal"
@@ -75,6 +76,7 @@ async def test_ai_order_cn_buy_tags_ai_signal(db_session: AsyncSession) -> None:
         ch,  # type: ignore[arg-type]
         user,  # type: ignore[arg-type]
         db_session,
+        "zh",  # lang(i18n Phase3 刀2 · 直接调用端点函数需显式传)
     )
     assert resp.filled is True
     assert resp.source == "ai_signal"
@@ -96,6 +98,7 @@ async def test_ai_order_spot_sell_no_position_rejected(db_session: AsyncSession)
         ch,  # type: ignore[arg-type]
         user,  # type: ignore[arg-type]
         db_session,
+        "zh",  # lang(i18n Phase3 刀2 · 直接调用端点函数需显式传)
     )
     assert resp.filled is False  # 无持仓 → 不成交(观望)· 没有裸做空
 
@@ -119,6 +122,7 @@ async def test_ai_order_crypto_open_long_tags_ai_signal(
         _FakeCH(),  # type: ignore[arg-type]
         user,  # type: ignore[arg-type]
         db_session,
+        "zh",  # lang(i18n Phase3 刀2 · 直接调用端点函数需显式传)
     )
     assert resp.filled is True
     assert resp.source == "ai_signal"
@@ -146,6 +150,7 @@ async def test_ai_order_hk_lot_rounded(db_session: AsyncSession) -> None:
         ch,  # type: ignore[arg-type]
         user,  # type: ignore[arg-type]
         db_session,
+        "zh",  # lang(i18n Phase3 刀2 · 直接调用端点函数需显式传)
     )
     assert resp.filled is True
     assert resp.source == "ai_signal"
@@ -169,6 +174,7 @@ async def test_ai_order_hk_not_in_pool_rejected(db_session: AsyncSession) -> Non
         ch,  # type: ignore[arg-type]
         user,  # type: ignore[arg-type]
         db_session,
+        "zh",  # lang(i18n Phase3 刀2 · 直接调用端点函数需显式传)
     )
     assert resp.filled is False
     assert "不在" in resp.detail or "池" in resp.detail
@@ -187,6 +193,7 @@ async def test_ai_order_hk_below_one_lot_rejected(db_session: AsyncSession) -> N
         ch,  # type: ignore[arg-type]
         user,  # type: ignore[arg-type]
         db_session,
+        "zh",  # lang(i18n Phase3 刀2 · 直接调用端点函数需显式传)
     )
     assert resp.filled is False
     assert "一手" in resp.detail or "不足" in resp.detail
@@ -203,5 +210,6 @@ async def test_ai_order_invalid_direction_for_market(db_session: AsyncSession) -
             _FakeCH(),  # type: ignore[arg-type]
             user,  # type: ignore[arg-type]
             db_session,
+            "zh",  # lang(i18n Phase3 刀2)
         )
     assert exc.value.status_code == 400

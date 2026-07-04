@@ -144,7 +144,7 @@ async def test_strategy_recommend_uptrend_ma_cross():
     """上升趋势 → 推荐 ma_cross。"""
     ch = _FakeCH(_kl([100.0 + i for i in range(40)]))
     resp = await get_strategy_recommend(
-        ch, None, None, None, None, None,  # type: ignore[arg-type]
+        ch, None, None, None, None, None, "zh",  # type: ignore[arg-type]  # 末位 = lang(刀2)
         symbol="NVDA", market="us", period="1d", limit=300, instrument="spot",
     )
     assert resp.recommended_strategy == "ma_cross"
@@ -158,7 +158,7 @@ async def test_strategy_recommend_four_markets_echo():
     ch = _FakeCH(_kl([100.0 + i for i in range(40)]))
     for market, inst in (("cn", "spot"), ("us", "spot"), ("crypto", "perp")):
         resp = await get_strategy_recommend(
-            ch, None, None, None, None, None,  # type: ignore[arg-type]
+            ch, None, None, None, None, None, "zh",  # type: ignore[arg-type]  # 末位 = lang(刀2)
             symbol="X", market=market, period="1d", limit=300, instrument=inst,  # type: ignore[arg-type]
         )
         assert resp.market == market
@@ -189,7 +189,7 @@ async def test_strategy_recommend_perp_non_crypto_rejected():
     ch = _FakeCH(_kl([10.0] * 35))
     with pytest.raises(HTTPException) as exc:
         await get_strategy_recommend(
-            ch, None, None, None, None, None,  # type: ignore[arg-type]
+            ch, None, None, None, None, None, "zh",  # type: ignore[arg-type]  # 末位 = lang(刀2)
             symbol="600519", market="cn", period="1d", limit=300, instrument="perp",
         )
     assert exc.value.status_code == 400
