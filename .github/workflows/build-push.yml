@@ -11,7 +11,8 @@ name: 构建并推送镜像到 ACR（阶段1 打底·部署链不动）
 #   ACR_NAMESPACE=midastrade(★自动创建仓库已开·私有)
 # ★web 头号风险(ADR 0016):NEXT_PUBLIC_API_URL 是 build-time inline 进 JS bundle · 必须在
 #   Actions build 时用生产值(repo Variable)注入,否则烤进 localhost fallback → 整站白屏。
-#   本 workflow build 完对 web 镜像【自动断言】bundle 含生产 API URL、不含 localhost:8000。
+#   本 workflow build 完对 web 镜像【自动断言】bundle 含生产 API URL(api.midastrade.asia)·
+#   ★不查 localhost:8000 残留(me.ts 有 ?? 兜底字面量·注入正确时也在·会假阳性)。
 
 on:
   workflow_dispatch: {} # 阶段1 只手动触发(不干扰现网 · 验证用)
@@ -65,14 +66,14 @@ jobs:
           IMG="${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/midas-web:${{ github.sha }}"
           echo "拉回刚推的 web 镜像验 bundle: $IMG"
           docker pull "$IMG"
-          # 运行时 WORKDIR=/repo/apps/web · 构建产物 .next 就在这里
-          if docker run --rm "$IMG" sh -c 'grep -rlF "localhost:8000" .next 2>/dev/null | head -1' | grep -q .; then
-            echo "❌ web bundle 含 localhost:8000 fallback → NEXT_PUBLIC_API_URL build-arg 没注入对(整站会白屏)"
-            exit 1
-          fi
+          # 运行时 WORKDIR=/repo/apps/web · 构建产物 .next 就在这里。
+          # ★只做【正向断言】:bundle 必须含生产 API URL(api.midastrade.asia)= NEXT_PUBLIC_API_URL
+          #   被 Next 编译期 inline 进来了。api.midastrade.asia 只可能来自这个注入,可靠。
+          # ★不拿「含 localhost:8000」当失败判据:me.ts 有 `process.env.NEXT_PUBLIC_API_URL ??
+          #   'http://localhost:8000'` 兜底字面量,压缩后仍残留,注入正确时也在 → 会假阳性。
           if docker run --rm "$IMG" sh -c 'grep -rlF "api.midastrade.asia" .next 2>/dev/null | head -1' | grep -q .; then
-            echo "✅ web bundle 含生产 API URL(api.midastrade.asia)· build-arg 注入正确"
+            echo "✅ web bundle 含生产 API URL(api.midastrade.asia)· NEXT_PUBLIC_API_URL build-arg 注入正确"
           else
-            echo "❌ web bundle 未含生产 API URL → build-arg 可能没生效"
+            echo "❌ web bundle 未含生产 API URL → build-arg 没注入(整站会白屏)"
             exit 1
           fi
