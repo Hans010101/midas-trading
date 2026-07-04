@@ -65,8 +65,16 @@ async def test_run_blocking_times_out_not_hangs(monkeypatch: pytest.MonkeyPatch)
 async def test_slow_upstream_does_not_block_event_loop(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """一个上游调用卡住时,事件循环 + 其它协程照常运行(不被冻死)。"""
-    monkeypatch.setattr(base, "UPSTREAM_CALL_TIMEOUT", 1.0)
+    """一个上游调用卡住时,事件循环 + 其它协程照常运行(不被冻死)。
+
+    ★flaky 修(2026-07-04·CI run 28707325755 首跑红重跑绿):原 UPSTREAM_CALL_TIMEOUT=1.0 与
+    _slow_sync 的 time.sleep(1.0) 是【精确平局竞态】——executor 若比 timeout 早一瞬完成,
+    _run_blocking 正常返回不抛错 → "DID NOT RAISE UpstreamUnavailableError" 偶发红。
+    改 0.3(与 test_run_blocking_times_out_not_hangs 同款)拉开 0.7s 决定性差距消除竞态;
+    fast 阈值 0.5→0.75 容 CI runner 噪音(冻结时 fast_elapsed≈1.0s=sync sleep 时长·仍可判别)。
+    测试意图(慢上游不冻事件循环 + 超时必抛)不变。
+    """
+    monkeypatch.setattr(base, "UPSTREAM_CALL_TIMEOUT", 0.3)
     src = _DummySource()
 
     async def _swallow() -> None:
@@ -83,7 +91,8 @@ async def test_slow_upstream_does_not_block_event_loop(
     fast_elapsed = time.monotonic() - start
 
     assert fast_result == "fast-done"
-    assert fast_elapsed < 0.5, (
+    # 0.75 容 CI 噪音:未冻死 ≈0.05s;冻死 ≈1.0s(被 sync sleep 拖满)· 判别边界依然清晰
+    assert fast_elapsed < 0.75, (
         f"其它协程被阻塞了 {fast_elapsed:.2f}s · 事件循环疑似被同步调用冻死"
     )
     await slow_task  # 收尾(慢调用会超时退出)
