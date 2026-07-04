@@ -18,11 +18,12 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUserDep
+from app.api.deps import CurrentUserDep, RequestLangDep
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.support_ticket import SupportTicket
 from app.schemas.support import TicketCreateOut, TicketListItem
+from app.services.i18n import translate
 from app.services.support.ticket import create_ticket, send_ticket_email
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,7 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 async def submit_ticket(
     current_user: CurrentUserDep,
     db: DbDep,
+    lang: RequestLangDep,
     category: Annotated[str, Form()],
     description: Annotated[str, Form()],
     contact_email: Annotated[str | None, Form()] = None,
@@ -50,18 +52,23 @@ async def submit_ticket(
 ) -> TicketCreateOut:
     """提工单 → 存 DB → Resend 通知客服(图附件)。校验失败 422;邮件失败不阻塞(工单已存)。"""
     if category not in _ALLOWED_CATEGORIES:
-        raise HTTPException(status_code=422, detail="未知工单类型")
+        raise HTTPException(status_code=422, detail=translate("support.unknown_category", lang))
 
     desc = (description or "").strip()
     if not desc:
-        raise HTTPException(status_code=422, detail="问题描述不能为空")
+        raise HTTPException(status_code=422, detail=translate("support.description_empty", lang))
     if len(desc) > _MAX_DESC:
-        raise HTTPException(status_code=422, detail=f"问题描述过长(上限 {_MAX_DESC} 字)")
+        raise HTTPException(
+            status_code=422,
+            detail=translate("support.description_too_long", lang, max_chars=_MAX_DESC),
+        )
 
     # 联系邮箱 未填默认账号邮箱,提供则校验格式
     email = (contact_email or "").strip() or current_user.email
     if not _EMAIL_RE.match(email):
-        raise HTTPException(status_code=422, detail="联系邮箱格式不正确")
+        raise HTTPException(
+            status_code=422, detail=translate("support.contact_email_invalid", lang),
+        )
 
     # 关联订单:只记字符串(只读关联展示)· 不查/不碰收款表
     order_id = (related_order_id or "").strip() or None
@@ -70,18 +77,25 @@ async def submit_ticket(
     files = [f for f in (images or []) if f.filename]
     if len(files) > settings.support_max_images:
         raise HTTPException(
-            status_code=422, detail=f"最多上传 {settings.support_max_images} 张图片",
+            status_code=422,
+            detail=translate(
+                "support.too_many_images", lang, max_images=settings.support_max_images,
+            ),
         )
     max_bytes = settings.support_max_image_mb * 1024 * 1024
     decoded: list[tuple[str, bytes]] = []
     for f in files:
         if f.content_type not in _ALLOWED_IMAGE_TYPES:
-            raise HTTPException(status_code=422, detail="图片仅支持 JPEG / PNG")
+            raise HTTPException(
+                status_code=422, detail=translate("support.image_type_unsupported", lang),
+            )
         data = await f.read()
         if len(data) > max_bytes:
             raise HTTPException(
                 status_code=422,
-                detail=f"单张图片不得超过 {settings.support_max_image_mb} MB",
+                detail=translate(
+                    "support.image_too_large", lang, max_mb=settings.support_max_image_mb,
+                ),
             )
         decoded.append((f.filename or "image", data))
 

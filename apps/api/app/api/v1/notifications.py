@@ -13,7 +13,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUserDep
+from app.api.deps import CurrentUserDep, RequestLangDep
 from app.core.database import get_db
 from app.models.notification import NotificationConfig
 from app.schemas.notifications import (
@@ -23,6 +23,7 @@ from app.schemas.notifications import (
     default_config_response,
     serialize_config_response,
 )
+from app.services.i18n import translate
 from app.services.membership import resolve_plan
 from app.services.notifications.dispatcher import get_config, send_test
 
@@ -56,6 +57,7 @@ async def update_notification_config(
     payload: NotificationConfigUpdate,
     current_user: CurrentUserDep,
     db: DbDep,
+    lang: RequestLangDep,
 ) -> NotificationConfigResponse:
     """局部更新通知配置 · lazy create。
 
@@ -80,7 +82,7 @@ async def update_notification_config(
     if wants_dott_enable and await resolve_plan(db, current_user.id) != "pro":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="做T信号 TG 通知为 Pro 会员专属 · 请先开通 Pro",
+            detail=translate("notifications.dott_requires_pro", lang),
         )
     if payload.dott_digest_enabled is not None:
         config.dott_digest_enabled = payload.dott_digest_enabled
@@ -110,13 +112,14 @@ async def update_notification_config(
 async def send_test_notification(
     current_user: CurrentUserDep,
     db: DbDep,
+    lang: RequestLangDep,
     channel: Annotated[Literal["telegram"], Query(...)] = "telegram",
 ) -> NotificationTestResult:
     config = await get_config(db, current_user.id)
     if config is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="未绑定 Telegram · 请先在 bot 里 /start 绑定",
+            detail=translate("notifications.telegram_not_bound", lang),
         )
     result = await send_test(config, channel)
     return NotificationTestResult(

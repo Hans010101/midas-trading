@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, status
 from app.api.deps import ClickHouseDep, CurrentUserDep
 from app.models.user import User
 from app.schemas.structure import DiagnoseRequest, StructureDiagnosis, StructureSnapshot
+from app.services.i18n import translate
 from app.services.membership import make_quota_consumer, require_quota
 from app.services.structure.snapshot import get_structure_snapshot
 from app.services.structure.workflow import NoFactorDataError, get_structure_diagnosis
@@ -76,11 +77,11 @@ async def post_diagnose(
         # 友好闸:无效 symbol / 非 USDT 永续 → 422(用户输入面 · 未进 LLM 零成本)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"未找到 {e.symbol} 的合约因子数据,请确认是 USDT 永续合约",
+            detail=translate("structure.no_factor_data", lang, symbol=e.symbol),
         ) from e
     except ValueError as e:
         # LLM 输出解析失败(不产兜底假诊断 · 不污染缓存)→ 502 让用户重试
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"结构诊断生成失败,请稍后重试({e})",
+            detail=translate("structure.diagnosis_generation_failed", lang, e=e),
         ) from e

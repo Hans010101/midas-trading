@@ -18,9 +18,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUserDep
+from app.api.deps import CurrentUserDep, RequestLangDep
 from app.core.database import get_db
 from app.schemas.payment import CreateOrderIn, CreateOrderOut, OrderStatusOut
+from app.services.i18n import translate
 from app.services.payment.order import (
     create_payment_order,
     get_order_status,
@@ -37,7 +38,7 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 
 @router.post("/payment/order", response_model=CreateOrderOut)
 async def create_order(
-    payload: CreateOrderIn, current_user: CurrentUserDep, db: DbDep,
+    payload: CreateOrderIn, current_user: CurrentUserDep, db: DbDep, lang: RequestLangDep,
 ) -> CreateOrderOut:
     """建会员订阅支付订单 → OxaPay 托管收款页(前端跳转此 URL,用户在托管页付款)。"""
     try:
@@ -50,7 +51,7 @@ async def create_order(
         # 网关暂不可用 · 不泄露内部细节(凭证/URL 不进响应)
         logger.warning("[payment.order] OxaPay 建单失败 user=%s: %s", current_user.id, exc)
         raise HTTPException(
-            status_code=502, detail="支付网关暂不可用,请稍后重试",
+            status_code=502, detail=translate("payment.gateway_unavailable", lang),
         ) from exc
     return CreateOrderOut(
         payment_url=payment_url,
@@ -61,12 +62,12 @@ async def create_order(
 
 @router.get("/payment/order/{external_id}/status", response_model=OrderStatusOut)
 async def order_status(
-    external_id: str, current_user: CurrentUserDep, db: DbDep,
+    external_id: str, current_user: CurrentUserDep, db: DbDep, lang: RequestLangDep,
 ) -> OrderStatusOut:
     """查本人订单状态(前端到账轮询)· 限本人 · 不存在/非本人 → 404。"""
     order = await get_order_status(db, current_user.id, external_id)
     if order is None:
-        raise HTTPException(status_code=404, detail="订单不存在")
+        raise HTTPException(status_code=404, detail=translate("payment.order_not_found", lang))
     return OrderStatusOut(
         external_id=order.external_id, status=order.status, period=order.period,
     )
