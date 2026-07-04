@@ -4,12 +4,18 @@
 #
 # 用法(服务器):
 #   cd /opt/midas
-#   bash update.sh
+#   bash update.sh                       # ★默认 pull 模式(拉 ACR 镜像 · 零本地 build)
+#   DEPLOY_MODE=build bash update.sh     # 兜底:VPS 本地 build(ACR/Actions 故障时退老链)
+#
+# ── ★部署模式(DEPLOY_MODE · 详见下方定义处 + docs/decisions/0044)──────────────────
+#   pull(默认常态) = CI 在 GitHub Actions build 三镜像推 ACR → 这里只 docker compose pull
+#                     + recreate(零构建负载 · 同机重型 build 整机卡死根源物理消失)。
+#   build(兜底)    = 老链:VPS 本地 docker compose build 三镜像(顺序防 OOM)→ recreate。
 #
 # 行为:
 #   1. git pull(用 credential.helper store · 不弹 PAT)
 #   2. 对比 HEAD 前后差异 · 决定要不要 rebuild + 哪些服务
-#   3. 智能动作:
+#   3. 智能动作(pull:拉改动服务的镜像 / build:本地 build 改动服务):
 #        · apps/api / apps/worker 改了 → 重建 api + worker
 #        · apps/web / packages 改了 → 重建 web
 #        · docker/*.yaml 改了 → docker compose up -d --build(全栈影响)
@@ -17,7 +23,7 @@
 #        · apps/api/alembic/versions/ 新增 → docker exec midas-api alembic upgrade head
 #        · 只是 docs / scripts 改了 → 不做任何动作
 #   4. 健康检查 · 5 服务 healthy + worker running
-#   5. 打印最终状态
+#   5. 打印最终状态 · pull 模式额外催收旧 sha 镜像(保留最近 3 个供回滚)
 #
 # 设计:幂等 · 安全 · 一句话搞定所有迭代部署。
 
@@ -27,16 +33,21 @@ RED=$'\033[1;31m'; GREEN=$'\033[1;32m'; YELLOW=$'\033[1;33m'; CYAN=$'\033[1;36m'
 
 STAGE="init"
 # ── ADR 0029 DP4:外部 FORCE_REBUILD 开关(GitHub Actions inputs / 服务器手动) ──
-# true → 跳 "已是最新" + 跳 diff 判定 · 强制重建 api+worker+web(用于 cache 卡脏 / 强制刷依赖)
+# true → 跳 "已是最新" + 跳 diff 判定 · 强制处理 api+worker+web 三服务(用于 cache 卡脏 / 强制刷依赖)。
+#   ★语义随 DEPLOY_MODE 而定:build 模式=本地强制重 build 三镜像;pull 模式=强制 re-pull 三镜像 sha
+#   + recreate(要真刷镜像内容,走 workflow_dispatch 会连带无条件重跑 build-push job 重推 ACR)。
 # 缺省 false · 不影响正常 push 部署
 FORCE_REBUILD="${FORCE_REBUILD:-false}"
-# ── ★部署基建根治 · DEPLOY_MODE 双模式(build 挪出 VPS)──────────────────────────
-# build(默认·现网零改)= 现状:VPS 上 docker compose build 三镜像(顺序防 OOM)→ recreate。
-# pull  = CI(build-push.yml)在 Actions build 好推 ACR·VPS 只 docker compose pull + recreate
-#         (零构建负载·i18n 批0 整机卡死根源物理消失)。★阶段2 引入但默认仍 build·阶段4 才切默认。
-# pull 模式前置(Hans 配 VPS /opt/midas/.env):MIDAS_REGISTRY=<VPC registry>/midastrade
-#   (compose image: 插值用)· VPS 已 docker login ACR(credential store 持久)。
-DEPLOY_MODE="${DEPLOY_MODE:-build}"
+# ── ★部署基建根治 · DEPLOY_MODE 双模式(build 挪出 VPS · 阶段4 起 pull 为默认常态)──────
+# pull(★默认 · 新部署链常态)= CI(deploy.yml 的 build-push job)在 GitHub Actions build 好
+#         三镜像推阿里云 ACR → VPS 只 docker compose pull + recreate(零构建负载 · i18n 批0
+#         「同机重型 build 无内存余量」整机卡死根源物理消失 · build 失败=Actions 红=部署不跑=生产不动)。
+# build(兜底 · 退老链)= 现状旧链:VPS 上 docker compose build 三镜像(顺序防 OOM)→ recreate。
+#         ★何时用:ACR/Actions 故障、或需在 VPS 本地快速验证某分支镜像时。触发方式:
+#         GitHub Actions 手动 workflow_dispatch → deploy_mode=build;或服务器 DEPLOY_MODE=build bash update.sh。
+# pull 模式前置(已配 · VPS /opt/midas/.env):MIDAS_REGISTRY=<VPC registry>/midastrade
+#   (compose image: 插值用 · 缺失会被 3/7 的 fail-fast 守卫明确拦截)· VPS 已 docker login ACR(store 持久)。
+DEPLOY_MODE="${DEPLOY_MODE:-pull}"
 # ── ADR 0029 DP2:失败时回滚 git HEAD · 仅在 1/7 真实 reset 后才被赋值 ──
 # 防止 "git HEAD 已动 / docker image 未起 / DB 半 migrate" 三向脱钩
 OLD_HEAD_SAVED=""
@@ -291,8 +302,8 @@ if [ ${#RECREATE_SVCS[@]} -gt 0 ]; then
 
   if [ "$DEPLOY_MODE" = "pull" ]; then
     # ════════════════════════════════════════════════════════════════════
-    # ── ★pull 模式(build 挪出 VPS · 阶段4 起默认)──────────────────────────────
-    # CI(build-push.yml)已在 GitHub Actions build 好三镜像推 ACR;VPS 只 docker compose
+    # ── ★pull 模式(build 挪出 VPS · 阶段4 起为默认常态)────────────────────────────
+    # CI(deploy.yml 的 build-push job)已在 GitHub Actions build 好三镜像推 ACR;VPS 只 docker compose
     # pull 精确 sha tag → recreate · 零构建负载 · i18n 批0 整机卡死根源(同机重型 build)物理消失。
     #   · MIDAS_IMAGE_TAG=NEW_HEAD(全 40 位 sha · 与 CI push 的 tag 一致 · compose image: 插值用)
     #   · MIDAS_REGISTRY 由 VPS /opt/midas/.env 提供(VPC registry+命名空间 · compose 自动读 .env)
@@ -323,7 +334,7 @@ if [ ${#RECREATE_SVCS[@]} -gt 0 ]; then
     timeout 600 $COMPOSE pull "${RECREATE_SVCS[@]}"
     ok "镜像 pull 完成(tag=$MIDAS_IMAGE_TAG · VPS 零构建负载)"
   else
-    # ── build 模式(现状 · 默认 · 现网零改)· 以下与改造前一字不变 ──────────────────
+    # ── build 模式(兜底 · 阶段4 起非默认 · 退老链)· 以下与改造前一字不变 ────────────────
     # ── 2026-06-19 翻车修:构建【前】清陈旧 buildkit 缓存(失败时下方 post 清理到不了)──
     #   force-rebuild 三镜像 + pip 重试曾把 build cache 堆到 17.91GB · 压盘加剧超时/OOM。
     #   --keep-storage 10GB 保留近期层缓存(含 pip 依赖层)· 只清陈旧 · 不动在用镜像。
@@ -457,8 +468,50 @@ banner "7/7 · 缓存清理(按大小催收 · 压到 10GB)"
 STAGE="7/7 cache prune"
 echo "  按大小催收 BuildKit 缓存(保留最近 10GB)..."
 docker builder prune -f --keep-storage 10GB 2>&1 | tail -5 || warn "prune 失败 · 不阻塞 deploy(健康检查已过)"
+
+# ── ★pull 模式:催收旧 sha 镜像(保留最近 KEEP 个供回滚)· 阶段4(VPS 磁盘压力新来源)──────
+#   pull 模式每次部署 pull 新 sha 的 midas-{svc} 镜像 → VPS 累积旧 tag(build 模式无此累积)。
+#   策略:每个 ACR repo 只留最近 KEEP 个 sha tag(newest-first · docker images 默认序),更老删。
+#   ★关键:MIDAS_REGISTRY 由 .env 提供、compose 自己读,bash 进程里该 shell 变量【本就是空的】,
+#     所以【绝不能】用 $MIDAS_REGISTRY 拼 repo(会得到 `/midas-web` · 且 [ -n ] 恒假 → 整段死代码)。
+#     正确做法=和 3/7 守卫同源:从 `compose config` 取 web 完整镜像名(含 registry)反推 ACR repo 前缀。
+#   ★安全四重保:① 只碰 <registry>/midas-{api,worker,web} 这三个 repo · 绝不碰 pg/ch/redis/vibe/xshot
+#     ② docker rmi 【不加 -f】→ 在用镜像 docker 自己拒删(if 吞 · 不阻塞)③ latest 永不删(回滚指针)
+#     ④ 显式跳过所有容器(含停止)正引用的 ref。
+#   ★set -e 兼容:grep -q/rmi 全走 if(条件豁免 set -e)· 管道尾 `|| true` 防 grep 返 1 误触 ERR。
+if [ "$DEPLOY_MODE" = "pull" ]; then
+  KEEP_IMAGES=3
+  # compose config 解析出的 web 完整镜像名(含 registry)→ 反推 repo 前缀 <registry>/midastrade
+  _web_full=$($COMPOSE config 2>/dev/null | grep -E '^[[:space:]]*image:.*midas-web' | head -1 | sed -E "s/.*image:[[:space:]]*//; s/[\"']//g; s/[[:space:]]//g" || true)
+  _reg_ns=$(printf '%s' "$_web_full" | sed -E 's#/midas-web(:.*)?$##')
+  # _reg_ns 含 '/' = 有 registry/namespace 前缀(可清);否则(裸名 / 空)跳过 · 不误删本地镜像
+  if printf '%s' "$_reg_ns" | grep -q '/'; then
+    echo ""
+    echo "  ${MAGENTA}▸${NC} pull 模式催收旧 sha 镜像(每 repo 留最近 ${KEEP_IMAGES} 个 + latest + 在用 · repo 前缀=${_reg_ns})"
+    in_use_refs=$(docker ps -a --format '{{.Image}}' 2>/dev/null | sort -u || true)
+    for svc in api worker web; do
+      repo="${_reg_ns}/midas-${svc}"
+      old_tags=$(docker images "$repo" --format '{{.Tag}}' 2>/dev/null | grep -vx 'latest' | tail -n +$((KEEP_IMAGES + 1)) || true)
+      [ -n "$old_tags" ] || continue
+      while IFS= read -r tag; do
+        [ -z "$tag" ] && continue
+        ref="${repo}:${tag}"
+        if printf '%s\n' "$in_use_refs" | grep -qxF "$ref"; then
+          continue   # ★在用镜像(含停止容器引用)· 绝不删
+        fi
+        if docker rmi "$ref" >/dev/null 2>&1; then
+          echo "    ✓ 删旧镜像 ${svc}:${tag:0:12}…"
+        fi
+      done <<< "$old_tags"
+    done
+    docker image prune -f >/dev/null 2>&1 || true   # 清 untag 后悬空层(安全 · 只清无 tag 无引用)
+  else
+    warn "pull 模式镜像催收跳过:compose config 未解出带 registry 前缀的 web 镜像(_reg_ns=${_reg_ns:-<空>})"
+  fi
+fi
+
 echo ""
-echo "${CYAN}─── 当前缓存占用(prune 后)───${NC}"
+echo "${CYAN}─── 当前缓存/镜像占用(prune 后)───${NC}"
 docker system df 2>&1 | head -10 || true
 
 ELAPSED=$(($(date +%s) - START_TIME))

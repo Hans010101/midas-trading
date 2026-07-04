@@ -212,7 +212,7 @@ services:
 
   web:
     # ★部署基建根治:image+build 并存(见 api 注释)· dev 零破坏 · prod pull。
-    #   ★web 镜像的 NEXT_PUBLIC_API_URL 是 build-time inline·prod 镜像已由 CI(build-push.yml)
+    #   ★web 镜像的 NEXT_PUBLIC_API_URL 是 build-time inline·prod 镜像已由 CI(deploy.yml 的 build-push job)
     #   用生产值 build 好推 ACR;VPS pull 时不再本地 build,故 build.args 只影响 dev 本地 build。
     #   ★默认=派生名 midas-web(现有·不误 build)。
     image: ${MIDAS_REGISTRY:+${MIDAS_REGISTRY}/}midas-web${MIDAS_IMAGE_TAG:+:${MIDAS_IMAGE_TAG}}
