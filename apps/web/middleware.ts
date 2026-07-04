@@ -30,6 +30,54 @@ const VID_MAX_AGE = 60 * 60 * 24 * 365 // 1 年
 const BOT_RE =
   /bot|crawl|spider|slurp|bing|baidu|yandex|duckduck|facebookexternalhit|embedly|quora|pinterest|slackbot|telegram|whatsapp|headless|lighthouse|monitor|uptime|pingdom|curl|wget|python-requests|go-http|axios|okhttp|java\//i
 
+// SEO 批6:AI/搜索爬虫 UA 分类(GEO 领先指标)。★只提取 bot 名分桶发后端 · UA 字符串本身不发。
+//   有序:先 AI(GPTBot/ClaudeBot…),再搜索(Googlebot/Bingbot · 前缀 search:)· 返回桶名或 null。
+const CRAWLER_UA: ReadonlyArray<readonly [RegExp, string]> = [
+  [/gptbot/i, 'GPTBot'],
+  [/oai-searchbot/i, 'OAI-SearchBot'],
+  [/chatgpt-user/i, 'ChatGPT-User'],
+  [/claudebot/i, 'ClaudeBot'],
+  [/claude-web/i, 'Claude-Web'],
+  [/anthropic-ai/i, 'anthropic-ai'],
+  [/perplexitybot/i, 'PerplexityBot'],
+  [/perplexity-user/i, 'Perplexity-User'],
+  [/google-extended/i, 'Google-Extended'],
+  [/applebot-extended/i, 'Applebot-Extended'],
+  [/bytespider/i, 'Bytespider'],
+  [/ccbot/i, 'CCBot'],
+  [/cohere-ai/i, 'cohere-ai'],
+  [/meta-externalagent/i, 'Meta-ExternalAgent'],
+  [/amazonbot/i, 'Amazonbot'],
+  [/youbot/i, 'YouBot'],
+  [/diffbot/i, 'Diffbot'],
+  [/googlebot/i, 'search:Googlebot'],
+  [/bingbot/i, 'search:Bingbot'],
+  [/baiduspider/i, 'search:Baiduspider'],
+  [/yandexbot/i, 'search:YandexBot'],
+  [/duckduckbot/i, 'search:DuckDuckBot'],
+]
+
+function classifyCrawler(ua: string): string | null {
+  for (const [re, name] of CRAWLER_UA) {
+    if (re.test(ua)) return name
+  }
+  return null
+}
+
+/** referrer → 来源域名 host(剥 path/query · 去 www.)· 同域/无 referrer → null(不上报)。 */
+function extractRefHost(referer: string | null, selfHost: string): string | null {
+  if (!referer) return null
+  try {
+    const u = new URL(referer)
+    let h = u.hostname.toLowerCase()
+    if (h.startsWith('www.')) h = h.slice(4)
+    if (!h || h === selfHost || h === `www.${selfHost}`) return null // 站内跳转不算来源
+    return h.slice(0, 120)
+  } catch {
+    return null
+  }
+}
+
 // 原路由保护逻辑(auth 包装 · 提供 req.auth)
 const runAuth = auth((req) => {
   const url = req.nextUrl
@@ -66,9 +114,36 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
       ) => Promise<NextResponse | undefined>
     )(req, event)) ?? NextResponse.next()
 
-  // ── 访问埋点 · 仅页面文档 GET · 非重定向(<300)· 排除 bot ──
+  // ── 访问埋点 · 仅页面文档 GET · 非重定向(<300)──
   const ua = req.headers.get('user-agent') ?? ''
-  const isPageView = req.method === 'GET' && res.status < 300 && !BOT_RE.test(ua)
+  // 内网直连优先(http://api:8000)· 退化到公网 API base(NEXT_PUBLIC_API_URL 已 inline)
+  const base = process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL
+  const secret = process.env.TRACK_INGEST_SECRET
+  const postTrack = (path: string, body: Record<string, string>) => {
+    if (!base) return
+    event.waitUntil(
+      fetch(`${base}${path}`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(secret ? { 'x-track-secret': secret } : {}),
+        },
+        body: JSON.stringify(body),
+      }).catch(() => {
+        // 埋点 fire-and-forget · 失败静默(绝不影响页面)
+      }),
+    )
+  }
+  const isGetOk = req.method === 'GET' && res.status < 300
+
+  // SEO 批6:AI/搜索爬虫计数(GEO 领先指标)· bot UA 独立于 PV 计。★只发 bot 名 · UA 不发。
+  if (isGetOk) {
+    const bot = classifyCrawler(ua)
+    if (bot) postTrack('/api/v1/track/crawler', { bot })
+  }
+
+  // ── 人类 PV/UV(排除 bot)+ 来源归因 ──
+  const isPageView = isGetOk && !BOT_RE.test(ua)
   if (isPageView) {
     let vid = req.cookies.get(VID_COOKIE)?.value
     if (!vid || vid.length < 8) {
@@ -81,23 +156,14 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
         `${VID_COOKIE}=${vid}; Path=/; Max-Age=${VID_MAX_AGE}; HttpOnly; SameSite=Lax${secure}`,
       )
     }
-    // 内网直连优先(http://api:8000)· 退化到公网 API base(NEXT_PUBLIC_API_URL 已 inline)
-    const base = process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL
-    if (base) {
-      const secret = process.env.TRACK_INGEST_SECRET
-      event.waitUntil(
-        fetch(`${base}/api/v1/track/visit`, {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            ...(secret ? { 'x-track-secret': secret } : {}),
-          },
-          body: JSON.stringify({ visitor_id: vid }),
-        }).catch(() => {
-          // 埋点 fire-and-forget · 失败静默(绝不影响页面)
-        }),
-      )
-    }
+    // SEO 批6:来源归因(★D8:只取 referer 域名 host + utm_source · 不取 path/query · 不发 IP/UA)
+    const refHost = extractRefHost(req.headers.get('referer'), req.nextUrl.hostname)
+    const utm = (req.nextUrl.searchParams.get('utm_source') ?? '').slice(0, 64)
+    postTrack('/api/v1/track/visit', {
+      visitor_id: vid,
+      ...(refHost ? { ref_host: refHost } : {}),
+      ...(utm ? { utm_source: utm } : {}),
+    })
   }
 
   return res

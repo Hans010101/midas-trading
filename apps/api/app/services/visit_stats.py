@@ -145,3 +145,223 @@ async def flush_recent_days(session: AsyncSession, redis: Redis) -> dict[str, tu
     for d in (today, today - timedelta(days=1)):
         out[d.isoformat()] = await flush_day(session, redis, d)
     return out
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SEO 批6 · 来源归因 + AI 爬虫计数(度量闭环 · docs/seo/2026-07-seo-geo-audit.md D8)
+# ═══════════════════════════════════════════════════════════════════════════
+# ★D8 隐私口径(相对现有「隐私极简」的一次有意放宽):
+#   - 只记【来源域名 hostname】(不记 path — 每篇文章 URL 不同会爆炸且归因价值低)
+#     + utm_source 聚合桶 + AI 爬虫 bot 名分桶。
+#   - 绝不记 IP / 完整 UA / 个体行为明细。UA 只在前端 middleware 内瞬时分类成 bot 名,
+#     UA 字符串本身不离开边缘、不发后端、不落库。
+# 与 PV/UV 同款:Redis 实时 HINCRBY(HASH 桶)→ TTL 3 天 → beat flush upsert PG 三表。
+
+_SRC_KEY = "visit:src:{d}"          # HASH: {source_bucket: count}
+_REF_KEY = "visit:ref:{d}"          # HASH: {referrer_host: count}
+_CRAWLER_KEY = "visit:crawler:{d}"  # HASH: {bot_name: hits}
+_REF_HOST_CAP = 500  # referrer host 基数上限(域名天然有界 · 兜底防异常膨胀)
+
+# 精确/后缀域名规则(host == domain 或 host endswith "."+domain)。★用精确匹配而非子串:
+# 子串会误吞(如 "t.co" 命中 "reddi**t.co**m"、"x.com" 命中 "netfli**x.co**m")。
+# AI 子域(gemini.google.com 等)在此精确命中,先于下方 google 品牌标签兜底 → 归 gemini 不归 google。
+_EXACT_RULES: tuple[tuple[str, str], ...] = (
+    # ── AI 引擎(GEO 核心归因)──
+    ("chat.openai.com", "chatgpt"),
+    ("chatgpt.com", "chatgpt"),
+    ("perplexity.ai", "perplexity"),
+    ("gemini.google.com", "gemini"),
+    ("bard.google.com", "gemini"),
+    ("copilot.microsoft.com", "copilot"),
+    ("claude.ai", "claude"),
+    ("kimi.moonshot.cn", "kimi"),
+    ("kimi.com", "kimi"),
+    ("doubao.com", "doubao"),
+    ("metaso.cn", "metaso"),
+    ("you.com", "you"),
+    ("phind.com", "phind"),
+    ("poe.com", "poe"),
+    # ── 搜索引擎(单一 TLD · 后缀匹配覆盖子域)──
+    ("duckduckgo.com", "duckduckgo"),
+    ("so.com", "360"),
+    ("ecosia.org", "ecosia"),
+    ("brave.com", "brave-search"),
+    # ── 社交 / 即时通讯 ──
+    ("t.co", "x"),
+    ("twitter.com", "x"),
+    ("x.com", "x"),
+    ("t.me", "telegram"),
+    ("telegram.org", "telegram"),
+    ("facebook.com", "facebook"),
+    ("linkedin.com", "linkedin"),
+    ("reddit.com", "reddit"),
+    ("weibo.com", "weibo"),
+    ("zhihu.com", "zhihu"),
+    ("youtube.com", "youtube"),
+    ("github.com", "github"),
+)
+
+# 品牌标签兜底(多 ccTLD 引擎:google.com / google.com.hk / baidu 移动子域 等)· 在精确规则
+# 之后运行,故 gemini.google.com 已先归 gemini · 不被 google 标签误吞。label = 域名中一节。
+_LABEL_RULES: tuple[tuple[str, str], ...] = (
+    ("google", "google"),
+    ("baidu", "baidu"),
+    ("bing", "bing"),
+    ("yandex", "yandex"),
+    ("sogou", "sogou"),
+)
+
+# utm_source 归一白名单(投放可信 · 命中即用规范名 · 未命中 → utm:other 防爆炸)
+_UTM_CANON: dict[str, str] = {
+    "google": "google", "bing": "bing", "baidu": "baidu",
+    "chatgpt": "chatgpt", "perplexity": "perplexity", "kimi": "kimi",
+    "doubao": "doubao", "gemini": "gemini",
+    "twitter": "x", "x": "x", "telegram": "telegram", "tg": "telegram",
+    "weibo": "weibo", "zhihu": "zhihu", "newsletter": "newsletter",
+    "email": "newsletter", "wechat": "wechat",
+}
+
+
+def _normalize_host(raw: str) -> str:
+    """referrer host 归一:小写 · 去 www. 前缀 · 去端口 · 截 120。"""
+    h = raw.strip().lower().split(":")[0]
+    if h.startswith("www."):
+        h = h[4:]
+    return h[:120]
+
+
+def classify_source(ref_host: str | None, utm_source: str | None = None) -> str:
+    """把 (referrer host, utm_source) 归到一个固定来源桶 · 纯函数 · 无 IO。
+
+    优先级:utm_source(投放·可信)白名单归一 > referrer host 规则表 > direct(无来源) >
+    referral(有来源但不在表中)。桶集合有界(防 admin 看板维度爆炸)。
+    """
+    if utm_source:
+        key = utm_source.strip().lower()[:64]
+        if key in _UTM_CANON:
+            return _UTM_CANON[key]
+        if key:
+            return "utm:other"
+    if not ref_host or not ref_host.strip():
+        return "direct"
+    host = _normalize_host(ref_host)
+    # ① 精确/后缀域名匹配(host == d 或 host 是 d 的子域)
+    for domain, bucket in _EXACT_RULES:
+        if host == domain or host.endswith("." + domain):
+            return bucket
+    # ② 品牌标签兜底(google 等多 ccTLD · label 命中)
+    labels = host.split(".")
+    for label, bucket in _LABEL_RULES:
+        if label in labels:
+            return bucket
+    return "referral"
+
+
+async def record_source(
+    redis: Redis,
+    source: str,
+    ref_host: str | None,
+    day: date_type | None = None,
+) -> None:
+    """记一次访问的来源桶 + 来源域名(与 record_visit 分离 · 不动 PV/UV 链路)。
+
+    ★只碰 Redis(HINCRBY)· referrer host 基数超上限则跳过新 host(仍计 source 桶)。
+    """
+    d = day or cn_today()
+    sk = _SRC_KEY.format(d=d.isoformat())
+    pipe = redis.pipeline()
+    pipe.hincrby(sk, source, 1)
+    pipe.expire(sk, _KEY_TTL)
+    await pipe.execute()
+
+    host = _normalize_host(ref_host) if ref_host else ""
+    if not host:
+        return
+    rk = _REF_KEY.format(d=d.isoformat())
+    # 域名天然有界;仅当 host 已存在或未超上限时计数(HEXISTS 一次往返防异常膨胀)
+    if await redis.hexists(rk, host) or await redis.hlen(rk) < _REF_HOST_CAP:
+        pipe2 = redis.pipeline()
+        pipe2.hincrby(rk, host, 1)
+        pipe2.expire(rk, _KEY_TTL)
+        await pipe2.execute()
+
+
+async def record_crawler(redis: Redis, bot: str, day: date_type | None = None) -> None:
+    """记一次 AI/搜索爬虫访问(bot 名分桶)· 只碰 Redis(HINCRBY)· GEO 领先指标。"""
+    d = day or cn_today()
+    ck = _CRAWLER_KEY.format(d=d.isoformat())
+    pipe = redis.pipeline()
+    pipe.hincrby(ck, bot, 1)
+    pipe.expire(ck, _KEY_TTL)
+    await pipe.execute()
+
+
+async def _read_hash_day(redis: Redis, key: str) -> dict[str, int]:
+    """读某天一个 HASH 桶 → {field: int}(缺失 → {})。
+
+    ★key 强制 str():decode_responses=True 时 redis 返 str,但类型标注是 bytes|str
+    (与调用侧 aioredis 客户端配置无关的保守类型)· str() 幂等 · 防 mypy 报 union。
+    """
+    raw = await redis.hgetall(key)
+    return {str(k): int(v) for k, v in raw.items()}
+
+
+async def read_redis_source_day(redis: Redis, day: date_type) -> dict[str, int]:
+    """读某天来源桶实时计数 {source: count}。"""
+    return await _read_hash_day(redis, _SRC_KEY.format(d=day.isoformat()))
+
+
+async def read_redis_referrer_day(redis: Redis, day: date_type) -> dict[str, int]:
+    """读某天来源域名计数 {host: count}。"""
+    return await _read_hash_day(redis, _REF_KEY.format(d=day.isoformat()))
+
+
+async def read_redis_crawler_day(redis: Redis, day: date_type) -> dict[str, int]:
+    """读某天爬虫计数 {bot: hits}。"""
+    return await _read_hash_day(redis, _CRAWLER_KEY.format(d=day.isoformat()))
+
+
+async def flush_source_recent_days(session: AsyncSession, redis: Redis) -> dict[str, int]:
+    """flush 今/昨两天的 来源桶 / 来源域名 / 爬虫 三表(与 PV/UV flush 并列 · 同 beat 调)。
+
+    覆盖语义 upsert(Redis 当日累计 → SET 覆盖,与 flush_day 同哲学)· 空桶跳过不清零。
+    """
+    from app.models.daily_crawler_stat import DailyCrawlerStat
+    from app.models.daily_referrer_stat import DailyReferrerStat
+    from app.models.daily_source_stat import DailySourceStat
+
+    today = cn_today()
+    out: dict[str, int] = {"source": 0, "referrer": 0, "crawler": 0}
+    for d in (today, today - timedelta(days=1)):
+        for field, count in (await read_redis_source_day(redis, d)).items():
+            await session.execute(
+                pg_insert(DailySourceStat)
+                .values(date=d, source=field[:120], pv=count)
+                .on_conflict_do_update(
+                    index_elements=["date", "source"],
+                    set_={"pv": count, "updated_at": func.now()},
+                ),
+            )
+            out["source"] += 1
+        for field, count in (await read_redis_referrer_day(redis, d)).items():
+            await session.execute(
+                pg_insert(DailyReferrerStat)
+                .values(date=d, referrer=field[:120], pv=count)
+                .on_conflict_do_update(
+                    index_elements=["date", "referrer"],
+                    set_={"pv": count, "updated_at": func.now()},
+                ),
+            )
+            out["referrer"] += 1
+        for field, count in (await read_redis_crawler_day(redis, d)).items():
+            await session.execute(
+                pg_insert(DailyCrawlerStat)
+                .values(date=d, bot=field[:120], hits=count)
+                .on_conflict_do_update(
+                    index_elements=["date", "bot"],
+                    set_={"hits": count, "updated_at": func.now()},
+                ),
+            )
+            out["crawler"] += 1
+    await session.commit()
+    return out

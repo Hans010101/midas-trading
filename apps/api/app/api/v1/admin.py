@@ -12,10 +12,11 @@
 """
 
 import logging
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from datetime import date as date_type
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -28,6 +29,9 @@ from app.api.deps import AdminDep, ClickHouseDep
 from app.core.database import get_db
 from app.core.redis_client import get_redis
 from app.models.admin_action_log import AdminActionLog
+from app.models.daily_crawler_stat import DailyCrawlerStat
+from app.models.daily_referrer_stat import DailyReferrerStat
+from app.models.daily_source_stat import DailySourceStat
 from app.models.daily_visit_stat import DailyVisitStat
 from app.models.platform_dispatch import PlatformDispatch
 from app.models.redeem_code import RedeemCode
@@ -65,7 +69,15 @@ from app.services.report.send import send_report
 from app.services.report.weekly_dispatch import UNSUBSCRIBE_URL
 from app.services.report.weekly_email import render_email_html
 from app.services.report.weekly_md import WeeklyMdError
-from app.services.visit_stats import CN_TZ, cn_today, read_redis_day, read_redis_hours
+from app.services.visit_stats import (
+    CN_TZ,
+    cn_today,
+    read_redis_crawler_day,
+    read_redis_day,
+    read_redis_hours,
+    read_redis_referrer_day,
+    read_redis_source_day,
+)
 from app.services.x_marketing.generate import enqueue_daily_generation
 from app.services.x_marketing.publish import auto_guard
 from app.services.x_marketing.publish.dispatch import enqueue_publish, revoke_auto_tasks
@@ -597,6 +609,124 @@ async def visit_stats(
         cumulative_pv=cumulative_pv,
         cumulative_uv=cumulative_uv,
         total_registrations=int(total_reg),
+    )
+
+
+# ── SEO 批6 · 流量来源归因 + AI 爬虫看板(AdminDep · 独立端点 · 不动 visit-stats)──────
+# ★独立 SourceStatsOut + 独立三表聚合,绝不改 VisitStatsOut(不碰其测试)。
+# ★D8 口径:只读来源桶/来源域名/爬虫按天聚合 · 无 IP/UA/个体明细。窗口内 PG 历史 +
+#   今/昨 Redis 实时叠加(同 visit-stats 的 max-per-day 防回退,避免 flush ≤10min 延迟漏计)。
+
+
+class SourceCount(BaseModel):
+    source: str
+    pv: int
+
+
+class CrawlerCount(BaseModel):
+    bot: str
+    hits: int
+
+
+class ReferrerCount(BaseModel):
+    referrer: str
+    pv: int
+
+
+class SourceStatsOut(BaseModel):
+    range_days: int
+    sources: list[SourceCount]          # 各来源桶总 PV(降序 · 含今/昨实时)
+    crawlers: list[CrawlerCount]        # 各 bot 总 hits(降序 · 含今/昨实时 · GEO 领先指标)
+    top_referrers: list[ReferrerCount]  # top 来源域名(降序 · 上限 50)
+    total_attributed_pv: int            # 有来源归因的总 PV(= sources 之和)
+
+
+async def _agg_with_live(
+    rows: Sequence[Any],
+    redis: Any,
+    read_live: Callable[[Any, date_type], Awaitable[dict[str, int]]],
+    *,
+    start: date_type,
+    today: date_type,
+    yest: date_type,
+) -> dict[str, int]:
+    """纯聚合:PG 每 (dim, date, count) 行 + 今/昨 Redis 实时 max 叠加 → {dim: total}。
+
+    caller 各自建 typed select(具体列 · mypy 友好)· 本函数不碰 SQLAlchemy 只做累加。
+    """
+    per_day: dict[tuple[date_type, str], int] = {
+        (r[1], str(r[0])): int(r[2]) for r in rows  # (date, dim): count
+    }
+    for d in (today, yest):
+        if d < start:
+            continue
+        for dim, cnt in (await read_live(redis, d)).items():
+            key = (d, dim)
+            per_day[key] = max(per_day.get(key, 0), int(cnt))
+    totals: dict[str, int] = {}
+    for (_d, dim), cnt in per_day.items():
+        totals[dim] = totals.get(dim, 0) + cnt
+    return totals
+
+
+@router.get("/source-stats", response_model=SourceStatsOut)
+async def source_stats(
+    _admin: AdminDep,
+    db: DbDep,
+    days: int = Query(30, ge=1, le=365),
+) -> SourceStatsOut:
+    """流量来源看板:各来源桶 PV + AI/搜索爬虫计数 + top 来源域名(窗口内 · 含今/昨实时)。"""
+    today = cn_today()
+    yest = today - timedelta(days=1)
+    start = today - timedelta(days=days - 1)
+    redis = await get_redis()
+
+    src_rows = (
+        await db.execute(
+            select(DailySourceStat.source, DailySourceStat.date, DailySourceStat.pv)
+            .where(DailySourceStat.date >= start)
+        )
+    ).all()
+    src_totals = await _agg_with_live(
+        src_rows, redis, read_redis_source_day, start=start, today=today, yest=yest,
+    )
+    crawler_rows = (
+        await db.execute(
+            select(DailyCrawlerStat.bot, DailyCrawlerStat.date, DailyCrawlerStat.hits)
+            .where(DailyCrawlerStat.date >= start)
+        )
+    ).all()
+    crawler_totals = await _agg_with_live(
+        crawler_rows, redis, read_redis_crawler_day, start=start, today=today, yest=yest,
+    )
+    ref_rows = (
+        await db.execute(
+            select(DailyReferrerStat.referrer, DailyReferrerStat.date, DailyReferrerStat.pv)
+            .where(DailyReferrerStat.date >= start)
+        )
+    ).all()
+    ref_totals = await _agg_with_live(
+        ref_rows, redis, read_redis_referrer_day, start=start, today=today, yest=yest,
+    )
+
+    sources = [
+        SourceCount(source=s, pv=c)
+        for s, c in sorted(src_totals.items(), key=lambda kv: kv[1], reverse=True)
+    ]
+    crawlers = [
+        CrawlerCount(bot=b, hits=c)
+        for b, c in sorted(crawler_totals.items(), key=lambda kv: kv[1], reverse=True)
+    ]
+    top_referrers = [
+        ReferrerCount(referrer=r, pv=c)
+        for r, c in sorted(ref_totals.items(), key=lambda kv: kv[1], reverse=True)[:50]
+    ]
+    return SourceStatsOut(
+        range_days=days,
+        sources=sources,
+        crawlers=crawlers,
+        top_referrers=top_referrers,
+        total_attributed_pv=sum(src_totals.values()),
     )
 
 

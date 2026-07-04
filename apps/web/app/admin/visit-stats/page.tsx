@@ -27,7 +27,7 @@ import {
 
 import { AdminNav } from '@/components/admin/admin-nav'
 import { TopNav } from '@/components/layout/top-nav'
-import { AdminApiError, fetchAdminVisitStats } from '@/lib/api/admin'
+import { AdminApiError, fetchAdminSourceStats, fetchAdminVisitStats } from '@/lib/api/admin'
 
 const RANGES = [7, 30, 90] as const
 const RED = '#C8102E'
@@ -74,6 +74,42 @@ function StatCard({
   )
 }
 
+// SEO 批6:来源/爬虫排行卡(简单表 · 降序 · 空态提示)
+function RankCard({
+  title,
+  sub,
+  rows,
+  empty,
+}: {
+  title: string
+  sub: string
+  rows: { label: string; value: number }[]
+  empty: string
+}) {
+  return (
+    <div className="rounded-lg border border-paper bg-cream p-4 shadow-sm">
+      <p className="text-sm font-medium text-foreground">{title}</p>
+      <p className="mb-2 text-xs text-muted-foreground/70">{sub}</p>
+      {rows.length === 0 ? (
+        <p className="py-4 text-center text-xs text-muted-foreground/50">{empty}</p>
+      ) : (
+        <ul className="space-y-1">
+          {rows.slice(0, 12).map((r) => (
+            <li key={r.label} className="flex items-center justify-between gap-2 text-sm">
+              <span className="truncate text-muted-foreground" title={r.label}>
+                {r.label}
+              </span>
+              <span className="shrink-0 font-mono font-medium text-foreground">
+                {r.value.toLocaleString()}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 const TOOLTIP_STYLE = {
   background: '#FCFCF9',
   border: '1px solid #EDEAE0',
@@ -89,6 +125,13 @@ export default function AdminVisitStatsPage() {
   const query = useQuery({
     queryKey: ['admin-visit-stats', days],
     queryFn: ({ signal }) => fetchAdminVisitStats(token, days, signal),
+    enabled: token !== '',
+  })
+
+  // SEO 批6:流量来源归因 + AI 爬虫(独立 query · 失败不拖垮 PV/UV 主看板)
+  const srcQuery = useQuery({
+    queryKey: ['admin-source-stats', days],
+    queryFn: ({ signal }) => fetchAdminSourceStats(token, days, signal),
     enabled: token !== '',
   })
 
@@ -236,6 +279,37 @@ export default function AdminVisitStatsPage() {
             {query.status === 'pending' && (
               <p className="text-center text-xs text-muted-foreground/60">加载中…</p>
             )}
+
+            {/* SEO 批6:流量来源归因 + AI 爬虫 */}
+            <div className="mt-6 grid gap-3 lg:grid-cols-3">
+              <RankCard
+                title="流量来源"
+                sub={`归因 PV ${srcQuery.data?.total_attributed_pv ?? 0}`}
+                rows={(srcQuery.data?.sources ?? []).map((s) => ({
+                  label: s.source,
+                  value: s.pv,
+                }))}
+                empty="暂无来源数据(有来路的访问上线后渐显)"
+              />
+              <RankCard
+                title="AI / 搜索爬虫"
+                sub="GEO 领先指标 · 被抓取次数"
+                rows={(srcQuery.data?.crawlers ?? []).map((c) => ({
+                  label: c.bot,
+                  value: c.hits,
+                }))}
+                empty="暂无爬虫命中(GPTBot / Googlebot 等来访后显示)"
+              />
+              <RankCard
+                title="来源域名 Top"
+                sub="仅域名 · 无路径/个体明细"
+                rows={(srcQuery.data?.top_referrers ?? []).map((r) => ({
+                  label: r.referrer,
+                  value: r.pv,
+                }))}
+                empty="暂无外部来源域名"
+              />
+            </div>
 
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground/70">
               说明:访问数据(PV/UV)自本功能上线起累积、历史不可回溯,初期曲线较短属正常;
