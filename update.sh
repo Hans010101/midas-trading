@@ -30,6 +30,13 @@ STAGE="init"
 # true → 跳 "已是最新" + 跳 diff 判定 · 强制重建 api+worker+web(用于 cache 卡脏 / 强制刷依赖)
 # 缺省 false · 不影响正常 push 部署
 FORCE_REBUILD="${FORCE_REBUILD:-false}"
+# ── ★部署基建根治 · DEPLOY_MODE 双模式(build 挪出 VPS)──────────────────────────
+# build(默认·现网零改)= 现状:VPS 上 docker compose build 三镜像(顺序防 OOM)→ recreate。
+# pull  = CI(build-push.yml)在 Actions build 好推 ACR·VPS 只 docker compose pull + recreate
+#         (零构建负载·i18n 批0 整机卡死根源物理消失)。★阶段2 引入但默认仍 build·阶段4 才切默认。
+# pull 模式前置(Hans 配 VPS /opt/midas/.env):MIDAS_REGISTRY=<VPC registry>/midastrade
+#   (compose image: 插值用)· VPS 已 docker login ACR(credential store 持久)。
+DEPLOY_MODE="${DEPLOY_MODE:-build}"
 # ── ADR 0029 DP2:失败时回滚 git HEAD · 仅在 1/7 真实 reset 后才被赋值 ──
 # 防止 "git HEAD 已动 / docker image 未起 / DB 半 migrate" 三向脱钩
 OLD_HEAD_SAVED=""
@@ -280,43 +287,53 @@ if [ "$NEED_BUILD_VIBE" = "true" ] || ! docker image inspect midas-vibe:0.1.9 >/
 fi
 
 if [ ${#RECREATE_SVCS[@]} -gt 0 ]; then
-  section "强制重建有代码改动的无状态服务:${RECREATE_SVCS[*]}"
-  # ── 2026-06-19 翻车修:构建【前】清陈旧 buildkit 缓存(失败时下方 post 清理到不了)──
-  #   force-rebuild 三镜像 + pip 重试曾把 build cache 堆到 17.91GB · 压盘加剧超时/OOM。
-  #   --keep-storage 10GB 保留近期层缓存(含 pip 依赖层)· 只清陈旧 · 不动在用镜像。
-  echo "  ${MAGENTA}▸${NC} 构建前清陈旧 buildkit 缓存(--keep-storage 10GB · 保留依赖层)"
-  docker builder prune -f --keep-storage 10GB 2>&1 | tail -3 || warn "pre-build prune 失败 · 不阻塞"
+  section "重建有代码改动的无状态服务:${RECREATE_SVCS[*]}(DEPLOY_MODE=$DEPLOY_MODE)"
 
-  # 暴露 BuildKit · DOCKER_BUILDKIT=1 是 cache mount + syntax 1.7 必需
-  # BUILDKIT_PROGRESS=plain · 流式 build log(失败时易排障)
-  export DOCKER_BUILDKIT=1
-  export BUILDKIT_PROGRESS=plain
+  if [ "$DEPLOY_MODE" = "pull" ]; then
+    # ════════════════════════════════════════════════════════════════════
+    # ── ★pull 模式(build 挪出 VPS · 阶段4 起默认)──────────────────────────────
+    # CI(build-push.yml)已在 GitHub Actions build 好三镜像推 ACR;VPS 只 docker compose
+    # pull 精确 sha tag → recreate · 零构建负载 · i18n 批0 整机卡死根源(同机重型 build)物理消失。
+    #   · MIDAS_IMAGE_TAG=NEW_HEAD(全 40 位 sha · 与 CI push 的 tag 一致 · compose image: 插值用)
+    #   · MIDAS_REGISTRY 由 VPS /opt/midas/.env 提供(VPC registry+命名空间 · compose 自动读 .env)
+    #   · VPS 已 docker login ACR(credential store 持久 · 故此处不显式 login)
+    # ════════════════════════════════════════════════════════════════════
+    export MIDAS_IMAGE_TAG="$NEW_HEAD"
+    section "pull 改动服务:${RECREATE_SVCS[*]}(tag=$MIDAS_IMAGE_TAG · 零本地 build)"
+    timeout 600 $COMPOSE pull "${RECREATE_SVCS[@]}"
+    ok "镜像 pull 完成(tag=$MIDAS_IMAGE_TAG · VPS 零构建负载)"
+  else
+    # ── build 模式(现状 · 默认 · 现网零改)· 以下与改造前一字不变 ──────────────────
+    # ── 2026-06-19 翻车修:构建【前】清陈旧 buildkit 缓存(失败时下方 post 清理到不了)──
+    #   force-rebuild 三镜像 + pip 重试曾把 build cache 堆到 17.91GB · 压盘加剧超时/OOM。
+    #   --keep-storage 10GB 保留近期层缓存(含 pip 依赖层)· 只清陈旧 · 不动在用镜像。
+    echo "  ${MAGENTA}▸${NC} 构建前清陈旧 buildkit 缓存(--keep-storage 10GB · 保留依赖层)"
+    docker builder prune -f --keep-storage 10GB 2>&1 | tail -3 || warn "pre-build prune 失败 · 不阻塞"
 
-  # ════════════════════════════════════════════════════════════════════
-  # ── 2026-06-30 事故修(#91 部署 OOM · 整站宕机)· 顺序 build · 绝不并行 ──
-  # 旧版:`timeout 2700 $COMPOSE up -d --build --force-recreate --no-deps <api worker web>`
-  #   docker compose 对多 service 默认【并行 build】· api(pip)+worker(pip)+web(next build)
-  #   同时抢 7G 内存 → OOM → build 失败 → 回滚但容器没重起 → 整站宕机(事故根因)。
-  #   服务器静息只剩 ~2.6Gi available,连单个重 build 都贴天花板,三并行必 OOM。
-  # 修法:一个一个 build(任意时刻只 1 个 build 占内存峰值 · Hans 实证 api 638s→
-  #   worker 370s→web 229s 全程不 OOM)· 全部 build 成功后再一次性 --no-build 重建容器。
-  #   · 用 `docker compose build <svc>`(非裸 docker build):自动带 compose 里的 build args
-  #     (web 的 NEXT_PUBLIC_API_URL · 0016 ADR)· 绝不漏。
-  #   · 每 build 单独 timeout 1800s(30min):realistic 最坏 api ~19min(pip 阿里云重试)< 30min。
-  #   · build 期间老容器仍在跑 → 最后 --force-recreate 才切换 → 几乎零停机。
-  # ════════════════════════════════════════════════════════════════════
-  for svc in "${RECREATE_SVCS[@]}"; do
-    section "顺序 build:${svc}(独占内存峰值 · 防并行 OOM)"
-    timeout 1800 $COMPOSE build "$svc"
-    ok "${svc} 镜像 build 完成"
-  done
+    # 暴露 BuildKit · DOCKER_BUILDKIT=1 是 cache mount + syntax 1.7 必需
+    # BUILDKIT_PROGRESS=plain · 流式 build log(失败时易排障)
+    export DOCKER_BUILDKIT=1
+    export BUILDKIT_PROGRESS=plain
 
-  section "全部镜像就绪 · 一次性重建容器(--no-build 不再 build · 秒级切换)"
-  # --no-build      镜像已在上面顺序 build 好 · 这步绝不再 build(否则又触发并行 build OOM)
-  # --force-recreate 即使层缓存命中也用新镜像重建容器(根治"代码已 main 但容器跑旧码")
+    # ── 2026-06-30 事故修(#91 部署 OOM · 整站宕机)· 顺序 build · 绝不并行 ──
+    #   docker compose 对多 service 默认【并行 build】三镜像同抢 7G 内存 → OOM → 宕机(#91 根因)。
+    #   一个一个 build(任意时刻只 1 个占内存峰值)· 全 build 成功后再一次性 --no-build 重建。
+    #   用 `docker compose build`(非裸 docker build):自动带 web 的 NEXT_PUBLIC_API_URL(0016)。
+    #   ★注:pull 模式上线后这条重型 build 路径退居 force_rebuild 兜底(内存墙根源随之退场)。
+    for svc in "${RECREATE_SVCS[@]}"; do
+      section "顺序 build:${svc}(独占内存峰值 · 防并行 OOM)"
+      timeout 1800 $COMPOSE build "$svc"
+      ok "${svc} 镜像 build 完成"
+    done
+  fi
+
+  # ── 两模式共用:pull/build 完后一次性重建容器 ──
+  section "镜像就绪 · 一次性重建容器(--no-build --force-recreate --no-deps)"
+  # --no-build      pull/build 已就绪 · 这步绝不 build(pull 模式更是物理无 build 能力 · 双保险)
+  # --force-recreate 用新镜像重建容器(pull 模式 sha tag 每次不同 · 天然强制重建 · 不靠同名兜底)
   # --no-deps       只动无状态服务 · 绝不触碰 postgres/clickhouse/redis(数据卷不动 · 红线)
   $COMPOSE up -d --no-build --force-recreate --no-deps "${RECREATE_SVCS[@]}"
-  ok "force-recreate 完成:${RECREATE_SVCS[*]}(有状态容器未触碰 · 顺序 build 全程无 OOM)"
+  ok "force-recreate 完成:${RECREATE_SVCS[*]}(有状态容器未触碰 · DEPLOY_MODE=$DEPLOY_MODE)"
 elif [ "$NEED_COMPOSE_UP" = "true" ]; then
   # 仅 compose yaml 改动(无后端/前端代码改动)→ 普通 up -d 应用配置差异。
   # 不 --build、不 --force-recreate:compose 只重建"配置确实变了"的服务,有状态容器不会被无故重建。
