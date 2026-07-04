@@ -1,13 +1,17 @@
+import { defineRouting } from 'next-intl/routing'
+
 /**
- * i18n locale 常量(cookie-locale 无路由方案 · 决策 A · 见 docs/i18n/cookie-locale-design.md)。
+ * i18n 路由配置(Phase 0 地基 · 决策 2 as-needed:中文 `/` 无前缀 · 英文 `/en`)。
  *
- * ★不再用 next-intl 的 defineRouting / localePrefix —— cookie 方案【不走路径路由】:
- *   locale 由 NEXT_LOCALE cookie 决定(i18n/request.ts),URL 恒不变、middleware 零参与、
- *   无 as-needed 隐形 rewrite → 批0 两次生产 redirect loop 的根源在此方案里物理不存在。
- *   本文件只作纯常量源(locales / defaultLocale / Locale 类型),供 request.ts 复用。
+ * ★当前【未激活】:真正启用需 activation 三件——① next.config 挂 createNextIntlPlugin
+ *   ② middleware.ts locale 检测/重写 ③ app/[locale]/ 页面迁移 + 根 layout 挂
+ *   NextIntlClientProvider。这三件 touches next.config / layout / 全站页面,属"改全站组件/layout"
+ *   的道(错层并行避让暗黑模式)。故本文件先作为【就绪骨架】存在,activation 延后到进场换 key 时统一做。
  */
-export const locales = ['zh', 'en'] as const
+export const routing = defineRouting({
+  locales: ['zh', 'en'],
+  defaultLocale: 'zh',
+  localePrefix: 'as-needed',
+})
 
-export type Locale = (typeof locales)[number]
-
-export const defaultLocale: Locale = 'zh'
+export type Locale = (typeof routing.locales)[number]
