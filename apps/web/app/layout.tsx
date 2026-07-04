@@ -48,7 +48,12 @@ const jetbrainsMono = localFont({
 // + openGraph / twitter 卡(分享到 TG / X 出预览图)
 export const metadata: Metadata = {
   metadataBase: new URL('https://midastrade.asia'),
-  title: '点金 Midas · AI 原生跨市场分析终端',
+  // SEO 批1:title 模板 —— 子页只写短 title,'%s · 点金 Midas' 统一品牌后缀(防手写漂移);
+  // 未定义 title 的页面用 default(现状不变)。
+  title: {
+    template: '%s · 点金 Midas',
+    default: '点金 Midas · AI 原生跨市场分析终端',
+  },
   description:
     '覆盖加密、美股、A 股、港股四大市场的 AI 原生分析终端:11 因子结构沙盘、策略回测研究室、AI 决策卡、缠论自动标注,Pro 会员解锁更高 AI 额度,全程虚拟资金,不构成投资建议。',
   openGraph: {

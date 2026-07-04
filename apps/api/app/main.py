@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 import ccxt.async_support as ccxt_async
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 
 from app.api.v1 import router as api_v1_router
 from app.core.config import settings
@@ -90,3 +91,13 @@ app.include_router(api_v1_router, prefix="/api/v1")
 @app.get("/health")
 async def health_check() -> dict[str, str]:
     return {"status": "ok", "service": "midas-api"}
+
+
+@app.get("/robots.txt", include_in_schema=False)
+async def robots_txt() -> PlainTextResponse:
+    """api 子域全站禁爬(SEO 批1 · docs/seo/2026-07-seo-geo-audit.md)。
+
+    Swagger /docs 与 /openapi.json 公网 200 —— 不挡访问只挡收录,
+    防 API 文档页出现在品牌搜索结果(观感差 + 给撞库者省事)。
+    """
+    return PlainTextResponse("User-agent: *\nDisallow: /\n")
