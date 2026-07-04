@@ -39,6 +39,7 @@ from tasks import (  # noqa: E402, F401
     perp_liquidation,
     price_alerts,
     report,
+    system_health,
     visit_flush,
     x_auto,
     x_publish,

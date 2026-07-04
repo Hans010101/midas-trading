@@ -29,6 +29,14 @@ task_routes = {
 # Beat schedule(时刻是 CN 本地)
 # TODO(Task 4.3): 加密增量从 5 分钟轮询升级为 WebSocket 实时推送 + 1 分钟 K 落库
 beat_schedule = {
+    # 系统健康监控:每 20 分钟查 CH system.disks(与 Docker 同盘)算磁盘使用率 → 超阈值(≥85% 或
+    #   <8G)TG 告警 admin(去抖 1h)· 防 2026-07-04 磁盘墙(build 缓存撑满 → CH 0 空间 → api 500)复发。
+    "monitor-disk-space": {
+        "task": "tasks.monitor.check_disk_space",
+        "schedule": crontab(minute="*/20"),
+        # ★不设 expires:防复发监控在【正是要监控的积压/磁盘满场景】不能被丢弃 —— worker 恢复后
+        #   这条仍要执行发告警(去抖 Redis 1h 防恢复瞬间刷屏)。异于数据采集 sibling(过期丢弃靠下个 beat 补)。
+    },
     "update-cn-demo": {
         "task": "tasks.incremental.update_cn_demo",
         # A 股每个交易日 15:30 收盘后跑

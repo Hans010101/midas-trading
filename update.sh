@@ -466,8 +466,18 @@ banner "7/7 · 缓存清理(按大小催收 · 压到 10GB)"
 # 兜底层:① daemon.json builder.gc 加【无 filter 的 15GB 硬上限】催收规则(N2 修正 · 服务器侧);
 #         ② prune 失败不阻塞 deploy 成功路径(健康检查已过 · 此步纯卫生)。
 STAGE="7/7 cache prune"
-echo "  按大小催收 BuildKit 缓存(保留最近 10GB)..."
-docker builder prune -f --keep-storage 10GB 2>&1 | tail -5 || warn "prune 失败 · 不阻塞 deploy(健康检查已过)"
+# ★build 缓存清理【按模式分叉】(2026-07-04 磁盘墙事故根治):
+#   pull 模式 → VPS 永不 build → BuildKit 缓存 100% 是死重(21G 历史遗留曾撑满 /dev/vda3 →
+#     ClickHouse 可用空间归 0 → 写不进 → api 500 → 前端"后端不可达")→ `prune -af` 清光
+#     (★-a 连 "in-use" 死缓存一起清 · --keep-storage 保不住的那 ~11G 非 -a 不动 · 正是死重来源)。
+#   build 兜底模式 → 下次 VPS 还要本地 build → 保留 `--keep-storage 10GB` 热缓存(不伤 build 速度)。
+if [ "$DEPLOY_MODE" = "pull" ]; then
+  echo "  pull 模式:清光 BuildKit 缓存(VPS 不 build · 缓存全死 · prune -af)..."
+  docker builder prune -af 2>&1 | tail -5 || warn "prune 失败 · 不阻塞 deploy(健康检查已过)"
+else
+  echo "  build 模式:按大小催收 BuildKit 缓存(保留最近 10GB 热缓存)..."
+  docker builder prune -f --keep-storage 10GB 2>&1 | tail -5 || warn "prune 失败 · 不阻塞 deploy(健康检查已过)"
+fi
 
 # ── ★pull 模式:催收旧 sha 镜像(保留最近 KEEP 个供回滚)· 阶段4(VPS 磁盘压力新来源)──────
 #   pull 模式每次部署 pull 新 sha 的 midas-{svc} 镜像 → VPS 累积旧 tag(build 模式无此累积)。
@@ -480,7 +490,7 @@ docker builder prune -f --keep-storage 10GB 2>&1 | tail -5 || warn "prune 失败
 #     ④ 显式跳过所有容器(含停止)正引用的 ref。
 #   ★set -e 兼容:grep -q/rmi 全走 if(条件豁免 set -e)· 管道尾 `|| true` 防 grep 返 1 误触 ERR。
 if [ "$DEPLOY_MODE" = "pull" ]; then
-  KEEP_IMAGES=3
+  KEEP_IMAGES=2   # 每 repo 留最近 2 个 sha(当前 + 1 回滚目标)+ latest + 在用 · 2026-07-04 收紧(原 3)
   # compose config 解析出的 web 完整镜像名(含 registry)→ 反推 repo 前缀 <registry>/midastrade
   _web_full=$($COMPOSE config 2>/dev/null | grep -E '^[[:space:]]*image:.*midas-web' | head -1 | sed -E "s/.*image:[[:space:]]*//; s/[\"']//g; s/[[:space:]]//g" || true)
   _reg_ns=$(printf '%s' "$_web_full" | sed -E 's#/midas-web(:.*)?$##')
@@ -508,6 +518,31 @@ if [ "$DEPLOY_MODE" = "pull" ]; then
   else
     warn "pull 模式镜像催收跳过:compose config 未解出带 registry 前缀的 web 镜像(_reg_ns=${_reg_ns:-<空>})"
   fi
+
+  # ── ★补清无引用的旧【裸名】镜像(build 时代遗留 · 已被 ACR 镜像取代)· 2026-07-04 ──────
+  #   裸名 midas-{api,worker,web}(无 registry 前缀)是 build 时代 VPS 本地 build 产物。web 已切 ACR
+  #   镜像 → 裸名 midas-web 成死镜像;api/worker 若仍跑裸名(在用)则必须保住。只碰 midas-{api,worker,web}
+  #   三个裸名 repo(不碰 vibe/xshot/pg/ch/redis)。
+  #   ★★真正的安全保障 = `docker rmi` 【不加 -f】:在用镜像的最后一个 tag,daemon 直接拒删(exit 1·
+  #     if 吞掉·不阻塞)—— 对抗审查实证:这一层【绝不误删在跑/停容器的镜像】。
+  #   ★grep 守卫只是【best-effort 降噪】(少试几次注定失败的 rmi):`{{.Image}}` 不规范化(compose 隐式
+  #     :latest 的容器可能显示裸名 `midas-api` 而非 `midas-api:latest`,或显示 image ID)→ 故【也】比对裸名
+  #     repo 形式兜住 compose 隐式 tag 的常见情形;ID 情形则由上面 rmi-不加-f 兜底。
+  in_use_bare=$(docker ps -a --format '{{.Image}}' 2>/dev/null | sort -u || true)
+  for svc in api worker web; do
+    for btag in $(docker images "midas-${svc}" --format '{{.Tag}}' 2>/dev/null || true); do
+      bref="midas-${svc}:${btag}"
+      # best-effort 跳过:精确 ref 在用 · 或裸名 repo 形式在用(compose 隐式 :latest 常显示裸名)
+      if printf '%s\n' "$in_use_bare" | grep -qxF "$bref" \
+        || printf '%s\n' "$in_use_bare" | grep -qxF "midas-${svc}"; then
+        continue
+      fi
+      # 兜底安全:即便上面漏判,rmi 不加 -f 对在用镜像最后一个 tag 会被 daemon 拒删(if 吞 · 不阻塞)
+      if docker rmi "$bref" >/dev/null 2>&1; then
+        echo "    ✓ 删死裸名镜像 ${bref}(已被 ACR 取代)"
+      fi
+    done
+  done
 fi
 
 echo ""
