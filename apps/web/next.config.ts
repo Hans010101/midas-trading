@@ -1,8 +1,11 @@
+import createNextIntlPlugin from 'next-intl/plugin'
 import type { NextConfig } from 'next'
 
-// ★部署基建根治 阶段4:无害注释级改动·触发一次 web 重建走【默认 pull 链 + 镜像清理】验证
-//   (Actions build+push → ACR → VPS docker compose pull → recreate·VPS 零构建负载·
-//   7/7 pull 模式旧 sha 镜像催收在真机跑一次)。验证通过后可移除本行(纯占位·零功能影响)。
+// ★cookie-locale i18n 激活(刀1 地基 · 决策 A · docs/i18n/cookie-locale-design.md):
+//   挂 next-intl 插件指向 i18n/request.ts(按 NEXT_LOCALE cookie 载 messages)。
+//   纯 cookie 无路由 —— 不建 [locale]/、middleware 零改、URL 恒不变、redirect loop 根源不存在。
+const withNextIntl = createNextIntlPlugin('./i18n/request.ts')
+
 const nextConfig: NextConfig = {
   transpilePackages: ['@midas/shared'],
   // typedRoutes 在动态路由 + NextAuth pages 字符串场景下摩擦过多
@@ -19,4 +22,4 @@ const nextConfig: NextConfig = {
   },
 }
 
-export default nextConfig
+export default withNextIntl(nextConfig)
