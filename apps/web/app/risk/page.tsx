@@ -7,7 +7,7 @@ import { LegalH2, LegalP, LegalPage } from '@/components/legal/legal-page'
 export const dynamic = 'force-static'
 
 export const metadata = {
-  title: '风险提示 · 点金 Midas',
+  title: '风险提示',
   description: '点金 Midas 风险提示:全程虚拟、不涉及真实交易、不构成投资建议。',
 }
 

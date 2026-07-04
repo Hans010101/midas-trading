@@ -7,7 +7,7 @@ import { LegalH2, LegalP, LegalPage, LegalUL } from '@/components/legal/legal-pa
 export const dynamic = 'force-static'
 
 export const metadata = {
-  title: '隐私政策 · 点金 Midas',
+  title: '隐私政策',
   description: '点金 Midas 隐私政策:收集哪些信息、如何使用,以及您的权利。',
 }
 
