@@ -78,6 +78,12 @@ services:
       start_period: 5s
 
   api:
+    # ★部署基建根治(build 挪出 VPS):image+build 并存 —— compose build 走 build 段(dev/兜底
+    #   本地构建并打上此名)· compose pull 走 image 从仓库拉(prod)· 命令决定行为·dev 零破坏。
+    #   ★默认(两变量都不设)= `midas-api`,精确等于 compose 派生的现有本地镜像名(project=midas)·
+    #   保证加了 image: 后 compose up 不会因"镜像名变了/不存在"而误触发 build(dev + 现网 build 模式零破坏)。
+    #   prod pull 模式由 update.sh/.env 设 MIDAS_REGISTRY(VPC 地址)+ MIDAS_IMAGE_TAG(git sha)→ 拉 ACR。
+    image: ${MIDAS_REGISTRY:+${MIDAS_REGISTRY}/}midas-api${MIDAS_IMAGE_TAG:+:${MIDAS_IMAGE_TAG}}
     build:
       context: ../apps/api
       dockerfile: Dockerfile
@@ -118,6 +124,8 @@ services:
       - x_shots:/shots
 
   worker:
+    # ★部署基建根治:image+build 并存(见 api 注释)· 默认=派生名 midas-worker(现有·不误 build)· prod pull。
+    image: ${MIDAS_REGISTRY:+${MIDAS_REGISTRY}/}midas-worker${MIDAS_IMAGE_TAG:+:${MIDAS_IMAGE_TAG}}
     build:
       # context 是仓库根:worker 容器要同时拥有 apps/api(app.* 模块)和 apps/worker
       context: ..
@@ -203,6 +211,11 @@ services:
     # 镜像已 USER vibe(非 root)· 不映射端口(不经 Caddy / 不面向公网)
 
   web:
+    # ★部署基建根治:image+build 并存(见 api 注释)· dev 零破坏 · prod pull。
+    #   ★web 镜像的 NEXT_PUBLIC_API_URL 是 build-time inline·prod 镜像已由 CI(build-push.yml)
+    #   用生产值 build 好推 ACR;VPS pull 时不再本地 build,故 build.args 只影响 dev 本地 build。
+    #   ★默认=派生名 midas-web(现有·不误 build)。
+    image: ${MIDAS_REGISTRY:+${MIDAS_REGISTRY}/}midas-web${MIDAS_IMAGE_TAG:+:${MIDAS_IMAGE_TAG}}
     build:
       context: ..
       dockerfile: apps/web/Dockerfile
