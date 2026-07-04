@@ -1,17 +1,18 @@
 /**
- * 某阶文章列表页 · 薄 server 壳(照 app/lab/report/page.tsx + crypto-preview/page.tsx 范式)。
- * <Suspense> 包 'use client' 的 <StageList/>(内部 useSearchParams 读 ?s={stageSlug})。
- * ⛔ 不建 [id] 动态路由段 —— 走 searchParams(项目零先例)。
+ * 旧阶列表 URL 兜底薄壳(SEO 批2)· /academy/stage?s=x → 308 → /academy/stage/x。
+ *
+ * ★Next 15 的 redirects() has:[{type:'query'}] 不支持 query 值捕获 → 薄壳 permanentRedirect
+ *   是唯一正解(侦察确认)。无 s → 训练营首页。正文渲染全在 [s]/page.tsx(路径段 · 6 阶 SSG)。
  */
 
-import { Suspense } from 'react'
+import { permanentRedirect, redirect } from 'next/navigation'
 
-import { StageList } from '@/components/academy/stage-list'
-
-export default function AcademyStagePage() {
-  return (
-    <Suspense fallback={<main className="min-h-screen bg-background" />}>
-      <StageList />
-    </Suspense>
-  )
+export default async function LegacyStageRedirect({
+  searchParams,
+}: {
+  searchParams: Promise<{ s?: string }>
+}) {
+  const { s } = await searchParams
+  if (s) permanentRedirect(`/academy/stage/${s}`)
+  redirect('/academy')
 }

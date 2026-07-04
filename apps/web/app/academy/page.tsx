@@ -1,9 +1,10 @@
 /**
  * 训练营首页 · 列表页(server component · 无 hooks · 全免费无门控)。
  *
- * TopNav + 五阶概览卡片 + 词典入口卡片(★UI 修补:删二级标签行 + 大标题/副标题,直接从阶卡开始)。
- * 阶卡点击 → /academy/stage?s={slug};词典 → /academy/glossary。
- * ⛔ 不用 [id] 动态段;入口走查询参数(项目零先例规矩)。左侧导航只在内页(列表/详情/词典),首页不挂。
+ * TopNav + 五阶概览卡片 + ★各阶文章速览(SEO 批2:server 渲染文章 <a> 入口 · 打通「首页→文章」
+ * 纯 HTML 爬行链 · 修 118 篇爬虫孤岛)+ 词典入口卡片。
+ * 阶卡点击 → /academy/stage/{slug};文章 → /academy/article/{slug}(路径段 · docs/decisions/0045)。
+ * 左侧导航只在内页(列表/详情/词典),首页不挂。
  */
 
 import { ArrowRight, BookOpen } from 'lucide-react'
@@ -27,7 +28,7 @@ export default function AcademyHomePage() {
               return (
                 <Link
                   key={stage.slug}
-                  href={`/academy/stage?s=${stage.slug}`}
+                  href={`/academy/stage/${stage.slug}`}
                   className="group flex flex-col rounded-xl border border-paper bg-cream p-5 shadow-sm transition-colors hover:border-midas-red/40"
                 >
                   <div className="flex items-center justify-between">
@@ -54,6 +55,36 @@ export default function AcademyHomePage() {
               )
             })}
           </div>
+
+          {/* ★各阶文章速览(SEO 批2)· server 渲染 <a> 入口:打通「首页→文章」纯 HTML 爬行链
+              (此前文章链接只在 client 渲染的阶列表里 · 非 JS 爬虫发现不了任何一篇 · 审计 critical)*/}
+          <section className="mt-8">
+            <h2 className="mb-4 font-serif text-lg font-bold">从这里开始读</h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {ACADEMY_STAGES.map((stage) => {
+                const top3 = ACADEMY_ARTICLES.filter((a) => a.stage === stage.slug)
+                  .sort((a, b) => a.order - b.order)
+                  .slice(0, 3)
+                return (
+                  <div key={stage.slug} className="rounded-xl border border-paper bg-cream p-4 shadow-sm">
+                    <p className="mb-2 font-mono text-xs text-midas-red">{stage.stageLabel} · {stage.name}</p>
+                    <ul className="space-y-1.5">
+                      {top3.map((a) => (
+                        <li key={a.slug}>
+                          <Link
+                            href={`/academy/article/${a.slug}`}
+                            className="line-clamp-1 text-sm text-foreground/80 transition-colors hover:text-midas-red"
+                          >
+                            {a.title}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
 
           {/* 词典入口 */}
           <Link
