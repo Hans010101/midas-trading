@@ -688,15 +688,6 @@
         "note": "Saved per browser (not synced to account) · detail pages show defaults on load (adjustable after opening)",
         "period": "Default Timeframe"
       },
-      "language": {
-        "_": "Language",
-        "description": "Choose your interface language · applies instantly (URL unchanged)",
-        "en": "English",
-        "en_note": "English",
-        "note": "Synced across devices when signed in · remembered in this browser otherwise",
-        "zh": "中文",
-        "zh_note": "Simplified Chinese"
-      },
       "notifications": {
         "_": "Message Notifications",
         "description": "Bind Telegram{isAdmin ? ' / Feishu' : ''}, then trade notifications / price alerts push to that channel · unbound only shows in-app alerts",
