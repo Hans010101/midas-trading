@@ -12,15 +12,17 @@
  */
 
 import { Search } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import Image from 'next/image'
-import Link from 'next/link'
 import { signOut, useSession } from 'next-auth/react'
 import { useEffect, useState } from 'react'
 
 import { UserAvatar } from '@/components/account/user-avatar'
 import { CommandPalette } from '@/components/layout/command-palette'
+import { LanguageToggle } from '@/components/layout/language-toggle'
 import { MarketSwitcher } from '@/components/layout/market-switcher'
 import { ThemeToggle } from '@/components/layout/theme-toggle'
+import { Link } from '@/i18n/navigation' // ★i18n:核心导航 locale 感知
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +34,7 @@ import {
 import { useMe } from '@/hooks/use-me'
 
 export function TopNav() {
+  const t = useTranslations('common.nav') // ★i18n Phase0 打通证明:TopNav 走 common.nav
   const { data: session, status } = useSession()
   const { data: me } = useMe() // 头像编号(选了预设则渲染预设图)
   const email = session?.user?.email ?? ''
@@ -65,17 +68,18 @@ export function TopNav() {
 
         {/* 右:主题切换 + Cmd+K 搜索入口 + 用户头像下拉(登录态)/ 登录入口(未登录)/ loading 占位 */}
         <div className="flex items-center gap-3">
-          {/* ★暗黑模式 P0:浅↔深 一键切(与用户菜单里的设置页三档独立·都能用) */}
+          {/* ★i18n:语言快捷切换(访客也能切)· ★暗黑模式 P0:浅↔深 一键切 */}
+          <LanguageToggle />
           <ThemeToggle />
           {/* Cmd+K 命令面板入口(搜品种 / 跳功能页)· 移动端只显 🔍 图标 */}
           <button
             type="button"
             onClick={() => setPaletteOpen(true)}
-            aria-label="搜索品种(⌘K)"
+            aria-label={t('top')}
             className="flex shrink-0 items-center gap-2 rounded-md border border-paper bg-surface-subtle/40 px-2.5 py-1 text-muted-foreground transition-colors hover:border-midas-red/30 hover:text-foreground"
           >
             <Search className="h-3.5 w-3.5" />
-            <span className="hidden text-sm sm:inline">搜索品种…</span>
+            <span className="hidden text-sm sm:inline">{t('search')}</span>
             <kbd className="hidden rounded bg-paper px-1.5 py-0.5 font-mono text-[10px] leading-none text-muted-foreground sm:inline">
               ⌘K
             </kbd>
@@ -149,7 +153,7 @@ export function TopNav() {
               href="/login"
               className="shrink-0 whitespace-nowrap rounded-md bg-midas-red px-3 py-1 text-sm text-white transition-colors hover:bg-midas-red/90"
             >
-              登录
+              {t('login')}
             </Link>
           ) : (
             // loading · 占位避免布局跳动

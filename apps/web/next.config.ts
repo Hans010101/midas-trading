@@ -1,8 +1,12 @@
+import createNextIntlPlugin from 'next-intl/plugin'
 import type { NextConfig } from 'next'
 
-// ★部署基建根治 阶段4:无害注释级改动·触发一次 web 重建走【默认 pull 链 + 镜像清理】验证
-//   (Actions build+push → ACR → VPS docker compose pull → recreate·VPS 零构建负载·
-//   7/7 pull 模式旧 sha 镜像催收在真机跑一次)。验证通过后可移除本行(纯占位·零功能影响)。
+// ★i18n 批0 Phase 0 激活:挂 next-intl 插件,指向就绪的 i18n/request.ts(getRequestConfig 按 locale 载 messages)。
+//   这是让 request.ts / routing.ts 骨架真正生效的唯一开关(未挂时它们是死骨架)。
+//   ★阶段5(build-offload 阶段5)走新部署链(Actions build→ACR→VPS pull)重上批0 v3:
+//   前两次翻车的「同机重型 build 无内存余量」根源已被 build 挪出 VPS 物理根治·内存墙不存在。
+const withNextIntl = createNextIntlPlugin('./i18n/request.ts')
+
 const nextConfig: NextConfig = {
   transpilePackages: ['@midas/shared'],
   // typedRoutes 在动态路由 + NextAuth pages 字符串场景下摩擦过多
@@ -19,4 +23,4 @@ const nextConfig: NextConfig = {
   },
 }
 
-export default nextConfig
+export default withNextIntl(nextConfig)
