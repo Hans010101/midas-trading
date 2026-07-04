@@ -17,7 +17,8 @@ api.midastrade.asia {
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-Proto https
     }
-    encode gzip
+    # SEO 批5:zstd 优先(Chrome 123+ 支持)· gzip 兜底 · brotli 不上(免 xcaddy · D10)
+    encode zstd gzip
 
     header {
         # HSTS · 强制 HTTPS · 1 年
@@ -28,6 +29,10 @@ api.midastrade.asia {
         X-Frame-Options DENY
         # Referrer 仅同源时带完整 URL
         Referrer-Policy strict-origin-when-cross-origin
+        # SEO 批5:现代浏览器版防嵌入(与 XFO DENY 等价 · CSP 只上 frame-ancestors · D10)
+        Content-Security-Policy "frame-ancestors 'none'"
+        # SEO 批5:API 不需要任何浏览器强权限
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
     }
 
     # 上游 502/503 时给可读的错误页(不暴露内部细节)
@@ -54,13 +59,29 @@ midastrade.asia {
         header_up X-Forwarded-Proto https
         header_up X-Forwarded-For {remote_host}
     }
-    encode gzip
+    # SEO 批5:zstd 优先 · gzip 兜底(Next 侧 compress:false 后由 Caddy 统一压缩)
+    encode zstd gzip
 
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
         X-Content-Type-Options nosniff
         Referrer-Policy strict-origin-when-cross-origin
-        # Next.js 自己控制 X-Frame-Options · 这里不强制
+        # SEO 批5:补 clickjacking 防护(Next 默认根本不发 XFO · 旧注释「Next 自己控制」不成立)
+        #   SAMEORIGIN 而非 DENY:给未来站内自嵌(预览 iframe 等)留余地 · CSP frame-ancestors 同步
+        X-Frame-Options SAMEORIGIN
+        Content-Security-Policy "frame-ancestors 'self'"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    }
+
+    # SEO 批5:public/ 静态内容资产长缓存(371 张训练营图等 · Next 对 public/ 默认发
+    #   Cache-Control: public, max-age=0 = 每次都回源验证,纯浪费)。
+    #   30 天(2592000s)· 不加 immutable(文件名无 hash · 内容 runbook 是「追加新名」为主,
+    #   同名覆盖极少;真要换图用新文件名即可)。★defer 必须:让本 header 在响应写出时执行,
+    #   覆盖 Next 上游的 max-age=0(不 defer 会被上游值顶掉 / 产生重复头)。
+    @static_assets path /academy-img/* /marketing/* /brand/* /avatars/*
+    header @static_assets {
+        Cache-Control "public, max-age=2592000"
+        defer
     }
 
     log {
