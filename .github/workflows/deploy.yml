@@ -1,88 +1,148 @@
 name: 部署到生产(香港 VPS)
 
-# 触发:
-#   · push 到 main 分支 → 自动部署
-#   · 手动触发(Actions 页面 "Run workflow" 按钮)· 用于回滚 / 重跑
+# ── ★部署基建根治(build 挪出 7G VPS)· 新链 ─────────────────────────────────────
+# 旧链:单 job·SSH 到 VPS 上 docker compose build 三镜像(同机重型 build 无内存余量 →
+#   i18n 批0 连翻三次:内存竞争 / redirect loop / 整机卡死到 SSH 不可达)。
+# 新链:① build-push job(Actions runner 内存充足·矩阵并行 build 三镜像 → 推阿里云 ACR)
+#       ② deploy job(needs build-push·SSH VPS 只 docker compose pull + recreate·零构建负载)。
+#   ★build 失败 = Actions 红 = deploy job 根本不跑 = 生产纹丝不动(#91「build 失败宕机」物理消失)。
+#   ★DEPLOY_MODE=build 兜底保留在 update.sh(三层回滚兜底之一)· 可 workflow_dispatch 选 build。
+
 on:
   push:
     branches: [main]
-    # 只改 docs / 这个 workflow 自己时不触发(省一次部署)· 按需可删
     paths-ignore:
       - 'docs/**'
       - '**/*.md'
   workflow_dispatch:
-    # ADR 0029 DP4:手动触发开关 · 强制完整重建(跳过 update.sh "已是最新" + diff fast-path)
-    # 使用场景:① cache 卡脏(buildx 状态损坏)② 依赖未变但要重装(pip 拉新 wheel)
-    # ③ 验证 docker image 真实状态(确认 git HEAD ↔ image 不脱钩)
-    # push 触发时此 input 为空 · update.sh 默认 FORCE_REBUILD=false 走原快速路径
     inputs:
       force_rebuild:
-        description: '强制完整重建(跳过 update.sh 已是最新 + diff 判定 · 重建 api/worker/web)'
+        description: '强制完整重建(跳 update.sh 已是最新 + diff·重建 api/worker/web)'
         type: boolean
         default: false
         required: false
+      deploy_mode:
+        description: 'VPS 部署模式:pull(默认·拉 ACR 镜像)/ build(兜底·VPS 本地 build)'
+        type: choice
+        options: [pull, build]
+        default: pull
+        required: false
 
-# 同一时间只允许一个部署在跑 · 后到的排队(部署不能并发,会互相打架)
 concurrency:
   group: deploy-production
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: SSH 部署 + 健康检查
+  # ══════════════════════════════════════════════════════════════════════════
+  # job 1 · build+push 三镜像到 ACR(在 Actions runner·内存充足·build 物理离开 VPS)
+  # ══════════════════════════════════════════════════════════════════════════
+  build-push:
+    name: build+push ${{ matrix.service }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60   # 全 force-rebuild(api+worker+web)+ pip 阿里云镜像重试实测可达 ~28min(2026-06-19 翻车)· 2026-06-30 改顺序 build 后串行不重叠、时长严格累加,50→60 留余量防 flaky pip 顶到 50 被 SIGKILL 砍在半截 build(那会复现"回滚没重起")
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false # 一个镜像失败不掐断其它两个(便于一次看全)
+      matrix:
+        include:
+          - { service: api, context: ./apps/api, file: ./apps/api/Dockerfile }
+          - { service: worker, context: ., file: ./apps/worker/Dockerfile }
+          - { service: web, context: ., file: ./apps/web/Dockerfile }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: 登录 ACR（公网 registry）
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ACR_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+      - name: build + push ${{ matrix.service }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          # ★仅 web 需要 NEXT_PUBLIC_API_URL(build-time inline·ADR0016)· api/worker 传空
+          build-args: ${{ matrix.service == 'web' && format('NEXT_PUBLIC_API_URL={0}', vars.NEXT_PUBLIC_API_URL) || '' }}
+          push: true
+          # ★tag=github.sha(全 40 位·与 VPS update.sh 的 NEW_HEAD 同 sha·pull 对得上)+ latest
+          tags: |
+            ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/midas-${{ matrix.service }}:${{ github.sha }}
+            ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/midas-${{ matrix.service }}:latest
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+      # ★web bundle 断言:必须含生产 API URL(NEXT_PUBLIC_API_URL 被 inline)· 防整站白屏(ADR0016)。
+      #   只正向查 api.midastrade.asia(只可能来自注入·可靠)· 不查 localhost 残留(?? 兜底字面量假阳性)。
+      - name: 验 web bundle 的 NEXT_PUBLIC_API_URL（防 localhost 白屏）
+        if: matrix.service == 'web'
+        run: |
+          set -e
+          IMG="${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/midas-web:${{ github.sha }}"
+          docker pull "$IMG"
+          if docker run --rm "$IMG" sh -c 'grep -rlF "api.midastrade.asia" .next 2>/dev/null | head -1' | grep -q .; then
+            echo "✅ web bundle 含生产 API URL(api.midastrade.asia)· build-arg 注入正确"
+          else
+            echo "❌ web bundle 未含生产 API URL → build-arg 没注入(整站会白屏)"
+            exit 1
+          fi
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # job 2 · SSH VPS · pull 已 build 好的镜像 + recreate(VPS 零构建负载)
+  # ══════════════════════════════════════════════════════════════════════════
+  deploy:
+    name: SSH 部署（pull 模式）+ 健康检查
+    needs: build-push # ★三镜像 build+push 全成功才部署;任一失败 → 此 job 不跑 → 生产不动
+    runs-on: ubuntu-latest
+    timeout-minutes: 20 # pull + recreate + alembic + 健康检查(无 build)· 远短于旧链的顺序 build
 
     steps:
-      # ────────────────────────────────────────────────
       - name: 写入部署 SSH 私钥(来自 GitHub Secrets)
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          # 私钥从 Secret 注入 · 引号保留换行 · 600 权限
           printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          # 把服务器主机公钥加进 known_hosts · 避免首连交互提示
           ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      # ────────────────────────────────────────────────
-      - name: SSH 到服务器 · 强行同步本地 main = origin/main + update.sh
+      - name: SSH 到服务器 · 强行同步 main + update.sh（DEPLOY_MODE=pull）
         run: |
           set -e
-          # FORCE_REBUILD 透传:push 事件 inputs.force_rebuild 为空字符串 →
-          # update.sh 的 ${FORCE_REBUILD:-false} 默认为 false · 不影响自动部署
-          #
-          # ── ADR 0029 hotfix-2 · git reset --hard origin/main(替代 checkout -f main) ──
-          # 让 update.sh 自身改动立即生效(disk 同步)· 实战故障实证 N1/N2 部署链
-          #
-          # ── ADR 0031 · fast-path 误判修复(DP1 · 方向 B) ──
-          # 副作用:reset 后 server local main 已 = origin/main · update.sh 1/7 看 HEAD 没动
-          #         → 误判 "无需重建" → fast-path → 普通 push 不真重建(被迫 push 两次)
-          # 修法:在 reset 【之前】算 OLD_HEAD,reset 【之后】算 NEW_HEAD,一起 export 给
-          #       update.sh · 这样 update.sh 1/7 拿到的是 reset 前的真实 server HEAD
-          # 引号:外层 "..." 让 GH Actions 展开 secrets / inputs · 内层 \$(...) 转义避免
-          #       GH runner 本地展开,$ 要由远端 bash 解释(SSH 到远端后才执行)
+          # ★DEPLOY_MODE=pull(默认)· update.sh 走 pull 分支:docker compose pull 精确 sha tag →
+          #   recreate · VPS 零构建负载。workflow_dispatch 可选 deploy_mode=build 走兜底本地 build。
+          # OLD_HEAD reset 前算 / NEW_HEAD reset 后算(ADR0031 fast-path 修)· NEW_HEAD = 本次 sha
+          #   = build-push job 的 github.sha → update.sh pull 的 MIDAS_IMAGE_TAG 对得上仓库镜像 tag。
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=accept-new \
             -o ServerAliveInterval=30 \
             -o ServerAliveCountMax=120 \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "cd /opt/midas && OLD_HEAD=\$(git rev-parse HEAD) && git fetch origin main && git checkout main && git reset --hard origin/main && NEW_HEAD=\$(git rev-parse HEAD) && OLD_HEAD=\$OLD_HEAD NEW_HEAD=\$NEW_HEAD FORCE_REBUILD='${{ inputs.force_rebuild }}' bash update.sh"
+            "cd /opt/midas && OLD_HEAD=\$(git rev-parse HEAD) && git fetch origin main && git checkout main && git reset --hard origin/main && NEW_HEAD=\$(git rev-parse HEAD) && OLD_HEAD=\$OLD_HEAD NEW_HEAD=\$NEW_HEAD DEPLOY_MODE='${{ inputs.deploy_mode || 'pull' }}' FORCE_REBUILD='${{ inputs.force_rebuild }}' bash update.sh"
 
-      # ────────────────────────────────────────────────
-      # update.sh 内部已做容器健康检查 · 这里再从 GitHub runner(外网)
-      # 打一次公网 HTTPS 端点 · 验证 DNS + Caddy + api 整条链路对外可用
-      - name: 外部健康检查 · 公网 HTTPS 端点
+      # ★外部健康检查:严格 200 + redirect-loop 探测(2026-07-03 i18n 批0 redirect loop 教训)。
+      #   旧 `curl -fsS /` 的 -f 只 4xx/5xx 失败、放过 3xx → localeDetection 让 /→307→/ 死循环时
+      #   仍报 web HTTP 307 success 漏掉中文站崩(假绿)。现:① 关键页必须 200 ② -L 探 redirect loop。
+      - name: 外部健康检查 · 公网 HTTPS 端点（严格 200 + loop 探测）
         run: |
           echo "等 5s 让服务稳定..."
           sleep 5
           echo "── api.midastrade.asia/health ──"
           curl -fsS --max-time 20 https://api.midastrade.asia/health
           echo ""
-          echo "── midastrade.asia 首页 ──"
-          curl -fsS -o /dev/null -w "web HTTP %{http_code} · %{time_total}s\n" --max-time 20 https://midastrade.asia/
+          check_200() {
+            local code
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$1")
+            echo "  $2: HTTP ${code}"
+            if [ "$code" != "200" ]; then
+              echo "  ❌ $2 非 200(疑 redirect loop / 未就绪 / 崩)· 部署判失败"
+              return 1
+            fi
+          }
+          echo "── 中文关键页严格 200 ──"
+          check_200 "https://midastrade.asia/" "中文首页 /"
+          check_200 "https://midastrade.asia/cn-market" "/cn-market"
+          check_200 "https://midastrade.asia/workbench" "/workbench"
+          echo "── redirect-loop 探测(curl -L 跳数上限 3·超限即失败)──"
+          curl -fsS -L --max-redirs 3 -o /dev/null -w "  / 跟随最终 HTTP %{http_code} · 跳 %{num_redirects} · %{time_total}s\n" --max-time 20 https://midastrade.asia/
 
-      # ────────────────────────────────────────────────
       - name: 清理私钥(无论成败都跑)
         if: always()
         run: rm -f ~/.ssh/deploy_key
