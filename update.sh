@@ -299,6 +299,26 @@ if [ ${#RECREATE_SVCS[@]} -gt 0 ]; then
     #   · VPS 已 docker login ACR(credential store 持久 · 故此处不显式 login)
     # ════════════════════════════════════════════════════════════════════
     export MIDAS_IMAGE_TAG="$NEW_HEAD"
+
+    # ── ★fail-fast 守卫:MIDAS_REGISTRY 未配 → 明确报错 + 指引(2026-07-04 阶段3 首跑翻车)──
+    #   VPS /opt/midas/.env 漏配 MIDAS_REGISTRY 时,compose image: 的 ${MIDAS_REGISTRY:+…} 退化成
+    #   裸名 `midas-web:<sha>` → docker 去 docker.io 找 → `pull access denied`(cryptic·难排查)。
+    #   ★注:MIDAS_REGISTRY 由 .env 提供、compose 自己读;bash 进程里该 shell 变量本就是空的,
+    #   所以【绝不能】查 `$MIDAS_REGISTRY` shell 变量(必误报)。正确做法=用 `compose config`
+    #   全量解析取 web 服务的 image 行(compose 真正会拉的镜像名)做地面真相:带 registry 前缀=
+    #   含 '/',裸名=不含。★用全量 config(自 compose v1 通用)而非 `--images`(旧版无此 flag →
+    #   空输出会误报拦截配置正确的 .env)。grep 定位到 `image: …midas-web…` 行(context 行是别的 key)。
+    _web_img=$($COMPOSE config 2>/dev/null | grep -E '^\s*image:.*midas-web' | head -1 || true)
+    if ! printf '%s' "$_web_img" | grep -q '/'; then
+      echo "${RED}  ✗ pull 模式:compose 解析出的 web 镜像 =「${_web_img:-<空>}」· 无 registry 前缀${NC}"
+      echo "${RED}    根因:MIDAS_REGISTRY 未生效(VPS /opt/midas/.env 缺此变量 → image 退化裸名 → 拉取被拒)${NC}"
+      echo "${RED}    修复:在 VPS /opt/midas/.env 加一行(VPC 地址 + 命名空间 · 无尾斜杠):${NC}"
+      echo "${RED}    MIDAS_REGISTRY=crpi-kejjqltz4vumnjmv-vpc.cn-hongkong.personal.cr.aliyuncs.com/midastrade${NC}"
+      echo "${RED}    或退回 build 兜底:DEPLOY_MODE=build bash update.sh${NC}"
+      false   # 触发 ERR trap → on_err 诊断快照 + 回滚 git HEAD(此刻尚未 pull/recreate · 站点不受影响)
+    fi
+    ok "compose 解析 web 镜像带 registry 前缀:${_web_img}"
+
     section "pull 改动服务:${RECREATE_SVCS[*]}(tag=$MIDAS_IMAGE_TAG · 零本地 build)"
     timeout 600 $COMPOSE pull "${RECREATE_SVCS[@]}"
     ok "镜像 pull 完成(tag=$MIDAS_IMAGE_TAG · VPS 零构建负载)"
