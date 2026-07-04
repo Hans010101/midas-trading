@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from 'next-intl'
 import { getLocale } from 'next-intl/server'
 
 import { RewardToastWatcher } from '@/components/growth/reward-toast-watcher'
+import { I18nClientInit } from '@/components/i18n/i18n-client-init'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { QueryProvider } from '@/lib/providers/query-provider'
@@ -101,6 +102,8 @@ export default async function RootLayout({
           <SessionProvider>
             <ThemeProvider>
               <QueryProvider>
+                {/* ★i18n cookie-locale:X-Lang 全站注入 + 登录跨设备同步(须在 Session+Query 内) */}
+                <I18nClientInit />
                 <UiStoreProvider>
                   <TooltipProvider>{children}</TooltipProvider>
                 </UiStoreProvider>
