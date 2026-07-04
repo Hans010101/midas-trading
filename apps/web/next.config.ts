@@ -1,5 +1,8 @@
 import type { NextConfig } from 'next'
 
+// ★部署基建根治 阶段3:无害注释级改动·触发一次 web 重建走【完整新链】验证
+//   (Actions build+push → ACR → VPS docker compose pull → recreate·VPS 零构建负载)。
+//   验证通过后可移除本行(纯占位·零功能影响)。
 const nextConfig: NextConfig = {
   transpilePackages: ['@midas/shared'],
   // typedRoutes 在动态路由 + NextAuth pages 字符串场景下摩擦过多
