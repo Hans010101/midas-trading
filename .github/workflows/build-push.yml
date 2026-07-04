@@ -1,0 +1,78 @@
+name: 构建并推送镜像到 ACR（阶段1 打底·部署链不动）
+
+# ── 部署基建根治 · 阶段1「打底」──────────────────────────────────────────────
+# 把 web/api/worker 三镜像的 build 从 7G 香港 VPS 挪到 GitHub Actions runner(内存充足)·
+# build+push 到阿里云 ACR(香港)。★本阶段【VPS 部署链完全不动】(deploy.yml 照旧 VPS build):
+#   本 workflow 只 workflow_dispatch 手动触发,不挂 push · 纯验证「Actions 能 build 出正确镜像
+#   + 推进 ACR」这半条链。阶段2/3 才把它接进 deploy.yml 并让 VPS 改 pull。
+#
+# 镜像地址:${ACR_REGISTRY}/${ACR_NAMESPACE}/midas-{api,worker,web}:{git-sha, latest}
+#   ACR_REGISTRY=公网 crpi-xxx.cn-hongkong.personal.cr.aliyuncs.com(Actions 从公网推)
+#   ACR_NAMESPACE=midastrade(★自动创建仓库已开·私有)
+# ★web 头号风险(ADR 0016):NEXT_PUBLIC_API_URL 是 build-time inline 进 JS bundle · 必须在
+#   Actions build 时用生产值(repo Variable)注入,否则烤进 localhost fallback → 整站白屏。
+#   本 workflow build 完对 web 镜像【自动断言】bundle 含生产 API URL、不含 localhost:8000。
+
+on:
+  workflow_dispatch: {} # 阶段1 只手动触发(不干扰现网 · 验证用)
+
+permissions:
+  contents: read
+
+jobs:
+  build-push:
+    name: build+push ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false # 一个镜像失败不掐断其它两个(便于一次看全)
+      matrix:
+        include:
+          - { service: api, context: ./apps/api, file: ./apps/api/Dockerfile }
+          - { service: worker, context: ., file: ./apps/worker/Dockerfile }
+          - { service: web, context: ., file: ./apps/web/Dockerfile }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: 登录 ACR（公网 registry）
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ACR_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: build + push ${{ matrix.service }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          # ★仅 web 需要 NEXT_PUBLIC_API_URL(build-time inline)· api/worker 传空
+          build-args: ${{ matrix.service == 'web' && format('NEXT_PUBLIC_API_URL={0}', vars.NEXT_PUBLIC_API_URL) || '' }}
+          push: true
+          tags: |
+            ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/midas-${{ matrix.service }}:${{ github.sha }}
+            ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/midas-${{ matrix.service }}:latest
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+      # ★阶段1 验证闸门②:web bundle 必须含生产 API URL、不含 localhost fallback(防整站白屏)
+      - name: 验 web bundle 的 NEXT_PUBLIC_API_URL（防 localhost 白屏）
+        if: matrix.service == 'web'
+        run: |
+          set -e
+          IMG="${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/midas-web:${{ github.sha }}"
+          echo "拉回刚推的 web 镜像验 bundle: $IMG"
+          docker pull "$IMG"
+          # 运行时 WORKDIR=/repo/apps/web · 构建产物 .next 就在这里
+          if docker run --rm "$IMG" sh -c 'grep -rlF "localhost:8000" .next 2>/dev/null | head -1' | grep -q .; then
+            echo "❌ web bundle 含 localhost:8000 fallback → NEXT_PUBLIC_API_URL build-arg 没注入对(整站会白屏)"
+            exit 1
+          fi
+          if docker run --rm "$IMG" sh -c 'grep -rlF "api.midastrade.asia" .next 2>/dev/null | head -1' | grep -q .; then
+            echo "✅ web bundle 含生产 API URL(api.midastrade.asia)· build-arg 注入正确"
+          else
+            echo "❌ web bundle 未含生产 API URL → build-arg 可能没生效"
+            exit 1
+          fi
