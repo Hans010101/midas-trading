@@ -10,12 +10,15 @@
 import { BotOrderPresetSection } from '@/components/settings/bot-order-preset-section'
 import { ColorPrefSection } from '@/components/settings/color-pref-section'
 import { DetailPrefsSection } from '@/components/settings/detail-prefs-section'
+import { LanguageSection } from '@/components/settings/language-section'
 import { ThemeSection } from '@/components/settings/theme-section'
 
 export default function PreferencesPage() {
   return (
     <div>
       <h1 className="mb-6 font-serif text-2xl font-bold text-foreground">偏好设置</h1>
+      {/* ★i18n:语言切换(显示类偏好聚一起·置 ThemeSection 前) */}
+      <LanguageSection />
       <ThemeSection />
       <ColorPrefSection />
       <DetailPrefsSection />
