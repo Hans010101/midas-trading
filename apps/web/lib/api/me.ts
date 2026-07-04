@@ -14,6 +14,7 @@ export interface MeResponse {
   has_password: boolean // false = OAuth-only(无密码)→ 不显示改密码表单
   avatar_id: number | null // NULL/0=首字母 · 1-16=预设头像
   is_platinum: boolean // 铂金标记 · 前端据此显/隐铂金自助入口(PR-6 · 真边界在后端 PlatinumDep)
+  language_pref: string | null // ★i18n:'zh'|'en'|NULL(NULL=跟随浏览器)· 登录用户跨设备同步语言(后端 MeOut 已含)
 }
 
 export class MeApiError extends Error {
@@ -65,4 +66,19 @@ export async function setAvatar(token: string, avatarId: number): Promise<number
   if (!r.ok) throw new MeApiError(r.status, await readDetail(r))
   const body = (await r.json()) as { avatar_id: number | null }
   return body.avatar_id
+}
+
+/**
+ * ★i18n:写回语言偏好(登录用户跨设备同步层 · NEXT_LOCALE cookie 是本设备即时生效层)。
+ * 后端 PATCH /user/language(language ∈ {'zh','en'},非法 422)· 返回服务端最终 language。
+ */
+export async function setLanguage(token: string, language: 'zh' | 'en'): Promise<string> {
+  const r = await fetch(`${API_BASE}/api/v1/user/language`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ language }),
+  })
+  if (!r.ok) throw new MeApiError(r.status, await readDetail(r))
+  const body = (await r.json()) as { language: string }
+  return body.language
 }
