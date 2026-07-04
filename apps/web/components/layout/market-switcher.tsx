@@ -17,7 +17,7 @@
  * 视觉沿用工作台 Header 原市场 Tab 样式(中国红选中态),保证工作台外观不变。
  */
 
-import { usePathname, useRouter } from '@/i18n/navigation' // ★i18n:locale 感知(usePathname 剥前缀·英文导航正确)
+import { usePathname, useRouter } from 'next/navigation'
 
 import { MARKET_LABEL } from '@/lib/format-money'
 import { detailMarketOf, homeMarketOf, resolveActiveMarket } from '@/lib/market-nav'
