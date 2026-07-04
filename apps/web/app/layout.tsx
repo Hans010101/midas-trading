@@ -1,7 +1,5 @@
 import type { Metadata } from 'next'
 import localFont from 'next/font/local'
-import { NextIntlClientProvider } from 'next-intl'
-import { getLocale } from 'next-intl/server'
 
 import { RewardToastWatcher } from '@/components/growth/reward-toast-watcher'
 import { Toaster } from '@/components/ui/sonner'
@@ -72,19 +70,14 @@ export const metadata: Metadata = {
   },
 }
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  // ★cookie-locale i18n(决策 A):locale 由 NEXT_LOCALE cookie 决定(i18n/request.ts)· <html lang> 动态。
-  //   读 cookie 使根 layout 走 dynamic 渲染(设计 §1 已知取舍);NextIntlClientProvider 从 Server Component
-  //   渲染时自动继承 locale + messages(无需传 props)。middleware 零参与 → 无 redirect loop 根源。
-  const locale = await getLocale()
-
   return (
     <html
-      lang={locale === 'en' ? 'en' : 'zh-CN'}
+      lang="zh-CN"
       className={`${notoSerifSC.variable} ${notoSansSC.variable} ${jetbrainsMono.variable}`}
       suppressHydrationWarning
     >
@@ -97,20 +90,18 @@ export default async function RootLayout({
               "(function(){try{var m=document.cookie.match(/(?:^|; )color_pref=([^;]+)/);document.documentElement.dataset.colorPref=(m&&decodeURIComponent(m[1])==='green-up')?'green-up':'red-up';}catch(e){}})();",
           }}
         />
-        <NextIntlClientProvider>
-          <SessionProvider>
-            <ThemeProvider>
-              <QueryProvider>
-                <UiStoreProvider>
-                  <TooltipProvider>{children}</TooltipProvider>
-                </UiStoreProvider>
-              </QueryProvider>
-            </ThemeProvider>
-          </SessionProvider>
-          {/* Phase 1.5 刀B:OAuth 到账 toast(读一次性 midas_reward cookie) */}
-          <RewardToastWatcher />
-          <Toaster position="top-center" closeButton />
-        </NextIntlClientProvider>
+        <SessionProvider>
+          <ThemeProvider>
+            <QueryProvider>
+              <UiStoreProvider>
+                <TooltipProvider>{children}</TooltipProvider>
+              </UiStoreProvider>
+            </QueryProvider>
+          </ThemeProvider>
+        </SessionProvider>
+        {/* Phase 1.5 刀B:OAuth 到账 toast(读一次性 midas_reward cookie) */}
+        <RewardToastWatcher />
+        <Toaster position="top-center" closeButton />
       </body>
     </html>
   )
