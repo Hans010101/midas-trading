@@ -217,6 +217,40 @@ export async function fetchAdminVisitStats(
   return (await r.json()) as VisitStats
 }
 
+// ── SEO 批6:流量来源归因 + AI 爬虫看板 ──────────────────────────────────────
+export interface SourceCount {
+  source: string
+  pv: number
+}
+export interface CrawlerCount {
+  bot: string
+  hits: number
+}
+export interface ReferrerCount {
+  referrer: string
+  pv: number
+}
+export interface SourceStats {
+  range_days: number
+  sources: SourceCount[]
+  crawlers: CrawlerCount[]
+  top_referrers: ReferrerCount[]
+  total_attributed_pv: number
+}
+
+export async function fetchAdminSourceStats(
+  token: string,
+  days: number,
+  signal?: AbortSignal,
+): Promise<SourceStats> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/source-stats?days=${days}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as SourceStats
+}
+
 // ── 训练营「答题赢会员」统计(刀4)──────────────────────────────────────────
 
 export interface AcademyStageStat {

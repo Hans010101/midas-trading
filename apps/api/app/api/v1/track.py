@@ -17,7 +17,12 @@ from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.core.redis_client import get_redis
-from app.services.visit_stats import record_visit
+from app.services.visit_stats import (
+    classify_source,
+    record_crawler,
+    record_source,
+    record_visit,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +31,14 @@ router = APIRouter(prefix="/track", tags=["track"])
 
 class VisitBeacon(BaseModel):
     visitor_id: str = Field(min_length=1, max_length=64)
+    # SEO 批6:来源归因(全可选 · 老 payload {visitor_id} 仍合法 · 向后兼容)。
+    # ★D8:只收来源【域名 hostname】+ utm_source(前端已剥 path/query)· 绝不收 IP/UA。
+    ref_host: str | None = Field(default=None, max_length=120)
+    utm_source: str | None = Field(default=None, max_length=64)
+
+
+class CrawlerBeacon(BaseModel):
+    bot: str = Field(min_length=1, max_length=64)  # 前端依 UA 瞬时分类的 bot 名(UA 本身不发)
 
 
 @router.post("/visit", status_code=status.HTTP_204_NO_CONTENT)
@@ -40,6 +53,27 @@ async def track_visit(
     try:
         redis = await get_redis()
         await record_visit(redis, beacon.visitor_id.strip()[:64])
+        # SEO 批6:来源桶 + 来源域名(与 PV/UV 分离 · 独立 Redis HASH · 不影响上面链路)
+        if beacon.ref_host or beacon.utm_source:
+            source = classify_source(beacon.ref_host, beacon.utm_source)
+            await record_source(redis, source, beacon.ref_host)
     except Exception:  # noqa: BLE001 — 埋点绝不影响主流程
         logger.warning("track_visit 记录失败(忽略)", exc_info=True)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/crawler", status_code=status.HTTP_204_NO_CONTENT)
+async def track_crawler(
+    beacon: CrawlerBeacon,
+    x_track_secret: Annotated[str | None, Header()] = None,
+) -> Response:
+    """AI/搜索爬虫访问计数(GEO 领先指标)· 前端 middleware 依 UA 分类后调 · UA 不落库。"""
+    secret = settings.track_ingest_secret
+    if secret and x_track_secret != secret:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    try:
+        redis = await get_redis()
+        await record_crawler(redis, beacon.bot.strip()[:64])
+    except Exception:  # noqa: BLE001 — 埋点绝不影响主流程
+        logger.warning("track_crawler 记录失败(忽略)", exc_info=True)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

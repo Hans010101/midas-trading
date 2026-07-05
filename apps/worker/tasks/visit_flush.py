@@ -15,12 +15,12 @@ from redis import asyncio as aioredis
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.services.visit_stats import flush_recent_days
+from app.services.visit_stats import flush_recent_days, flush_source_recent_days
 
 logger = logging.getLogger(__name__)
 
 
-async def _flush() -> dict[str, tuple[int, int]]:
+async def _flush() -> tuple[dict[str, tuple[int, int]], dict[str, int]]:
     engine = create_async_engine(
         os.environ["DATABASE_URL"], future=True, poolclass=NullPool,
     )
@@ -31,7 +31,10 @@ async def _flush() -> dict[str, tuple[int, int]]:
     )
     try:
         async with session_maker() as session:
-            return await flush_recent_days(session, redis)
+            pv_uv = await flush_recent_days(session, redis)
+            # SEO 批6:同一 beat 顺带 flush 来源桶 / 来源域名 / 爬虫 三表(独立表 · 不影响上面)
+            src = await flush_source_recent_days(session, redis)
+            return pv_uv, src
     finally:
         await redis.aclose()
         await engine.dispose()
@@ -39,7 +42,14 @@ async def _flush() -> dict[str, tuple[int, int]]:
 
 @shared_task(name="tasks.visit.flush_visit_stats")
 def flush_visit_stats() -> dict[str, list[int]]:
-    """Celery 入口 · sync wrapper · 把今/昨 Redis PV/UV 快照 upsert 进 daily_visit_stat。"""
-    result = asyncio.run(_flush())
-    logger.info("[visit.flush] %s", {k: list(v) for k, v in result.items()})
-    return {k: list(v) for k, v in result.items()}
+    """Celery 入口 · sync wrapper · 把今/昨 Redis PV/UV 快照 upsert 进 daily_visit_stat。
+
+    SEO 批6:并附带 flush 来源/爬虫三表(见 flush_source_recent_days)。
+    """
+    pv_uv, src = asyncio.run(_flush())
+    logger.info(
+        "[visit.flush] pv_uv=%s src=%s",
+        {k: list(v) for k, v in pv_uv.items()},
+        src,
+    )
+    return {k: list(v) for k, v in pv_uv.items()}
