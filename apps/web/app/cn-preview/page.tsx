@@ -9,11 +9,13 @@
 
 import { Suspense } from 'react'
 
+import { CuratedRedirect } from '@/components/seo/curated-redirect'
 import { SpotDetail } from '@/components/spot-preview/spot-detail'
 
 export default function CnPreviewPage() {
   return (
     <Suspense fallback={<main className="min-h-screen bg-background" />}>
+      <CuratedRedirect market="cn" />
       <SpotDetail market="cn" />
     </Suspense>
   )

@@ -33,6 +33,7 @@ import {
   type FuturesMetricItem,
 } from '@/lib/api/crypto-market'
 import { useQuery } from '@tanstack/react-query'
+import { detailHref } from '@/lib/seo/detail-symbols'
 import { cn } from '@/lib/utils'
 
 const BOARD_SIZE = 100 // 榜单显示前 100(去无限滚动 · 更多币种走搜索 · 四市场统一)
@@ -188,7 +189,11 @@ export default function CryptoMarketPage() {
     else { setSortKey(key); setSortDir('desc') }
   }
   function openDetail(ccxtSymbol: string) {
-    window.open(`/crypto-preview?symbol=${toBinanceSymbol(ccxtSymbol)}`, '_blank', 'noopener,noreferrer')
+    window.open(
+      detailHref({ symbol: toBinanceSymbol(ccxtSymbol), market: 'crypto' }),
+      '_blank',
+      'noopener,noreferrer',
+    )
   }
 
   const fmtPct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`

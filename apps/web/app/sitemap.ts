@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next'
 
 import { ACADEMY_ARTICLES, ACADEMY_STAGES } from '@/content/academy/manifest'
+import { DETAIL_MARKETS, DETAIL_SYMBOLS } from '@/lib/seo/detail-symbols'
 
 /**
  * sitemap.xml(SEO 批1 · docs/seo/2026-07-seo-geo-audit.md)。
@@ -59,5 +60,15 @@ export default function sitemap(): MetadataRoute.Sitemap {
     changeFrequency: 'monthly',
   }))
 
-  return [...staticEntries, ...stageEntries, ...articleEntries]
+  // SEO 批7:详情页语义壳(路径段 · curated 有界集 · 4 市场)· 每 symbol 独立静态壳 + 唯一 title。
+  // 旧 ?symbol= 空壳仍不进(非 curated 长尾)· curated 的旧 query 由 client redirect 兜到路径段。
+  const detailEntries: MetadataRoute.Sitemap = DETAIL_MARKETS.flatMap((market) =>
+    DETAIL_SYMBOLS[market].map((s) => ({
+      url: `${BASE}/${market}/${s.symbol}`,
+      priority: 0.6,
+      changeFrequency: 'weekly' as const,
+    })),
+  )
+
+  return [...staticEntries, ...detailEntries, ...stageEntries, ...articleEntries]
 }

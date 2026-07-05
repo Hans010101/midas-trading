@@ -32,15 +32,19 @@ const DEFAULTS: Record<'cn' | 'us' | 'hk', { symbol: string; name: string }> = {
 interface SpotDetailProps {
   // 港股阶段二:hk 复用现货详情页,但 market==='hk' 时 gate 掉 AI 决策卡 + 下单区(见 aside)
   market: 'cn' | 'us' | 'hk'
+  // ★SEO 批7:路径段静态壳 `/{cn,us,hk}/[symbol]` 传入 symbol(+可选 name)· 缺省回退 searchParams
+  symbol?: string
+  name?: string
 }
 
-export function SpotDetail({ market }: SpotDetailProps) {
+export function SpotDetail({ market, symbol: propSymbol, name: propName }: SpotDetailProps) {
+  // ★优先 prop(路径段壳)· 回退 useSearchParams(旧 `?symbol=` 页现状不变 · 缺省逐字节等于改造前)。
   const searchParams = useSearchParams()
   const { symbol, name } = useMemo(() => {
-    const raw = (searchParams.get('symbol') ?? '').trim()
+    const raw = (propSymbol ?? searchParams.get('symbol') ?? '').trim()
     if (!raw) return DEFAULTS[market]
-    return { symbol: raw.toUpperCase(), name: (searchParams.get('name') ?? '').trim() }
-  }, [searchParams, market])
+    return { symbol: raw.toUpperCase(), name: (propName ?? searchParams.get('name') ?? '').trim() }
+  }, [searchParams, market, propSymbol, propName])
   // 默认周期:cn/us 用 1h(日内 · 15m/1h/1d 可切);★港股只支持日/周线(hk_source 无分钟线)→ 默认且仅 1d
   const [period, setPeriod] = useState<Period>(market === 'hk' ? '1d' : '1h')
 

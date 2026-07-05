@@ -12,6 +12,7 @@ import { useState } from 'react'
 
 import { useScreener } from '@/hooks/use-screener'
 import type { ScreenerFilters, StockMarket } from '@/lib/api/screener'
+import { detailHref } from '@/lib/seo/detail-symbols'
 
 const MARKETS: { key: StockMarket; label: string }[] = [
   { key: 'cn', label: 'A股' },
@@ -212,7 +213,7 @@ export default function ScreenerPage() {
               return (
                 <li key={h.symbol}>
                   <Link
-                    href={`/${market}-preview?symbol=${encodeURIComponent(h.symbol)}&name=${encodeURIComponent(h.name)}`}
+                    href={detailHref({ symbol: h.symbol, market, name: h.name })}
                     className="flex items-center justify-between gap-2 rounded-md border border-paper bg-cream px-3 py-2 transition-colors hover:border-midas-red/40"
                   >
                     <span className="text-sm text-foreground">
