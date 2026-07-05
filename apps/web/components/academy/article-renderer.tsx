@@ -8,12 +8,14 @@
  * 入参 markdown 为原始字符串(由 server 端 lib/academy 用 fs 读出后传入)。
  */
 
+import Image from 'next/image'
 import Link from 'next/link'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { type PluggableList } from 'unified'
 
 import { glossaryAnchorId, reactChildrenToText } from '@/lib/academy-anchor'
+import { ACADEMY_IMG_DIMS } from '@/lib/academy-img-dims'
 import { DEFAULT_EXCLUDE_TERMS, type AliasEntry } from '@/lib/glossary-terms'
 import { rehypeGlossaryLinks } from '@/lib/rehype-glossary-links'
 
@@ -105,17 +107,41 @@ const components: Components = {
       {children}
     </td>
   ),
-  // img = 居中 / 圆角 / 最大宽度 100% / 懒加载(md 图 path 已是 /academy-img/xxx.png → public 根)
-  img: ({ src, alt }) => (
-    // markdown 内容图无固定尺寸,next/image 需 fill+容器不适用 → 用原生 img + lazy
+  // img = 居中 / 圆角 / 最大宽度 100%(md 图 path 已是 /academy-img/xxx.png → public 根)。
+  // SEO webp 小刀:走 next/image 优化器 → 自动 webp/avif(实测单图 166KB→8.8KB · 省 ~95%),
+  // 顺带吃 next.config images.minimumCacheTTL 31 天缓存。next/image 必须知 w/h 防抖动/失真,
+  // 从预生成清单 academy-img-dims 查表(scripts/gen-academy-img-dims.mjs 生成);
+  // 清单未收录的图(未来新增未重跑脚本)→ 裸 <img> 兜底,保证不破。lazy 是 next/image 默认。
+  img: ({ src, alt }) => {
+    const raw = typeof src === 'string' ? src : undefined
+    // react-markdown 按 CommonMark 规范把非 ASCII src 百分号编码(中文图名 → %E9..%),
+    // 而清单 key 与 next/image src 都要【解码后】的原始路径 → 统一解码(解码失败退回原值)。
+    let s = raw
+    if (raw) {
+      try {
+        s = decodeURIComponent(raw)
+      } catch {
+        s = raw
+      }
+    }
+    const dim = s ? ACADEMY_IMG_DIMS[s] : undefined
+    const className =
+      'mx-auto my-5 block h-auto max-w-full rounded-lg border border-paper shadow-sm'
+    if (s && dim) {
+      return (
+        <Image
+          src={s}
+          alt={alt ?? ''}
+          width={dim.w}
+          height={dim.h}
+          sizes="(max-width: 1024px) 100vw, 720px"
+          className={className}
+        />
+      )
+    }
     // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={typeof src === 'string' ? src : undefined}
-      alt={alt ?? ''}
-      loading="lazy"
-      className="mx-auto my-5 block max-w-full rounded-lg border border-paper shadow-sm"
-    />
-  ),
+    return <img src={s} alt={alt ?? ''} loading="lazy" className={className} />
+  },
   code: ({ children }) => (
     <code className="rounded bg-surface-subtle px-1.5 py-0.5 font-mono text-[0.85em] text-midas-red">
       {children}
