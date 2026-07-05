@@ -25,6 +25,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { BollScanList } from '@/components/crypto/boll-scan-list'
 import { TopNav } from '@/components/layout/top-nav'
+import { useIndicatorPrefs } from '@/hooks/use-indicator-prefs'
 import {
   fetchCryptoOverview,
   fetchFuturesMetricsBatch,
@@ -80,6 +81,15 @@ export default function CryptoMarketPage() {
   const [query, setQuery] = useState('')
   // 榜单切换:涨幅榜(默认 · 现状不变)⇄ 做T信号(读 A-1 快照)· 纯前端状态,不刷整页
   const [board, setBoard] = useState<'gainers' | 'boll'>('gainers')
+
+  // ★做T信号暗发布:仅账号偏好 day_trade=ON 才显示「做T信号」榜单入口(#158 · 未登录/未开=隐藏)。
+  //   未登录 → useIndicatorPrefs disabled → 无数据 → dayTradeEnabled=false → 切换器整体不渲染。
+  const indicatorPrefsQ = useIndicatorPrefs()
+  const dayTradeEnabled = indicatorPrefsQ.data?.day_trade === true
+  // day_trade 关闭(或登出 · 或另一标签页改了偏好)时若正停在做T榜 → 回落涨幅榜。
+  useEffect(() => {
+    if (!dayTradeEnabled && board === 'boll') setBoard('gainers')
+  }, [dayTradeEnabled, board])
 
   const overviewQ = useQuery({
     queryKey: ['crypto-overview'],
@@ -223,7 +233,9 @@ export default function CryptoMarketPage() {
 
           {/* 工具条:榜单切换器 + (仅涨幅榜)搜索/刷新 */}
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            {/* ★切换器:合约 24H 涨幅榜 ⇄ 做T信号(默认涨幅榜 · 前端状态,不刷整页)*/}
+            {/* ★切换器:合约 24H 涨幅榜 ⇄ 做T信号 · 做T信号仅暗发布(day_trade=ON)用户可见,
+                未开启则整个切换器不渲染(只见涨幅榜 · 现状不变)· 默认涨幅榜 · 前端状态不刷整页 */}
+            {dayTradeEnabled && (
             <div className="inline-flex rounded-lg border border-paper bg-surface-card p-0.5">
               <button type="button" onClick={() => setBoard('gainers')}
                 className={cn('rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
@@ -236,6 +248,7 @@ export default function CryptoMarketPage() {
                 做T信号
               </button>
             </div>
+            )}
 
             {board === 'gainers' && (
             <div className="flex items-center gap-2">

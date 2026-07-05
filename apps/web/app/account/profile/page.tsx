@@ -9,6 +9,7 @@
 
 import { BotOrderPresetSection } from '@/components/settings/bot-order-preset-section'
 import { ColorPrefSection } from '@/components/settings/color-pref-section'
+import { DayTradeSection } from '@/components/settings/day-trade-section'
 import { DetailPrefsSection } from '@/components/settings/detail-prefs-section'
 import { ThemeSection } from '@/components/settings/theme-section'
 
@@ -19,6 +20,7 @@ export default function PreferencesPage() {
       <ThemeSection />
       <ColorPrefSection />
       <DetailPrefsSection />
+      <DayTradeSection />
       <BotOrderPresetSection />
     </div>
   )
