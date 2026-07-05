@@ -16,6 +16,19 @@ accept_content = ["json"]
 timezone = "Asia/Shanghai"
 enable_utc = True
 
+# ── worker 子进程回收(慢性 OOM 治理 · docs/decisions/0046)─────────────────────
+# 诊断:主 worker --concurrency=4 无子进程回收配置 → 4 个 fork 子进程【永不重启】,
+#   高频任务(5 个每分钟扫描器 ≈ 7200 次/天/进程 + 5min/10min/30min 采集/flush)在长时
+#   运行中累积内存(Python 分配器碎片 / 三方库缓存 / 偶发未释放),数日爬升破 2G cgroup
+#   硬顶(docker-compose.prod worker limits.memory=2G)→ 被 cgroup OOM 周期性杀
+#   (dmesg 近日 4 次 · 7/2 一天 3 次)。稳态 4×~365M≈1.46G 本安全,问题是【无回收→单调爬升】。
+# 修法(纯配置 · 零任务逻辑改动 · celery 标准 OOM 解法):
+#   ① max_tasks_per_child:每子进程处理 N 个任务后优雅重启(释放全部累积内存 · 周期兜底)。
+#   ② max_memory_per_child(KB):子进程常驻内存超阈 → 当前任务完成后即换新子进程
+#      (精准封顶:4×450MB≈1.76G < 2G 硬顶 · 健康子进程稳态 ~365M 不触发·只回收膨胀的)。
+worker_max_tasks_per_child = 200
+worker_max_memory_per_child = 450_000  # KB(≈440MB)· 超此常驻内存的子进程做完当前任务即回收
+
 # ── 队列路由(P1-4b · 方案戊)─────────────────────────────────────────────────
 # 主 worker 启动【无 -Q】→ 只消费默认队列 "celery"(此处显式化)· ★绝不订阅 backtest。
 # vibe 回测任务路由到 backtest 队列 → 由 midas-vibe 容器内的 vibe-worker(-Q backtest)消费。
