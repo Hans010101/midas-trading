@@ -6,7 +6,8 @@
  * 文章清单从 manifest 动态生成(内容 runbook 追加新文章 → 下次构建自动进清单,零手维护)。
  *
  * ★红线:结构描述非建议 · 免责措辞逐字复用现有合规文案 · 无买卖祈使词。
- * ★文章 URL 现为 ?slug= 形式(同 sitemap.ts · 批2 路径段迁移后此处同步改一行模板)。
+ * ★文章 URL 用路径段 /academy/article/{slug}(与 sitemap.ts 一致 · 批2 迁移后规范形式 ·
+ *   直接给 AI 爬虫规范 URL,不走 ?slug= 的 308 薄壳重定向)。
  */
 import { ACADEMY_ARTICLES, ACADEMY_STAGES } from '@/content/academy/manifest'
 
@@ -20,7 +21,7 @@ export function GET(): Response {
       (a, b) => a.order - b.order,
     )
     const lines = articles.map(
-      (a) => `- [${a.title}](${BASE}/academy/article?slug=${a.slug}): ${a.excerpt}`,
+      (a) => `- [${a.title}](${BASE}/academy/article/${a.slug}): ${a.excerpt}`,
     )
     return `## 训练营 · ${stage.stageLabel} ${stage.name}(${articles.length} 篇)\n\n${stage.desc}\n\n${lines.join('\n')}`
   })
