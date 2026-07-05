@@ -516,7 +516,7 @@ async def get_strategy_recommend(
         symbol=symbol, market=market, period=period, instrument=instrument,
         limit=limit, lang=lang, purpose_key="analysis.purpose_recommend",
     )
-    rec = recommend_strategy(klines)
+    rec = recommend_strategy(klines, lang)
     logger.info(
         "[strategy-recommend] symbol=%s market=%s instrument=%s period=%s → %s",
         symbol, market, instrument, period, rec.strategy,

@@ -329,6 +329,93 @@ _CATALOG: dict[str, dict[str, str]] = {
         "zh": "结构诊断生成失败,请稍后重试({e})",
         "en": "Structure diagnosis generation failed, please retry later ({e})",
     },
+
+    # ── 刀3 · 规则层 user-facing 展示文案(feeds_shadow_push=false · zh 逐字节)────────
+    # ★排除:boll_state/boll_digest 全部(喂 M1 影子 validate_shadow_push 门禁·红线不碰)·
+    #   composite_label(刀2 决策A 归前端)· plan_note LLM prompt 标签(75 prompt 红线)·
+    #   strategy_signals scan reasons(拆 刀3b · 6 扫描器穿参侵入性高·见 PR 说明)。
+    # 策略推荐 reason(strategy_recommend._pick / recommend_strategy · 术语:趋势/震荡/均值回归)
+    "recommend.trend_up": {
+        "zh": "近 5 日上行趋势 · 适合均线金叉跟踪趋势",
+        "en": "Uptrend over the last 5 days · a moving-average golden cross suits trend-following",
+    },
+    "recommend.trend_down": {
+        "zh": "近 5 日下行趋势 · 适合均线死叉跟踪趋势",
+        "en": "Downtrend over the last 5 days · a moving-average death cross suits trend-following",
+    },
+    "recommend.range_oversold": {
+        "zh": "震荡市 + RSI {rsi:.0f} 偏超卖 · 适合 RSI 超卖反弹策略",
+        "en": "Range-bound + RSI {rsi:.0f} leaning oversold · an RSI oversold-bounce strategy fits",
+    },
+    "recommend.range_overbought": {
+        "zh": "震荡市 + RSI {rsi:.0f} 偏超买 · 适合 RSI 超买回落策略",
+        "en": (
+            "Range-bound + RSI {rsi:.0f} leaning overbought"
+            " · an RSI overbought-pullback strategy fits"
+        ),
+    },
+    "recommend.range_lower_band": {
+        "zh": "震荡市 + 价格贴近布林下轨 · 适合均值回归(博反弹)",
+        "en": (
+            "Range-bound + price hugging the lower Bollinger band"
+            " · mean-reversion (fade for a bounce) fits"
+        ),
+    },
+    "recommend.range_upper_band": {
+        "zh": "震荡市 + 价格贴近布林上轨 · 适合均值回归(博回落)",
+        "en": (
+            "Range-bound + price hugging the upper Bollinger band"
+            " · mean-reversion (fade for a pullback) fits"
+        ),
+    },
+    "recommend.range_default": {
+        "zh": "震荡市无明显极值 · 默认均线金叉观察趋势启动",
+        "en": (
+            "Range-bound with no clear extreme · defaulting to the"
+            " moving-average cross to watch for a trend start"
+        ),
+    },
+    "recommend.insufficient_data": {
+        "zh": "K 线数据不足 · 默认均线金叉策略",
+        "en": "Insufficient K-line data · defaulting to the moving-average cross strategy",
+    },
+    # 告警指标 label(alerts registry IndicatorDef.label · list_indicators 端点展示)
+    "alert_indicator.price": {"zh": "最新价", "en": "Latest price"},
+    "alert_indicator.price_change_pct": {"zh": "涨跌幅 %", "en": "Change %"},
+    "alert_indicator.volume": {"zh": "成交量", "en": "Volume"},
+    "alert_indicator.ma_5": {"zh": "MA5", "en": "MA5"},
+    "alert_indicator.ma_20": {"zh": "MA20", "en": "MA20"},
+    "alert_indicator.ma_60": {"zh": "MA60", "en": "MA60"},
+    "alert_indicator.macd_hist": {"zh": "MACD 柱", "en": "MACD histogram"},
+    "alert_indicator.rsi_14": {"zh": "RSI(14)", "en": "RSI(14)"},
+    "alert_indicator.boll_pctb": {"zh": "布林 %B", "en": "Bollinger %B"},
+    "alert_indicator.chan_buy": {"zh": "缠论买点出现", "en": "Chan Theory buy point appears"},
+    "alert_indicator.chan_sell": {"zh": "缠论卖点出现", "en": "Chan Theory sell point appears"},
+    "alert_indicator.funding_rate": {"zh": "资金费率", "en": "Funding rate"},
+    "alert_indicator.open_interest_usd": {"zh": "未平仓额(USD)", "en": "Open interest (USD)"},
+    "alert_indicator.long_short_ratio": {
+        "zh": "多空比(大户账户)",
+        "en": "Long/short ratio (top accounts)",
+    },
+    "alert_indicator.basis_pct": {"zh": "基差 %", "en": "Basis %"},
+    "alert_indicator.fear_greed": {"zh": "恐贪指数", "en": "Fear & Greed index"},
+    "alert_indicator.btc_dominance": {"zh": "BTC 占比 %", "en": "BTC dominance %"},
+    "alert_indicator.cn_breadth_up_ratio": {
+        "zh": "A股上涨家数占比 %",
+        "en": "CN advancers ratio %",
+    },
+    "alert_indicator.hk_breadth_up_ratio": {
+        "zh": "港股上涨家数占比 %",
+        "en": "HK advancers ratio %",
+    },
+    "alert_indicator.sector_change_pct": {
+        "zh": "板块涨跌 %(symbol=板块名)",
+        "en": "Sector change % (symbol = sector name)",
+    },
+    "alert_indicator.index_change_pct": {
+        "zh": "指数涨跌 %(symbol=指数代码)",
+        "en": "Index change % (symbol = index code)",
+    },
 }
 
 

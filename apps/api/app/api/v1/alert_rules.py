@@ -46,12 +46,18 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
     response_model=list[IndicatorMeta],
     summary="可选告警指标清单(供前端 / bot 渲染)",
 )
-async def list_indicators() -> list[IndicatorMeta]:
+async def list_indicators(lang: RequestLangDep) -> list[IndicatorMeta]:
+    # ★i18n Phase3 刀3:label 迁 catalog(alert_indicator.{key})· zh 逐字节 = registry 原 label。
+    #   未登记 key(未来新增指标忘补 catalog)→ translate 返回 key 兜底,此处回退 registry 原 label。
+    def _label(key: str, fallback: str) -> str:
+        localized = translate(f"alert_indicator.{key}", lang)
+        return fallback if localized == f"alert_indicator.{key}" else localized
+
     return [
         IndicatorMeta(
-            key=d.key, label=d.label, category=d.category, markets=list(d.markets),
-            requires_symbol=d.requires_symbol, needs_timeframe=d.needs_timeframe,
-            unit=d.unit,
+            key=d.key, label=_label(d.key, d.label), category=d.category,
+            markets=list(d.markets), requires_symbol=d.requires_symbol,
+            needs_timeframe=d.needs_timeframe, unit=d.unit,
         )
         for d in REGISTRY.values()
     ]
