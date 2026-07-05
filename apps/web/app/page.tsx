@@ -45,6 +45,8 @@ import { Membership } from '@/components/landing/membership'
 import { ResearchLab } from '@/components/landing/research-lab'
 import { StructureSandbox } from '@/components/landing/structure-sandbox'
 import { VirtualPractice } from '@/components/landing/virtual-practice'
+import { JsonLd } from '@/components/seo/json-ld'
+import { organizationSchema, websiteSchema } from '@/lib/seo/schema'
 import { cn } from '@/lib/utils'
 
 export const dynamic = 'force-static'
@@ -52,6 +54,8 @@ export const dynamic = 'force-static'
 export default function HomePage() {
   return (
     <main className="relative flex min-h-screen flex-col bg-background text-foreground">
+      {/* SEO 批3:品牌实体 JSON-LD(Organization + WebSite)· 喂知识图谱/AI 引擎归拢站点 */}
+      <JsonLd data={[organizationSchema, websiteSchema]} />
       {/* 极淡纸纹背景 · 用 SVG noise · 通过 fixed 层叠在背景上 */}
       <div
         aria-hidden
@@ -484,6 +488,11 @@ function Footer() {
           <div>
             <h4 className="mb-3 font-serif text-sm font-bold text-foreground">法务</h4>
             <ul className="space-y-2 text-sm">
+              <li>
+                <Link href="/about" className="text-muted-foreground transition-colors hover:text-midas-red">
+                  关于点金
+                </Link>
+              </li>
               <li>
                 <Link href="/terms" className="text-muted-foreground transition-colors hover:text-midas-red">
                   服务条款

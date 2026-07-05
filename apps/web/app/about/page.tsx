@@ -8,6 +8,8 @@
  */
 
 import { LegalH2, LegalP, LegalPage } from '@/components/legal/legal-page'
+import { JsonLd } from '@/components/seo/json-ld'
+import { organizationSchema } from '@/lib/seo/schema'
 
 export const dynamic = 'force-static'
 
@@ -15,11 +17,15 @@ export const metadata = {
   title: '关于点金',
   description:
     '点金 Midas 是 AI 原生的跨市场(加密/美股/A股/港股)分析与交易学习终端:全程虚拟资金、不构成投资建议。这里是我们的产品定位、方法论与六条产品原则。',
+  // SEO 批3(点金-3 叠加·衔接点):canonical
+  alternates: { canonical: '/about' },
 }
 
 export default function AboutPage() {
   return (
     <LegalPage title="关于点金">
+      {/* SEO 批3:Organization JSON-LD(与 landing 同 @id · 让知识图谱把 about 归入品牌实体)*/}
+      <JsonLd data={organizationSchema} />
       <LegalP>
         点金 Midas(midastrade.asia)是一款 AI 原生的跨市场分析与交易学习终端,覆盖加密货币、
         美股、A股与港股四大市场。我们把行情数据、技术指标、缠论结构、合约数据与 AI

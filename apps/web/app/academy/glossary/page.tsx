@@ -7,17 +7,35 @@
  * UI 修补:删二级标签行,改为常驻左侧导航 AcademySideNav(active='glossary' · 词典项高亮)。
  */
 
+import type { Metadata } from 'next'
+
 import { AcademySideNav } from '@/components/academy/academy-side-nav'
 import { ArticleRenderer } from '@/components/academy/article-renderer'
 import { HashScroller } from '@/components/academy/hash-scroller'
 import { TopNav } from '@/components/layout/top-nav'
+import { JsonLd } from '@/components/seo/json-ld'
 import { getGlossary } from '@/lib/academy'
+import { buildGlossaryTermSet } from '@/lib/academy/glossary-schema'
+
+// SEO 批3:词典独立 metadata + DefinedTermSet JSON-LD(88 词条喂 AI 引擎抽取)。
+export const metadata: Metadata = {
+  title: '交易名词词典 · 88 条速查',
+  description:
+    '88 个交易名词速查 · 10 大类:基础概念、订单交易、合约衍生品、技术指标、缠论、策略与风险等,每条一句话定义 + 展开说明。知识科普,不构成投资建议。',
+  alternates: { canonical: '/academy/glossary' },
+  openGraph: {
+    title: '交易名词词典 · 88 条速查 · 点金 Midas',
+    description: '88 个交易名词 · 10 大类 · 一句话定义 + 展开。知识科普,不构成投资建议。',
+    url: '/academy/glossary',
+  },
+}
 
 export default function AcademyGlossaryPage() {
   const markdown = getGlossary()
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <JsonLd data={buildGlossaryTermSet()} />
       <TopNav />
       {/* 到达 /academy/glossary#<术语id> 时滚动定位到对应词条(软导航/直接访问都兜底)*/}
       <HashScroller />

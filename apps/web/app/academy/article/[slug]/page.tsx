@@ -22,6 +22,8 @@ import { ArticleRenderer } from '@/components/academy/article-renderer'
 import { ArticleInteractives } from '@/components/academy/interactive/article-interactives'
 import { PracticeCTA } from '@/components/academy/practice-cta'
 import { TopNav } from '@/components/layout/top-nav'
+import { JsonLd } from '@/components/seo/json-ld'
+import { buildArticleSchema, buildBreadcrumbSchema } from '@/lib/seo/schema'
 import { ACADEMY_ARTICLES } from '@/content/academy/manifest'
 import { getInteractives } from '@/content/academy/interactives'
 import { getPractice, buildPracticeHref } from '@/content/academy/practice'
@@ -76,8 +78,17 @@ export default async function AcademyArticlePage({
   const interactives = getInteractives(slug)
   const glossaryAliases = getGlossaryAliases()
 
+  const stageName = stage?.name ?? '点金训练营'
+
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
+      {/* SEO 批3:Article + 面包屑 JSON-LD(喂富摘要 + AI 引擎引用)*/}
+      <JsonLd
+        data={[
+          buildArticleSchema({ title: meta.title, excerpt: meta.excerpt, slug, stageName }),
+          buildBreadcrumbSchema({ stageName, stageSlug: meta.stage, title: meta.title, slug }),
+        ]}
+      />
       <TopNav />
       <main className="flex-1">
         <div className="mx-auto max-w-5xl px-6 py-6">
