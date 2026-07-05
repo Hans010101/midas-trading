@@ -13,7 +13,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, status
 
-from app.api.deps import ClickHouseDep, CurrentUserDep
+from app.api.deps import ClickHouseDep, CurrentUserDep, RequestLangDep
 from app.models.user import User
 from app.schemas.structure import DiagnoseRequest, StructureDiagnosis, StructureSnapshot
 from app.services.i18n import translate
@@ -60,10 +60,11 @@ async def post_diagnose(
     # 🔴 QuotaDep 只查不扣;扣减回调由 get_structure_diagnosis 在缓存 miss、
     #    LLM 真跑成功后调用(命中缓存不扣 · LLM 失败不扣)。
     current_user: Annotated[User, Depends(require_quota("diagnose"))],
+    lang: RequestLangDep,
 ) -> StructureDiagnosis:
     raw_client = ch._client  # noqa: SLF001 — 房规:读层收裸 AsyncClient(同上)
-    # i18n Phase4 刀1:取用户语言偏好穿进诊断链路(默认 zh · zh 走原路径逐字节不变)。
-    lang = current_user.language_pref or "zh"
+    # ★i18n:lang 由 RequestLangDep 解析(2026-07-05 收窄=仅 X-Lang override,否则 zh ·
+    #   language_pref/Accept 停用 · 见 i18n/lang.py + 0047)· zh 逐字节零变化。
     try:
         return await get_structure_diagnosis(
             raw_client,

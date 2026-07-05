@@ -70,7 +70,7 @@ async def test_strategy_signals_returns_buy_signal(
     """30 根平盘后转涨(金叉)→ ma_cross 返回 buy 信号。"""
     ch = _FakeCH(_kl([10.0] * 30 + [11.0, 12.0, 13.0, 14.0, 15.0]))
     resp = await get_strategy_signals(
-        ch, None, None, None, None, None, db_session, pro_user,  # type: ignore[arg-type]
+        ch, None, None, None, None, None, db_session, pro_user, "zh",  # type: ignore[arg-type]
         symbol="NVDA", market="us", period="1d", limit=300,
         instrument="spot", strategy="ma_cross",
     )
@@ -93,7 +93,7 @@ async def test_strategy_signals_current_triggered_true(
     base = [100.0, 102.0, 98.0, 101.0, 99.0] * 6   # 30 根
     ch = _FakeCH(_kl(base + [80.0]))               # index30 = 最后一根触发
     resp = await get_strategy_signals(
-        ch, None, None, None, None, None, db_session, pro_user,  # type: ignore[arg-type]
+        ch, None, None, None, None, None, db_session, pro_user, "zh",  # type: ignore[arg-type]
         symbol="600519", market="cn", period="1d", limit=300,
         instrument="spot", strategy="boll_reversion",
     )
@@ -110,7 +110,7 @@ async def test_strategy_signals_crypto_perp(
     """crypto + perp(拍板⑦ 跟随详情页)· instrument 回显。"""
     ch = _FakeCH(_kl([20.0] * 30 + [19.0, 18.0, 17.0, 16.0, 15.0]))
     resp = await get_strategy_signals(
-        ch, None, None, None, None, None, db_session, pro_user,  # type: ignore[arg-type]
+        ch, None, None, None, None, None, db_session, pro_user, "zh",  # type: ignore[arg-type]
         symbol="BTCUSDT", market="crypto", period="1h", limit=300,
         instrument="perp", strategy="ma_cross",
     )
@@ -126,7 +126,7 @@ async def test_strategy_signals_no_signal_empty_list(
     """单调上涨(无金叉穿越)→ 空信号 · current_triggered=False · last_signal=None。"""
     ch = _FakeCH(_kl([100.0 + i for i in range(40)]))
     resp = await get_strategy_signals(
-        ch, None, None, None, None, None, db_session, pro_user,  # type: ignore[arg-type]
+        ch, None, None, None, None, None, db_session, pro_user, "zh",  # type: ignore[arg-type]
         symbol="NVDA", market="us", period="1d", limit=300,
         instrument="spot", strategy="ma_cross",
     )
@@ -176,7 +176,7 @@ async def test_strategy_signals_perp_non_crypto_rejected(
     ch = _FakeCH(_kl([10.0] * 35))
     with pytest.raises(HTTPException) as exc:
         await get_strategy_signals(
-            ch, None, None, None, None, None, db_session, pro_user,  # type: ignore[arg-type]
+            ch, None, None, None, None, None, db_session, pro_user, "zh",  # type: ignore[arg-type]
             symbol="NVDA", market="us", period="1d", limit=300,
             instrument="perp", strategy="ma_cross",
         )

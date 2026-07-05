@@ -237,6 +237,7 @@ async def get_decision_card(
     binance_futures: BinanceFuturesSourceDep,
     db: DbDep,
     user: OptionalCurrentUserDep,
+    lang: RequestLangDep,
     symbol: str = Query(..., min_length=1, examples=["BTC/USDT", "NVDA", "600519", "BTCUSDT"]),
     market: Market = Query(...),
     period: Period = Query("1d"),
@@ -252,9 +253,10 @@ async def get_decision_card(
     if plan != "pro":
         return _locked_decision_card(symbol, market, period)
 
-    # ★i18n Phase4 刀1:取用户语言偏好(Pro 已过 → user 必非空 · 仍写死兜底 zh)· 穿给 workflow/cache。
-    # ★zh 用户 lang="zh" → 全链路走原代码行、缓存原 key(无后缀),行为逐字节零变化。
-    lang = (user.language_pref or "zh") if user else "zh"
+    # ★i18n:语言由 RequestLangDep 解析 · 2026-07-05 收窄=仅显式 X-Lang override,否则 zh
+    #   (language_pref / Accept 停用 · 见 i18n/lang.py + docs/decisions/0047)。
+    #   ★zh 用户 lang="zh" → 全链路走原代码行、缓存原 key(无后缀),逐字节零变化。
+    #   原直读 user.language_pref 是生产 bug 根源(Hans pref='en' → 决策卡英文),已根治。
 
     # M2-B 校验
     if instrument == "perp" and market != "crypto":
@@ -438,6 +440,7 @@ async def get_strategy_signals(
     binance_futures: BinanceFuturesSourceDep,
     db: DbDep,
     user: OptionalCurrentUserDep,
+    lang: RequestLangDep,
     symbol: str = Query(..., min_length=1, examples=["BTC/USDT", "NVDA", "600519", "BTCUSDT"]),
     market: Market = Query(...),
     period: Period = Query("1d"),
@@ -454,8 +457,8 @@ async def get_strategy_signals(
     if plan != "pro":
         return _locked_strategy_signals(symbol, market, period, instrument, strategy)
 
-    # ★zh 用户 lang="zh" → 错误 detail 走原字面量、逐字节零变化(同决策卡口径)
-    lang = (user.language_pref or "zh") if user else "zh"
+    # ★i18n:lang 由 RequestLangDep 解析(2026-07-05 收窄=仅 X-Lang override,否则 zh ·
+    #   language_pref/Accept 停用 · 见 lang.py + 0047)· zh 走原字面量逐字节零变化。
     klines = await _fetch_klines_for_strategy(
         ch=ch, cn=cn, us=us, crypto=crypto, hk=hk, binance_futures=binance_futures,
         symbol=symbol, market=market, period=period, instrument=instrument,
