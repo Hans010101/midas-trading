@@ -17,6 +17,7 @@
  * 视觉沿用工作台 Header 原市场 Tab 样式(中国红选中态),保证工作台外观不变。
  */
 
+import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 
 import { MARKET_LABEL } from '@/lib/format-money'
@@ -82,9 +83,9 @@ export function MarketSwitcher({ className }: { className?: string }) {
       className={cn('flex items-center gap-1 overflow-x-auto', className)}
       aria-label="市场切换"
     >
-      <button
-        type="button"
-        onClick={() => router.push('/global')}
+      {/* SEO 批3b:纯导航按钮 → Link(爬虫可循 <a href> · 高亮逻辑不变 · 保留 UX)*/}
+      <Link
+        href="/global"
         className={cn(
           'whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
           onGlobal
@@ -93,7 +94,7 @@ export function MarketSwitcher({ className }: { className?: string }) {
         )}
       >
         全球市场
-      </button>
+      </Link>
       {NAV_MARKETS.map((m) => (
         <button
           key={m}
@@ -110,9 +111,8 @@ export function MarketSwitcher({ className }: { className?: string }) {
         </button>
       ))}
       <span className="mx-1 h-4 w-px self-center bg-paper" aria-hidden />
-      <button
-        type="button"
-        onClick={() => router.push('/watchlist')}
+      <Link
+        href="/watchlist"
         className={cn(
           'whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
           onWatchlist
@@ -121,11 +121,10 @@ export function MarketSwitcher({ className }: { className?: string }) {
         )}
       >
         自选
-      </button>
-      <button
-        type="button"
-        // 方案乙:研究室默认落 AI 沙盘助手(/lab 回测 URL 不动不破书签)
-        onClick={() => router.push('/lab/assistant')}
+      </Link>
+      {/* 方案乙:研究室默认落 AI 沙盘助手(/lab 回测 URL 不动不破书签)*/}
+      <Link
+        href="/lab/assistant"
         className={cn(
           'whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
           onLab
@@ -134,10 +133,9 @@ export function MarketSwitcher({ className }: { className?: string }) {
         )}
       >
         策略研究室
-      </button>
-      <button
-        type="button"
-        onClick={() => router.push('/academy')}
+      </Link>
+      <Link
+        href="/academy"
         className={cn(
           'whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
           onAcademy
@@ -146,7 +144,7 @@ export function MarketSwitcher({ className }: { className?: string }) {
         )}
       >
         训练营
-      </button>
+      </Link>
     </nav>
   )
 }
