@@ -1,4 +1,4 @@
-# 0044 · Celery worker 慢性 OOM · 子进程回收治理
+# 0046 · Celery worker 慢性 OOM · 子进程回收治理
 
 - 状态:Accepted
 - 日期:2026-07-05
@@ -20,7 +20,7 @@
    (apps/worker/Dockerfile / docker-compose.prod.yaml)· celery 默认 `worker_max_tasks_per_child=None`
    + `worker_max_memory_per_child=None` → 4 个 prefork 子进程从启动到部署重建期间【从不重启】。
 
-2. **cgroup 硬顶 2G**:docker-compose.prod.yaml worker `deploy.resources.limits.memory: 2G`。
+2. **cgroup 硬顶 2G**:docker/docker-compose.prod.yaml worker `deploy.resources.limits.memory: 2G`。
    注释记录稳态估算 `4 × ~365M ≈ 1.46G < 2G`——**稳态本安全**,问题不在稳态峰值。
 
 3. **高频任务提供「爬升燃料」**:beat 里 5 个【每分钟】任务(scan_price_anomalies /

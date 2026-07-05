@@ -16,7 +16,7 @@ accept_content = ["json"]
 timezone = "Asia/Shanghai"
 enable_utc = True
 
-# ── worker 子进程回收(慢性 OOM 治理 · docs/decisions/0044)─────────────────────
+# ── worker 子进程回收(慢性 OOM 治理 · docs/decisions/0046)─────────────────────
 # 诊断:主 worker --concurrency=4 无子进程回收配置 → 4 个 fork 子进程【永不重启】,
 #   高频任务(5 个每分钟扫描器 ≈ 7200 次/天/进程 + 5min/10min/30min 采集/flush)在长时
 #   运行中累积内存(Python 分配器碎片 / 三方库缓存 / 偶发未释放),数日爬升破 2G cgroup
