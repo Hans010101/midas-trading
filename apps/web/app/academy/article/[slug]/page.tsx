@@ -23,6 +23,7 @@ import { ArticleInteractives } from '@/components/academy/interactive/article-in
 import { PracticeCTA } from '@/components/academy/practice-cta'
 import { TopNav } from '@/components/layout/top-nav'
 import { JsonLd } from '@/components/seo/json-ld'
+import { ARTICLE_DATES } from '@/lib/seo/article-dates'
 import { buildArticleSchema, buildBreadcrumbSchema } from '@/lib/seo/schema'
 import { ACADEMY_ARTICLES } from '@/content/academy/manifest'
 import { getInteractives } from '@/content/academy/interactives'
@@ -85,7 +86,11 @@ export default async function AcademyArticlePage({
       {/* SEO 批3:Article + 面包屑 JSON-LD(喂富摘要 + AI 引擎引用)*/}
       <JsonLd
         data={[
-          buildArticleSchema({ title: meta.title, excerpt: meta.excerpt, slug, stageName }),
+          buildArticleSchema({
+            title: meta.title, excerpt: meta.excerpt, slug, stageName,
+            datePublished: ARTICLE_DATES[slug]?.published,
+            dateModified: ARTICLE_DATES[slug]?.modified,
+          }),
           buildBreadcrumbSchema({ stageName, stageSlug: meta.stage, title: meta.title, slug }),
         ]}
       />

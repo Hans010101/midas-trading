@@ -39,12 +39,15 @@ export const websiteSchema = {
   publisher: { '@id': ORG_ID },
 } as const
 
-/** 文章 Article schema(每篇 · 喂富摘要 + AI 引擎引用)· 无日期(git 回填是后续小刀 · 宁缺毋假)。 */
+/** 文章 Article schema(每篇 · 喂富摘要 + AI 引擎引用)· date 由 GEO TL;DR刀 git 回填
+ *  (见 lib/seo/article-dates.ts · AI 新鲜度信号)· 缺失仍走原「无日期」兜底(宁缺毋假)。 */
 export function buildArticleSchema(input: {
   title: string
   excerpt: string
   slug: string
   stageName: string
+  datePublished?: string
+  dateModified?: string
 }) {
   const url = `${BASE}/academy/article/${input.slug}`
   return {
@@ -58,6 +61,9 @@ export function buildArticleSchema(input: {
     author: { '@type': 'Organization', name: '点金 Midas 研究团队' },
     publisher: { '@id': ORG_ID },
     image: `${BASE}/brand/seal.png`,
+    // ★date 缺失时【不输出】该字段(保持原「无日期」兜底 · 宁缺毋假,绝不造假日期)。
+    ...(input.datePublished ? { datePublished: input.datePublished } : {}),
+    ...(input.dateModified ? { dateModified: input.dateModified } : {}),
   }
 }
 
