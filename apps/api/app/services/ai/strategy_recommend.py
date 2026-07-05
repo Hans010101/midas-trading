@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 
 from app.schemas.strategy import StrategyRecommendation
 from app.services.ai import indicators as ind
+from app.services.i18n import translate
 
 if TYPE_CHECKING:
     from app.schemas.market import Kline
@@ -35,32 +36,34 @@ _PCTB_HIGH = 0.8                # %B ≥ 此值视为贴近上轨
 
 
 def _pick(
-    trend: str, rsi: float, pctb: float | None,
+    trend: str, rsi: float, pctb: float | None, lang: str = "zh",
 ) -> StrategyRecommendation:
     """纯逻辑:由当前 (趋势, RSI, 布林 %B) 推荐策略 · 确定性 · 可单测各分支。
 
     pctb = (close - lower) / (upper - lower);布林带退化(width=0)时传 None。
+    ★i18n Phase3 刀3:reason 迁 catalog(recommend.*)· lang 默认 "zh" → 逐字节等于改造前
+      (现有 _pick 调用不传 lang 走中文 · 测试零改)。
     """
     # 1) 趋势市 → 均线金叉/死叉
     if trend == "up":
         return StrategyRecommendation(
-            strategy="ma_cross", reason="近 5 日上行趋势 · 适合均线金叉跟踪趋势",
+            strategy="ma_cross", reason=translate("recommend.trend_up", lang),
         )
     if trend == "down":
         return StrategyRecommendation(
-            strategy="ma_cross", reason="近 5 日下行趋势 · 适合均线死叉跟踪趋势",
+            strategy="ma_cross", reason=translate("recommend.trend_down", lang),
         )
 
     # 2) 震荡市 + RSI 偏极值 → RSI 反弹
     if rsi <= _RSI_OVERSOLD_ZONE:
         return StrategyRecommendation(
             strategy="rsi_reversal",
-            reason=f"震荡市 + RSI {rsi:.0f} 偏超卖 · 适合 RSI 超卖反弹策略",
+            reason=translate("recommend.range_oversold", lang, rsi=rsi),
         )
     if rsi >= _RSI_OVERBOUGHT_ZONE:
         return StrategyRecommendation(
             strategy="rsi_reversal",
-            reason=f"震荡市 + RSI {rsi:.0f} 偏超买 · 适合 RSI 超买回落策略",
+            reason=translate("recommend.range_overbought", lang, rsi=rsi),
         )
 
     # 3) 震荡市 + 价格贴布林轨 → 均值回归
@@ -68,28 +71,29 @@ def _pick(
         if pctb <= _PCTB_LOW:
             return StrategyRecommendation(
                 strategy="boll_reversion",
-                reason="震荡市 + 价格贴近布林下轨 · 适合均值回归(博反弹)",
+                reason=translate("recommend.range_lower_band", lang),
             )
         if pctb >= _PCTB_HIGH:
             return StrategyRecommendation(
                 strategy="boll_reversion",
-                reason="震荡市 + 价格贴近布林上轨 · 适合均值回归(博回落)",
+                reason=translate("recommend.range_upper_band", lang),
             )
 
     # 4) 兜底:震荡无明显极值 → 均线金叉(最经典)
     return StrategyRecommendation(
-        strategy="ma_cross", reason="震荡市无明显极值 · 默认均线金叉观察趋势启动",
+        strategy="ma_cross", reason=translate("recommend.range_default", lang),
     )
 
 
-def recommend_strategy(klines: list[Kline]) -> StrategyRecommendation:
+def recommend_strategy(klines: list[Kline], lang: str = "zh") -> StrategyRecommendation:
     """给一段 K 线,推荐当前适合哪个策略 · 纯函数 · 复用 compute_*(读不改)。
 
     数据不足(< 20 根)→ 兜底 ma_cross(避免在未预热指标上瞎推荐)。
+    ★i18n Phase3 刀3:lang 默认 "zh"(现有调用不传 → 中文 · 逐字节零变化)· 端点传用户 lang。
     """
     if len(klines) < _MIN_BARS:
         return StrategyRecommendation(
-            strategy="ma_cross", reason="K 线数据不足 · 默认均线金叉策略",
+            strategy="ma_cross", reason=translate("recommend.insufficient_data", lang),
         )
 
     trend = ind.compute_trend_5d(klines)        # up / down / sideways
@@ -100,7 +104,7 @@ def recommend_strategy(klines: list[Kline]) -> StrategyRecommendation:
     width = boll["upper"] - boll["lower"]
     pctb = (last_close - boll["lower"]) / width if width > 0 else None
 
-    return _pick(trend, rsi, pctb)
+    return _pick(trend, rsi, pctb, lang)
 
 
 __all__ = ["recommend_strategy"]
