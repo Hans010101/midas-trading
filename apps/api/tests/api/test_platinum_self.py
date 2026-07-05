@@ -61,7 +61,29 @@ async def test_non_platinum_403(client: AsyncClient, db_session: AsyncSession) -
 
 @pytest.mark.asyncio
 async def test_non_platinum_403_en(client: AsyncClient, db_session: AsyncSession) -> None:
-    """★i18n Phase3 刀1:Accept-Language=en → 403 文案英文(后端本地化端到端 · 前端零查表)。"""
+    """★双语能力铁证(2026-07-05 收窄后):显式 X-Lang=en → 403 文案英文(后端本地化端到端)。
+
+    收窄后英文由【显式 X-Lang】触发(海外版 / 联调)· Accept-Language 自动判定已停用。
+    """
+    user = await make_user(db_session, role="user")
+    token = await issue_session(db_session, user_id=user.id)
+    await db_session.commit()
+    r = await client.get(
+        "/api/v1/platinum/intelligent/status",
+        headers={"Authorization": f"Bearer {token}", "X-Lang": "en"},
+    )
+    assert r.status_code == 403
+    assert r.json()["detail"] == "Platinum access required"
+
+
+@pytest.mark.asyncio
+async def test_non_platinum_403_ignores_accept_language(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    """★收窄端到端(docs/decisions/0047):英文浏览器 Accept-Language=en(无 X-Lang)→ 403 中文。
+
+    纯中文产品无语言切换 UI · Accept-Language 自动判英文已停用 → 不再让中文用户看到英文错误。
+    """
     user = await make_user(db_session, role="user")
     token = await issue_session(db_session, user_id=user.id)
     await db_session.commit()
@@ -70,7 +92,7 @@ async def test_non_platinum_403_en(client: AsyncClient, db_session: AsyncSession
         headers={"Authorization": f"Bearer {token}", "Accept-Language": "en-US,en;q=0.9"},
     )
     assert r.status_code == 403
-    assert r.json()["detail"] == "Platinum access required"
+    assert r.json()["detail"] == "需铂金权限"  # ★Accept-Language 被忽略 → 中文兜底
 
 
 @pytest.mark.asyncio

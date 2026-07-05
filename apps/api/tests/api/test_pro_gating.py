@@ -115,7 +115,7 @@ async def test_decision_card_free_locked_no_content(
     monkeypatch.setattr(analysis_mod, "run_decision_workflow", _boom_workflow)
     user = await _user_with_plan(db_session, "free")
     resp = await get_decision_card(
-        _FakeCH(_kl()), None, None, None, None, None, db_session, user,  # type: ignore[arg-type]
+        _FakeCH(_kl()), None, None, None, None, None, db_session, user, "zh",  # type: ignore[arg-type]
         symbol="NVDA", market="us", period="1d",
     )
     assert resp.locked is True
@@ -132,7 +132,7 @@ async def test_decision_card_anon_locked_no_401(
     """🔴 未登录(user=None)→ locked,不抛 401(访客访问详情页不被破坏)。"""
     monkeypatch.setattr(analysis_mod, "run_decision_workflow", _boom_workflow)
     resp = await get_decision_card(
-        _FakeCH(_kl()), None, None, None, None, None, db_session, None,  # type: ignore[arg-type]
+        _FakeCH(_kl()), None, None, None, None, None, db_session, None, "zh",  # type: ignore[arg-type]
         symbol="NVDA", market="us", period="1d",
     )
     assert resp.locked is True
@@ -149,7 +149,7 @@ async def test_decision_card_pro_reaches_workflow(
     user = await _user_with_plan(db_session, "pro")
     with pytest.raises(_Sentinel):
         await get_decision_card(
-            _FakeCH(_kl()), None, None, None, None, None, db_session, user,  # type: ignore[arg-type]
+            _FakeCH(_kl()), None, None, None, None, None, db_session, user, "zh",  # type: ignore[arg-type]
             symbol="NVDA", market="us", period="1d",
         )
 
@@ -165,7 +165,7 @@ async def test_strategy_signals_free_locked_no_signals(
     monkeypatch.setattr(analysis_mod, "scan_signals", _boom_scan)
     user = await _user_with_plan(db_session, "free")
     resp = await get_strategy_signals(
-        _FakeCH(_kl()), None, None, None, None, None, db_session, user,  # type: ignore[arg-type]
+        _FakeCH(_kl()), None, None, None, None, None, db_session, user, "zh",  # type: ignore[arg-type]
         symbol="NVDA", market="us", period="1d", instrument="spot", strategy="ma_cross",
     )
     assert resp.locked is True
@@ -181,7 +181,7 @@ async def test_strategy_signals_anon_locked_no_401(
     """🔴 未登录 → locked,不抛 401。"""
     monkeypatch.setattr(analysis_mod, "scan_signals", _boom_scan)
     resp = await get_strategy_signals(
-        _FakeCH(_kl()), None, None, None, None, None, db_session, None,  # type: ignore[arg-type]
+        _FakeCH(_kl()), None, None, None, None, None, db_session, None, "zh",  # type: ignore[arg-type]
         symbol="NVDA", market="us", period="1d", instrument="spot", strategy="ma_cross",
     )
     assert resp.locked is True
@@ -197,7 +197,7 @@ async def test_strategy_signals_pro_reaches_scan(
     user = await _user_with_plan(db_session, "pro")
     with pytest.raises(_Sentinel):
         await get_strategy_signals(
-            _FakeCH(_kl()), None, None, None, None, None, db_session, user,  # type: ignore[arg-type]
+            _FakeCH(_kl()), None, None, None, None, None, db_session, user, "zh",  # type: ignore[arg-type]
             symbol="NVDA", market="us", period="1d", instrument="spot", strategy="ma_cross",
         )
 
