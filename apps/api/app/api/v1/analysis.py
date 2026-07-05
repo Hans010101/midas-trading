@@ -20,6 +20,7 @@ from app.api.deps import (
     CryptoSourceDep,
     HkSourceDep,
     OptionalCurrentUserDep,
+    RequestLangDep,
     UsSourceDep,
 )
 from app.core.database import get_db
@@ -48,6 +49,7 @@ from app.services.ai.strategy_signals import scan_signals
 from app.services.ai.workflow import run_decision_workflow
 from app.services.analysis.chan import analyze as analyze_chan
 from app.services.data_sources.base import BaseDataSource
+from app.services.i18n import translate
 from app.services.membership import resolve_plan
 
 # 仅本路由用 · 不放 deps.py 避免对其他路由产生隐式依赖(virtual.py 已自定义本地 DbDep)
@@ -108,6 +110,7 @@ async def get_chan_analysis(
     crypto: CryptoSourceDep,
     hk: HkSourceDep,
     binance_futures: BinanceFuturesSourceDep,
+    lang: RequestLangDep,
     symbol: str = Query(..., min_length=1, examples=["BTC/USDT", "NVDA", "600519", "00700"]),
     market: Market = Query(...),
     period: Period = Query("1d"),
@@ -121,7 +124,7 @@ async def get_chan_analysis(
     if instrument == "perp" and market != "crypto":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"instrument=perp 只支持 market=crypto · 当前 market={market}",
+            detail=translate("common.perp_only_crypto", lang, market=market),
         )
 
     # 拿 K 线 · 复用 market 路由的 cache-aside 路径(直查 CH)
@@ -139,7 +142,7 @@ async def get_chan_analysis(
             except Exception as e:  # noqa: BLE001
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"perp K 线数据不足 30 根 · 无法做缠论分析:{e}",
+                    detail=translate("analysis.perp_kline_insufficient_chan", lang, e=e),
                 ) from e
         else:
             source = _source_for(market, cn=cn, us=us, crypto=crypto, hk=hk)
@@ -148,7 +151,7 @@ async def get_chan_analysis(
             except Exception as e:  # noqa: BLE001
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"K 线数据不足 30 根 · 无法做缠论分析:{e}",
+                    detail=translate("analysis.kline_insufficient_chan", lang, e=e),
                 ) from e
 
     result = await analyze_chan(klines, period, symbol)
@@ -257,7 +260,7 @@ async def get_decision_card(
     if instrument == "perp" and market != "crypto":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"instrument=perp 只支持 market=crypto · 当前 market={market}",
+            detail=translate("common.perp_only_crypto", lang, market=market),
         )
 
     # 1. 缓存命中检查 · 注:cache key 暂用 (market, symbol, period) · M2-D 加 instrument
@@ -283,7 +286,7 @@ async def get_decision_card(
             except Exception as e:  # noqa: BLE001
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"perp K 线数据不足 30 根 · 无法生成决策卡:{e}",
+                    detail=translate("analysis.perp_kline_insufficient_decision_card", lang, e=e),
                 ) from e
         else:
             # 港股阶段三单元1:decision-card 注入 hk(此前 _source_for 无 hk → market=hk KeyError)
@@ -293,7 +296,7 @@ async def get_decision_card(
             except Exception as e:  # noqa: BLE001
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"K 线数据不足 30 根 · 无法生成决策卡:{e}",
+                    detail=translate("analysis.kline_insufficient_decision_card", lang, e=e),
                 ) from e
 
     # 3. 跑 LangGraph workflow(mock 或 real,workflow 不关心)
@@ -370,17 +373,22 @@ async def _fetch_klines_for_strategy(
     period: Period,
     instrument: Instrument,
     limit: int,
-    purpose: str,
+    lang: str,
+    purpose_key: str,
 ) -> list[Kline]:
     """策略端点专用 K 线获取(只读 · 先 CH 后回源)· 复用 decision-card 同源模式。
 
     ★ 只读 select_kline(CH 已采)· 不足回源拉(与 /chan、/decision-card 同源)·
     绝不写、绝不下单。不改现有 chan/decision-card 端点(它们各自内联,本 helper 仅新端点用)。
+    ★i18n Phase3 刀2:双层插值 —— purpose_key(analysis.purpose_*)先按 lang 译成动词短语,
+      再作为 {purpose} 填入错误模板;zh 下逐字节等于原 f-string。
     """
+    # 双层插值:先把 purpose_key 译成本地化动词短语(zh → 原中文字面量)
+    purpose = translate(purpose_key, lang)
     if instrument == "perp" and market != "crypto":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"instrument=perp 只支持 market=crypto · 当前 market={market}",
+            detail=translate("common.perp_only_crypto", lang, market=market),
         )
     klines = await ch.select_kline(
         symbol=symbol, market=market, period=period, limit=limit, instrument=instrument,
@@ -393,7 +401,9 @@ async def _fetch_klines_for_strategy(
             except Exception as e:  # noqa: BLE001
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"perp K 线数据不足 · 无法{purpose}:{e}",
+                    detail=translate(
+                        "analysis.perp_kline_insufficient_purpose", lang, purpose=purpose, e=e,
+                    ),
                 ) from e
         else:
             source = _source_for(market, cn=cn, us=us, crypto=crypto, hk=hk)
@@ -402,7 +412,9 @@ async def _fetch_klines_for_strategy(
             except Exception as e:  # noqa: BLE001
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"K 线数据不足 · 无法{purpose}:{e}",
+                    detail=translate(
+                        "analysis.kline_insufficient_purpose", lang, purpose=purpose, e=e,
+                    ),
                 ) from e
     return klines
 
@@ -442,10 +454,12 @@ async def get_strategy_signals(
     if plan != "pro":
         return _locked_strategy_signals(symbol, market, period, instrument, strategy)
 
+    # ★zh 用户 lang="zh" → 错误 detail 走原字面量、逐字节零变化(同决策卡口径)
+    lang = (user.language_pref or "zh") if user else "zh"
     klines = await _fetch_klines_for_strategy(
         ch=ch, cn=cn, us=us, crypto=crypto, hk=hk, binance_futures=binance_futures,
         symbol=symbol, market=market, period=period, instrument=instrument,
-        limit=limit, purpose="生成策略信号",
+        limit=limit, lang=lang, purpose_key="analysis.purpose_gen_signals",
     )
     # extreme = 合约极端信号(★仅 crypto perp · 需 funding/OI/多空比)· 走专路;其余 5 个纯 klines。
     if strategy == "extreme":
@@ -487,6 +501,7 @@ async def get_strategy_recommend(
     crypto: CryptoSourceDep,
     hk: HkSourceDep,
     binance_futures: BinanceFuturesSourceDep,
+    lang: RequestLangDep,
     symbol: str = Query(..., min_length=1, examples=["BTC/USDT", "NVDA", "600519", "BTCUSDT"]),
     market: Market = Query(...),
     period: Period = Query("1d"),
@@ -499,7 +514,7 @@ async def get_strategy_recommend(
     klines = await _fetch_klines_for_strategy(
         ch=ch, cn=cn, us=us, crypto=crypto, hk=hk, binance_futures=binance_futures,
         symbol=symbol, market=market, period=period, instrument=instrument,
-        limit=limit, purpose="推荐策略",
+        limit=limit, lang=lang, purpose_key="analysis.purpose_recommend",
     )
     rec = recommend_strategy(klines)
     logger.info(

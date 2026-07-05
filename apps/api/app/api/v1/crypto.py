@@ -32,7 +32,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, HTTPException, Path, Query, status
 from pydantic import ValidationError
 
-from app.api.deps import ClickHouseDep
+from app.api.deps import ClickHouseDep, RequestLangDep
 from app.core.redis_client import get_redis
 from app.schemas.crypto import (
     BasisPoint,
@@ -68,6 +68,7 @@ from app.services.clickhouse_crypto import (
     select_premium_index_series,
     select_tickers_by_symbols,
 )
+from app.services.i18n import translate
 from app.services.ingest_monitor import build_ingest_status, select_ingest_freshness
 
 logger = logging.getLogger(__name__)
@@ -371,6 +372,7 @@ async def _compute_boll_structure(ch: ClickHouseClient, sym: str) -> BollStructu
 )
 async def get_futures_metrics_batch(
     ch: ClickHouseDep,
+    lang: RequestLangDep,
     symbols: Annotated[str, Query(description="逗号分隔 · Binance 风格 · 如 BTCUSDT,ETHUSDT")],
 ) -> FuturesMetricsBatchResponse:
     syms = [s.strip().upper() for s in symbols.split(",") if s.strip()]
@@ -379,7 +381,7 @@ async def get_futures_metrics_batch(
     if len(syms) > 200:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"symbols 最多 200 个 · 当前 {len(syms)}",
+            detail=translate("crypto.too_many_symbols", lang, count=len(syms)),
         )
     metrics = await select_futures_metrics_batch(
         ch._client,  # noqa: SLF001
@@ -483,6 +485,7 @@ async def get_long_short_ratio(
 )
 async def get_futures_info(
     ch: ClickHouseDep,
+    lang: RequestLangDep,
     symbol: Annotated[str, Path(min_length=3, examples=["BTCUSDT"])],
 ) -> FuturesSymbolInfo:
     latest_oi = await select_open_interest(
@@ -491,7 +494,7 @@ async def get_futures_info(
     if not latest_oi:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"symbol {symbol} 没有 OI 数据 · 数据预热未覆盖此 symbol",
+            detail=translate("crypto.no_oi_data", lang, symbol=symbol),
         )
     oi = latest_oi[-1]
 
@@ -515,7 +518,7 @@ async def get_futures_info(
         if not latest_funding:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"symbol {symbol} 没有 premium / funding 数据 · 数据预热未覆盖此 symbol",
+                detail=translate("crypto.no_premium_funding_data", lang, symbol=symbol),
             )
         fr = latest_funding[-1]
         mark_price = fr.mark_price

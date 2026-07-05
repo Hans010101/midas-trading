@@ -18,7 +18,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUserDep
+from app.api.deps import CurrentUserDep, RequestLangDep
 from app.core.database import get_db
 from app.models.watchlist import WatchlistItem
 from app.schemas.watchlist import (
@@ -27,6 +27,7 @@ from app.schemas.watchlist import (
     WatchlistReorderIn,
 )
 from app.services.data_sources.crypto_source import CcxtBinanceCryptoSource
+from app.services.i18n import translate
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +144,7 @@ async def add_watchlist(
     current_user: CurrentUserDep,
     db: DbDep,
     crypto_source: OptionalCryptoSourceDep,
+    lang: RequestLangDep,
 ) -> WatchlistItemResponse:
     # 1. 重复检测
     existing = await db.scalar(
@@ -155,7 +157,7 @@ async def add_watchlist(
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="该标的已在自选列表",
+            detail=translate("watchlist.already_added", lang),
         )
 
     # 2. 加密标的存在性校验(仅 crypto · A股/美股保持原逻辑、不校验)。
@@ -168,7 +170,7 @@ async def add_watchlist(
     ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"加密交易对不存在:{payload.symbol}(请用 Binance 现货交易对,如 BTC/USDT)",
+            detail=translate("watchlist.crypto_symbol_not_found", lang, symbol=payload.symbol),
         )
 
     # 3. 算 sort_order = max + 1(或 0 如果列表为空)
@@ -198,6 +200,7 @@ async def delete_watchlist(
     item_id: int,
     current_user: CurrentUserDep,
     db: DbDep,
+    lang: RequestLangDep,
 ) -> None:
     result = await db.execute(
         delete(WatchlistItem)
@@ -210,7 +213,7 @@ async def delete_watchlist(
     if result.scalar_one_or_none() is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="自选股不存在或无权限",
+            detail=translate("watchlist.item_not_found", lang),
         )
     await db.commit()
 
@@ -224,6 +227,7 @@ async def reorder_watchlist(
     payload: WatchlistReorderIn,
     current_user: CurrentUserDep,
     db: DbDep,
+    lang: RequestLangDep,
 ) -> dict[str, int | str]:
     """按 item_ids 顺序重写 sort_order(0..N-1)。
 
@@ -243,7 +247,7 @@ async def reorder_watchlist(
             await db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"自选股 {item_id} 不存在或无权限",
+                detail=translate("watchlist.item_not_found_by_id", lang, item_id=item_id),
             )
     await db.commit()
     return {"status": "ok", "reordered": len(payload.item_ids)}

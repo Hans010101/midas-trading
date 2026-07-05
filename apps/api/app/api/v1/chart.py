@@ -20,6 +20,7 @@ from app.api.deps import (
     ClickHouseDep,
     CnSourceDep,
     HkSourceDep,
+    RequestLangDep,
     UsSourceDep,
 )
 from app.schemas.market import Kline, Market, Period
@@ -27,6 +28,7 @@ from app.services.charting.kline_render import render_kline_png_async
 from app.services.clickhouse_client import ClickHouseClient
 from app.services.data_sources.base import BaseDataSource
 from app.services.data_sources.exceptions import DataSourceError
+from app.services.i18n import translate
 
 router = APIRouter(prefix="/chart", tags=["chart"])
 logger = logging.getLogger(__name__)
@@ -81,6 +83,7 @@ async def get_kline_png(
     us: UsSourceDep,
     hk: HkSourceDep,
     binance_futures: BinanceFuturesSourceDep,
+    lang: RequestLangDep,
     market: Market,
     symbol: Annotated[str, Query(min_length=1, max_length=32, description="标的(crypto 可带斜杠)")],
     name: Annotated[str, Query(max_length=32, description="中文名(标题用 · 缺省用 symbol)")] = "",
@@ -102,7 +105,7 @@ async def get_kline_png(
     if len(klines) < _MIN_KLINES:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"K线数据不足(回源后仍 {len(klines)} 根)· 无法渲染",
+            detail=translate("chart.insufficient_kline_data", lang, count=len(klines)),
         )
     try:
         png = await render_kline_png_async(

@@ -15,7 +15,7 @@ from sqlalchemy import delete, desc, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import ClickHouseDep, CurrentUserDep
+from app.api.deps import ClickHouseDep, CurrentUserDep, RequestLangDep
 from app.core.database import get_db
 from app.models.conditional_order import (
     ConditionalKind,
@@ -59,6 +59,7 @@ from app.services.data_sources.base import BaseDataSource
 from app.services.data_sources.exceptions import DataSourceError
 from app.services.hk_board_lot import resolve_hk_board_lot
 from app.services.hk_pool import normalize_hk_code
+from app.services.i18n import translate
 from app.services.kline_freshness import get_fresh_kline
 from app.services.virtual_trading.engine import (
     PlaceOrderRequest,
@@ -144,7 +145,7 @@ async def list_accounts(
     summary="单市场子账户详情(404 = 未激活)",
 )
 async def get_account(
-    market: Market, current_user: CurrentUserDep, db: DbDep,
+    market: Market, current_user: CurrentUserDep, db: DbDep, lang: RequestLangDep,
 ) -> AccountResponse:
     account = await db.scalar(
         select(VirtualAccount).where(
@@ -155,7 +156,7 @@ async def get_account(
     if account is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="该市场资金未激活",
+            detail=translate("virtual.account_not_activated", lang),
         )
     return AccountResponse.model_validate(account)
 
@@ -278,6 +279,7 @@ async def place_order(
     ch: ClickHouseDep,
     current_user: CurrentUserDep,
     db: DbDep,
+    lang: RequestLangDep,
 ) -> OrderResponse:
     fetcher = make_price_fetcher(ch, crypto_source=_crypto_source_of(request))
     # 港股按手取整(board lot)· ★全程虚拟 · 复用 place_market_order · 不接真实通道。
@@ -289,13 +291,13 @@ async def place_order(
         if lot is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="该标的不在港股可下单池",
+                detail=translate("virtual.hk_symbol_not_in_pool", lang),
             )
         lots = int(quantity // lot)
         if lots < 1:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"港股按手交易 · 每手 {lot} 股 · 最少下单 1 手({lot} 股)",
+                detail=translate("virtual.hk_min_one_lot", lang, lot=lot),
             )
         quantity = Decimal(lots * lot)
     req = PlaceOrderRequest(
@@ -318,6 +320,7 @@ async def place_order(
 )
 async def get_hk_board_lot(
     db: DbDep,
+    lang: RequestLangDep,
     symbol: str = Query(..., min_length=1, description="港股代码 · 容错任意位数 / .HK 后缀"),
 ) -> HkBoardLotResponse:
     """返回港股某标的每手股数 · 不在下单池(lot 表 ~2406 + 18 种子兜底)→ 404。
@@ -328,7 +331,7 @@ async def get_hk_board_lot(
     if lot is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="该标的不在港股可下单池",
+            detail=translate("virtual.hk_symbol_not_in_pool", lang),
         )
     return HkBoardLotResponse(symbol=normalize_hk_code(symbol), board_lot=lot)
 
@@ -343,6 +346,7 @@ async def place_ai_order(
     ch: ClickHouseDep,
     current_user: CurrentUserDep,
     db: DbDep,
+    lang: RequestLangDep,
 ) -> AiOrderResponse:
     """AI 决策卡「一键模拟下单」· 构造 source='ai_signal' 的 OrderIntent → 复用 U0 的 execute。
 
@@ -358,7 +362,12 @@ async def place_ai_order(
     if not bot_order.direction_valid(payload.market, payload.direction):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"市场 {payload.market} 不支持方向 {payload.direction}",
+            detail=translate(
+                "virtual.market_direction_unsupported",
+                lang,
+                market=payload.market,
+                direction=payload.direction,
+            ),
         )
     intent = bot_order.OrderIntent(
         market=payload.market,
@@ -396,7 +405,7 @@ async def _floor_spot_qty(
     summary="按 AI 交易计划入场价挂限价单 · 复用 conditional LIMIT · 同一虚拟撮合",
 )
 async def place_ai_plan_order(
-    payload: AiPlanOrderRequest, current_user: CurrentUserDep, db: DbDep,
+    payload: AiPlanOrderRequest, current_user: CurrentUserDep, db: DbDep, lang: RequestLangDep,
 ) -> ConditionalOrderResponse:
     """决策卡「按计划入场价挂限价单」· entry_price → trigger_price · 仓位走 BotOrderPreset。
 
@@ -407,7 +416,12 @@ async def place_ai_plan_order(
     if not bot_order.direction_valid(payload.market, payload.direction):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"市场 {payload.market} 不支持方向 {payload.direction}",
+            detail=translate(
+                "virtual.market_direction_unsupported",
+                lang,
+                market=payload.market,
+                direction=payload.direction,
+            ),
         )
     preset = await bot_order.load_preset(db, current_user.id)
 
@@ -430,14 +444,14 @@ async def place_ai_plan_order(
         if payload.direction != "buy":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="现货仅支持按计划价限价买入(看空请走平仓,不经此端点)",
+                detail=translate("virtual.spot_plan_buy_only", lang),
             )
         raw_qty = preset.spot_notional(payload.market) / payload.entry_price
         qty = await _floor_spot_qty(db, payload.market, payload.symbol, raw_qty)
         if qty is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="按预设名义与入场价算出的数量不足一个最小交易单位",
+                detail=translate("virtual.qty_below_min_unit", lang),
             )
         create = ConditionalOrderCreate(
             symbol=payload.symbol,
@@ -448,7 +462,7 @@ async def place_ai_plan_order(
             trigger_price=payload.entry_price,
             quantity=qty,
         )
-    return await create_conditional_order(create, current_user, db)
+    return await create_conditional_order(create, current_user, db, lang)
 
 
 @router.get(
@@ -631,7 +645,7 @@ async def _has_active_position(
     summary="挂条件单(限价/止损/止盈)· 本刀仅挂单簿,触发成交随刀2",
 )
 async def create_conditional_order(
-    payload: ConditionalOrderCreate, current_user: CurrentUserDep, db: DbDep,
+    payload: ConditionalOrderCreate, current_user: CurrentUserDep, db: DbDep, lang: RequestLangDep,
 ) -> ConditionalOrderResponse:
     """挂单不冻结资金(ADR 0041 决策二)· 触发时由 place_market_order 现有余额校验把关。"""
     symbol = payload.symbol.strip()
@@ -651,13 +665,15 @@ async def create_conditional_order(
             ):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="perp 限价单须填写杠杆 / 保证金 / 仓位模式",
+                    detail=translate("virtual.perp_limit_requires_margin_fields", lang),
                 )
             expected_open = _OPENING_SIDE[payload.position_side]
             if payload.side != expected_open:
-                msg = (
-                    f"perp 限价开仓:{payload.position_side.value} 仓须用 "
-                    f"{expected_open.value} 方向"
+                msg = translate(
+                    "virtual.perp_limit_open_side_mismatch",
+                    lang,
+                    position_side=payload.position_side.value,
+                    side=expected_open.value,
                 )
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
         else:
@@ -665,25 +681,30 @@ async def create_conditional_order(
             if payload.quantity is None:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="限价单必须填写数量",
+                    detail=translate("virtual.limit_requires_quantity", lang),
                 )
             if _has_perp_open_fields(payload):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="现货限价单不接受杠杆 / 保证金 / 仓位模式",
+                    detail=translate("virtual.spot_limit_rejects_margin_fields", lang),
                 )
     else:
         # SL/TP(未决②定型 (a):持仓后独立挂)—— side 必须是该仓向的平仓方向 + 须有活仓
         if _has_perp_open_fields(payload):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="止损/止盈单不接受杠杆 / 保证金 / 仓位模式",
+                detail=translate("virtual.sltp_rejects_margin_fields", lang),
             )
         expected = _CLOSING_SIDE[payload.position_side]
         if payload.side != expected:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"止损/止盈是平仓单:{payload.position_side.value} 仓须用 {expected.value}",
+                detail=translate(
+                    "virtual.sltp_closing_side_mismatch",
+                    lang,
+                    position_side=payload.position_side.value,
+                    side=expected.value,
+                ),
             )
         account = await db.scalar(
             select(VirtualAccount).where(
@@ -694,14 +715,14 @@ async def create_conditional_order(
         if account is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="该市场资金未设置 · 请先去个人设置页填写",
+                detail=translate("virtual.market_account_not_set", lang),
             )
         if not await _has_active_position(
             db, account.id, payload.market, symbol, payload.position_side,
         ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="无对应活仓 · 止损/止盈需先持有该方向仓位",
+                detail=translate("virtual.no_active_position_for_sltp", lang),
             )
 
     row = ConditionalOrder(
@@ -757,7 +778,7 @@ async def list_conditional_orders(
     summary="撤条件单(仅本人 ACTIVE · 状态机转 cancelled 留审计)",
 )
 async def cancel_conditional_order(
-    cond_id: int, current_user: CurrentUserDep, db: DbDep,
+    cond_id: int, current_user: CurrentUserDep, db: DbDep, lang: RequestLangDep,
 ) -> None:
     """ADR 0041 状态机:撤单 = ACTIVE → CANCELLED(保留行供审计,非物理删除);
     鉴权与 404 口径照 alert_rules 范式(不存在/非本人/非 ACTIVE 统一 404,不泄露状态)。
@@ -771,7 +792,8 @@ async def cancel_conditional_order(
     )
     if row is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="条件单不存在或不可撤销",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=translate("virtual.conditional_order_not_found_or_uncancelable", lang),
         )
     row.status = ConditionalStatus.CANCELLED
     await db.commit()

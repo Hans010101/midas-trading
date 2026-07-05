@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUserDep
+from app.api.deps import CurrentUserDep, RequestLangDep
 from app.core.database import get_db
 from app.models.alert_rule import AlertRule
 from app.schemas.alert_rule import (
@@ -27,6 +27,7 @@ from app.schemas.alert_rule import (
 from app.services.alerts.engine import MAX_RULES_PER_USER
 from app.services.alerts.recommended import apply_recommended_rules
 from app.services.alerts.registry import REGISTRY, get_indicator
+from app.services.i18n import translate
 
 
 class ApplyRecommendedResult(BaseModel):
@@ -75,19 +76,24 @@ async def list_alert_rules(
     summary="新增告警规则",
 )
 async def create_alert_rule(
-    payload: AlertRuleCreate, current_user: CurrentUserDep, db: DbDep,
+    payload: AlertRuleCreate, current_user: CurrentUserDep, db: DbDep, lang: RequestLangDep,
 ) -> AlertRuleResponse:
     # 1. 指标合法 + 市场适用
     indicator = get_indicator(payload.indicator)
     if indicator is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"未知指标:{payload.indicator}",
+            detail=translate("alert_rule.unknown_indicator", lang, indicator=payload.indicator),
         )
     if payload.market not in indicator.markets:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"指标 {payload.indicator} 不支持市场 {payload.market}",
+            detail=translate(
+                "alert_rule.indicator_market_unsupported",
+                lang,
+                indicator=payload.indicator,
+                market=payload.market,
+            ),
         )
 
     # 2. symbol 要求:per-symbol 指标必传;市场级指标忽略传入的 symbol
@@ -95,7 +101,9 @@ async def create_alert_rule(
     if indicator.requires_symbol and not symbol:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"指标 {payload.indicator} 需要 symbol",
+            detail=translate(
+                "alert_rule.indicator_requires_symbol", lang, indicator=payload.indicator,
+            ),
         )
     if not indicator.requires_symbol:
         symbol = None  # 市场级指标:忽略 symbol
@@ -109,7 +117,7 @@ async def create_alert_rule(
     if (count or 0) >= MAX_RULES_PER_USER:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"告警规则数已达上限({MAX_RULES_PER_USER})· 请先删除部分规则",
+            detail=translate("alert_rule.max_rules_reached", lang, max_rules=MAX_RULES_PER_USER),
         )
 
     rule = AlertRule(
@@ -146,6 +154,7 @@ async def apply_recommended(
 )
 async def update_alert_rule(
     rule_id: int, payload: AlertRuleUpdate, current_user: CurrentUserDep, db: DbDep,
+    lang: RequestLangDep,
 ) -> AlertRuleResponse:
     rule = await db.scalar(
         select(AlertRule).where(
@@ -154,7 +163,8 @@ async def update_alert_rule(
     )
     if rule is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="规则不存在或无权限",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=translate("alert_rule.not_found_or_forbidden", lang),
         )
     if payload.operator is not None:
         rule.operator = payload.operator
@@ -175,7 +185,7 @@ async def update_alert_rule(
     "/{rule_id}", status_code=status.HTTP_204_NO_CONTENT, summary="删除告警规则",
 )
 async def delete_alert_rule(
-    rule_id: int, current_user: CurrentUserDep, db: DbDep,
+    rule_id: int, current_user: CurrentUserDep, db: DbDep, lang: RequestLangDep,
 ) -> None:
     result = await db.execute(
         delete(AlertRule)
@@ -184,6 +194,7 @@ async def delete_alert_rule(
     )
     if result.scalar_one_or_none() is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="规则不存在或无权限",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=translate("alert_rule.not_found_or_forbidden", lang),
         )
     await db.commit()

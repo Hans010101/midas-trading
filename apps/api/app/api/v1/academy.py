@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUserDep, OptionalCurrentUserDep
+from app.api.deps import CurrentUserDep, OptionalCurrentUserDep, RequestLangDep
 from app.core.database import get_db
 from app.services.academy.catalog import STAGE_TOTALS, is_valid_slug
 from app.services.academy.exam_award import award_membership_if_first_pass
@@ -29,6 +29,7 @@ from app.services.academy.exams import (
     score_exam,
 )
 from app.services.academy.progress import get_progress, mark_complete, unmark_complete
+from app.services.i18n import translate
 
 router = APIRouter(prefix="/academy", tags=["academy"])
 
@@ -61,22 +62,22 @@ class ProgressOut(BaseModel):
     total_articles: int
 
 
-def _require_valid_slug(raw: str) -> str:
+def _require_valid_slug(raw: str, lang: str) -> str:
     slug = raw.strip()
     if not is_valid_slug(slug):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"未知文章 slug: {slug}",
+            detail=translate("academy.unknown_article_slug", lang, slug=slug),
         )
     return slug
 
 
 @router.post("/progress/complete", response_model=CompleteOut)
 async def complete_article(
-    payload: CompleteIn, user: CurrentUserDep, db: DbDep,
+    payload: CompleteIn, user: CurrentUserDep, db: DbDep, lang: RequestLangDep,
 ) -> CompleteOut:
     """标记学完(幂等)· 强制登录。slug 非法 → 400。"""
-    slug = _require_valid_slug(payload.article_slug)
+    slug = _require_valid_slug(payload.article_slug, lang)
     row, newly = await mark_complete(db, user_id=user.id, article_slug=slug)
     return CompleteOut(
         article_slug=row.article_slug,
@@ -90,10 +91,11 @@ async def complete_article(
 async def uncomplete_article(
     user: CurrentUserDep,
     db: DbDep,
+    lang: RequestLangDep,
     article_slug: Annotated[str, Query(min_length=1, max_length=32)],
 ) -> UncompleteOut:
     """取消标记(幂等 · toggle 用)· 强制登录。slug 非法 → 400。"""
-    slug = _require_valid_slug(article_slug)
+    slug = _require_valid_slug(article_slug, lang)
     removed = await unmark_complete(db, user_id=user.id, article_slug=slug)
     return UncompleteOut(article_slug=slug, removed=removed)
 
@@ -170,20 +172,23 @@ class ExamResultsOut(BaseModel):
     results: list[ExamStatusItem]
 
 
-def _require_valid_stage(raw: str) -> str:
+def _require_valid_stage(raw: str, lang: str) -> str:
     stage = raw.strip()
     if not has_exam(stage):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"未知模块或暂无结业测验: {stage}",
+            detail=translate("academy.unknown_exam_stage", lang, stage=stage),
         )
     return stage
 
 
 @router.get("/exam", response_model=ExamQuestionsOut)
-async def get_exam(stage: Annotated[str, Query(min_length=1, max_length=16)]) -> ExamQuestionsOut:
+async def get_exam(
+    lang: RequestLangDep,
+    stage: Annotated[str, Query(min_length=1, max_length=16)],
+) -> ExamQuestionsOut:
     """取某模块结业测验题 · ★只下发题干+选项(无答案)· 公开可读(答题需登录)。"""
-    s = _require_valid_stage(stage)
+    s = _require_valid_stage(stage, lang)
     total = exam_total(s)
     return ExamQuestionsOut(
         stage=s,
@@ -199,10 +204,10 @@ async def get_exam(stage: Annotated[str, Query(min_length=1, max_length=16)]) ->
 
 @router.post("/exam/submit", response_model=SubmitExamOut)
 async def submit_exam(
-    payload: SubmitExamIn, user: CurrentUserDep, db: DbDep,
+    payload: SubmitExamIn, user: CurrentUserDep, db: DbDep, lang: RequestLangDep,
 ) -> SubmitExamOut:
     """提交结业测验 · ★后端用 exams.py 答案重新判分(前端传的分数一律不信)· 记成绩(可重考)。"""
-    s = _require_valid_stage(payload.stage)
+    s = _require_valid_stage(payload.stage, lang)
     scored = score_exam(s, payload.answers)
     await record_result(
         db, user_id=user.id, stage=s,

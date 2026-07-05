@@ -19,7 +19,7 @@ from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUserDep
+from app.api.deps import CurrentUserDep, RequestLangDep
 from app.core.database import get_db
 from app.models.user import User
 from app.services.auth import (
@@ -38,6 +38,7 @@ from app.services.growth import (
     grant_trial_if_eligible,
     redeem_invite_if_pending,
 )
+from app.services.i18n import resolve_lang, translate
 
 # 复用同一个 scheme · auto_error=False 让未携带时也能进路由(我们自己处理)
 _oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
@@ -135,18 +136,19 @@ def _public_base_url() -> str:
     response_model=RegisterOut,
     status_code=status.HTTP_201_CREATED,
 )
-async def register(payload: RegisterIn, db: DbDep) -> RegisterOut:
+async def register(payload: RegisterIn, db: DbDep, request: Request) -> RegisterOut:
+    lang = resolve_lang(request)
     if not payload.age_confirmed:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="必须确认年满 18 周岁",
+            detail=translate("auth.age_not_confirmed", lang),
         )
     email = payload.email.lower()
     existing = await find_user_by_email(db, email)
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="该邮箱已注册",
+            detail=translate("auth.email_taken", lang),
         )
     user = User(
         email=email,
@@ -186,22 +188,23 @@ async def login(payload: LoginIn, db: DbDep, request: Request) -> LoginOut:
     响应字段名 access_token 保持不变(NextAuth 前端代码兼容)·
     实际是 opaque session token,不再是 JWT。
     """
+    lang = resolve_lang(request)
     email = payload.email.lower()
     user = await find_user_by_email(db, email)
     if user is None or not verify_password(payload.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="邮箱或密码错误",
+            detail=translate("auth.invalid_credentials", lang),
         )
     if user.email_verified_at is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="邮箱未验证 · 请查收注册邮件或调用 /resend-verification",
+            detail=translate("auth.email_not_verified", lang),
         )
     if user.banned_at is not None:  # 刀3b-2:封禁拒登(邮箱路)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="账号已被停用",
+            detail=translate("auth.account_disabled", lang),
         )
     ua = request.headers.get("user-agent")
     ip = request.client.host if request.client else None
@@ -276,12 +279,13 @@ async def oauth_google(
     - id_token 是 Google 签发的 JWT · 必须验签 + 验 aud(client_id 匹配)
     - 如果 client_id 不在 env 配置 · 返回 503(开关未开)
     """
+    lang = resolve_lang(request)
     google_client_id = os.getenv("GOOGLE_CLIENT_ID", "")
     if not google_client_id:
         logger.error("[oauth.google] GOOGLE_CLIENT_ID 未配置 · 返回 503")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Google OAuth 未启用(GOOGLE_CLIENT_ID 未配置)",
+            detail=translate("auth.google_oauth_disabled", lang),
         )
     logger.info("[oauth.google] 收到 id_token · client_id 前 12 字符=%s", google_client_id[:12])
 
@@ -304,7 +308,7 @@ async def oauth_google(
         logger.warning("[oauth.google] email_verified=false · 拒绝 · email=%s", email)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Google 账号邮箱未验证",
+            detail=translate("auth.google_email_unverified", lang),
         )
 
     # find_or_create + 发 session · DB 错误单独 catch · 暴露明细(常见:google_sub 列缺失)
@@ -320,7 +324,7 @@ async def oauth_google(
             await db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="账号已被停用",
+                detail=translate("auth.account_disabled", lang),
             )
         trial_granted = False
         invite_rewarded = False
@@ -427,12 +431,13 @@ async def _verify_google_id_token(
 
 
 @router.post("/verify", response_model=VerifyOut)
-async def verify_email(payload: VerifyIn, db: DbDep) -> VerifyOut:
+async def verify_email(payload: VerifyIn, db: DbDep, request: Request) -> VerifyOut:
+    lang = resolve_lang(request)
     user_id = await consume_verification_token(db, token=payload.token)
     if user_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="验证链接无效或已过期",
+            detail=translate("auth.verify_token_invalid", lang),
         )
     from app.services.auth import find_user_by_id  # 避免循环
 
@@ -440,7 +445,7 @@ async def verify_email(payload: VerifyIn, db: DbDep) -> VerifyOut:
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="用户不存在",
+            detail=translate("auth.user_not_found", lang),
         )
     user.email_verified_at = datetime.now(tz=UTC)
     # Phase 1.5 刀A:★ trial 必须先于兑现(invite 先开行会让 trial 误判已有订阅)
@@ -486,7 +491,7 @@ async def me(current_user: CurrentUserDep) -> MeOut:
 
 @router.post("/change-password", response_model=ChangePasswordOut)
 async def change_password(
-    payload: ChangePasswordIn, current_user: CurrentUserDep, db: DbDep,
+    payload: ChangePasswordIn, current_user: CurrentUserDep, db: DbDep, lang: RequestLangDep,
 ) -> ChangePasswordOut:
     """修改密码(邮箱密码用户)· 旧密码校验通过后写入新 hash。
 
@@ -497,12 +502,12 @@ async def change_password(
     if current_user.password_hash is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="你通过 Google 登录,账户安全由 Google 管理,无需在此修改密码",
+            detail=translate("auth.oauth_only_no_password_change", lang),
         )
     if not verify_password(payload.old_password, current_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="旧密码错误",
+            detail=translate("auth.old_password_incorrect", lang),
         )
     current_user.password_hash = hash_password(payload.new_password)
     await db.commit()

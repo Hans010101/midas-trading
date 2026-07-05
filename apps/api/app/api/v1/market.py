@@ -18,6 +18,7 @@ from app.api.deps import (
     CnSourceDep,
     CryptoSourceDep,
     HkSourceDep,
+    RequestLangDep,
     UsSourceDep,
 )
 from app.schemas.market import KlineResponse, Market, Period, SymbolMeta
@@ -28,6 +29,7 @@ from app.services.data_sources.exceptions import (
     UpstreamUnavailableError,
 )
 from app.services.hk_pool import HK_POOL
+from app.services.i18n import translate
 from app.services.kline_freshness import get_fresh_kline
 
 # M2-B(0017 ADR)· instrument 区分 spot/perp · 默认 spot 向后兼容
@@ -55,6 +57,7 @@ async def get_kline(
     crypto: CryptoSourceDep,
     hk: HkSourceDep,
     binance_futures: BinanceFuturesSourceDep,
+    lang: RequestLangDep,
     symbol: str = Query(..., min_length=1, examples=["600519", "NVDA", "BTC/USDT", "00700"]),
     market: Market = Query(...),
     period: Period = Query("1d"),
@@ -68,7 +71,7 @@ async def get_kline(
     if instrument == "perp" and market != "crypto":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"instrument=perp 只支持 market=crypto · 当前 market={market}",
+            detail=translate("common.perp_only_crypto", lang, market=market),
         )
 
     # 刀A2-1:cache-aside 收敛进 get_fresh_kline(端点 + 撮合 fetcher 共用)——
