@@ -49,7 +49,7 @@ ${stage.desc}
       if (md === null) continue // manifest 条目无对应 md(案例库复用等)→ 跳过
       parts.push(`\n\n---
 标题:${a.title}
-出处:${BASE}/academy/article?slug=${a.slug}(点金训练营 · ${stage.stageLabel} ${stage.name})
+出处:${BASE}/academy/article/${a.slug}(点金训练营 · ${stage.stageLabel} ${stage.name})
 ---\n
 ${md.trim()}`)
     }
