@@ -18,6 +18,7 @@ import { DataTable, TCell, TH, THead, TRow } from '@/components/ui/data-table'
 import { Panel } from '@/components/ui/panel'
 import { EmptyState, LoadingNote } from '@/components/ui/state'
 import { fetchCnBoard, searchCnSpot, type CnBreadth, type CnSpotRow } from '@/lib/api/cn-market'
+import { detailHref } from '@/lib/seo/detail-symbols'
 import { cn } from '@/lib/utils'
 
 type Tab = 'gainers' | 'losers' | 'amount'
@@ -42,11 +43,8 @@ const upDown = (n: number) => (n >= 0 ? 'text-up' : 'text-down')
 
 // 行点击 → 新标签打开 A股个股详情页(纯做多下单)· 同 crypto-market 模式
 function openDetail(symbol: string, name: string) {
-  window.open(
-    `/cn-preview?symbol=${encodeURIComponent(symbol)}&name=${encodeURIComponent(name)}`,
-    '_blank',
-    'noopener,noreferrer',
-  )
+  // SEO 批7:curated → 路径段 SEO 页 · 非 curated → 旧 ?symbol=(detailHref 统一判定)
+  window.open(detailHref({ symbol, market: 'cn', name }), '_blank', 'noopener,noreferrer')
 }
 
 export function CnSections() {

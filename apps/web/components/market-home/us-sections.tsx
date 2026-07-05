@@ -17,6 +17,7 @@ import { SectorHeatmap } from '@/components/market-home/sector-heatmap'
 import { DataTable, TCell, TH, THead, TRow } from '@/components/ui/data-table'
 import { EmptyState, LoadingNote } from '@/components/ui/state'
 import { fetchUsBoard, type UsSpotRow } from '@/lib/api/us-market'
+import { detailHref } from '@/lib/seo/detail-symbols'
 import { cn } from '@/lib/utils'
 
 type Tab = 'gainers' | 'losers' | 'amount'
@@ -42,11 +43,8 @@ const upDown = (n: number) => (n >= 0 ? 'text-up' : 'text-down')
 
 // 行点击 → 新标签打开美股个股详情页(做多 + 卖空下单)· 同 crypto-market 模式
 function openDetail(symbol: string, name: string) {
-  window.open(
-    `/us-preview?symbol=${encodeURIComponent(symbol)}&name=${encodeURIComponent(name)}`,
-    '_blank',
-    'noopener,noreferrer',
-  )
+  // SEO 批7:curated → 路径段 SEO 页 · 非 curated → 旧 ?symbol=(detailHref 统一判定)
+  window.open(detailHref({ symbol, market: 'us', name }), '_blank', 'noopener,noreferrer')
 }
 
 export function UsSections() {

@@ -18,11 +18,13 @@
 import { Suspense } from 'react'
 
 import { CryptoDetail } from '@/components/crypto-preview/crypto-detail'
+import { CuratedRedirect } from '@/components/seo/curated-redirect'
 
 export default function CryptoPreviewPage() {
   // CryptoDetail 用 useSearchParams 读 ?symbol= · App Router 要求包 Suspense 边界
   return (
     <Suspense fallback={<main className="min-h-screen bg-background" />}>
+      <CuratedRedirect market="crypto" />
       <CryptoDetail />
     </Suspense>
   )

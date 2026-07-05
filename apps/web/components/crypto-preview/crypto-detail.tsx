@@ -52,11 +52,13 @@ function deriveSymbols(raw: string | null): { klineSymbol: string; futuresSymbol
   return { klineSymbol: `${s.slice(0, -quote.length)}/${quote}`, futuresSymbol: s }
 }
 
-export function CryptoDetail() {
+export function CryptoDetail({ symbol: propSymbol }: { symbol?: string } = {}) {
+  // ★SEO 批7:优先 symbol prop(路径段静态壳 `/crypto/[symbol]` 传入)· 回退 useSearchParams
+  //   (旧 `/crypto-preview?symbol=` 页现状不变 · prop 缺省时逐字节等于改造前)。
   const searchParams = useSearchParams()
   const { klineSymbol, futuresSymbol } = useMemo(
-    () => deriveSymbols(searchParams.get('symbol')),
-    [searchParams],
+    () => deriveSymbols(propSymbol ?? searchParams.get('symbol')),
+    [propSymbol, searchParams],
   )
   // ★刀2:默认周期初值读 display_prefs.period(★同步 lazy init · 在首个 kline query 之前读到,
   //   避免先按 1h 拉一次再切的【双拉】)· cookie 值非法 / 不在可切集合 → 回退 '1h'。

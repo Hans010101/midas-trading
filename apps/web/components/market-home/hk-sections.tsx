@@ -19,6 +19,7 @@ import { DataTable, TCell, TH, THead, TRow } from '@/components/ui/data-table'
 import { Panel } from '@/components/ui/panel'
 import { EmptyState, LoadingNote } from '@/components/ui/state'
 import { fetchHkBoard, fetchHkSectors, type HkBreadth, type HkSpotRow } from '@/lib/api/hk-market'
+import { detailHref } from '@/lib/seo/detail-symbols'
 import { cn } from '@/lib/utils'
 
 const BOARD_SIZE = 100 // 榜单显示前 100(去无限滚动 · 更多走搜索 · 四市场统一)· 搜索仍覆盖全 ~900
@@ -45,11 +46,8 @@ const upDown = (n: number) => (n >= 0 ? 'text-up' : 'text-down')
 
 // 行点击 → 新标签打开港股详情页(K线+缠论 · 只读 · 不下单)
 function openDetail(symbol: string, name: string) {
-  window.open(
-    `/hk-preview?symbol=${encodeURIComponent(symbol)}&name=${encodeURIComponent(name)}`,
-    '_blank',
-    'noopener,noreferrer',
-  )
+  // SEO 批7:curated → 路径段 SEO 页 · 非 curated → 旧 ?symbol=(detailHref 统一判定)
+  window.open(detailHref({ symbol, market: 'hk', name }), '_blank', 'noopener,noreferrer')
 }
 
 export function HkSections() {
