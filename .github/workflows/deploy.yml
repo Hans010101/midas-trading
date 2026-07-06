@@ -108,14 +108,18 @@ jobs:
           set -e
           # ★DEPLOY_MODE=pull(默认)· update.sh 走 pull 分支:docker compose pull 精确 sha tag →
           #   recreate · VPS 零构建负载。workflow_dispatch 可选 deploy_mode=build 走兜底本地 build。
-          # OLD_HEAD reset 前算 / NEW_HEAD reset 后算(ADR0031 fast-path 修)· NEW_HEAD = 本次 sha
-          #   = build-push job 的 github.sha → update.sh pull 的 MIDAS_IMAGE_TAG 对得上仓库镜像 tag。
+          # ★git reset 对齐【触发本次 run 的 commit sha】(github.sha)· 而非盲取 origin/main ——
+          #   根治双合并/交叉部署 race:每个 run 部署自己 build-push 出的那个 sha 镜像。
+          #   盲取 origin/main 时,若本 run 运行中又有新合并进 main,reset 会跳到新 sha,
+          #   再 pull 未 build 的新 sha 镜像 → not found → 回滚(2026-07-06 #166+#165 双合并事故根治)。
+          #   ${{ github.sha }} = build-push job 打 tag 的同一 sha → pull 必命中本 run 建的镜像。
+          #   NEW_HEAD 由 reset 后 HEAD 派生(= github.sha)· update.sh 吃传入 NEW_HEAD 作 MIDAS_IMAGE_TAG。
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=accept-new \
             -o ServerAliveInterval=30 \
             -o ServerAliveCountMax=120 \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "cd /opt/midas && OLD_HEAD=\$(git rev-parse HEAD) && git fetch origin main && git checkout main && git reset --hard origin/main && NEW_HEAD=\$(git rev-parse HEAD) && OLD_HEAD=\$OLD_HEAD NEW_HEAD=\$NEW_HEAD DEPLOY_MODE='${{ inputs.deploy_mode || 'pull' }}' FORCE_REBUILD='${{ inputs.force_rebuild }}' bash update.sh"
+            "cd /opt/midas && OLD_HEAD=\$(git rev-parse HEAD) && git fetch origin main && git checkout main && git reset --hard ${{ github.sha }} && NEW_HEAD=\$(git rev-parse HEAD) && OLD_HEAD=\$OLD_HEAD NEW_HEAD=\$NEW_HEAD DEPLOY_MODE='${{ inputs.deploy_mode || 'pull' }}' FORCE_REBUILD='${{ inputs.force_rebuild }}' bash update.sh"
 
       # ★外部健康检查:严格 200 + redirect-loop 探测(2026-07-03 i18n 批0 redirect loop 教训)。
       #   旧 `curl -fsS /` 的 -f 只 4xx/5xx 失败、放过 3xx → localeDetection 让 /→307→/ 死循环时
@@ -124,19 +128,30 @@ jobs:
         run: |
           echo "等 5s 让服务稳定..."
           sleep 5
-          echo "── api.midastrade.asia/health ──"
-          curl -fsS --max-time 20 https://api.midastrade.asia/health
-          echo ""
-          check_200() {
-            local code
-            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$1")
-            echo "  $2: HTTP ${code}"
-            if [ "$code" != "200" ]; then
-              echo "  ❌ $2 非 200(疑 redirect loop / 未就绪 / 崩)· 部署判失败"
-              return 1
-            fi
+          # ★重试容差(2026-07-06 #166 假负事故):recreate 后公网端点可能瞬时未就绪,
+          #   给 3×5s retry —— 瞬时未就绪重试即恢复;真故障(retry 耗尽仍失败)才判死(不放过真崩)。
+          retry_curl() {  # $1=url $2=label · api/health 类(严格成功·-fsS)· 3×5s
+            local i
+            for i in 1 2 3; do
+              if curl -fsS --max-time 20 "$1" >/dev/null 2>&1; then
+                echo "  ✓ $2: 就绪(第 $i 次)"; return 0
+              fi
+              echo "  $2: 第 $i/3 次未就绪 · 5s 后重试"; [ "$i" -lt 3 ] && sleep 5
+            done
+            echo "  ❌ $2 3 次仍失败 · 部署判失败"; return 1
           }
-          echo "── 中文关键页严格 200 ──"
+          check_200() {  # $1=url $2=label · 关键页严格 200 · 3×5s
+            local code i
+            for i in 1 2 3; do
+              code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$1")
+              if [ "$code" = "200" ]; then echo "  ✓ $2: HTTP 200(第 $i 次)"; return 0; fi
+              echo "  $2: HTTP ${code}(第 $i/3 次非 200 · 5s 后重试)"; [ "$i" -lt 3 ] && sleep 5
+            done
+            echo "  ❌ $2 3 次仍非 200(疑 redirect loop / 崩 / 未就绪)· 部署判失败"; return 1
+          }
+          echo "── api.midastrade.asia/health(3×5s retry)──"
+          retry_curl "https://api.midastrade.asia/health" "api/health"
+          echo "── 中文关键页严格 200(3×5s retry)──"
           check_200 "https://midastrade.asia/" "中文首页 /"
           check_200 "https://midastrade.asia/cn-market" "/cn-market"
           check_200 "https://midastrade.asia/workbench" "/workbench"
