@@ -156,9 +156,10 @@ jobs:
           echo "── api.midastrade.asia/health(3×5s retry)──"
           retry_curl "https://api.midastrade.asia/health" "api/health"
           echo "── 中文关键页严格 200(3×5s retry)──"
-          # ★多市场逐页覆盖(CLAUDE.md 红线:同功能不同市场=不同前端组件·只验一个面≠全覆盖):
-          #   crypto-market / hk-market 是与 MarketHomePage 无关的独立组件(us 复用 cn 故 cn 代验),
-          #   补进探针清单防「单个市场页构建崩、其它页正常」被判绿(/crypto-preview CryptoAiCard 教训同型)。
+          # ★多市场逐页覆盖(CLAUDE.md 红线:只验一个面≠全覆盖):crypto-market 是独立 'use client'
+          #   组件(BollScanList);cn/us/hk 共用 MarketHomePage 但各传不同 market prop(hk 走恒生指数/
+          #   港股家数·cn 代不了那条数据路径)。补 crypto + hk 防「单市场页崩、其它页正常」被判绿
+          #   (/crypto-preview CryptoAiCard 教训同型)。us 与 cn 同 prop 形态·cn 代验足够。
           check_200 "https://midastrade.asia/" "中文首页 /"
           check_200 "https://midastrade.asia/cn-market" "/cn-market"
           check_200 "https://midastrade.asia/crypto-market" "/crypto-market"
