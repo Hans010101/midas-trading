@@ -143,7 +143,11 @@ jobs:
           check_200() {  # $1=url $2=label · 关键页严格 200 · 3×5s
             local code i
             for i in 1 2 3; do
-              code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$1")
+              # ★|| true 不可省:GHA 默认 bash -eo pipefail 下,裸 code=$(curl) 若 curl 连接级
+              #   失败(conn-refused exit7 / timeout exit28 = 瞬时未就绪的一种)→ 命令替换非零 →
+              #   set -e 当场退出、retry 一次都不跑(实测复刻 exit=7·循环零打印)。|| true 让替换
+              #   永不失败→set -e 不触发→retry 正常;curl 失败时 %{http_code} 已输出 000·仍走重试。
+              code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$1" || true)
               if [ "$code" = "200" ]; then echo "  ✓ $2: HTTP 200(第 $i 次)"; return 0; fi
               echo "  $2: HTTP ${code}(第 $i/3 次非 200 · 5s 后重试)"; [ "$i" -lt 3 ] && sleep 5
             done
@@ -152,11 +156,20 @@ jobs:
           echo "── api.midastrade.asia/health(3×5s retry)──"
           retry_curl "https://api.midastrade.asia/health" "api/health"
           echo "── 中文关键页严格 200(3×5s retry)──"
+          # ★多市场逐页覆盖(CLAUDE.md 红线:同功能不同市场=不同前端组件·只验一个面≠全覆盖):
+          #   crypto-market / hk-market 是与 MarketHomePage 无关的独立组件(us 复用 cn 故 cn 代验),
+          #   补进探针清单防「单个市场页构建崩、其它页正常」被判绿(/crypto-preview CryptoAiCard 教训同型)。
           check_200 "https://midastrade.asia/" "中文首页 /"
           check_200 "https://midastrade.asia/cn-market" "/cn-market"
+          check_200 "https://midastrade.asia/crypto-market" "/crypto-market"
+          check_200 "https://midastrade.asia/hk-market" "/hk-market"
           check_200 "https://midastrade.asia/workbench" "/workbench"
-          echo "── redirect-loop 探测(curl -L 跳数上限 3·超限即失败)──"
-          curl -fsS -L --max-redirs 3 -o /dev/null -w "  / 跟随最终 HTTP %{http_code} · 跳 %{num_redirects} · %{time_total}s\n" --max-time 20 https://midastrade.asia/
+          # ★redirect-loop 现由上面 check_200 "/"(严格 200·不跟 -L)兜死:真有 /→307→/ 死循环时
+          #   首跳返 3xx ≠ 200 → check_200 直接判失败。故这条 -L 探测退化为纯诊断(打印跳数/耗时),
+          #   末尾 `|| true` 让它【不再是零容忍的裸命令】—— 否则 recreate 后一次瞬时 conn-refused/timeout
+          #   就把整步 set -e 击穿判死(与 check_200 无 || true 同类假负;那条已修,这条一并根治)。
+          echo "── redirect-loop 诊断(判定已由 check_200 \"/\" 严格 200 承担·这里仅打印)──"
+          curl -fsS -L --max-redirs 3 -o /dev/null -w "  / 跟随最终 HTTP %{http_code} · 跳 %{num_redirects} · %{time_total}s\n" --max-time 20 https://midastrade.asia/ || true
 
       - name: 清理私钥(无论成败都跑)
         if: always()
