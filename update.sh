@@ -170,7 +170,15 @@ if [ "$OLD_HEAD" = "$NEW_HEAD" ]; then
     exit 0
   fi
 else
-  git reset --hard origin/main 2>&1 | tail -1
+  # ── ★reset 到 NEW_HEAD 而非 origin/main(2026-07-06 双合并 split-brain 根治)──────────
+  #   env 注入场景:deploy.yml 已把 disk reset 到 github.sha(=触发本 run 的 commit=NEW_HEAD),
+  #   MIDAS_IMAGE_TAG 也 = NEW_HEAD(3/7 pull 用)。若这里再 `reset --hard origin/main`,当本 run
+  #   执行窗口内又有并发合并进 main(origin/main 已领先到更新 sha)→ disk 被拉到那个更新 sha,
+  #   而 pull 的镜像 tag 仍是 NEW_HEAD → git HEAD 与运行镜像 split-brain;更糟:下一 run 读 disk
+  #   已是更新 sha → OLD==NEW → 误判「已是最新」静默跳过 → 那个更新 commit 永不部署(实测复刻坐实)。
+  #   reset 到 NEW_HEAD 让 disk 与镜像 tag 严格同 sha。disk 自算场景:NEW_HEAD 就 = origin/main
+  #   (line 144 刚算)→ 与旧行为一字不差、零回归。deploy.yml「对齐 github.sha」的 race 修复靠这行贯穿到底。
+  git reset --hard "$NEW_HEAD" 2>&1 | tail -1
   NEW_HEAD_SHORT=$(git rev-parse --short HEAD)
   # ⚠ 关键:reset 真正发生后才设 OLD_HEAD_SAVED · trap 据此判定是否回滚
   OLD_HEAD_SAVED=$OLD_HEAD
