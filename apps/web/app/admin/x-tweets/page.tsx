@@ -1,11 +1,12 @@
 'use client'
 
 /**
- * 管理员 · X 营销每日推文(阶段4a · PR-3)。
+ * 管理员 · X 营销每日推文(阶段4b · X 真发上线 2026-07-07)。
  *
  * ★ 安全边界后端 AdminDep(403)· 数据全来自 admin API,普通用户手输 URL → 后端 403 → 降级。
  * 流程:点「生成今日推文」→ 后端异步选币+DeepSeek生成+门禁 → 列表展示(★门禁不过的也列,标红不可发)。
- * ★ 止于展示 · 不发 X(发布=4b)· 截图(image_path)PR-4 才有,现阶段不显图。
+ * ★ 发布:门禁通过的推文可【admin 单次点】发布到 币安广场 / X(tweepy OAuth 1.0a)· 各自状态/按钮。
+ *   含 URL 的推有成本提醒(X $0.20 ≈ 十几倍)· 截图(image_path)PR-4 才有,现阶段不显图。
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -98,7 +99,11 @@ function PublishRow({
     onError: (e: Error) => setErr(e.message),
   })
   const binance = t.dispatches.find((d) => d.platform === 'binance_square')
-  const sending = mut.isPending || binance?.status === 'pending'
+  const x = t.dispatches.find((d) => d.platform === 'x')
+  // ★per-platform 发布中:共享一个 mutation,用 mut.variables 分清点的是哪个平台
+  const sendingPlatform = mut.isPending ? (mut.variables ?? null) : null
+  const binanceSending = sendingPlatform === 'binance_square' || binance?.status === 'pending'
+  const xSending = sendingPlatform === 'x' || x?.status === 'pending'
   // ★审计:有发布记录则标来源(自动托管 PR-4)· auto 自动托管 / manual 人工点
   const sourceBadge = binance ? (
     <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
@@ -119,7 +124,7 @@ function PublishRow({
             </a>
           )}
         </span>
-      ) : sending ? (
+      ) : binanceSending ? (
         <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
           币安广场 发布中…
         </span>
@@ -132,15 +137,41 @@ function PublishRow({
           {binance?.status === 'failed' ? '重试币安广场' : '发布到币安广场'}
         </button>
       )}
-      {/* X:等 X API · 槽位占着,禁用 */}
-      <span
-        className="cursor-not-allowed rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground/60"
-        title="待接入 X API"
-      >
-        X(待接入)
-      </span>
+      {/* X:tweepy OAuth 1.0a 真发(2026-07-07 上线)· 与币安广场并列,各自状态/按钮 */}
+      {x?.status === 'success' ? (
+        <span className="rounded bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+          ✓ X
+          {x.url && (
+            <a href={x.url} target="_blank" rel="noopener noreferrer" className="ml-1 underline">
+              查看
+            </a>
+          )}
+        </span>
+      ) : xSending ? (
+        <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">X 发布中…</span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => mut.mutate('x')}
+          className="rounded-md bg-midas-red px-2.5 py-1 text-xs font-medium text-white hover:bg-midas-red/85"
+        >
+          {x?.status === 'failed' ? '重试发布到 X' : '发布到 X'}
+        </button>
+      )}
+      {/* ★URL 成本提醒(X 含链接推 $0.20 ≈ 十几倍 · 引流放简介/评论,别在正文放链接)*/}
+      {t.has_url && (
+        <span
+          className="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] text-amber-700"
+          title="含链接的推 $0.20/条 ≈ 无链接($0.015)的十几倍 · 建议链接放简介 / 评论区,正文别放"
+        >
+          ⚠ 正文含链接(发 X 贵十几倍)
+        </span>
+      )}
       {binance?.status === 'failed' && binance.error && (
         <span className="w-full text-xs text-red-600">币安失败:{binance.error}</span>
+      )}
+      {x?.status === 'failed' && x.error && (
+        <span className="w-full text-xs text-red-600">X 失败:{x.error}</span>
       )}
       {err && <span className="w-full text-xs text-red-600">{err}</span>}
     </div>

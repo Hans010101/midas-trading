@@ -11,11 +11,13 @@ from __future__ import annotations
 
 from app.services.x_marketing.publish.base import PublishAdapter
 from app.services.x_marketing.publish.binance_square import BinanceSquareAdapter
+from app.services.x_marketing.publish.x_twitter import XTwitterAdapter
 
 # 已实现的 adapter(能发的平台)· 加平台 = 加一行。
-# ★x 平台待 X API:届时新增 XAdapter 并在此登记一行即接入(不动生产线/其他平台)。
+# ★x:tweepy OAuth 1.0a 真发(2026-07-07 Hans 配 4 密钥)· enabled 由 4 密钥是否配齐决定。
 ADAPTERS: dict[str, PublishAdapter] = {
     "binance_square": BinanceSquareAdapter(),
+    "x": XTwitterAdapter(),
 }
 
 

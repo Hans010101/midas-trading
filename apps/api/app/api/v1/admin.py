@@ -78,6 +78,7 @@ from app.services.visit_stats import (
     read_redis_referrer_day,
     read_redis_source_day,
 )
+from app.services.x_marketing.compliance import has_body_url
 from app.services.x_marketing.generate import enqueue_daily_generation
 from app.services.x_marketing.publish import auto_guard
 from app.services.x_marketing.publish.dispatch import enqueue_publish, revoke_auto_tasks
@@ -1134,6 +1135,7 @@ class XTweetItem(BaseModel):
     image_path: str | None  # PR-4 截图后非空 · 现阶段 null
     created_at: datetime
     auto_drafted: bool = False  # ★自动托管起草(待补发素材标识 · 频率调整)
+    has_url: bool = False  # ★正文含 URL(发 X 贵十几倍 · 前端提醒成本 · 非门禁否决)
     dispatches: list[XTweetDispatchItem] = []  # 各平台发布状态(发布层 PR-3)
 
 
@@ -1157,6 +1159,7 @@ def _to_tweet_item(
         compliance_passed=row.compliance_passed, compliance_reason=row.compliance_reason,
         status=row.status, image_path=row.image_path, created_at=row.created_at,
         auto_drafted=row.auto_drafted,
+        has_url=has_body_url(row.tweet_text),
         dispatches=[_to_dispatch_item(d) for d in (dispatches or [])],
     )
 

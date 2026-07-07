@@ -30,6 +30,7 @@ export interface XTweetItem {
   image_path: string | null
   created_at: string
   auto_drafted: boolean // ★自动托管起草(待补发素材标识 · 频率调整)
+  has_url: boolean // ★正文含 URL(发 X 贵十几倍 · 成本提醒 · 非门禁否决)
   dispatches: XTweetDispatchItem[] // 各平台发布状态(发布层 PR-3)
 }
 

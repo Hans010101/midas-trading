@@ -47,6 +47,8 @@ dependencies = [
     "pypdf>=5.0.0",
     # 周报素材原始文件存阿里云 OSS(第三刀-B)· ★同步 SDK,调用处用 asyncio.to_thread 包。
     "oss2>=2.18.0",
+    # X(Twitter)发布 · OAuth 1.0a 真发(x_twitter adapter)· ★同步 SDK,调用处 asyncio.to_thread 包。
+    "tweepy>=4.14.0",
 ]
 
 [project.optional-dependencies]
@@ -122,6 +124,7 @@ module = [
     "mplfinance.*",
     "reportlab.*",
     "oss2.*",
+    "tweepy.*",
     "yaml",
 ]
 ignore_missing_imports = true

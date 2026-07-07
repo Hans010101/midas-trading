@@ -82,6 +82,14 @@ class Settings(BaseSettings):
     # 空 = 币安广场 adapter 禁用(enabled=False · 端点拦)· PR-2 接真 API 时 Hans 配。
     binance_square_openapi_key: str = ""
 
+    # X(Twitter)发布 · OAuth 1.0a user-context 4 密钥(2026-07-07 Hans 配 · 权限 Read and write)
+    # ⚠ 敏感:只从 env 读(/opt/midas/.env · compose --env-file 注入)· 绝不进 git/前端/DB/日志 ·
+    #   ★4 个任一为空 = X adapter 禁用(enabled=False · 端点拦不发)· 只进 tweepy client。
+    x_consumer_key: str = ""          # Consumer Key(API Key)
+    x_consumer_secret: str = ""       # Consumer Secret(API Secret)
+    x_access_token: str = ""          # Access Token(用户令牌)
+    x_access_token_secret: str = ""   # Access Token Secret(用户令牌密钥)
+
     # 阿里云 OSS · 周报素材原始文件归档(第三刀-B · prefix report-materials/ · 桶 lifecycle 7 天)
     # ⚠ 敏感:oss_access_key_id/secret 只从 env 读 · 绝不进 git/前端/DB/日志(脱敏)· 空 = 上传未启用。
     # ★凭证现在 VPS /etc/midas/backup.env,需 Hans 复制到 app 容器 env(/opt/midas/.env)。
