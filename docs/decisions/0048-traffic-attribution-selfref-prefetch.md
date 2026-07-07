@@ -41,6 +41,11 @@ Next App Router 生产默认预取视口内所有 `<Link>` → 每个预取都�
 `fetch-server-response.js`:`prefetchKind===AUTO` 才设 `next-router-prefetch:1`,正常导航不带)
 + 浏览器 `sec-purpose: prefetch`。命中 → **不计 PV**。★**真软导航(点击)不带预取头 → 照常计 PV**。
 
+**残留取舍(点金-3 评审记录·可接受)**:若某页已被预取且命中客户端 Router Cache,点击时可能不发新请求
+→ 该次真实浏览理论上漏计。但我们多数页是动态数据(staleTime≈0·点击多会重取→beacon 照发),
+爬虫又不跑 Next 客户端(不受此影响);相比换掉 PV/UV=13.2 的预取 overcount,这点残留完全值得。
+另:full-prefetch(`prefetch={true}`)不设该头 → 当前代码库全用默认 auto,无此形态(已 grep 确认)。
+
 ## 历史数据口径(不追溯改写)
 
 原始每条访问明细已弃(只留按天聚合),无法精确回补,故**不追溯改写**,改标注口径:
