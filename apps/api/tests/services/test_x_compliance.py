@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.x_marketing.compliance import validate_tweet
+from app.services.x_marketing.compliance import has_body_url, validate_tweet
 from app.services.x_marketing.tweet_gen import (
     TweetContext,
     append_tags,
@@ -278,3 +278,27 @@ async def test_fetch_extra_metrics_enrich_and_graceful(monkeypatch) -> None:  # 
     assert out[1].long_short_ratio is None
     assert out[1].change_pct_15m is None
     assert out[1].volume_ratio is None
+
+
+# ── ★正文 URL 成本警告(warn-only · 与门禁否决正交)──────────────────────────────
+def test_has_body_url_detects_links() -> None:
+    """检出正文 URL(X 含链接推贵十几倍 · 前端据此提醒)。"""
+    assert has_body_url("详见 https://midastrade.asia/cn") is True
+    assert has_body_url("http://x.com/foo") is True
+    assert has_body_url("访问 www.midastrade.asia") is True
+    assert has_body_url("midastrade.asia 有更多") is True
+    assert has_body_url("go example.io now") is True
+
+
+def test_has_body_url_no_false_positive_on_normal_tweet() -> None:
+    """正常分析推文(数字/百分比/币种/标签)不误报。"""
+    assert has_body_url("BTC 24h 跌 3.5%,%B 0.82,近上轨。仅供参考,不构成投资建议") is False
+    assert has_body_url("ETH 破位 1.20 支撑 #ETH #点金Midas") is False
+    assert has_body_url("") is False
+
+
+def test_has_body_url_orthogonal_to_gate() -> None:
+    """★含 URL 不影响门禁 passed(URL 是成本提醒不是否决项)· 合规带免责的推仍过。"""
+    text = "BTC 走强,近上轨。详见 midastrade.asia。仅供参考,不构成投资建议"
+    assert has_body_url(text) is True
+    assert validate_tweet(text).passed is True  # 有 URL 但无买卖/预测/收益词 + 带免责 → 仍过

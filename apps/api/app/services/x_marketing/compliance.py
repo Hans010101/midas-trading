@@ -127,3 +127,21 @@ def validate_tweet(text: str) -> TweetGateResult:
         reasons.append(f"过长({len(raw)} 字 · 超 {_MAX_LEN})")
 
     return TweetGateResult(passed=not reasons, reasons=tuple(reasons))
+
+
+# ── ★正文 URL 成本警告(warn-only · 不入上面 6 维一票否决)──────────────────────────
+# X 含链接推 $0.20/条 = 无链接($0.015)的十几倍。正文放 URL 不违规、只是贵 → 检出后前端
+# 提醒 admin(引流走简介链接 / 评论区,别在正文放 URL)。★这是【成本提醒】不是【门禁拦截】,
+# passed 不受影响 · 与买卖/预测/免责红线正交。
+# ★含 asia(点金自有域 midastrade.asia = 推文最可能出现的链接)· 常见 TLD 白名单避免误报
+_URL_RE = re.compile(
+    r"https?://|www\.[\w-]+|"
+    r"[\w-]+\.(?:com|net|org|io|cn|ai|co|me|app|asia|xyz|xin|top|vip|info|biz|dev|"
+    r"site|online|store|tech|cc|tv)\b",
+    re.IGNORECASE,
+)
+
+
+def has_body_url(text: str) -> bool:
+    """正文是否含 URL(含链接的 X 推贵十几倍 · 前端据此提醒成本 · ★非门禁否决项)。"""
+    return bool(_URL_RE.search(text or ""))

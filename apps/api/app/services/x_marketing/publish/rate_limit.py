@@ -10,8 +10,9 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-# 每平台每日上限(币安广场官方 100 条/天)· 没列的平台不限日额(如 x · 待其规则定)
-_DAILY_CAP: dict[str, int] = {"binance_square": 100}
+# 每平台每日上限 · 币安广场官方 100 · ★x=50(未验证账号 2026-05 起 50 条原创/天硬限,
+#   卡在账号级远早于烧钱;Hans 用量远在安全区,设 50 是防触顶的硬护栏,不是可选项)。
+_DAILY_CAP: dict[str, int] = {"binance_square": 100, "x": 50}
 _MIN_INTERVAL_S = 30  # 最小发帖间隔(秒)· 防短时间连发触发风控
 _TTL_S = 60 * 60 * 48  # 日计数 key TTL 2 天(自然跨日 + 兜底)
 
