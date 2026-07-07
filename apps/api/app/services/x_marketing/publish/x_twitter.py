@@ -16,6 +16,8 @@ import asyncio
 import logging
 from typing import Any
 
+import tweepy
+
 from app.core.config import settings
 from app.services.x_marketing.publish.base import PublishAdapter, PublishResult
 
@@ -67,8 +69,6 @@ class XTwitterAdapter(PublishAdapter):
 
     def _post_sync(self, text: str) -> Any:
         """同步 tweepy 发推(在 asyncio.to_thread 里跑)· OAuth 1.0a user-context。"""
-        import tweepy  # 延迟导入:仅真发时需要 · 模块加载不依赖 tweepy 装没装
-
         client = tweepy.Client(
             consumer_key=settings.x_consumer_key,
             consumer_secret=settings.x_consumer_secret,
@@ -89,8 +89,6 @@ class XTwitterAdapter(PublishAdapter):
                     "请精简正文或为账号开通 X Premium(解 25000 字上限)"
                 ),
             )
-        import tweepy  # 仅用于异常类型匹配 · 与 _post_sync 同源(装没装一致)
-
         try:
             resp = await asyncio.to_thread(self._post_sync, text)
         except tweepy.TooManyRequests:
