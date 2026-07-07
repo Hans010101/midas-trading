@@ -9,15 +9,22 @@
  *  - 页面请求只到 web(Next)容器(Caddy 把 /api 路由到 FastAPI)→ ★只有这层看得到页面访问,
  *    故埋点放此(服务端 Edge · 非浏览器 JS · 关 JS / 拦截不失真)。
  *  - matcher 已天然排除 api / _next / 所有带扩展名的静态资源(js/css/png/woff/map);此处再补:
- *    仅 GET · 非重定向(<300)· 排除已知 bot UA。
+ *    仅 GET · 非重定向(<300)· 排除已知 bot UA · ★排除 Next 预取请求(见下 Bug B)。
  *  - UV 去重靠匿名 cookie mid_vid(随机 hex · 无个人信息 · 1 年)· 首访下发。
  *  - 性能红线:只读 cookie + 判定;beacon 用 event.waitUntil fire-and-forget(响应返回后后台发,
  *    绝不阻塞页面)→ 内网 POST /track/visit,FastAPI 侧只 bump Redis(O(1))。隐私:只送匿名 vid。
+ *
+ * ★2026-07-07 两个 P0 修复(流量归因诊断 · 埋点判定纯函数已抽到 lib/track/beacon-rules.ts):
+ *  - Bug A(来源污染):自指判断的 selfHost 改用 req.headers.get('host')(Caddy 正确透传 apex),
+ *    不再用 req.nextUrl.hostname(standalone 下 = 内网 host → 自指失效 → 站内跳转误记 referral)。
+ *  - Bug B(PV 虚高):isPrefetchRequest 认 Next 15 预取头 → 预取请求不计 PV;真软导航照常计。
  */
 
 import { auth } from '@/auth'
 import { NextResponse } from 'next/server'
 import type { NextFetchEvent, NextRequest } from 'next/server'
+
+import { BOT_RE, classifyCrawler, extractRefHost, isPrefetchRequest } from '@/lib/track/beacon-rules'
 
 // /workbench 不在保护列表 · 匿名可访问看图
 // /admin:未登录跳登录(仅 UX · 真正边界 = 后端 AdminDep 403,普通用户进页也只看到无权限提示)
@@ -26,57 +33,6 @@ const AUTH_PAGES = ['/login', '/register']
 
 const VID_COOKIE = 'mid_vid'
 const VID_MAX_AGE = 60 * 60 * 24 * 365 // 1 年
-// 已知爬虫 / 预览抓取 / 监控 / 脚本 UA → 不计入 PV(避免被机器人刷爆)
-const BOT_RE =
-  /bot|crawl|spider|slurp|bing|baidu|yandex|duckduck|facebookexternalhit|embedly|quora|pinterest|slackbot|telegram|whatsapp|headless|lighthouse|monitor|uptime|pingdom|curl|wget|python-requests|go-http|axios|okhttp|java\//i
-
-// SEO 批6:AI/搜索爬虫 UA 分类(GEO 领先指标)。★只提取 bot 名分桶发后端 · UA 字符串本身不发。
-//   有序:先 AI(GPTBot/ClaudeBot…),再搜索(Googlebot/Bingbot · 前缀 search:)· 返回桶名或 null。
-const CRAWLER_UA: ReadonlyArray<readonly [RegExp, string]> = [
-  [/gptbot/i, 'GPTBot'],
-  [/oai-searchbot/i, 'OAI-SearchBot'],
-  [/chatgpt-user/i, 'ChatGPT-User'],
-  [/claudebot/i, 'ClaudeBot'],
-  [/claude-web/i, 'Claude-Web'],
-  [/anthropic-ai/i, 'anthropic-ai'],
-  [/perplexitybot/i, 'PerplexityBot'],
-  [/perplexity-user/i, 'Perplexity-User'],
-  [/google-extended/i, 'Google-Extended'],
-  [/applebot-extended/i, 'Applebot-Extended'],
-  [/bytespider/i, 'Bytespider'],
-  [/ccbot/i, 'CCBot'],
-  [/cohere-ai/i, 'cohere-ai'],
-  [/meta-externalagent/i, 'Meta-ExternalAgent'],
-  [/amazonbot/i, 'Amazonbot'],
-  [/youbot/i, 'YouBot'],
-  [/diffbot/i, 'Diffbot'],
-  [/googlebot/i, 'search:Googlebot'],
-  [/bingbot/i, 'search:Bingbot'],
-  [/baiduspider/i, 'search:Baiduspider'],
-  [/yandexbot/i, 'search:YandexBot'],
-  [/duckduckbot/i, 'search:DuckDuckBot'],
-]
-
-function classifyCrawler(ua: string): string | null {
-  for (const [re, name] of CRAWLER_UA) {
-    if (re.test(ua)) return name
-  }
-  return null
-}
-
-/** referrer → 来源域名 host(剥 path/query · 去 www.)· 同域/无 referrer → null(不上报)。 */
-function extractRefHost(referer: string | null, selfHost: string): string | null {
-  if (!referer) return null
-  try {
-    const u = new URL(referer)
-    let h = u.hostname.toLowerCase()
-    if (h.startsWith('www.')) h = h.slice(4)
-    if (!h || h === selfHost || h === `www.${selfHost}`) return null // 站内跳转不算来源
-    return h.slice(0, 120)
-  } catch {
-    return null
-  }
-}
 
 // 原路由保护逻辑(auth 包装 · 提供 req.auth)
 const runAuth = auth((req) => {
@@ -137,13 +93,16 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
   const isGetOk = req.method === 'GET' && res.status < 300
 
   // SEO 批6:AI/搜索爬虫计数(GEO 领先指标)· bot UA 独立于 PV 计。★只发 bot 名 · UA 不发。
+  //   爬虫不跑 Next 客户端、不会带预取头,故与下方 PV 的预取排除无关(爬虫计数不受 Bug B 修复影响)。
   if (isGetOk) {
     const bot = classifyCrawler(ua)
     if (bot) postTrack('/api/v1/track/crawler', { bot })
   }
 
-  // ── 人类 PV/UV(排除 bot)+ 来源归因 ──
-  const isPageView = isGetOk && !BOT_RE.test(ua)
+  // ── 人类 PV/UV(排除 bot + ★排除 Next 预取)+ 来源归因 ──
+  //   ★Bug B:预取请求(next-router-prefetch 等)是推测加载、非真实浏览 → 不计 PV;
+  //   真软导航(点击)不带预取头 → isPrefetchRequest=false → 照常计 PV。
+  const isPageView = isGetOk && !BOT_RE.test(ua) && !isPrefetchRequest(req.headers)
   if (isPageView) {
     let vid = req.cookies.get(VID_COOKIE)?.value
     if (!vid || vid.length < 8) {
@@ -157,7 +116,9 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
       )
     }
     // SEO 批6:来源归因(★D8:只取 referer 域名 host + utm_source · 不取 path/query · 不发 IP/UA)
-    const refHost = extractRefHost(req.headers.get('referer'), req.nextUrl.hostname)
+    //   ★Bug A:selfHost 传 req.headers.get('host')(Caddy header_up Host {host} 正确透传 apex),
+    //   不传 req.nextUrl.hostname(standalone 下为内网 host → 站内跳转自指判断会失效)。
+    const refHost = extractRefHost(req.headers.get('referer'), req.headers.get('host'))
     const utm = (req.nextUrl.searchParams.get('utm_source') ?? '').slice(0, 64)
     postTrack('/api/v1/track/visit', {
       visitor_id: vid,

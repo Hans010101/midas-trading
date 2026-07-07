@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from typing import Annotated
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Header, Response, status
 from pydantic import BaseModel, Field
@@ -54,8 +55,10 @@ async def track_visit(
         redis = await get_redis()
         await record_visit(redis, beacon.visitor_id.strip()[:64])
         # SEO 批6:来源桶 + 来源域名(与 PV/UV 分离 · 独立 Redis HASH · 不影响上面链路)
+        # ★Bug A 纵深防御:传自有公网域 → 同域 ref_host 归 internal(前端 extractRefHost 漏发时兜底)
         if beacon.ref_host or beacon.utm_source:
-            source = classify_source(beacon.ref_host, beacon.utm_source)
+            self_host = urlsplit(settings.public_web_base_url).hostname
+            source = classify_source(beacon.ref_host, beacon.utm_source, self_host=self_host)
             await record_source(redis, source, beacon.ref_host)
     except Exception:  # noqa: BLE001 — 埋点绝不影响主流程
         logger.warning("track_visit 记录失败(忽略)", exc_info=True)

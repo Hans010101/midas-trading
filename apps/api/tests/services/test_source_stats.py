@@ -73,3 +73,24 @@ def test_classify_source_bucket_set_bounded() -> None:
     assert classify_source("totally-unknown-domain-xyz.io") == "referral"
     assert classify_source(None, "weird-source-name") == "utm:other"
     assert classify_source(None, None) == "direct"
+
+
+def test_classify_source_self_host_internal() -> None:
+    """★Bug A 纵深防御:同域(自有公网域)ref_host 归 internal · 不误记 referral。
+
+    2026-07-07 流量归因诊断:站内跳转的同域 referrer 曾被误判成外部 referral、污染来源桶。
+    前端 extractRefHost 已用 Host 头剔自指,这是后端兜底(前端漏发时仍归 internal)。
+    """
+    self_host = "midastrade.asia"
+    # 同域(含 www / 端口不对称)→ internal
+    assert classify_source("midastrade.asia", None, self_host=self_host) == "internal"
+    assert classify_source("www.midastrade.asia", None, self_host=self_host) == "internal"
+    assert classify_source("midastrade.asia:443", None, self_host=self_host) == "internal"
+    assert classify_source("midastrade.asia", None, self_host="www.midastrade.asia") == "internal"
+    # 外部域不受影响:仍按规则表归类(不因传了 self_host 就误伤)
+    assert classify_source("www.google.com", None, self_host=self_host) == "google"
+    assert classify_source("some-blog.com", None, self_host=self_host) == "referral"
+    # utm 优先级仍高于 internal(投放显式来源可信)
+    assert classify_source("midastrade.asia", "newsletter", self_host=self_host) == "newsletter"
+    # self_host 缺省(None)→ 老行为不变(同域仍归 referral · 向后兼容)
+    assert classify_source("midastrade.asia", None) == "referral"

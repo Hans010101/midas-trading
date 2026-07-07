@@ -230,11 +230,19 @@ def _normalize_host(raw: str) -> str:
     return h[:120]
 
 
-def classify_source(ref_host: str | None, utm_source: str | None = None) -> str:
+def classify_source(
+    ref_host: str | None,
+    utm_source: str | None = None,
+    self_host: str | None = None,
+) -> str:
     """把 (referrer host, utm_source) 归到一个固定来源桶 · 纯函数 · 无 IO。
 
-    优先级:utm_source(投放·可信)白名单归一 > referrer host 规则表 > direct(无来源) >
-    referral(有来源但不在表中)。桶集合有界(防 admin 看板维度爆炸)。
+    优先级:utm_source(投放·可信)白名单归一 > ★自有域(internal) > referrer host 规则表 >
+    direct(无来源) > referral(有来源但不在表中)。桶集合有界(防 admin 看板维度爆炸)。
+
+    ★self_host(自有公网域·如 midastrade.asia)= Bug A 纵深防御:前端 extractRefHost 已用 Host
+      头剔除站内跳转,这里是后端兜底 —— 若前端漏发同域 ref_host(旧缓存/边界),也归 internal
+      而非误记 referral(2026-07-07 流量归因诊断:同域 referrer 被误判外部引荐、referral 全自指)。
     """
     if utm_source:
         key = utm_source.strip().lower()[:64]
@@ -245,6 +253,9 @@ def classify_source(ref_host: str | None, utm_source: str | None = None) -> str:
     if not ref_host or not ref_host.strip():
         return "direct"
     host = _normalize_host(ref_host)
+    # ★自有域(站内跳转)→ internal · 不污染 referral(两侧 _normalize_host 对称去 www/端口)
+    if self_host and self_host.strip() and host == _normalize_host(self_host):
+        return "internal"
     # ① 精确/后缀域名匹配(host == d 或 host 是 d 的子域)
     for domain, bucket in _EXACT_RULES:
         if host == domain or host.endswith("." + domain):
