@@ -142,3 +142,17 @@ async def test_platform_checked_set_roundtrip() -> None:
     #   见 test_auto_publish.test_resolve_platforms_whitelist_welds_x。
     await ag.set_platform_checked(r, "x", checked=True)
     assert await ag.is_platform_checked(r, "x") is True
+
+
+# ── ③b ★生成侧 6h 去重(按 gen_style 分线独立)────────────────────────
+@pytest.mark.asyncio
+async def test_gen_dedup_per_style_independent() -> None:
+    """生成侧 6h 去重按 gen_style 分线:default(币安)与 x_short 各自独立键,互不影响。"""
+    r = _FakeRedis()
+    assert await ag.is_recently_generated(r, "default", "BTCUSDT") is False
+    await ag.mark_generated(r, "default", "BTCUSDT")
+    assert await ag.is_recently_generated(r, "default", "BTCUSDT") is True    # 币安 BTC 已起草
+    assert await ag.is_recently_generated(r, "x_short", "BTCUSDT") is False   # ★x_short BTC 仍 fresh
+    await ag.mark_generated(r, "x_short", "BTCUSDT")
+    assert await ag.is_recently_generated(r, "x_short", "BTCUSDT") is True
+    assert await ag.is_recently_generated(r, "default", "ETHUSDT") is False   # 别的币不受影响

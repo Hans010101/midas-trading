@@ -318,3 +318,56 @@ def test_merge_xshort_empty_unchanged() -> None:
     binance = {"status": "skip", "reason": "disabled"}
     out = auto_draft.merge_xshort_drafted(binance, [])
     assert out == {"status": "skip", "reason": "disabled"}
+
+
+# ── ★生成侧 6h 去重(两平台统一规则:每轮最强 N + 6h 不重复)──────────────
+
+
+@pytest.mark.asyncio
+async def test_gen_dedup_skips_recently_generated(db_session, monkeypatch) -> None:  # noqa: ANN001
+    """★6h 内已起草的币被剔除,顺延到次强 fresh 币(每轮仍取最强 N·防同币 15min 刷屏)。"""
+    _mock_compliant_llm(monkeypatch)
+    r = _FakeRedis()
+    await auto_guard.set_enabled(r, enabled=True)
+    await auto_guard.mark_generated(r, "default", "BBBUSDT")  # BBB(|9|最强)6h 内已起草 → 剔除
+    _seed_snapshot(r, [
+        _snap_item("BBBUSDT", -9.0, transition=True),  # 最强但已起草 → 跳过
+        _snap_item("CCCUSDT", 4.0, transition=True),   # 次强 fresh → 起草
+        _snap_item("DDDUSDT", 1.0, transition=True),   # 再次 fresh → 起草(补满 2)
+    ])
+    out = await auto_draft.run_auto_draft(db_session, r, now=_in_window())
+    assert out["status"] == "ok"
+    # ★BBB 被 6h 去重剔除 → 起草次强两个 fresh(CCC+DDD)· 不含 BBB
+    assert {s for _, s in out["drafted"]} == {"CCCUSDT", "DDDUSDT"}
+    # ★新起草的被标记 6h(下轮不再重复)
+    assert await auto_guard.is_recently_generated(r, "default", "CCCUSDT") is True
+    assert await auto_guard.is_recently_generated(r, "default", "DDDUSDT") is True
+
+
+@pytest.mark.asyncio
+async def test_gen_dedup_all_recent_skips_round(db_session, monkeypatch) -> None:  # noqa: ANN001
+    """★候选全在 6h 内已起草 → 本轮无 fresh → skip no_candidates(不重复刷屏)。"""
+    _mock_compliant_llm(monkeypatch)
+    r = _FakeRedis()
+    await auto_guard.set_enabled(r, enabled=True)
+    await auto_guard.mark_generated(r, "default", "BBBUSDT")
+    await auto_guard.mark_generated(r, "default", "CCCUSDT")
+    _seed_snapshot(r, [
+        _snap_item("BBBUSDT", -9.0, transition=True),
+        _snap_item("CCCUSDT", 4.0, transition=True),
+    ])
+    out = await auto_draft.run_auto_draft(db_session, r, now=_in_window())
+    assert out == {"status": "skip", "reason": "no_candidates"}
+
+
+@pytest.mark.asyncio
+async def test_gen_dedup_xshort_independent_from_binance(db_session, monkeypatch) -> None:  # noqa: ANN001
+    """★x_short 生成去重与币安独立:币安起草过 BBB 不挡 x_short 起草 BBB(各自 gen_style 键)。"""
+    _mock_compliant_llm(monkeypatch)
+    r = _FakeRedis()
+    await auto_guard.set_enabled(r, enabled=True)
+    await auto_guard.mark_generated(r, "default", "BBBUSDT")  # 只币安线标了 BBB
+    _seed_snapshot(r, [_snap_item("BBBUSDT", -9.0, transition=True)])
+    xs = await auto_draft.run_auto_draft_xshort(db_session, r, now=_in_window())
+    assert {s for _, s in xs} == {"BBBUSDT"}  # ★x_short 线不受币安标记影响,照常起草 BBB
+    assert await auto_guard.is_recently_generated(r, "x_short", "BBBUSDT") is True  # x_short 线标了
