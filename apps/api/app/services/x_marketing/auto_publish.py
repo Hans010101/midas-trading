@@ -6,7 +6,7 @@ upsert_pending(source=auto)→ run_publish(复用发布层:撮合+台账+rate_li
 成功:mark_published(6h去重)+ incr_daily(日计数)+ reset_fail · 失败:record_fail,连续 3 次 → 开熔断。
 
 ★退避(护栏⑤):连续失败 FAIL_THRESHOLD 次自动开熔断 + TG 通知 Hans(best-effort)· 停所有自动发。
-★红线:自动发布只可能发 _AUTO_PUBLISH_ALLOWED 白名单平台(现仅 binance_square·X 焊死待 Hans 授权·
+★红线:自动发布只可能发 AUTO_PUBLISH_ALLOWED 白名单平台(现仅 binance_square·X 焊死待 Hans 授权·
 ADR 0050),零碰交易引擎(虚拟资金绝不真实下单)· 门禁不过 run_publish 内再拦。
 """
 
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 #   可能被自动发。X("x")不在白名单 → 即便 Redis 勾选被误翻 ON / 端点被绕,自动路径也
 #   【发不出 X】(代码级焊死 · 不降级成运行时 flag)。将来 Hans 验过 X 自动化质量并明确
 #   授权 → 白名单加 "x" 一行 + 后台勾选即启用,架构不动。
-_AUTO_PUBLISH_ALLOWED: frozenset[str] = frozenset({"binance_square"})
+AUTO_PUBLISH_ALLOWED: frozenset[str] = frozenset({"binance_square"})
 _DELAY_MIN_S = 60   # 单条自动发布随机延迟下限 1min(频率调整 · Hans 定)
 _DELAY_MAX_S = 420  # 上限 7min
 
@@ -44,7 +44,7 @@ async def resolve_auto_platforms(redis: Any) -> list[str]:
     ★勾选是分闸(admin 可只关币安自动发·总开关仍管起草);白名单是物理锁(X 焊死)。
     """
     return [
-        p for p in sorted(_AUTO_PUBLISH_ALLOWED)
+        p for p in sorted(AUTO_PUBLISH_ALLOWED)
         if await auto_guard.is_platform_checked(redis, p)
     ]
 

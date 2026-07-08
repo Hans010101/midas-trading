@@ -75,14 +75,23 @@ async def test_stop_disables_and_circuits(
 
 @pytest.mark.asyncio
 async def test_status_contains_platforms(client: AsyncClient, db_session: AsyncSession) -> None:
-    """status 带平台清单:binance 默认勾选+白名单内;x 默认不勾+★auto_allowed=False(暂未启用)。"""
+    """status 带平台清单:binance 勾选+白名单内;x 不勾+★auto_allowed=False(暂未启用)。
+
+    ★防状态污染(自审 nit3):端点测试共享持久 Redis(无 flushdb),binance 勾选值可能
+    被别的 toggle 测试留下 "0" → 先显式 POST checked=true 归位,不依赖「键未设」的默认。
+    (默认值语义本身由 tests/services/test_auto_guard.py 的 FakeRedis 单测钉死。)
+    """
     headers = await _admin_headers(db_session)
+    await client.post(  # 归位:显式勾上 binance(幂等·消除跨 run 残留)
+        "/api/v1/admin/x-auto/platforms/binance_square",
+        json={"checked": True}, headers=headers,
+    )
     r = await client.get("/api/v1/admin/x-auto/status", headers=headers)
     assert r.status_code == 200
     by_p = {p["platform"]: p for p in r.json()["platforms"]}
-    assert by_p["binance_square"]["checked"] is True       # 默认 ON(现状零变化)
+    assert by_p["binance_square"]["checked"] is True       # 勾上(显式归位后)
     assert by_p["binance_square"]["auto_allowed"] is True  # 白名单内
-    assert by_p["x"]["checked"] is False                   # ★默认 OFF
+    assert by_p["x"]["checked"] is False                   # ★OFF(x 键无任何写入路径)
     assert by_p["x"]["auto_allowed"] is False              # ★白名单外 = 暂未启用(UI 灰显)
 
 

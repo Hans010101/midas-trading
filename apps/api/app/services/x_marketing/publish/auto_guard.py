@@ -60,7 +60,7 @@ async def set_enabled(redis: Any, enabled: bool) -> None:  # noqa: FBT001
 # 自动发布 = 总开关(x:auto:enabled)AND 平台勾选(x:auto:platform:{p})双闸。
 # ★默认值按平台分:binance_square 默认 ON(未设 = 开 · 保持现状零语义变化);
 #   其它平台一律默认 OFF(★新平台加进 ADAPTERS 绝不自动开着发 · fail-safe 方向)。
-# ★★勾选只是配置层第一道门 —— X 能否自动发的【物理锁】在 auto_publish._AUTO_PUBLISH_ALLOWED
+# ★★勾选只是配置层第一道门 —— X 能否自动发的【物理锁】在 auto_publish.AUTO_PUBLISH_ALLOWED
 #   硬编码白名单(勾选被误翻也发不出白名单外的平台),见 auto_publish.py + ADR 0050。
 _PLATFORM_KEY_PREFIX = "x:auto:platform:"
 _PLATFORM_DEFAULT_ON = frozenset({"binance_square"})  # 现状:自动托管本就只发币安

@@ -24,7 +24,7 @@ Hans 拍板分两步:**第一步**(#173,已上线)x_short 自动起草、发布�
    **其它平台一律默认 OFF**(判 `=="1"` 才开,绝不用 `!="0"`)——新平台加进 ADAPTERS
    **绝不自动开着发**,fail-safe 方向(Redis 丢键也回落安全侧)。
 
-2. **★★硬编码白名单 = manual-first 的物理锁**(`auto_publish._AUTO_PUBLISH_ALLOWED`,
+2. **★★硬编码白名单 = manual-first 的物理锁**(`auto_publish.AUTO_PUBLISH_ALLOWED`,
    现 `{"binance_square"}`):自动路径读勾选配置,但**只有白名单内的平台可能被自动发**。
    X 不在白名单 → 即便 Redis 勾选被误翻 ON / 端点被绕,自动路径也**发不出 X**
    (代码级焊死,不降级成运行时 flag)。这是 Hans 明确认可的设计:「架子早搭 + X 绝不
@@ -45,7 +45,7 @@ Hans 拍板分两步:**第一步**(#173,已上线)x_short 自动起草、发布�
 
 ## 第二步启用清单(留给未来 · 须 Hans 明确授权)
 
-启用 X 自动发布时:① `_AUTO_PUBLISH_ALLOWED` 加 `"x"`;② Hans 后台勾选 X;
+启用 X 自动发布时:① `AUTO_PUBLISH_ALLOWED` 加 `"x"`;② Hans 后台勾选 X;
 ③ **按既定安全设计补齐**:per-platform 熔断(现全局熔断会让 X 失败连坐币安)、
 X 独立自动发布配额与频率、x_short↔platform 的选稿映射(自动发 X 应发 x_short 风格)。
 ①②之外的③在启用刀里做,本架子刀不预埋(避免无行为的死代码)。

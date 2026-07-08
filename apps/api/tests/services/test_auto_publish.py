@@ -170,7 +170,7 @@ def test_publish_delay_in_range() -> None:
 async def test_resolve_platforms_whitelist_welds_x() -> None:
     """★★红线焊死:把 x 勾选强翻 ON(模拟配置层被绕),resolve 仍只可能返回白名单平台。
 
-    X 不在 _AUTO_PUBLISH_ALLOWED → 无论 Redis 勾选值如何,自动路径永远拿不到 "x"。
+    X 不在 AUTO_PUBLISH_ALLOWED → 无论 Redis 勾选值如何,自动路径永远拿不到 "x"。
     """
     r = _FakeRedis()
     await auto_guard.set_platform_checked(r, "x", checked=True)  # 强翻 X 勾选
@@ -194,6 +194,8 @@ async def test_publish_skips_when_binance_unchecked(db_session) -> None:  # noqa
 @pytest.mark.asyncio
 async def test_publish_default_unset_platform_still_publishes(db_session, monkeypatch) -> None:  # noqa: ANN001
     """★现状零变化:平台勾选键从未设置(存量部署)→ binance 默认 ON → 照常自动发。"""
+    from app.services.x_marketing.publish.store import get_dispatch  # noqa: PLC0415
+
     _mock_publish(monkeypatch, "success")
     r = await _enabled_redis()  # 无任何 platform 键
     tweet = await _mk_tweet(db_session, passed=True)
@@ -201,3 +203,7 @@ async def test_publish_default_unset_platform_still_publishes(db_session, monkey
         db_session, r, tweet_id=tweet.id, symbol=tweet.symbol, now=_in_window(),
     )
     assert out["status"] == "success"  # 行为与旧 _PLATFORM 硬编码逐字节一致
+    # ★钉死 platforms[0]→upsert_pending 一环:dispatch 行 platform 就是 binance_square(自审 nit2)
+    dp = await get_dispatch(db_session, tweet.id, "binance_square")
+    assert dp is not None
+    assert dp.source == "auto"

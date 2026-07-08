@@ -1309,14 +1309,14 @@ class AutoPilotToggleIn(BaseModel):
 
 async def _platform_items(redis: Any) -> list[AutoPilotPlatformItem]:  # noqa: ANN401
     """从 registry.ADAPTERS 派生平台勾选清单(加平台 = registry 加一行,面板自动出现)。"""
-    from app.services.x_marketing.auto_publish import _AUTO_PUBLISH_ALLOWED  # noqa: PLC0415
+    from app.services.x_marketing.auto_publish import AUTO_PUBLISH_ALLOWED  # noqa: PLC0415
     from app.services.x_marketing.publish.registry import ADAPTERS  # noqa: PLC0415
 
     return [
         AutoPilotPlatformItem(
             platform=p,
             checked=await auto_guard.is_platform_checked(redis, p),
-            auto_allowed=p in _AUTO_PUBLISH_ALLOWED,
+            auto_allowed=p in AUTO_PUBLISH_ALLOWED,
             adapter_enabled=adapter.enabled,
         )
         for p, adapter in sorted(ADAPTERS.items())
@@ -1350,17 +1350,17 @@ async def toggle_auto_platform(
 ) -> AutoPilotStatus:
     """★平台分闸(总开关 AND 平台勾选)· 白名单外的平台(如 X)连勾选值都不可写:
 
-    配置层也焊死 —— 即便有人直改本端点,X 仍被 auto_publish._AUTO_PUBLISH_ALLOWED
+    配置层也焊死 —— 即便有人直改本端点,X 仍被 auto_publish.AUTO_PUBLISH_ALLOWED
     物理锁挡(双保险)。将来 Hans 授权启用 X = 白名单加一行,本端点随之自动解锁。
     """
-    from app.services.x_marketing.auto_publish import _AUTO_PUBLISH_ALLOWED  # noqa: PLC0415
+    from app.services.x_marketing.auto_publish import AUTO_PUBLISH_ALLOWED  # noqa: PLC0415
     from app.services.x_marketing.publish.registry import get_adapter  # noqa: PLC0415
 
     if get_adapter(platform) is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"未知平台:{platform}",
         )
-    if platform not in _AUTO_PUBLISH_ALLOWED:
+    if platform not in AUTO_PUBLISH_ALLOWED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"{platform} 自动发布暂未启用(白名单锁定 · 见 ADR 0050)",
