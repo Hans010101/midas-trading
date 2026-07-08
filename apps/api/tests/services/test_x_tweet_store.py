@@ -1,4 +1,4 @@
-"""x_tweet 数据层单测:create(门禁不过也存)/ list_recent(72h)/ cleanup(删行+返图路径·跳已发布)。
+"""x_tweet 数据层单测:create(门禁不过也存)/ list_recent(保留窗口内)/ cleanup(删行+返图路径·跳已发布)。
 
 DB 测(midas_test · CI 跑;本地无 PG 用 --collect-only 验证)。
 """
@@ -13,6 +13,7 @@ from sqlalchemy import select
 from app.models.platform_dispatch import PlatformDispatch
 from app.models.x_tweet import XTweet
 from app.services.x_marketing.store import (
+    RETENTION_HOURS,
     cleanup_expired,
     create_tweet,
     list_recent,
@@ -41,18 +42,18 @@ async def test_create_stores_pass_and_fail(db_session) -> None:  # noqa: ANN001
 
 
 @pytest.mark.asyncio
-async def test_list_recent_only_72h(db_session) -> None:  # noqa: ANN001
-    # ★发布层 PR-1:窗口 24h→72h · 超 72h 的不在列表(73h 老的排除,1h 新的留)
+async def test_list_recent_only_within_retention(db_session) -> None:  # noqa: ANN001
+    # ★保留窗口(RETENTION_HOURS·现 168h/一周)· 超窗的不在列表(窗+1h 老的排除,1h 新的留)
     now = datetime(2026, 6, 25, 12, 0, tzinfo=UTC)
     db_session.add_all([
         XTweet(symbol="OLDUSDT", bias="中性", tweet_text="老", compliance_passed=True,
-               created_at=now - timedelta(hours=73)),
+               created_at=now - timedelta(hours=RETENTION_HOURS + 1)),
         XTweet(symbol="NEWUSDT", bias="偏多", tweet_text="新", compliance_passed=True,
                created_at=now - timedelta(hours=1)),
     ])
     await db_session.commit()
     rows = await list_recent(db_session, now=now)
-    assert [r.symbol for r in rows] == ["NEWUSDT"]  # 只显 72h 内
+    assert [r.symbol for r in rows] == ["NEWUSDT"]  # 只显保留窗口内
 
 
 @pytest.mark.asyncio
@@ -65,7 +66,7 @@ async def test_set_image_path(db_session) -> None:  # noqa: ANN001
     assert ok is True
     refreshed = await list_recent(db_session)
     assert refreshed[0].image_path == "/shots/1.png"
-    # 行不存在 → False(截图回来但行已被 24h 清理)
+    # 行不存在 → False(截图回来但行已被保留窗口清理)
     assert await set_image_path(db_session, 999999, "/shots/x.png") is False
 
 
@@ -74,7 +75,8 @@ async def test_cleanup_deletes_old_and_returns_image_paths(db_session) -> None: 
     now = datetime(2026, 6, 25, 12, 0, tzinfo=UTC)
     db_session.add_all([
         XTweet(symbol="OLDUSDT", bias="偏空", tweet_text="老", compliance_passed=True,
-               image_path="/vol/x-shots/old.png", created_at=now - timedelta(hours=73)),
+               image_path="/vol/x-shots/old.png",
+               created_at=now - timedelta(hours=RETENTION_HOURS + 1)),
         XTweet(symbol="NEWUSDT", bias="偏多", tweet_text="新", compliance_passed=True,
                created_at=now - timedelta(hours=1)),
     ])
@@ -82,17 +84,18 @@ async def test_cleanup_deletes_old_and_returns_image_paths(db_session) -> None: 
     paths = await cleanup_expired(db_session, now=now)
     assert paths == ["/vol/x-shots/old.png"]  # ★返回旧行图路径给 worker 删文件
     remaining = await list_recent(db_session, now=now)
-    assert [r.symbol for r in remaining] == ["NEWUSDT"]  # 旧的(>72h)删了,新的留
+    assert [r.symbol for r in remaining] == ["NEWUSDT"]  # 旧的(超窗)删了,新的留
 
 
 @pytest.mark.asyncio
 async def test_cleanup_skips_published(db_session) -> None:  # noqa: ANN001
-    # ★发布层 PR-1:有 platform_dispatch 台账的推文(已发布)豁免 72h 清理(留审计)
+    # ★发布层 PR-1:有 platform_dispatch 台账的推文(已发布)豁免清理(留审计)
     now = datetime(2026, 6, 25, 12, 0, tzinfo=UTC)
+    old_h = RETENTION_HOURS + 1  # 两条都超保留窗口
     pub = XTweet(symbol="PUBUSDT", bias="偏多", tweet_text="已发", compliance_passed=True,
-                 image_path="/vol/x-shots/pub.png", created_at=now - timedelta(hours=100))
+                 image_path="/vol/x-shots/pub.png", created_at=now - timedelta(hours=old_h))
     plain = XTweet(symbol="OLDUSDT", bias="偏空", tweet_text="没发", compliance_passed=True,
-                   created_at=now - timedelta(hours=100))
+                   created_at=now - timedelta(hours=old_h))
     db_session.add_all([pub, plain])
     await db_session.commit()
     db_session.add(PlatformDispatch(tweet_id=pub.id, platform="binance_square", status="success"))
@@ -102,4 +105,4 @@ async def test_cleanup_skips_published(db_session) -> None:  # noqa: ANN001
     assert paths == []  # 没发的没图;已发的豁免不删 → 无图路径返回
     survivors = (await db_session.execute(select(XTweet.symbol))).scalars().all()
     assert "PUBUSDT" in survivors  # ★已发布的留着(审计)
-    assert "OLDUSDT" not in survivors  # 没发的(>72h 无 dispatch)被清
+    assert "OLDUSDT" not in survivors  # 没发的(超窗 无 dispatch)被清

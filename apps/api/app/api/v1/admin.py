@@ -1128,7 +1128,7 @@ class XTweetDispatchItem(BaseModel):
 
 
 class XTweetItem(BaseModel):
-    """单条推文(后台展示 · 72h 临时)。"""
+    """单条推文(后台展示 · 7天 临时)。"""
 
     id: int
     symbol: str
@@ -1171,9 +1171,9 @@ def _to_tweet_item(
     )
 
 
-@router.get("/x-tweets", summary="今日推文列表(72h · 含门禁结果 + 各平台发布状态)")
+@router.get("/x-tweets", summary="今日推文列表(7天 · 含门禁结果 + 各平台发布状态)")
 async def list_x_tweets(_admin: AdminDep, db: DbDep) -> XTweetListOut:
-    """最近 72h 生成的推文(created_at desc)· ★门禁不过的也列出 · 带各平台发布状态。"""
+    """最近 7天 生成的推文(created_at desc)· ★门禁不过的也列出 · 带各平台发布状态。"""
     rows = await list_recent(db)
     # ★批量查 dispatches(一次)避 N+1 · 按 tweet_id 分组
     by_tweet: dict[int, list[PlatformDispatch]] = {}
@@ -1185,7 +1185,7 @@ async def list_x_tweets(_admin: AdminDep, db: DbDep) -> XTweetListOut:
 
 @router.get("/x-tweets/{tweet_id}", summary="单条推文详情(含各平台发布状态)")
 async def get_x_tweet(tweet_id: int, _admin: AdminDep, db: DbDep) -> XTweetItem:
-    """单条推文详情 · 不存在 404(可能已过 72h 被清理)。"""
+    """单条推文详情 · 不存在 404(可能已过 7天 被清理)。"""
     row = await get_tweet(db, tweet_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="推文不存在或已过期")
