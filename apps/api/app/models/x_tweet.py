@@ -45,6 +45,11 @@ class XTweet(Base):
     auto_drafted: Mapped[bool] = mapped_column(
         Boolean, server_default="false", nullable=False,
     )
+    # ★内容生成风格/平台(step1 分平台地基)· default=币安广场长文 / x_short=X 短推 ·
+    #   server_default 兼容老数据(存量行=default)· 将来头条/小红书加枚举值即扩展。
+    gen_style: Mapped[str] = mapped_column(
+        String(16), server_default="default", nullable=False,
+    )
     # 触发生成的 admin(删 admin 置空)
     generated_by: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="SET NULL"), nullable=True,

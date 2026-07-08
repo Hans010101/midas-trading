@@ -140,6 +140,7 @@ async def fetch_extra_metrics(
 async def generate_and_store(
     session: AsyncSession, contexts: list[TweetContext], *, generated_by: UUID | None,
     auto_drafted: bool = False, ch: ClickHouseClient | None = None,
+    style: str = "default",
 ) -> list[XTweet]:
     """逐币:DeepSeek 生成 → 拼标签 → 门禁 → 存行(★门禁不过也存+reason)· 返回创建的行。
 
@@ -147,6 +148,7 @@ async def generate_and_store(
     单币失败(LLM 异常)隔离:log + 跳过,不影响其他币(批量稳健)。
     auto_drafted=True:自动托管起草(待补发素材 + 计入 30 日配额)· 默认 False(手动)。
     ★ch 给定(刀2):先富化 5 扩字段(做T零碰·失败整体降级到基础字段);None=不富化(向后兼容)。
+    ★style(step1 分平台):default=币安广场长文 / x_short=X 短推 · 决定 prompt+标签+入库 gen_style。
     """
     if ch is not None:
         try:
@@ -156,8 +158,8 @@ async def generate_and_store(
     created: list[XTweet] = []
     for ctx in contexts:
         try:
-            resp = await generate_tweet_text(ctx)
-            tweet = append_tags(resp.content, ctx.symbol)
+            resp = await generate_tweet_text(ctx, style)
+            tweet = append_tags(resp.content, ctx.symbol, style)
             result = validate_tweet(tweet)
             row = await create_tweet(
                 session,
@@ -168,6 +170,7 @@ async def generate_and_store(
                 compliance_reason=None if result.passed else " | ".join(result.reasons),
                 generated_by=generated_by,
                 auto_drafted=auto_drafted,
+                gen_style=style,
             )
             created.append(row)
         except Exception as exc:  # noqa: BLE001 · 单币失败隔离,不中断批量
@@ -177,13 +180,16 @@ async def generate_and_store(
     return created
 
 
-def enqueue_daily_generation(generated_by: UUID) -> None:
-    """admin 触发 · enqueue worker 跑生成(★异步:DeepSeek 慢,不阻塞 HTTP)· 走 Celery broker。"""
+def enqueue_daily_generation(generated_by: UUID, style: str = "default") -> None:
+    """admin 触发 · enqueue worker 跑生成(★异步:DeepSeek 慢,不阻塞 HTTP)· 走 Celery broker。
+
+    style(step1 分平台):default=币安广场长文 / x_short=X 短推 · 传给 worker 生成任务。
+    """
     global _celery_client
     if _celery_client is None:
         from celery import Celery  # noqa: PLC0415
 
         broker = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/1")
         _celery_client = Celery("midas-api", broker=broker)
-    _celery_client.send_task(_GENERATE_TASK, args=[str(generated_by)])
-    logger.info("[x-tweets] enqueue 生成任务 · by=%s", generated_by)
+    _celery_client.send_task(_GENERATE_TASK, args=[str(generated_by), style])
+    logger.info("[x-tweets] enqueue 生成任务 · by=%s · style=%s", generated_by, style)

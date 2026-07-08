@@ -89,6 +89,10 @@ class Settings(BaseSettings):
     x_consumer_secret: str = ""       # Consumer Secret(API Secret)
     x_access_token: str = ""          # Access Token(用户令牌)
     x_access_token_secret: str = ""   # Access Token Secret(用户令牌密钥)
+    # X 发推加权字数上限(CJK=2)· 免费层 280;★Premium(蓝勾)可发长推 → 设 25000。
+    #   仅作发布前友好预检(X 端做权威校验);默认 280 保守,Hans 有 Premium 则 env 设
+    #   X_TWEET_MAX_WEIGHTED=25000。超限仍【拒发不截断】(保尾部免责红线)。
+    x_tweet_max_weighted: int = 280
 
     # 阿里云 OSS · 周报素材原始文件归档(第三刀-B · prefix report-materials/ · 桶 lifecycle 7 天)
     # ⚠ 敏感:oss_access_key_id/secret 只从 env 读 · 绝不进 git/前端/DB/日志(脱敏)· 空 = 上传未启用。

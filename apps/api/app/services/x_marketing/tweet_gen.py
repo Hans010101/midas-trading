@@ -82,9 +82,36 @@ _SYSTEM = (
 )
 
 
-def build_system_prompt() -> str:
-    """system prompt(纯函数 · 可单测)。"""
-    return _SYSTEM
+# ── ★X 短推 system prompt(step1)· 冷静克制『结构体检』口吻(账号调性:只读结构不喊上车)──
+_SYSTEM_X_SHORT = (
+    "你是点金 Midas 的加密盯盘小编,给 X(推特)写【一条超短推】。\n"
+    "★口吻:冷静、克制的『结构体检』——像医生念体检指标那样,把此刻盘面的关键结构点出来,"
+    "★犀利但不惊悚、不渲染情绪、不制造焦虑(账号调性是『只读结构、不喊你上车』)。"
+    "开头一句大白话把此刻状态点破,再带一两个最有信息量的数据(24h/15m 涨跌%、量能倍数、"
+    "OI 变化、费率——挑最有代表性的),点到为止别堆细节。\n"
+    "★只描述【此刻正在发生的】:绝不预测方向(涨/跌/突破/反弹一个都不许猜、★不用反问揣测),"
+    "绝不教操作(买入/卖出/建议/抄底/止损/止盈/加仓/减仓一律禁)。数字照抄给定值绝不编;"
+    "费率/多空比只说『多头/空头』不用『做多/做空』;OI 说『仓单/持仓在缩』别用『减仓』。\n"
+    "★禁词:暴涨/暴跌/大涨/大跌/将涨/将跌/看涨/看跌/冲高/探底/翻倍/稳赚"
+    "(跌得多用口语『跌得狠』这类,别惊悚)。定调只用偏多/偏空/中性(或偏强/偏弱/震荡)。\n"
+    "★不自己加 # 话题标签(系统统一拼 1-2 个)· ★★绝不放任何链接/网址"
+    "(不写 http、不写域名、不写『详见 xxx』——含链接的推成本是普通的十几倍)。\n"
+    "★结尾必须原样带上『仅供参考,不构成投资建议』。\n"
+    "【长度红线】连同免责控制在【110 中文字以内】,越精炼越好,只留最关键的结构判断。"
+)
+
+# ── ★平台风格注册表(内容生成分平台地基)· 加平台=加一条 style(prompt+长度)· 不重构 ─────
+#   default = 币安广场长文(300-500 字·现状);x_short = X 短犀利体检(≤110 字·step1)。
+#   数据共享 TweetContext,只 system prompt + 收尾指令不同;将来头条/小红书加一条即扩展。
+_STYLES: dict[str, str] = {
+    "default": _SYSTEM,
+    "x_short": _SYSTEM_X_SHORT,
+}
+
+
+def build_system_prompt(style: str = "default") -> str:
+    """按平台 style 取 system prompt(纯函数 · 可单测)· 未知 style 回退 default。"""
+    return _STYLES.get(style, _SYSTEM)
 
 
 def _fmt(v: float | None, suffix: str = "", pct: bool = False) -> str:
@@ -106,10 +133,11 @@ def _fmt_usd(v: float) -> str:
     return f"{v:.0f} 美元"
 
 
-def build_user_prompt(ctx: TweetContext) -> str:
+def build_user_prompt(ctx: TweetContext, style: str = "default") -> str:
     """user prompt(纯函数 · 可单测)· 只喂【当前】结构事实,不喂任何预测倾向。
 
     ★口语化(PR·刀1):字段带内联「说人话」提示,但数值(涨跌/%B/费率)照喂给定值不改。
+    ★style=x_short:收尾指令换成『冷静克制的结构体检超短推 ≤110 字』(system 已定调,这里对齐)。
     """
     zone = ctx.zone_label
     if ctx.pct_b is not None:
@@ -138,14 +166,22 @@ def build_user_prompt(ctx: TweetContext) -> str:
         lines.append(f"15 分钟涨跌:{ctx.change_pct_15m:+.2f}%(如实报 · 别编)")
     if ctx.volume_ratio is not None:
         lines.append(f"15 分钟成交量:约近期均量的 {ctx.volume_ratio:.1f} 倍")
-    lines.append(
-        "\n把以上【当前】状态写成一条散户秒懂的口语盯盘短帖:说人话、带点情绪、只讲此刻、"
-        "不揣测之后、不暗示操作、结尾带『仅供参考,不构成投资建议』(遵守 system 全部规则)。",
-    )
+    if style == "x_short":
+        lines.append(
+            "\n把以上【当前】状态写成一条【冷静克制的结构体检】超短推:犀利但不惊悚、不渲染情绪、"
+            "只讲此刻、不揣测之后、不暗示操作、★连同免责 ≤110 中文字、结尾带"
+            "『仅供参考,不构成投资建议』、绝不放链接(遵守 system 全部规则)。",
+        )
+    else:
+        lines.append(
+            "\n把以上【当前】状态写成一条散户秒懂的口语盯盘短帖:说人话、带点情绪、只讲此刻、"
+            "不揣测之后、不暗示操作、结尾带『仅供参考,不构成投资建议』(遵守 system 全部规则)。",
+        )
     return "\n".join(lines)
 
 
 _BRAND_TAG = "#点金Midas"
+_CATEGORY_TAG = "#加密货币"  # X 短推第二标签用话题类(蹭话题利传播·Hans 定)
 
 
 def coin_tag(symbol: str) -> str:
@@ -154,14 +190,18 @@ def coin_tag(symbol: str) -> str:
     return f"#{base}"
 
 
-def append_tags(text: str, symbol: str) -> str:
-    """末尾拼接 #币种 + #点金Midas(★代码侧 · 不依赖 AI · 标签纯标识不含违规词,不触发门禁)。"""
-    return f"{text.rstrip()}\n{coin_tag(symbol)} {_BRAND_TAG}"
+def append_tags(text: str, symbol: str, style: str = "default") -> str:
+    """末尾拼接 #币种 + 第二标签(★代码侧 · 纯标识不含违规词/不触发门禁 · ★绝不含链接)。
+
+    default(币安长文)→ 第二标签 #点金Midas(品牌);x_short(X)→ #加密货币(话题·利 X 传播)。
+    """
+    second = _CATEGORY_TAG if style == "x_short" else _BRAND_TAG
+    return f"{text.rstrip()}\n{coin_tag(symbol)} {second}"
 
 
-async def generate_tweet_text(ctx: TweetContext) -> LLMResponse:
-    """调 DeepSeek(无 key 自动 mock)生成推文文本 · 返回 LLMResponse(.text / .is_mock)。
+async def generate_tweet_text(ctx: TweetContext, style: str = "default") -> LLMResponse:
+    """调 DeepSeek(无 key 自动 mock)生成推文文本 · style 选平台风格(default 长文 / x_short 短推)。
 
     ★只生成,不过门禁(门禁由调用方 compliance.validate_tweet 做)· 不发 X、不写库。
     """
-    return await ainvoke(build_user_prompt(ctx), system=build_system_prompt())
+    return await ainvoke(build_user_prompt(ctx, style), system=build_system_prompt(style))
