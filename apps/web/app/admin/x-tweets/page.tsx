@@ -6,13 +6,14 @@
  * ★ 安全边界后端 AdminDep(403)· 数据全来自 admin API,普通用户手输 URL → 后端 403 → 降级。
  * 流程:点「生成今日推文」→ 后端异步选币+DeepSeek生成+门禁 → 列表展示(★门禁不过的也列,标红不可发)。
  * ★ 发布:门禁通过的推文可【admin 单次点】发布到 币安广场 / X(tweepy OAuth 1.0a)· 各自状态/按钮。
- *   含 URL 的推有成本提醒(X $0.20 ≈ 十几倍)· 截图(image_path)PR-4 才有,现阶段不显图。
+ *   含 URL 的推有成本提醒(X $0.20 ≈ 十几倍)。
+ * ★ 截图:xshot 异步回填 image_path → 列表轮询(近 20min 有缺图行 · 12s)自动刷出 → blob 显图。
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { AdminNav } from '@/components/admin/admin-nav'
 import { AutoPilotPanel } from '@/components/admin/auto-pilot-panel'
@@ -38,32 +39,36 @@ function BiasBadge({ bias }: { bias: string }) {
   )
 }
 
-/** K线主图截图:★端点 AdminDep → authed fetch blob → objectURL → <img>。无图/未截好显占位。 */
+/** K线主图截图:★端点 AdminDep → authed fetch blob → objectURL → <img>。无图/未截好显占位。
+ *
+ * ★配图修复(2026-07-08):旧版 useEffect 一次性 fetch——瞬时失败/挂起 = 永久占位、无重试、
+ * 不随列表轮询自愈。改 React Query:失败自动重试 ×2 · staleTime=Infinity(截图内容不变,
+ * 拿到就不再打端点)· 列表轮询刷出 image_path 后 hasImage 翻真 → enabled 生效自动拉图。
+ */
 function XTweetImage({ id, hasImage, token }: { id: number; hasImage: boolean; token: string }) {
-  const [url, setUrl] = useState<string>('')
-  const [failed, setFailed] = useState(false)
+  const imgQuery = useQuery({
+    queryKey: ['admin-x-tweet-image', id],
+    queryFn: () => fetchXTweetImage(token, id),
+    enabled: hasImage && token !== '',
+    staleTime: Infinity,
+    retry: 2, // ★瞬时网络失败自动重试(旧版一次失败=永久「读取失败」)
+  })
+  // blob → objectURL(随 blob 重建 · 卸载/更换时 revoke 防内存泄漏)
+  const url = useMemo(
+    () => (imgQuery.data ? URL.createObjectURL(imgQuery.data) : ''),
+    [imgQuery.data],
+  )
+  useEffect(
+    () => () => {
+      if (url) URL.revokeObjectURL(url)
+    },
+    [url],
+  )
 
-  useEffect(() => {
-    if (!hasImage || token === '') return
-    let revoked = ''
-    let alive = true
-    fetchXTweetImage(token, id)
-      .then((blob) => {
-        if (!alive) return
-        revoked = URL.createObjectURL(blob)
-        setUrl(revoked)
-      })
-      .catch(() => alive && setFailed(true))
-    return () => {
-      alive = false
-      if (revoked) URL.revokeObjectURL(revoked)
-    }
-  }, [id, hasImage, token])
-
-  if (!hasImage || failed) {
+  if (!hasImage || imgQuery.isError) {
     return (
       <div className="flex h-32 items-center justify-center rounded-md border border-dashed border-paper text-xs text-muted-foreground">
-        {hasImage ? '截图读取失败' : '截图生成中…(异步,稍后刷新)'}
+        {hasImage ? '截图读取失败' : '截图生成中…(截好自动显示)'}
       </div>
     )
   }
@@ -249,6 +254,16 @@ export default function AdminXTweetsPage() {
     queryKey: ['admin-x-tweets'],
     queryFn: ({ signal }) => fetchXTweets(token, signal),
     enabled: token !== '',
+    // ★配图轮询(2026-07-08):近 20 分钟内还有未截好图的推 → 12s 一刷(截图串行 10-15s/张·
+    //   异步回填 image_path);全部有图 / 超窗(截图彻底失败的老行)→ 返回 false 自动停,不空转。
+    refetchInterval: (q) => {
+      const items = q.state.data?.items ?? []
+      const cutoff = Date.now() - 20 * 60_000
+      const waiting = items.some(
+        (t) => t.image_path === null && new Date(t.created_at).getTime() > cutoff,
+      )
+      return waiting ? 12_000 : false
+    },
   })
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: ['admin-x-tweets'] })
