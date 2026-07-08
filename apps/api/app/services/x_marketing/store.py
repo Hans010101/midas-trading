@@ -1,6 +1,7 @@
-"""x_tweet 数据访问(阶段4a · PR-1 · 发布层 PR-1 清理改 72h)· create / list_recent / cleanup。
+"""x_tweet 数据访问(阶段4a · PR-1)· create / list_recent / cleanup。
 
-★72h 临时:列表只显 72h 内;清理删 created_at 超 72h 的行 + 返 image_path 给 worker 删截图。
+★保留窗口一周(168h · Hans 定「最多存一周」):列表只显 7 天内;清理删 created_at 超 7 天的行
+  + 返 image_path 给 worker 删截图。
 ★发布层 PR-1:已发布(有 platform_dispatch 台账)的推文【豁免清理】—— 外部帖子永久,留它发了啥的审计。
 """
 
@@ -18,7 +19,7 @@ from app.models.x_tweet import XTweet
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-RETENTION_HOURS = 72  # ★72h 临时存储窗口(发布层 PR-1 从 24h 放宽)
+RETENTION_HOURS = 168  # ★保留窗口一周(7×24·Hans 定「最多存一周」· 曾 24h→72h→168h)
 
 
 async def create_tweet(
@@ -59,7 +60,7 @@ async def create_tweet(
 async def list_recent(
     session: AsyncSession, *, now: datetime | None = None,
 ) -> list[XTweet]:
-    """列最近 24h 的推文(created_at desc)· 后台面板只显 24h 内。"""
+    """列最近 7 天(RETENTION_HOURS)的推文(created_at desc)· 后台面板只显一周内。"""
     now = now or datetime.now(tz=UTC)
     since = now - timedelta(hours=RETENTION_HOURS)
     stmt = (
@@ -91,7 +92,7 @@ async def set_image_path(
 async def cleanup_expired(
     session: AsyncSession, *, now: datetime | None = None,
 ) -> list[str]:
-    """删 created_at 超 72h 的行 · 返回这些行的 image_path(非空)给调用方删截图文件。
+    """删 created_at 超 7 天(RETENTION_HOURS)的行 · 返回这些行的 image_path(非空)给调用方删截图。
 
     ★先收 image_path 再删行(删后查不到)· 返回的路径由 worker 任务 os.remove(本服务不碰文件系统)。
     ★发布层 PR-1:已发布(有 platform_dispatch 台账)的推文【豁免】—— notin_ 子查询排除,留审计。

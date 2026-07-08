@@ -23,11 +23,13 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from app.services.clickhouse_client import ClickHouseClient
+    from app.services.x_marketing.tweet_gen import TweetContext
 
 logger = logging.getLogger(__name__)
 
 _SNAPSHOT_KEY = "boll:snapshot:latest"  # boll_scan 落 · 本任务只读挑币
 _MAX_PER_ROUND = 2                      # 每轮最多起草 1-2 条(Hans 定)
+_CANDIDATE_POOL = 20                    # ★选候选池上限(从中剔 6h 内已起草的·再取最强 N)
 
 
 async def _read_snapshot_items(redis: Any) -> list[dict[str, Any]]:
@@ -37,6 +39,23 @@ async def _read_snapshot_items(redis: Any) -> list[dict[str, Any]]:
     data = json.loads(raw)
     items = data.get("items", []) if isinstance(data, dict) else []
     return items if isinstance(items, list) else []
+
+
+async def _pick_fresh_contexts(
+    redis: Any, items: list[dict[str, Any]], *, gen_style: str, limit: int,
+) -> list[TweetContext]:
+    """★生成侧 6h 去重(Hans 定·两平台统一规则):候选按 |change| 降序 → 剔除 6h 内已起草
+    的同风格同币 → 取前 limit 个 fresh。同币 6h 内不再重复自动起草(防每 15min 刷屏),
+    但每轮仍取当前【最强的】(不够 fresh 时顺延到次强),故「每轮最强 N + 6h 不重复」两条统一。"""
+    candidates = pick_auto_contexts(items, limit=_CANDIDATE_POOL)
+    fresh: list[TweetContext] = []
+    for c in candidates:
+        if await auto_guard.is_recently_generated(redis, gen_style, c.symbol):
+            continue
+        fresh.append(c)
+        if len(fresh) >= limit:
+            break
+    return fresh
 
 
 async def run_auto_draft(
@@ -61,16 +80,20 @@ async def run_auto_draft(
     if remaining <= 0:
         return {"status": "skip", "reason": "daily_cap"}
 
-    # 选币(口径 b · |change| 降序)· 取 min(每轮上限, 日剩余)
+    # 选币(口径 b · |change| 降序)· ★生成侧 6h 去重(剔 6h 内已起草)· 取 min(每轮上限, 日剩余)
     items = await _read_snapshot_items(redis)
-    contexts = pick_auto_contexts(items, limit=min(_MAX_PER_ROUND, remaining))
+    contexts = await _pick_fresh_contexts(
+        redis, items, gen_style="default", limit=min(_MAX_PER_ROUND, remaining),
+    )
     if not contexts:
         return {"status": "skip", "reason": "no_candidates"}
 
-    # ★两条都起草存后台(不在起草层去重)· auto_drafted=True(待补发素材 + 计入日配额)
+    # ★起草存后台 · auto_drafted=True(待补发素材 + 计入日配额)· gen_style 默认 "default"(币安长文)
     rows = await generate_and_store(
         session, contexts, generated_by=None, auto_drafted=True, ch=ch,
     )
+    for r in rows:  # ★标记 6h 已起草(只标真生成成功的·防重复刷屏)
+        await auto_guard.mark_generated(redis, "default", r.symbol)
     drafted = [(r.id, r.symbol) for r in rows]  # 全部供截图
 
     # ★理解B(Hans 定):按 rows 顺序(|change| 降序)找第一个「门禁过 且 6h 内没发过」的 → 只发它。
@@ -109,7 +132,7 @@ async def run_auto_draft_xshort(
       (★不受币安 daily_cap / circuit 影响 · 独立配额避免挤占)。
     - ★★x_short draft 永不自动发布:本函数【不返回 target】,只返回 (id,sym) 供截图;
       x_short 只能人工发(auto_publish.AUTO_PUBLISH_ALLOWED 白名单焊死不含 x · manual-first 不破)。
-    - 选币同币安口径 b(每轮 ≤ 2 · 同一快照 → 同批热门币)· gen_style=x_short。
+    - 选币同币安口径 b(每轮 ≤ 2·★同套统一规则:每轮最强 N + 6h 生成去重)· gen_style=x_short。
 
     返回 [(id, symbol)] 供截图;守卫不过 / 无候选 / 无生成行 → []。
     """
@@ -121,7 +144,10 @@ async def run_auto_draft_xshort(
     if remaining <= 0:
         return []
     items = await _read_snapshot_items(redis)
-    contexts = pick_auto_contexts(items, limit=min(_MAX_PER_ROUND, remaining))
+    # ★生成侧 6h 去重(与币安同规则·各自 gen_style 独立键)· 剔 6h 内已起草 → 取最强 N
+    contexts = await _pick_fresh_contexts(
+        redis, items, gen_style="x_short", limit=min(_MAX_PER_ROUND, remaining),
+    )
     if not contexts:
         return []
     # ★style="x_short" → 短推 prompt + #加密货币 标签 + gen_style=x_short 入库 · auto_drafted=True
@@ -131,6 +157,8 @@ async def run_auto_draft_xshort(
     if not rows:
         return []
     await auto_guard.incr_xshort_draft(redis, len(rows), now)
+    for r in rows:  # ★标记 6h 已起草(x_short 独立键)
+        await auto_guard.mark_generated(redis, "x_short", r.symbol)
     logger.info(
         "[x-auto] X 短推自动起草 · %d 条(gen_style=x_short · ★手动发·永不自动发)",
         len(rows),

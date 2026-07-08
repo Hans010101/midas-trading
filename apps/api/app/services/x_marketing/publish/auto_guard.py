@@ -20,7 +20,8 @@ from app.services.visit_stats import CN_TZ
 # ── 护栏常量(Hans 定 · 不走 env)──────────────────────────────────────
 AUTO_DAILY_MAX = 30                  # 自动托管每日发布上限(独立于 TG 200 / 手动 100)
 XSHORT_DRAFT_DAILY_MAX = 30          # ★X 短推每日【自动起草】上限 · 独立于币安配额 · 手动发 · 可调
-DEDUP_TTL_S = 6 * 3600               # 同 symbol 6h 去重
+DEDUP_TTL_S = 6 * 3600               # 同 symbol 6h 去重(发布侧)
+GEN_DEDUP_TTL_S = 6 * 3600           # ★生成侧 6h 去重(同风格同币 6h 内不重复【自动起草】· Hans 定)
 FAIL_THRESHOLD = 3                   # 连续失败 N 次 → 开熔断(不硬刚,降封号)
 _WINDOW_START = time(7, 30)          # 大中华区发布窗起(含)
 _WINDOW_END = time(22, 30)           # 大中华区发布窗止(含)
@@ -34,6 +35,11 @@ _PENDING = "x:auto:pending_tasks"    # set:排队中的 auto-publish 任务 id(�
 
 def _published_key(symbol: str) -> str:
     return f"x:auto:published:{symbol}"
+
+
+def _gen_key(gen_style: str, symbol: str) -> str:
+    """★生成侧 6h 去重键(step-规则统一)· 按 gen_style 分线(default 币安 / x_short)独立去重。"""
+    return f"x:auto:gen:{gen_style}:{symbol}"
 
 
 def _daily_key(now: datetime | None = None) -> str:
@@ -95,6 +101,16 @@ async def is_recently_published(redis: Any, symbol: str) -> bool:
 
 async def mark_published(redis: Any, symbol: str) -> None:
     await redis.set(_published_key(symbol), "1", ex=DEDUP_TTL_S)
+
+
+# ── ③b ★生成侧 6h 去重(同风格同币 6h 内不重复自动起草 · 两平台统一规则)──────────
+async def is_recently_generated(redis: Any, gen_style: str, symbol: str) -> bool:
+    """该 gen_style 下 symbol 6h 内是否已自动起草过(防同币每 15min 重复刷屏)。"""
+    return bool(await redis.get(_gen_key(gen_style, symbol)))
+
+
+async def mark_generated(redis: Any, gen_style: str, symbol: str) -> None:
+    await redis.set(_gen_key(gen_style, symbol), "1", ex=GEN_DEDUP_TTL_S)
 
 
 # ── ④ 日上限(30 封顶 · date-stamped)──────────────────────────────────

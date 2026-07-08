@@ -2,7 +2,7 @@
 
 一条 x_tweet → 每个发布平台一条记录(发了哪些平台 / 各自成功失败 / 各自帖子链接)。
 ★ 唯一约束 (tweet_id, platform):一推文每平台至多一条 → 重发更新同行 → 幂等防重复发(关键防风控)。
-★ 台账永久留存(审计外部发了啥)· 不随 x_tweet 的 72h 清理删(清理只删【没有任何 dispatch】的草稿)。
+★ 台账永久留存(审计外部发了啥)· 不随 x_tweet 的 7天 清理删(清理只删【没有任何 dispatch】的草稿)。
 ★ 红线:发布永远 admin 显式单次触发,无自动/定时/批量(本表只记录,不驱动任何自动发)。
 """
 
@@ -35,7 +35,7 @@ class PlatformDispatch(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    # 已发布推文豁免 72h 清理 → 有 dispatch 的 x_tweet 不会被删,CASCADE 仅理论兜底
+    # 已发布推文豁免 7天 清理 → 有 dispatch 的 x_tweet 不会被删,CASCADE 仅理论兜底
     tweet_id: Mapped[int] = mapped_column(
         ForeignKey("x_tweet.id", ondelete="CASCADE"), nullable=False,
     )
