@@ -306,15 +306,34 @@ def test_has_body_url_orthogonal_to_gate() -> None:
 
 # ── ★step1:分平台 style(X 短推 vs 币安长文)────────────────────────────────────
 def test_x_short_style_prompt_differs_and_falls_back() -> None:
-    """x_short 取短推 system prompt(≤110·体检口吻)· 未知 style 回退 default。"""
+    """x_short 取短推 system prompt(≤110·口语化)· 未知 style 回退 default。"""
     default_p = build_system_prompt("default")
     x_p = build_system_prompt("x_short")
     assert x_p != default_p
     assert "110" in x_p            # 短推特征:≤110 字上限在 prompt
-    assert "体检" in x_p           # 冷静体检口吻
+    assert "唠明白" in x_p          # 口语化口吻(改进2)· x_short 独有,兼作 style 区分标记
     assert "绝不放任何链接" in x_p  # ★X 无链接红线在 prompt
     assert build_system_prompt("unknown") == default_p  # 未知 style 回退 default(向后兼容)
     assert build_system_prompt() == default_p           # 缺省 = default
+
+
+def test_x_short_disclaimer_shortened_gate_still_passes() -> None:
+    """★改进2-免责精简(Hans 授权 2026-07-08·【仅 X 短推】):尾巴『不构成投资建议』· 门禁认 · default 不动。
+
+    锁死红线仍在:门禁 _DISCLAIMERS 认『不构成投资建议』token → 只带它的推仍过合规。
+    """
+    x_sys = build_system_prompt("x_short")
+    assert "『不构成投资建议』" in x_sys                      # 系统 prompt 指令=精简版
+    ctx = TweetContext(
+        symbol="BTCUSDT", price=61744.1, change_pct_24h=3.2, bias="偏多",
+        state_label="三线齐上", zone_label="近上轨", pct_b=0.9, funding_rate=0.0001,
+    )
+    x_user = build_user_prompt(ctx, "x_short")
+    assert "不构成投资建议" in x_user
+    assert "仅供参考,不构成投资建议" not in x_user            # ★X 短推 user prompt 不再要求全句
+    assert "仅供参考,不构成投资建议" in build_user_prompt(ctx, "default")  # ★default 币安长文不动
+    # ★门禁:只带『不构成投资建议』的口语短推能过(compliance 认该 token)
+    assert validate_tweet("BTC 横着磨,成交量就平时三成,持仓小幅在缩。不构成投资建议").passed
 
 
 def test_x_short_style_uses_topic_tag() -> None:

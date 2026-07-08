@@ -104,10 +104,14 @@ function PublishRow({
   const sendingPlatform = mut.isPending ? (mut.variables ?? null) : null
   const binanceSending = sendingPlatform === 'binance_square' || binance?.status === 'pending'
   const xSending = sendingPlatform === 'x' || x?.status === 'pending'
+  // ★改进3:按 gen_style 分离发布选项 —— x_short 只显「发布到 X」· default 只显「发布到币安广场」
+  //   (K线图两边共用同一次扫描的截图,不冲突)。
+  const isX = t.gen_style === 'x_short'
+  const disp = isX ? x : binance
   // ★审计:有发布记录则标来源(自动托管 PR-4)· auto 自动托管 / manual 人工点
-  const sourceBadge = binance ? (
+  const sourceBadge = disp ? (
     <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-      {binance.source === 'auto' ? '🤖 自动' : '👤 人工'}
+      {disp.source === 'auto' ? '🤖 自动' : '👤 人工'}
     </span>
   ) : null
 
@@ -115,7 +119,7 @@ function PublishRow({
     <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-paper pt-2">
       <span className="text-xs text-muted-foreground">发布到:</span>
       {sourceBadge}
-      {binance?.status === 'success' ? (
+      {!isX && (binance?.status === 'success' ? (
         <span className="rounded bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
           ✓ 币安广场
           {binance.url && (
@@ -136,9 +140,9 @@ function PublishRow({
         >
           {binance?.status === 'failed' ? '重试币安广场' : '发布到币安广场'}
         </button>
-      )}
-      {/* X:tweepy OAuth 1.0a 真发(2026-07-07 上线)· 与币安广场并列,各自状态/按钮 */}
-      {x?.status === 'success' ? (
+      ))}
+      {/* ★改进3:X 短推(gen_style=x_short)底部只显「发布到 X」· tweepy OAuth 1.0a 真发 */}
+      {isX && (x?.status === 'success' ? (
         <span className="rounded bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
           ✓ X
           {x.url && (
@@ -157,9 +161,9 @@ function PublishRow({
         >
           {x?.status === 'failed' ? '重试发布到 X' : '发布到 X'}
         </button>
-      )}
-      {/* ★URL 成本提醒(X 含链接推 $0.20 ≈ 十几倍 · 引流放简介/评论,别在正文放链接)*/}
-      {t.has_url && (
+      ))}
+      {/* ★URL 成本提醒仅 X 短推显(链接税是 X 特有)· 含链接推 $0.20 ≈ 十几倍 */}
+      {isX && t.has_url && (
         <span
           className="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] text-amber-700"
           title="含链接的推 $0.20/条 ≈ 无链接($0.015)的十几倍 · 建议链接放简介 / 评论区,正文别放"
@@ -167,10 +171,10 @@ function PublishRow({
           ⚠ 正文含链接(发 X 贵十几倍)
         </span>
       )}
-      {binance?.status === 'failed' && binance.error && (
+      {!isX && binance?.status === 'failed' && binance.error && (
         <span className="w-full text-xs text-red-600">币安失败:{binance.error}</span>
       )}
-      {x?.status === 'failed' && x.error && (
+      {isX && x?.status === 'failed' && x.error && (
         <span className="w-full text-xs text-red-600">X 失败:{x.error}</span>
       )}
       {err && <span className="w-full text-xs text-red-600">{err}</span>}
