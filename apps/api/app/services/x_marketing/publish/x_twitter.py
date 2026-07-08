@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 from typing import Any
 
 import tweepy
@@ -68,8 +69,25 @@ class XTwitterAdapter(PublishAdapter):
         # ★不截断(截断会丢尾部免责红线)· 超限由 publish 拒发。此处原样返回。
         return text
 
-    def _post_sync(self, text: str) -> Any:
-        """同步 tweepy 发推(在 asyncio.to_thread 里跑)· OAuth 1.0a user-context。"""
+    def _post_sync(self, text: str, image_path: str | None) -> Any:
+        """同步 tweepy 发推(在 asyncio.to_thread 里跑)· OAuth 1.0a user-context。
+
+        ★有 K线截图(image_path 存在)→ 先 v1.1 media_upload 拿 media_id 附推
+        (★图片不算链接·不触发 $0.20 链接税)· 上传失败退纯文本
+        (best-effort·不阻塞发推·照 binance 范式)。
+        """
+        media_ids: list[str] | None = None
+        if image_path and Path(image_path).is_file():
+            try:
+                auth = tweepy.OAuth1UserHandler(
+                    settings.x_consumer_key, settings.x_consumer_secret,
+                    settings.x_access_token, settings.x_access_token_secret,
+                )
+                media = tweepy.API(auth).media_upload(filename=image_path)
+                media_ids = [str(media.media_id)]
+            except Exception as exc:  # noqa: BLE001 · 传图失败退纯文本,不阻塞发推
+                logger.warning("[x-twitter] 图上传失败,退纯文本 · %s", type(exc).__name__)
+                media_ids = None
         client = tweepy.Client(
             consumer_key=settings.x_consumer_key,
             consumer_secret=settings.x_consumer_secret,
@@ -77,10 +95,10 @@ class XTwitterAdapter(PublishAdapter):
             access_token_secret=settings.x_access_token_secret,
         )
         # user_auth=True → 用 OAuth 1.0a 用户上下文发推(不传默认 bearer 只读会 403)
-        return client.create_tweet(text=text, user_auth=True)
+        return client.create_tweet(text=text, media_ids=media_ids, user_auth=True)
 
     async def publish(self, *, text: str, image_path: str | None) -> PublishResult:
-        _ = image_path  # 本阶段纯文本(X 媒体待 v1.1 media/upload)
+        # ★改进1:有 K线截图则带图发(_post_sync 内 best-effort 上传·失败退纯文本)
         weighted = _x_weighted_len(text)
         limit = settings.x_tweet_max_weighted
         if weighted > limit:
@@ -92,7 +110,7 @@ class XTwitterAdapter(PublishAdapter):
                 ),
             )
         try:
-            resp = await asyncio.to_thread(self._post_sync, text)
+            resp = await asyncio.to_thread(self._post_sync, text, image_path)
         except tweepy.TooManyRequests:
             logger.warning("[x-twitter] 限流 429")
             return PublishResult(success=False, error="X 限流(429)· 稍后再试")

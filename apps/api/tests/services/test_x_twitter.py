@@ -6,7 +6,10 @@ publish 永不 raise。真发端到端由 Hans 后台点发验(刀4)。asyncio_m
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
+import tweepy
 
 from app.services.x_marketing.publish.base import PublishResult
 from app.services.x_marketing.publish.x_twitter import (
@@ -71,7 +74,7 @@ async def test_publish_success(monkeypatch: pytest.MonkeyPatch, _keys: None) -> 
     class _Resp:
         data = {"id": "1234567890"}
 
-    monkeypatch.setattr(a, "_post_sync", lambda _text: _Resp())
+    monkeypatch.setattr(a, "_post_sync", lambda *_: _Resp())  # *_ 吃 (text, image_path)
     res = await a.publish(text="BTC 走强。仅供参考,不构成投资建议", image_path=None)
     assert res.success is True
     assert res.platform_post_id == "1234567890"
@@ -84,7 +87,7 @@ async def test_publish_no_id_in_response(monkeypatch: pytest.MonkeyPatch, _keys:
     class _Resp:
         data = None
 
-    monkeypatch.setattr(a, "_post_sync", lambda _text: _Resp())
+    monkeypatch.setattr(a, "_post_sync", lambda *_: _Resp())  # *_ 吃 (text, image_path)
     res = await a.publish(text="仅供参考,不构成投资建议", image_path=None)
     assert res.success is False
     assert "id" in (res.error or "")
@@ -99,7 +102,7 @@ async def test_publish_maps_tweepy_errors_never_raises(
     a = XTwitterAdapter()
 
     def _raise(exc: BaseException):
-        def _inner(_text: str) -> object:
+        def _inner(*_: object) -> object:  # *_ 吃 (text, image_path)
             raise exc
         return _inner
 
@@ -125,3 +128,89 @@ async def test_publish_maps_tweepy_errors_never_raises(
     assert rerr.success is False
     assert "意外" in (rerr.error or "")
     assert isinstance(rerr, PublishResult)
+
+
+# ── ★改进1:配图(K线截图)media 上传分支 ──────────────────────────
+# ★monkeypatch 直接打共享 tweepy 模块(x_twitter 内 `import tweepy` 引同一对象)。
+
+_CAPTURED: dict[str, object] = {}
+
+
+class _FakeMedia:
+    media_id = 999888
+
+
+class _FakeClient:
+    """记录 create_tweet 收到的 media_ids · 返回带 id 的假响应(**_ 吃 user_auth)。"""
+
+    def __init__(self, **_: object) -> None: ...
+
+    def create_tweet(self, *, text: str, media_ids: object, **_: object) -> object:
+        _CAPTURED["media_ids"] = media_ids
+        _CAPTURED["text"] = text
+
+        class _R:
+            data = {"id": "1"}
+
+        return _R()
+
+
+def test_post_sync_uploads_image_when_file_exists(
+    monkeypatch: pytest.MonkeyPatch, _keys: None, tmp_path: Path,
+) -> None:
+    """★image_path 存在 → media_upload 拿 media_id 传 create_tweet(图不算链接·不触发链接税)。"""
+    _CAPTURED.clear()
+    img = tmp_path / "kline.png"
+    img.write_bytes(b"\x89PNG\r\n")
+
+    class _FakeAPI:
+        def __init__(self, _auth: object) -> None: ...
+
+        def media_upload(self, filename: str, **_: object) -> _FakeMedia:
+            _CAPTURED["uploaded"] = filename
+            return _FakeMedia()
+
+    monkeypatch.setattr(tweepy, "OAuth1UserHandler", lambda *_, **__: object())
+    monkeypatch.setattr(tweepy, "API", _FakeAPI)
+    monkeypatch.setattr(tweepy, "Client", _FakeClient)
+
+    resp = XTwitterAdapter()._post_sync("BTC 走强。仅供参考", str(img))
+    assert _CAPTURED["uploaded"] == str(img)
+    assert _CAPTURED["media_ids"] == ["999888"]  # media_id → 字符串列表附推
+    assert resp.data == {"id": "1"}
+
+
+def test_post_sync_no_image_passes_none(monkeypatch: pytest.MonkeyPatch, _keys: None) -> None:
+    """image_path=None → media_ids=None · 绝不调 media_upload。"""
+    _CAPTURED.clear()
+
+    def _api_boom(_auth: object) -> object:
+        raise AssertionError("image_path=None 不该调 tweepy.API")
+
+    monkeypatch.setattr(tweepy, "API", _api_boom)
+    monkeypatch.setattr(tweepy, "Client", _FakeClient)
+    XTwitterAdapter()._post_sync("仅供参考", None)
+    assert _CAPTURED["media_ids"] is None
+
+
+def test_post_sync_image_upload_failure_falls_back_to_text(
+    monkeypatch: pytest.MonkeyPatch, _keys: None, tmp_path: Path,
+) -> None:
+    """★图上传失败 → 退纯文本(media_ids=None)· 仍照发(best-effort·不阻塞发推)。"""
+    _CAPTURED.clear()
+    img = tmp_path / "k.png"
+    img.write_bytes(b"x")
+
+    class _FakeAPI:
+        def __init__(self, _auth: object) -> None: ...
+
+        def media_upload(self, **_: object) -> object:
+            raise RuntimeError("upload 挂了")
+
+    monkeypatch.setattr(tweepy, "OAuth1UserHandler", lambda *_, **__: object())
+    monkeypatch.setattr(tweepy, "API", _FakeAPI)
+    monkeypatch.setattr(tweepy, "Client", _FakeClient)
+
+    resp = XTwitterAdapter()._post_sync("仅供参考", str(img))
+    assert _CAPTURED["media_ids"] is None  # 上传失败 → 退纯文本
+    assert resp.data == {"id": "1"}  # 仍成功发推

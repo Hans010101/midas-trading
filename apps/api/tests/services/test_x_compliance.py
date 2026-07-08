@@ -306,12 +306,12 @@ def test_has_body_url_orthogonal_to_gate() -> None:
 
 # ── ★step1:分平台 style(X 短推 vs 币安长文)────────────────────────────────────
 def test_x_short_style_prompt_differs_and_falls_back() -> None:
-    """x_short 取短推 system prompt(≤110·体检口吻)· 未知 style 回退 default。"""
+    """x_short 取短推 system prompt(≤110·口语化)· 未知 style 回退 default。"""
     default_p = build_system_prompt("default")
     x_p = build_system_prompt("x_short")
     assert x_p != default_p
     assert "110" in x_p            # 短推特征:≤110 字上限在 prompt
-    assert "体检" in x_p           # 冷静体检口吻
+    assert "说人话" in x_p          # 口语化口吻(改进2)
     assert "绝不放任何链接" in x_p  # ★X 无链接红线在 prompt
     assert build_system_prompt("unknown") == default_p  # 未知 style 回退 default(向后兼容)
     assert build_system_prompt() == default_p           # 缺省 = default
