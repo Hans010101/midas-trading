@@ -9,6 +9,12 @@
 
 只测「日 K + 一只标的」抓最容易出问题的链路;
 分钟 K(尤其 AKShare EM 当前不稳)留给 E1 smoke test 跑过即认定通过。
+
+标记 external,CI 用 `-m "not external"` 排除:skip 网兜不住所有网络失败形态
+(2026-07-08 CI runner 连 fc.yahoo.com SSL 失败 → yfinance 重试全空 →
+SymbolNotFoundError 而非 UpstreamUnavailableError → 染红),而在测试里加捕
+SymbolNotFoundError 会把真的契约变更也吞掉。本地手动验:
+`pytest tests/services/test_data_sources_integration.py -m external`
 """
 
 from __future__ import annotations
@@ -23,6 +29,8 @@ from app.services.data_sources.cn_source import AKShareCnSource
 from app.services.data_sources.crypto_source import CcxtBinanceCryptoSource
 from app.services.data_sources.exceptions import DataFormatError, UpstreamUnavailableError
 from app.services.data_sources.us_source import YFinanceUsSource
+
+pytestmark = pytest.mark.external
 
 
 def _assert_klines_valid(rows: list[Kline]) -> None:

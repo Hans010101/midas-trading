@@ -99,6 +99,9 @@ known-first-party = ["app"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "external: 真连外网上游(Sina/Yahoo/Binance)的集成测试;CI 网络不可控必 flake,用 -m 'not external' 排除,本地手动跑",
+]
 
 [tool.mypy]
 # 3.12(运行时实为 3.13)· 原 3.11 已过时,且 numpy 最新 stub 用 PEP 695 `type` 语句(需 ≥3.12),

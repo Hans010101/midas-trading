@@ -103,9 +103,9 @@ jobs:
       - name: "★ 硬卡 · 港股 AI 一键下单 hk 测试(放行硬条件 · 显式可见)"
         run: pytest tests/api/test_ai_order.py -v -k hk
 
-      - name: "★ 硬卡 · 全套 pytest(守新债 · 批2 已修 feishu 陈旧测试 · 全套纳入)"
+      - name: "★ 硬卡 · 全套 pytest(守新债 · 排除 external 真外网测试 · runner 网络不可控必 flake)"
         if: always()
-        run: pytest -q
+        run: pytest -q -m "not external"
 
       - name: "★ 硬卡 · ruff(批1 已清 23→0 · 自验闸进 CI · 守新债)"
         if: always()
