@@ -21,7 +21,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.services.clickhouse_client import ClickHouseClient
-from app.services.x_marketing.auto_draft import run_auto_draft
+from app.services.x_marketing.auto_draft import (
+    merge_xshort_drafted,
+    run_auto_draft,
+    run_auto_draft_xshort,
+)
 from app.services.x_marketing.auto_publish import (
     notify_circuit_open,
     publish_delay_seconds,
@@ -57,7 +61,16 @@ async def _draft() -> dict[str, Any]:
         ch = None
     try:
         async with session_maker() as session:
-            return await run_auto_draft(session, redis, ch=ch)
+            result = await run_auto_draft(session, redis, ch=ch)  # ★币安 · 零改
+            # ★step1:X 短推独立自动起草(自有配额 · 手动发 · ★永不进 auto_publish target)
+            # ★与币安解耦:x_short 失败只 log,绝不影响币安起草/发布(维持独立·fail-open x_short)
+            xs_drafted: list[tuple[int, str]] = []
+            try:
+                xs_drafted = await run_auto_draft_xshort(session, redis, ch=ch)
+            except Exception as exc:  # noqa: BLE001 · x_short 失败隔离,币安不受影响
+                logger.warning("[x-auto] X 短推自动起草失败(隔离·不影响币安): %s", exc)
+        # ★纯函数并入(红线边界·x_short 只进 drafted 供截图 · 绝不进 auto_publish)
+        return merge_xshort_drafted(result, xs_drafted)
     finally:
         if ch is not None:
             await ch.close()

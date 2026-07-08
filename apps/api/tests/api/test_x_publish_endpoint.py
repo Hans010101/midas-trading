@@ -135,6 +135,40 @@ async def test_publish_auto_drafted_quota_full_429(
 
 
 @pytest.mark.asyncio
+async def test_publish_auto_drafted_xshort_to_x_not_blocked_by_binance_quota(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch,  # noqa: ANN001
+) -> None:
+    """★step1 修复:auto_drafted 的 x_short 发到 X,即便【币安】配额满也不被拦(独立配额)。"""
+    from app.core.config import settings
+
+    for k, v in (
+        ("x_consumer_key", "ck"), ("x_consumer_secret", "cs"),
+        ("x_access_token", "at"), ("x_access_token_secret", "ats"),
+    ):
+        monkeypatch.setattr(settings, k, v, raising=False)  # X adapter enabled
+
+    async def _ok(_redis: object, _platform: str) -> tuple[bool, str]:
+        return True, ""
+
+    async def _full(*_args: object, **_kwargs: object) -> int:
+        return 0  # 币安配额满
+
+    monkeypatch.setattr("app.api.v1.admin.check_rate", _ok)
+    monkeypatch.setattr("app.api.v1.admin.auto_guard.daily_remaining", _full)
+    monkeypatch.setattr("app.api.v1.admin.enqueue_publish", lambda _id: None)  # 不真 enqueue
+
+    headers = await _authed_headers(db_session, role="admin")
+    row = await create_tweet(
+        db_session, symbol="ETHUSDT", bias="偏空", tweet_text="ETH 偏空 不构成投资建议",
+        compliance_passed=True, auto_drafted=True, gen_style="x_short",
+    )
+    r = await client.post(_ep(row.id), json={"platform": "x"}, headers=headers)
+    # ★发 X 不被币安配额 429 拦(独立)→ 受理 pending
+    assert r.status_code == 200
+    assert r.json()["status"] == "pending"
+
+
+@pytest.mark.asyncio
 async def test_publish_happy_enqueues(
     client: AsyncClient, db_session: AsyncSession, monkeypatch,  # noqa: ANN001
 ) -> None:

@@ -180,6 +180,32 @@ async def test_run_publish_auto_drafted_increments_daily(db_session, monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_run_publish_auto_drafted_to_x_keeps_binance_quota(db_session, monkeypatch) -> None:  # noqa: ANN001
+    """★step1 修复:auto_drafted 的 x_short 发到 X → 绝不 incr 币安 daily_count(独立配额·不挤占)。"""
+    from app.core.config import settings
+    from app.services.x_marketing.publish import auto_guard
+    from app.services.x_marketing.publish import x_twitter as xt
+
+    for k, v in (
+        ("x_consumer_key", "ck"), ("x_consumer_secret", "cs"),
+        ("x_access_token", "at"), ("x_access_token_secret", "ats"),
+    ):
+        monkeypatch.setattr(settings, k, v, raising=False)
+
+    class _Resp:
+        data = {"id": "x1"}
+
+    monkeypatch.setattr(xt.XTwitterAdapter, "_post_sync", lambda *_: _Resp())  # mock X 发布成功
+    r = _FakeRedis()
+    auto = await _mk_tweet(db_session, passed=True, auto_drafted=True)  # 短文 "x 仅供参考" · X 不超限
+    dp = await upsert_pending(db_session, tweet_id=auto.id, platform="x", dispatched_by=None)
+    result = await run_publish(db_session, r, dp.id)
+    assert result["status"] == "success"
+    # ★发到 X 成功,但币安自动托管日配额【纹丝不动】(平台隔离·x_short 不挤占币安 30/日)
+    assert await auto_guard.daily_remaining(r) == auto_guard.AUTO_DAILY_MAX
+
+
+@pytest.mark.asyncio
 async def test_run_publish_blocks_non_compliant(db_session, monkeypatch) -> None:  # noqa: ANN001
     # ★worker 侧双保险:门禁未过的,即使有 dispatch 也拒发(标 failed)
     monkeypatch.setattr("app.core.config.settings.binance_square_openapi_key", "test-key")

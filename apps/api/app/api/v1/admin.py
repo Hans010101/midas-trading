@@ -1259,8 +1259,13 @@ async def publish_x_tweet(
     ok, reason = await check_rate(redis, payload.platform)
     if not ok:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=reason)
-    # ★自动托管素材(auto_drafted)的人工补发也计入 30 日配额(配额"算":自动发+补发 ≤30 · 封号总量可控)
-    if tweet.auto_drafted and await auto_guard.daily_remaining(redis) <= 0:
+    # ★自动托管素材的人工补发也计入 30 日配额(自动发+补发 ≤30 · 封号总量可控)。
+    # ★★仅【币安广场】受此配额约束;X 等其它平台不受币安配额拦(step1·x_short 独立配额)。
+    if (
+        tweet.auto_drafted
+        and payload.platform == "binance_square"
+        and await auto_guard.daily_remaining(redis) <= 0
+    ):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="今日自动托管配额(30 条)已满,明日再补发此素材",
