@@ -4,7 +4,8 @@
  * 管理员 · X 营销每日推文(阶段4b · X 真发上线 2026-07-07)。
  *
  * ★ 安全边界后端 AdminDep(403)· 数据全来自 admin API,普通用户手输 URL → 后端 403 → 降级。
- * 流程:点「生成今日推文」→ 后端异步选币+DeepSeek生成+门禁 → 列表展示(★门禁不过的也列,标红不可发)。
+ * 流程(Hans 重构 2026-07-08):草稿由后台每 15min 自动生成好(带图)→ 顶部「币安广场/X 推文」
+ *   两 tab 只【切换查看】对应平台已生成草稿(不触发生成)→ 审 → 发布;手动生成弱化为「＋立即补充生成」。
  * ★ 发布:门禁通过的推文可【admin 单次点】发布到 币安广场 / X(tweepy OAuth 1.0a)· 各自状态/按钮。
  *   含 URL 的推有成本提醒(X $0.20 ≈ 十几倍)。
  * ★ 截图:xshot 异步回填 image_path → 列表轮询(近 20min 有缺图行 · 12s)自动刷出 → blob 显图。
@@ -249,6 +250,8 @@ export default function AdminXTweetsPage() {
   const token = session?.accessToken ?? ''
   const qc = useQueryClient()
   const [note, setNote] = useState<string>('')
+  // ★查看 tab(gen_style)· 切换只筛选查看已自动生成的草稿,不触发生成(Hans 重构:动作→查看)
+  const [tab, setTab] = useState<'default' | 'x_short'>('default')
 
   const query = useQuery({
     queryKey: ['admin-x-tweets'],
@@ -281,7 +284,11 @@ export default function AdminXTweetsPage() {
 
   const forbidden = query.isError
   const items: XTweetItem[] = query.data?.items ?? []
-  const passed = items.filter((t) => t.compliance_passed).length
+  // ★按平台(gen_style)分两条线 · tab 只切换查看,数据本来就带 gen_style
+  const binanceItems = items.filter((t) => t.gen_style !== 'x_short')
+  const xItems = items.filter((t) => t.gen_style === 'x_short')
+  const visible = tab === 'x_short' ? xItems : binanceItems
+  const passed = visible.filter((t) => t.compliance_passed).length
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -304,34 +311,51 @@ export default function AdminXTweetsPage() {
             {/* ★自动托管控制面板(开关/熔断/配额/时段)· 自动托管 PR-4 */}
             <AutoPilotPanel token={token} />
 
-            <div className="mb-4 flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => genMut.mutate('default')}
-                disabled={genMut.isPending || token === ''}
-                className="rounded-md bg-gold px-4 py-1.5 text-sm font-medium text-white hover:bg-gold/90 disabled:opacity-50"
-              >
-                {genMut.isPending && genMut.variables === 'default' ? '触发中…' : '生成长文(币安广场)'}
-              </button>
-              {/* ★step1:专为 X 生成的短推(≤110 字·冷静体检口吻)· 与长文分平台各生成一套 */}
-              <button
-                type="button"
-                onClick={() => genMut.mutate('x_short')}
-                disabled={genMut.isPending || token === ''}
-                className="rounded-md bg-midas-red px-4 py-1.5 text-sm font-medium text-white hover:bg-midas-red/90 disabled:opacity-50"
-              >
-                {genMut.isPending && genMut.variables === 'x_short' ? '触发中…' : '𝕏 生成 X 短推'}
-              </button>
-              <button
-                type="button"
-                onClick={invalidate}
-                className="rounded-md border border-paper px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
-              >
-                刷新
-              </button>
-              <span className="ml-auto text-xs text-muted-foreground">
-                共 {items.length} 条 · 门禁通过 {passed} 条 · 仅显最近 72h
-              </span>
+            {/* ★查看 tab(Hans 重构):顶部两个 tab 只切换查看对应平台已【自动生成】的草稿,
+                不触发生成。草稿由后台每 15 分钟(:04/:19/:34/:49)自动生成好(带图),打开即见现成的。 */}
+            <div className="mb-4 flex flex-wrap items-center gap-1 border-b border-paper">
+              {(
+                [
+                  { key: 'default' as const, label: '币安广场', count: binanceItems.length },
+                  { key: 'x_short' as const, label: '𝕏 X 推文', count: xItems.length },
+                ]
+              ).map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setTab(t.key)}
+                  className={
+                    tab === t.key
+                      ? '-mb-px border-b-2 border-midas-red px-4 py-2 text-sm font-medium text-midas-red'
+                      : '-mb-px border-b-2 border-transparent px-4 py-2 text-sm text-muted-foreground hover:text-foreground'
+                  }
+                >
+                  {t.label}
+                  <span className="ml-1.5 text-xs">({t.count})</span>
+                </button>
+              ))}
+              <div className="ml-auto flex items-center gap-2 py-1">
+                <span className="text-xs text-muted-foreground">
+                  门禁通过 {passed} · 最近 72h
+                </span>
+                {/* ★手动生成弱化为次要「立即补充生成」(主路径是后台自动生成·这里只补一批) */}
+                <button
+                  type="button"
+                  onClick={() => genMut.mutate(tab)}
+                  disabled={genMut.isPending || token === ''}
+                  title="草稿本由后台每 15 分钟自动生成 · 这里可立即补充生成一批当前平台的草稿"
+                  className="rounded-md border border-paper px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                >
+                  {genMut.isPending ? '生成中…' : '＋ 立即补充生成'}
+                </button>
+                <button
+                  type="button"
+                  onClick={invalidate}
+                  className="rounded-md border border-paper px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  刷新
+                </button>
+              </div>
             </div>
 
             {note && (
@@ -342,13 +366,14 @@ export default function AdminXTweetsPage() {
 
             {query.isLoading ? (
               <p className="py-8 text-center text-sm text-muted-foreground">加载中…</p>
-            ) : items.length === 0 ? (
+            ) : visible.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
-                还没有推文 · 点「生成今日推文」开始(异步,约数十秒后刷新可见)。
+                {tab === 'x_short' ? '𝕏 X 推文' : '币安广场'}暂无草稿 ·
+                后台每 15 分钟(整点后 :04/:19/:34/:49)自动生成(需自动托管开关开启)· 或点「＋ 立即补充生成」。
               </p>
             ) : (
               <div className="space-y-3">
-                {items.map((t) => (
+                {visible.map((t) => (
                   <TweetCard key={t.id} t={t} token={token} onChange={invalidate} />
                 ))}
               </div>
