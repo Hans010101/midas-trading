@@ -302,3 +302,25 @@ def test_has_body_url_orthogonal_to_gate() -> None:
     text = "BTC 走强,近上轨。详见 midastrade.asia。仅供参考,不构成投资建议"
     assert has_body_url(text) is True
     assert validate_tweet(text).passed is True  # 有 URL 但无买卖/预测/收益词 + 带免责 → 仍过
+
+
+# ── ★step1:分平台 style(X 短推 vs 币安长文)────────────────────────────────────
+def test_x_short_style_prompt_differs_and_falls_back() -> None:
+    """x_short 取短推 system prompt(≤110·体检口吻)· 未知 style 回退 default。"""
+    default_p = build_system_prompt("default")
+    x_p = build_system_prompt("x_short")
+    assert x_p != default_p
+    assert "110" in x_p            # 短推特征:≤110 字上限在 prompt
+    assert "体检" in x_p           # 冷静体检口吻
+    assert "绝不放任何链接" in x_p  # ★X 无链接红线在 prompt
+    assert build_system_prompt("unknown") == default_p  # 未知 style 回退 default(向后兼容)
+    assert build_system_prompt() == default_p           # 缺省 = default
+
+
+def test_x_short_style_uses_topic_tag() -> None:
+    """default → #点金Midas(品牌);x_short → #加密货币(话题·利 X 传播)· 都不含链接。"""
+    body = "BTC 结构偏空,贴下轨。仅供参考,不构成投资建议"
+    assert append_tags(body, "BTCUSDT", "default").endswith("#BTC #点金Midas")
+    assert append_tags(body, "BTCUSDT", "x_short").endswith("#BTC #加密货币")
+    # ★门禁平台无关:X 短推同样过同一门禁(带免责·无买卖词)
+    assert validate_tweet(append_tags(body, "BTCUSDT", "x_short")).passed is True

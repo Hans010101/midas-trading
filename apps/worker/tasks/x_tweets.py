@@ -58,7 +58,9 @@ def cleanup_expired_tweets() -> dict[str, int]:
     return {"image_files": files, "removed": removed}
 
 
-async def _generate(generated_by: str | None) -> tuple[dict[str, int], list[tuple[int, str]]]:
+async def _generate(
+    generated_by: str | None, style: str = "default",
+) -> tuple[dict[str, int], list[tuple[int, str]]]:
     # 读 boll 快照(只读)挑币
     redis = aioredis.from_url(
         os.environ.get("REDIS_URL", "redis://localhost:6379/0"), decode_responses=True,
@@ -84,7 +86,9 @@ async def _generate(generated_by: str | None) -> tuple[dict[str, int], list[tupl
         ch = None
     try:
         async with session_maker() as session:
-            rows = await generate_and_store(session, contexts, generated_by=by, ch=ch)
+            rows = await generate_and_store(
+                session, contexts, generated_by=by, ch=ch, style=style,
+            )
             # expire_on_commit=False → 关 session 后 id/symbol 仍可读 · 收集供 enqueue 截图
             targets = [(r.id, r.symbol) for r in rows]
             passed = sum(1 for r in rows if r.compliance_passed)
@@ -116,13 +120,14 @@ def _enqueue_capture(tweet_id: int, symbol: str) -> None:
 
 
 @shared_task(name="tasks.x_tweets.generate_daily", max_retries=0)
-def generate_daily(generated_by: str | None = None) -> dict[str, int]:
+def generate_daily(generated_by: str | None = None, style: str = "default") -> dict[str, int]:
     """Celery 入口(admin 端点 enqueue)· 选币 → DeepSeek 生成 → 门禁 → 存 x_tweet(止于 draft)。
 
     存行后逐条 enqueue 截图(xshot 队列 · ★截图 best-effort,失败/shooter 没起不阻塞生成)。
     ★异步:DeepSeek 每币数秒,放 worker 不阻塞 HTTP。★门禁不过也存(后台可见,4b 不发)。零 X 调用。
+    ★style(step1 分平台):default=币安广场长文 / x_short=X 短推 · 由 enqueue 传入(默认兼容在途任务)。
     """
-    counts, targets = asyncio.run(_generate(generated_by))
+    counts, targets = asyncio.run(_generate(generated_by, style))
     for tweet_id, symbol in targets:
         _enqueue_capture(tweet_id, symbol)  # ★截图链路与生成解耦 · 失败隔离
     logger.info("[x-tweets] 生成完成 · %s · enqueue 截图 %d 条", counts, len(targets))

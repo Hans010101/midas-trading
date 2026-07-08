@@ -16,7 +16,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from datetime import date as date_type
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -1101,14 +1101,19 @@ class XTweetGenerateOut(BaseModel):
     "/x-tweets/generate",
     summary="触发生成今日推文(异步 · 选币→DeepSeek→门禁→存待发 · 不发 X)",
 )
-async def generate_x_tweets(admin: AdminDep) -> XTweetGenerateOut:
+async def generate_x_tweets(
+    admin: AdminDep,
+    style: Literal["default", "x_short"] = "default",
+) -> XTweetGenerateOut:
     """admin 点「生成今日推文」· enqueue worker 异步生成(DeepSeek 慢,不阻塞 HTTP)。
 
     生成结果存 x_tweet(status=draft 待发 · ★门禁不过也存,后台可见但 4b 不发)· 本端点零 X 调用。
+    ★style(step1 分平台):default=币安广场长文 / x_short=X 短推(≤110 字·冷静体检口吻)。
     """
-    enqueue_daily_generation(admin.id)
+    enqueue_daily_generation(admin.id, style)
+    label = "X 短推" if style == "x_short" else "长文"
     return XTweetGenerateOut(
-        status="enqueued", message="已触发生成 · 约数十秒后在列表查看(异步)",
+        status="enqueued", message=f"已触发生成({label})· 约数十秒后在列表查看(异步)",
     )
 
 
@@ -1136,6 +1141,7 @@ class XTweetItem(BaseModel):
     created_at: datetime
     auto_drafted: bool = False  # ★自动托管起草(待补发素材标识 · 频率调整)
     has_url: bool = False  # ★正文含 URL(发 X 贵十几倍 · 前端提醒成本 · 非门禁否决)
+    gen_style: str = "default"  # ★内容风格/平台(default 币安长文 / x_short X 短推)· 面板区分
     dispatches: list[XTweetDispatchItem] = []  # 各平台发布状态(发布层 PR-3)
 
 
@@ -1160,6 +1166,7 @@ def _to_tweet_item(
         status=row.status, image_path=row.image_path, created_at=row.created_at,
         auto_drafted=row.auto_drafted,
         has_url=has_body_url(row.tweet_text),
+        gen_style=row.gen_style,
         dispatches=[_to_dispatch_item(d) for d in (dispatches or [])],
     )
 

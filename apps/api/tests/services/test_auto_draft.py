@@ -61,7 +61,7 @@ def _in_window() -> datetime:
 
 
 def _mock_compliant_llm(monkeypatch) -> None:  # noqa: ANN001
-    async def fake_gen(ctx: TweetContext) -> object:
+    async def fake_gen(ctx: TweetContext, *_: object) -> object:  # *_ 吃 style 参数
         return SimpleNamespace(
             content=f"${ctx.symbol} 偏空,运行于下轨下方。以上为当前结构。仅供参考,不构成投资建议。",
             is_mock=True,
@@ -170,7 +170,7 @@ async def test_understanding_b_first_gate_fail_promotes_second(
     db_session, monkeypatch,  # noqa: ANN001
 ) -> None:
     # ★理解B:rows[0] 门禁未过 → 顺延发 rows[1](合规那条)
-    async def fake_gen(ctx: TweetContext) -> object:
+    async def fake_gen(ctx: TweetContext, *_: object) -> object:  # *_ 吃 style 参数
         bad = "建议逢低买入"  # 买卖祈使 → 门禁拦
         body = bad if ctx.symbol == "BBBUSDT" else "偏空,运行于下轨下方"
         return SimpleNamespace(

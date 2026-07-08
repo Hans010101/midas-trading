@@ -31,6 +31,7 @@ export interface XTweetItem {
   created_at: string
   auto_drafted: boolean // ★自动托管起草(待补发素材标识 · 频率调整)
   has_url: boolean // ★正文含 URL(发 X 贵十几倍 · 成本提醒 · 非门禁否决)
+  gen_style: string // ★内容风格/平台(default 币安长文 / x_short X 短推)
   dispatches: XTweetDispatchItem[] // 各平台发布状态(发布层 PR-3)
 }
 
@@ -64,9 +65,15 @@ export async function fetchXTweets(token: string, signal?: AbortSignal): Promise
   return (await r.json()) as XTweetListOut
 }
 
-/** 触发生成今日推文(异步 · 后端 enqueue Celery,约数十秒后列表刷新可见)。 */
-export async function generateXTweets(token: string): Promise<XTweetGenerateOut> {
-  const r = await fetch(`${API_BASE}/api/v1/admin/x-tweets/generate`, {
+/**
+ * 触发生成今日推文(异步 · 后端 enqueue Celery,约数十秒后列表刷新可见)。
+ * style:default=币安广场长文 / x_short=X 短推(≤110 字·冷静体检口吻)。
+ */
+export async function generateXTweets(
+  token: string,
+  style: 'default' | 'x_short' = 'default',
+): Promise<XTweetGenerateOut> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/x-tweets/generate?style=${style}`, {
     method: 'POST',
     headers: _authHeaders(token),
   })

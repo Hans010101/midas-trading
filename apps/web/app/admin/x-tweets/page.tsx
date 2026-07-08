@@ -192,6 +192,12 @@ function TweetCard({
       <div className="mb-2 flex items-center gap-2">
         <span className="font-mono text-sm font-bold">{t.symbol}</span>
         <BiasBadge bias={t.bias} />
+        {/* ★内容风格/平台标识(step1 分平台)· x_short=专为 X 生成的短推 */}
+        {t.gen_style === 'x_short' && (
+          <span className="rounded bg-midas-red/15 px-1.5 py-0.5 text-[11px] font-medium text-midas-red">
+            𝕏 短推
+          </span>
+        )}
         {/* ★自动托管起草素材标识(频率调整)· 第2条未自动发=可人工补发 */}
         {t.auto_drafted && (
           <span className="rounded bg-gold/15 px-1.5 py-0.5 text-[11px] font-medium text-gold">
@@ -244,7 +250,7 @@ export default function AdminXTweetsPage() {
   const invalidate = () => void qc.invalidateQueries({ queryKey: ['admin-x-tweets'] })
 
   const genMut = useMutation({
-    mutationFn: () => generateXTweets(token),
+    mutationFn: (style: 'default' | 'x_short') => generateXTweets(token, style),
     onSuccess: (res) => {
       setNote(res.message)
       // ★异步生成约数十秒 · 先刷一次,再延时补刷一次(覆盖 worker 跑完)
@@ -279,14 +285,23 @@ export default function AdminXTweetsPage() {
             {/* ★自动托管控制面板(开关/熔断/配额/时段)· 自动托管 PR-4 */}
             <AutoPilotPanel token={token} />
 
-            <div className="mb-4 flex items-center gap-3">
+            <div className="mb-4 flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                onClick={() => genMut.mutate()}
+                onClick={() => genMut.mutate('default')}
+                disabled={genMut.isPending || token === ''}
+                className="rounded-md bg-gold px-4 py-1.5 text-sm font-medium text-white hover:bg-gold/90 disabled:opacity-50"
+              >
+                {genMut.isPending && genMut.variables === 'default' ? '触发中…' : '生成长文(币安广场)'}
+              </button>
+              {/* ★step1:专为 X 生成的短推(≤110 字·冷静体检口吻)· 与长文分平台各生成一套 */}
+              <button
+                type="button"
+                onClick={() => genMut.mutate('x_short')}
                 disabled={genMut.isPending || token === ''}
                 className="rounded-md bg-midas-red px-4 py-1.5 text-sm font-medium text-white hover:bg-midas-red/90 disabled:opacity-50"
               >
-                {genMut.isPending ? '触发中…' : '生成今日推文'}
+                {genMut.isPending && genMut.variables === 'x_short' ? '触发中…' : '𝕏 生成 X 短推'}
               </button>
               <button
                 type="button"

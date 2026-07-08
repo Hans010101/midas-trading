@@ -48,7 +48,9 @@ async def test_generate_admin_enqueues(
     import app.api.v1.admin as admin_mod
 
     calls: list[object] = []
-    monkeypatch.setattr(admin_mod, "enqueue_daily_generation", lambda uid: calls.append(uid))
+    monkeypatch.setattr(
+        admin_mod, "enqueue_daily_generation", lambda uid, *_: calls.append(uid),
+    )
     headers = await _authed_headers(db_session, role="admin")
     r = await client.post(_EP, headers=headers)
     assert r.status_code == 200

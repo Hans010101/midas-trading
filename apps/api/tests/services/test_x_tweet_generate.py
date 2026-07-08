@@ -86,7 +86,7 @@ async def test_generate_and_store_pass_and_fail(db_session, monkeypatch) -> None
         "ETHUSDT": "$ETH 偏空,建议逢低买入。仅供参考,不构成投资建议。",
     }
 
-    async def fake_gen(ctx: TweetContext) -> object:
+    async def fake_gen(ctx: TweetContext, *_: object) -> object:  # *_ 吃 style 参数
         return SimpleNamespace(content=contents[ctx.symbol], is_mock=True)
 
     monkeypatch.setattr(gen, "generate_tweet_text", fake_gen)

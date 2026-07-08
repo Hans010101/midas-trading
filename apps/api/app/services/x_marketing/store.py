@@ -32,10 +32,12 @@ async def create_tweet(
     image_path: str | None = None,
     generated_by: UUID | None = None,
     auto_drafted: bool = False,
+    gen_style: str = "default",
 ) -> XTweet:
     """存一条推文记录(status 默认 draft)· ★门禁不过的也存(passed=false + reason)。
 
     auto_drafted=True:自动托管起草(待补发素材识别 + 计入 30 日配额)· 默认 False(手动生成)。
+    gen_style:内容生成风格/平台(default 币安长文 / x_short X 短推)· step1 分平台地基。
     """
     row = XTweet(
         symbol=symbol,
@@ -46,6 +48,7 @@ async def create_tweet(
         image_path=image_path,
         generated_by=generated_by,
         auto_drafted=auto_drafted,
+        gen_style=gen_style,
     )
     session.add(row)
     await session.commit()

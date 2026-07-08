@@ -23,7 +23,8 @@ from app.services.x_marketing.publish.base import PublishAdapter, PublishResult
 
 logger = logging.getLogger(__name__)
 
-_X_TWEET_LIMIT = 280  # X 免费层加权字数上限(CJK=2)· Premium 为 25000(超限时提示开通)
+# ★加权字数上限走 settings.x_tweet_max_weighted(免费 280 / Premium 设 25000)· 见 config.py。
+#   仅发布前友好预检;超限【拒发不截断】(保尾部免责红线)· X 端做权威校验。
 
 
 def _x_weighted_len(text: str) -> int:
@@ -81,12 +82,13 @@ class XTwitterAdapter(PublishAdapter):
     async def publish(self, *, text: str, image_path: str | None) -> PublishResult:
         _ = image_path  # 本阶段纯文本(X 媒体待 v1.1 media/upload)
         weighted = _x_weighted_len(text)
-        if weighted > _X_TWEET_LIMIT:
+        limit = settings.x_tweet_max_weighted
+        if weighted > limit:
             return PublishResult(
                 success=False,
                 error=(
-                    f"超 X {_X_TWEET_LIMIT} 加权字数上限(当前 {weighted})· 未截断以保留免责红线 · "
-                    "请精简正文或为账号开通 X Premium(解 25000 字上限)"
+                    f"超 X 加权字数上限 {limit}(当前 {weighted})· 未截断以保留免责红线 · "
+                    "请精简正文;若已开 X Premium 可把 X_TWEET_MAX_WEIGHTED 设为 25000"
                 ),
             )
         try:
