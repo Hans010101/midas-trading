@@ -136,3 +136,21 @@ async def run_auto_draft_xshort(
         len(rows),
     )
     return [(r.id, r.symbol) for r in rows]
+
+
+def merge_xshort_drafted(
+    result: dict[str, Any], xs_drafted: list[tuple[int, str]],
+) -> dict[str, Any]:
+    """把 x_short 起草结果并入币安 run_auto_draft 的 result · ★纯函数(红线边界·可单测)。
+
+    ★★manual-first 锚点:x_short 只进 result["drafted"](供截图)· 【绝不】写 result["auto_publish"]
+    (auto_publish 键只由币安 run_auto_draft 设 → auto_draft_scan 排发只发币安 target)。
+    币安 skip 但 x_short 有货 → status 提为 "ok" 触发截图分支;★auto_publish 键不碰
+    (币安 skip 时本就无该键 → 排发拿到 None → x_short 永不自动发)。空 xs_drafted → result 原样返回。
+    """
+    if not xs_drafted:
+        return result
+    result["drafted"] = list(result.get("drafted") or []) + xs_drafted
+    if result.get("status") != "ok":
+        result["status"] = "ok"
+    return result
