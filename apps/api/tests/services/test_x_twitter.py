@@ -181,15 +181,26 @@ def test_post_sync_uploads_image_when_file_exists(
 
 
 def test_post_sync_no_image_passes_none(monkeypatch: pytest.MonkeyPatch, _keys: None) -> None:
-    """image_path=None → media_ids=None · 绝不调 media_upload。"""
+    """image_path=None → media_ids=None · 绝不进 media 上传路径。
+
+    ★用【记录法】证明,不用会被 _post_sync 内层 except 吞掉的异常守卫:
+    tweepy.API 被构造即记 api_called;若代码回归成 None 也进 media 块,
+    断言在【测试体内】爆(不被吞)· 老版 raise-AssertionError 会被 except Exception 吞掉=假通过。
+    """
     _CAPTURED.clear()
 
-    def _api_boom(_auth: object) -> object:
-        raise AssertionError("image_path=None 不该调 tweepy.API")
+    class _TrackAPI:
+        def __init__(self, _auth: object) -> None:
+            _CAPTURED["api_called"] = True
 
-    monkeypatch.setattr(tweepy, "API", _api_boom)
+        def media_upload(self, **_: object) -> _FakeMedia:
+            return _FakeMedia()
+
+    monkeypatch.setattr(tweepy, "OAuth1UserHandler", lambda *_, **__: object())
+    monkeypatch.setattr(tweepy, "API", _TrackAPI)
     monkeypatch.setattr(tweepy, "Client", _FakeClient)
     XTwitterAdapter()._post_sync("仅供参考", None)
+    assert "api_called" not in _CAPTURED  # ★None 短路 → 绝不构造 tweepy.API(记录法·不被吞)
     assert _CAPTURED["media_ids"] is None
 
 

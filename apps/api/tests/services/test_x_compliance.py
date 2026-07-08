@@ -311,7 +311,7 @@ def test_x_short_style_prompt_differs_and_falls_back() -> None:
     x_p = build_system_prompt("x_short")
     assert x_p != default_p
     assert "110" in x_p            # 短推特征:≤110 字上限在 prompt
-    assert "说人话" in x_p          # 口语化口吻(改进2)
+    assert "唠明白" in x_p          # 口语化口吻(改进2)· x_short 独有,兼作 style 区分标记
     assert "绝不放任何链接" in x_p  # ★X 无链接红线在 prompt
     assert build_system_prompt("unknown") == default_p  # 未知 style 回退 default(向后兼容)
     assert build_system_prompt() == default_p           # 缺省 = default
