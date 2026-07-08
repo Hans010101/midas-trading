@@ -210,3 +210,81 @@ async def test_understanding_b_both_blocked_no_publish(
     assert out["status"] == "ok"
     assert {s for _, s in out["drafted"]} == {"BBBUSDT", "CCCUSDT"}  # 仍都起草
     assert out["auto_publish"] is None  # ★两条都被挡 → 不发
+
+
+# ── ★step1:X 短推独立自动起草(run_auto_draft_xshort · 手动发 · 永不自动发)────
+
+
+@pytest.mark.asyncio
+async def test_xshort_drafts_when_enabled(db_session, monkeypatch) -> None:  # noqa: ANN001
+    """happy:开关开 + 窗内 + 有配额 + 有候选 → 生成 x_short draft(gen_style=x_short · auto_drafted)。
+
+    ★返回 list(不是 dict · 结构上永不含 auto_publish target)· x_short 只能人工发。
+    """
+    _mock_compliant_llm(monkeypatch)
+    r = _FakeRedis()
+    await auto_guard.set_enabled(r, enabled=True)
+    _seed_snapshot(r, [
+        _snap_item("BBBUSDT", -9.0, transition=True),
+        _snap_item("CCCUSDT", 4.0, transition=True),
+    ])
+    out = await auto_draft.run_auto_draft_xshort(db_session, r, now=_in_window())
+    assert isinstance(out, list)                       # ★永不返回 target,只 (id,sym) 列表
+    assert {s for _, s in out} == {"BBBUSDT", "CCCUSDT"}
+    rows = await list_recent(db_session)
+    xs = [row for row in rows if row.symbol in {"BBBUSDT", "CCCUSDT"}]
+    assert len(xs) == 2
+    assert all(row.gen_style == "x_short" for row in xs)   # ★gen_style=x_short
+    assert all(row.auto_drafted for row in xs)             # ★auto_drafted(🤖自动)
+    assert int(r.kv[auto_guard._xshort_draft_key(_in_window())]) == 2  # ★独立配额键 +2
+
+
+@pytest.mark.asyncio
+async def test_xshort_skip_when_disabled(db_session) -> None:  # noqa: ANN001
+    r = _FakeRedis()  # 总开关 OFF → x_short 也不起草
+    out = await auto_draft.run_auto_draft_xshort(db_session, r, now=_in_window())
+    assert out == []
+
+
+@pytest.mark.asyncio
+async def test_xshort_skip_out_of_window(db_session, monkeypatch) -> None:  # noqa: ANN001
+    _mock_compliant_llm(monkeypatch)
+    r = _FakeRedis()
+    await auto_guard.set_enabled(r, enabled=True)
+    _seed_snapshot(r, [_snap_item("BBBUSDT", -9.0, transition=True)])
+    out = await auto_draft.run_auto_draft_xshort(
+        db_session, r, now=datetime(2026, 6, 27, 3, 0, tzinfo=CN_TZ),  # 03:00 窗外
+    )
+    assert out == []
+
+
+@pytest.mark.asyncio
+async def test_xshort_skip_when_quota_exhausted(db_session, monkeypatch) -> None:  # noqa: ANN001
+    _mock_compliant_llm(monkeypatch)
+    r = _FakeRedis()
+    await auto_guard.set_enabled(r, enabled=True)
+    now = _in_window()
+    r.kv[auto_guard._xshort_draft_key(now)] = auto_guard.XSHORT_DRAFT_DAILY_MAX  # 顶格
+    _seed_snapshot(r, [_snap_item("BBBUSDT", -9.0, transition=True)])
+    out = await auto_draft.run_auto_draft_xshort(db_session, r, now=now)
+    assert out == []
+
+
+@pytest.mark.asyncio
+async def test_xshort_quota_independent_of_binance_cap(db_session, monkeypatch) -> None:  # noqa: ANN001
+    """★核心独立性:币安发布配额顶格(daily_cap)→ 币安 skip,但 x_short 仍照常起草(不被挤占)。"""
+    _mock_compliant_llm(monkeypatch)
+    r = _FakeRedis()
+    await auto_guard.set_enabled(r, enabled=True)
+    now = _in_window()
+    r.kv[auto_guard._daily_key(now)] = auto_guard.AUTO_DAILY_MAX  # 币安顶到 30
+    _seed_snapshot(r, [
+        _snap_item("BBBUSDT", -9.0, transition=True),
+        _snap_item("CCCUSDT", 4.0, transition=True),
+    ])
+    binance = await auto_draft.run_auto_draft(db_session, r, now=now)
+    assert binance["reason"] == "daily_cap"                # 币安被日配额挡
+    xs = await auto_draft.run_auto_draft_xshort(db_session, r, now=now)
+    assert {s for _, s in xs} == {"BBBUSDT", "CCCUSDT"}    # ★x_short 不受影响,照常起草
+    # ★x_short 没动币安配额键(仍 = MAX,没多加)
+    assert int(r.kv[auto_guard._daily_key(now)]) == auto_guard.AUTO_DAILY_MAX

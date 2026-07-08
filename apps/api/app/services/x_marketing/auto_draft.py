@@ -95,3 +95,44 @@ async def run_auto_draft(
         f"自动发 {target[1]} · {trace}" if target else f"不自动发(全被挡)· {trace}",
     )
     return {"status": "ok", "drafted": drafted, "auto_publish": target}
+
+
+async def run_auto_draft_xshort(
+    session: AsyncSession, redis: Any, *, now: datetime | None = None,
+    ch: ClickHouseClient | None = None,
+) -> list[tuple[int, str]]:
+    """★step1:X 短推【独立】自动起草(自有日配额 · 手动发 · 永不进 auto_publish)。
+
+    与币安 run_auto_draft 完全隔离,是【新增】函数,不改币安红线逻辑一行:
+    - 自有配额键 `x:auto:xshort_draft_count`,★不碰币安 daily_count / circuit / auto_publish target。
+    - 守卫:is_enabled(总开关 · 共享)+ 时段窗 + 自有 x_short 日配额
+      (★不受币安 daily_cap / circuit 影响 · 独立配额避免挤占)。
+    - ★★x_short draft 永不自动发布:本函数【不返回 target】,只返回 (id,sym) 供截图;
+      x_short 只能人工发(auto_publish._PLATFORM 硬编码 binance · manual-first 不破)。
+    - 选币同币安口径 b(每轮 ≤ 2 · 同一快照 → 同批热门币)· gen_style=x_short。
+
+    返回 [(id, symbol)] 供截图;守卫不过 / 无候选 / 无生成行 → []。
+    """
+    if not await auto_guard.is_enabled(redis):          # 总开关(共享)· 关着 x_short 也不起草
+        return []
+    if not auto_guard.is_in_publish_window(now):        # 时段窗(与币安同节奏)
+        return []
+    remaining = await auto_guard.xshort_draft_remaining(redis, now)  # ★独立配额
+    if remaining <= 0:
+        return []
+    items = await _read_snapshot_items(redis)
+    contexts = pick_auto_contexts(items, limit=min(_MAX_PER_ROUND, remaining))
+    if not contexts:
+        return []
+    # ★style="x_short" → 短推 prompt + #加密货币 标签 + gen_style=x_short 入库 · auto_drafted=True
+    rows = await generate_and_store(
+        session, contexts, generated_by=None, auto_drafted=True, ch=ch, style="x_short",
+    )
+    if not rows:
+        return []
+    await auto_guard.incr_xshort_draft(redis, len(rows), now)
+    logger.info(
+        "[x-auto] X 短推自动起草 · %d 条(gen_style=x_short · ★手动发·永不自动发)",
+        len(rows),
+    )
+    return [(r.id, r.symbol) for r in rows]

@@ -19,6 +19,7 @@ from app.services.visit_stats import CN_TZ
 
 # ── 护栏常量(Hans 定 · 不走 env)──────────────────────────────────────
 AUTO_DAILY_MAX = 30                  # 自动托管每日发布上限(独立于 TG 200 / 手动 100)
+XSHORT_DRAFT_DAILY_MAX = 30          # ★X 短推每日【自动起草】上限 · 独立于币安配额 · 手动发 · 可调
 DEDUP_TTL_S = 6 * 3600               # 同 symbol 6h 去重
 FAIL_THRESHOLD = 3                   # 连续失败 N 次 → 开熔断(不硬刚,降封号)
 _WINDOW_START = time(7, 30)          # 大中华区发布窗起(含)
@@ -38,6 +39,12 @@ def _published_key(symbol: str) -> str:
 def _daily_key(now: datetime | None = None) -> str:
     d = (now or datetime.now(tz=CN_TZ)).date().isoformat()
     return f"x:auto:daily_count:{d}"
+
+
+def _xshort_draft_key(now: datetime | None = None) -> str:
+    """★X 短推自动起草计数键(step1)· 与币安 _daily_key 完全独立(不共享·不挤占)。"""
+    d = (now or datetime.now(tz=CN_TZ)).date().isoformat()
+    return f"x:auto:xshort_draft_count:{d}"
 
 
 # ── ① 开关(默认 OFF)────────────────────────────────────────────────
@@ -74,6 +81,22 @@ async def incr_daily(redis: Any, now: datetime | None = None) -> None:
     key = _daily_key(now)
     await redis.incr(key)
     await redis.expire(key, 48 * 3600)  # 2 天 TTL 兜底(自然跨日已重置)
+
+
+# ── ④b ★X 短推自动起草日上限(step1 · 独立配额 · 不与币安共享)────────────────
+async def xshort_draft_remaining(redis: Any, now: datetime | None = None) -> int:
+    """X 短推每日自动起草剩余额度(独立键 · 不受币安 daily_count/circuit 影响)。"""
+    used = int(await redis.get(_xshort_draft_key(now)) or 0)
+    return max(0, XSHORT_DRAFT_DAILY_MAX - used)
+
+
+async def incr_xshort_draft(redis: Any, n: int = 1, now: datetime | None = None) -> None:
+    """X 短推起草计数 +n(date-stamped · 2 天 TTL 兜底)· FakeRedis 无 incrby,循环 incr。"""
+    key = _xshort_draft_key(now)
+    for _ in range(n):
+        await redis.incr(key)
+    if n > 0:
+        await redis.expire(key, 48 * 3600)
 
 
 # ── ⑤ 熔断 + 连续失败计数 ─────────────────────────────────────────────

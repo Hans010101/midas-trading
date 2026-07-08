@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.services.clickhouse_client import ClickHouseClient
-from app.services.x_marketing.auto_draft import run_auto_draft
+from app.services.x_marketing.auto_draft import run_auto_draft, run_auto_draft_xshort
 from app.services.x_marketing.auto_publish import (
     notify_circuit_open,
     publish_delay_seconds,
@@ -57,7 +57,15 @@ async def _draft() -> dict[str, Any]:
         ch = None
     try:
         async with session_maker() as session:
-            return await run_auto_draft(session, redis, ch=ch)
+            result = await run_auto_draft(session, redis, ch=ch)  # ★币安 · 零改
+            # ★step1:X 短推独立自动起草(自有配额 · 手动发 · ★永不进 auto_publish target)
+            xs_drafted = await run_auto_draft_xshort(session, redis, ch=ch)
+        # x_short 只并入 drafted(供截图)· ★绝不并入 auto_publish(manual-first 不破)
+        if xs_drafted:
+            result["drafted"] = list(result.get("drafted") or []) + xs_drafted
+            if result.get("status") != "ok":
+                result["status"] = "ok"  # 币安 skip 但 x_short 有货 → 整体 ok(触发截图)
+        return result
     finally:
         if ch is not None:
             await ch.close()
