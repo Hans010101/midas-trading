@@ -68,3 +68,85 @@ async def test_stop_disables_and_circuits(
     s = await client.get("/api/v1/admin/x-auto/status", headers=headers)
     assert s.json()["enabled"] is False
     assert s.json()["circuit_open"] is True
+
+
+# ── ★架子刀(ADR 0050):平台勾选端点 + status.platforms ──────────────────
+
+
+@pytest.mark.asyncio
+async def test_status_contains_platforms(client: AsyncClient, db_session: AsyncSession) -> None:
+    """status 带平台清单:binance 勾选+白名单内;x 不勾+★auto_allowed=False(暂未启用)。
+
+    ★防状态污染(自审 nit3):端点测试共享持久 Redis(无 flushdb),binance 勾选值可能
+    被别的 toggle 测试留下 "0" → 先显式 POST checked=true 归位,不依赖「键未设」的默认。
+    (默认值语义本身由 tests/services/test_auto_guard.py 的 FakeRedis 单测钉死。)
+    """
+    headers = await _admin_headers(db_session)
+    await client.post(  # 归位:显式勾上 binance(幂等·消除跨 run 残留)
+        "/api/v1/admin/x-auto/platforms/binance_square",
+        json={"checked": True}, headers=headers,
+    )
+    r = await client.get("/api/v1/admin/x-auto/status", headers=headers)
+    assert r.status_code == 200
+    by_p = {p["platform"]: p for p in r.json()["platforms"]}
+    assert by_p["binance_square"]["checked"] is True       # 勾上(显式归位后)
+    assert by_p["binance_square"]["auto_allowed"] is True  # 白名单内
+    assert by_p["x"]["checked"] is False                   # ★OFF(x 键无任何写入路径)
+    assert by_p["x"]["auto_allowed"] is False              # ★白名单外 = 暂未启用(UI 灰显)
+
+
+@pytest.mark.asyncio
+async def test_platform_toggle_binance_ok(client: AsyncClient, db_session: AsyncSession) -> None:
+    """勾/取消币安(白名单内)→ 200 · status 里 checked 跟着变。"""
+    headers = await _admin_headers(db_session)
+    r = await client.post(
+        "/api/v1/admin/x-auto/platforms/binance_square",
+        json={"checked": False}, headers=headers,
+    )
+    assert r.status_code == 200
+    by_p = {p["platform"]: p for p in r.json()["platforms"]}
+    assert by_p["binance_square"]["checked"] is False
+    r2 = await client.post(
+        "/api/v1/admin/x-auto/platforms/binance_square",
+        json={"checked": True}, headers=headers,
+    )
+    assert {p["platform"]: p for p in r2.json()["platforms"]}["binance_square"]["checked"] is True
+
+
+@pytest.mark.asyncio
+async def test_platform_toggle_x_rejected_400(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    """★★红线:X 在白名单外 → 连勾选值都不可写(400)· 配置层同焊死(双保险之一)。"""
+    headers = await _admin_headers(db_session)
+    r = await client.post(
+        "/api/v1/admin/x-auto/platforms/x", json={"checked": True}, headers=headers,
+    )
+    assert r.status_code == 400
+    assert "暂未启用" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_platform_toggle_unknown_400(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    headers = await _admin_headers(db_session)
+    r = await client.post(
+        "/api/v1/admin/x-auto/platforms/weibo", json={"checked": True}, headers=headers,
+    )
+    assert r.status_code == 400
+    assert "未知平台" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_platform_toggle_normal_user_403(
+    client: AsyncClient, db_session: AsyncSession,
+) -> None:
+    user = await make_user(db_session, role="user")
+    token = await issue_session(db_session, user_id=user.id)
+    await db_session.commit()
+    r = await client.post(
+        "/api/v1/admin/x-auto/platforms/binance_square",
+        json={"checked": False}, headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 403

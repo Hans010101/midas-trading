@@ -118,3 +118,27 @@ async def test_pending_task_tracking() -> None:
     ids = await ag.pop_pending_tasks(r)
     assert set(ids) == {"t1", "t2"}
     assert await ag.pop_pending_tasks(r) == []  # pop 后清空
+
+
+# ── ①b ★平台勾选(架子刀 · ADR 0050)─────────────────────────────────
+@pytest.mark.asyncio
+async def test_platform_checked_defaults() -> None:
+    """★默认值红线:binance 未设=ON(现状零变化)· x/未知平台 未设=OFF(fail-safe)。"""
+    r = _FakeRedis()
+    assert await ag.is_platform_checked(r, "binance_square") is True   # 默认 ON
+    assert await ag.is_platform_checked(r, "x") is False               # ★默认 OFF
+    assert await ag.is_platform_checked(r, "toutiao") is False         # 未来新平台也默认 OFF
+
+
+@pytest.mark.asyncio
+async def test_platform_checked_set_roundtrip() -> None:
+    """勾/取消写 Redis · =="1" 才算勾(绝不用 !="0" 语义)。"""
+    r = _FakeRedis()
+    await ag.set_platform_checked(r, "binance_square", checked=False)
+    assert await ag.is_platform_checked(r, "binance_square") is False  # 显式取消 → 关
+    await ag.set_platform_checked(r, "binance_square", checked=True)
+    assert await ag.is_platform_checked(r, "binance_square") is True
+    # ★x 即便被写 "1"(配置层被绕),勾选读出来是 True——但物理锁在 auto_publish 白名单,
+    #   见 test_auto_publish.test_resolve_platforms_whitelist_welds_x。
+    await ag.set_platform_checked(r, "x", checked=True)
+    assert await ag.is_platform_checked(r, "x") is True

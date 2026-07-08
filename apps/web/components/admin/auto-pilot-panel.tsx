@@ -11,7 +11,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
-import { getAutoPilotStatus, stopAutoPilot, toggleAutoPilot } from '@/lib/api/x-auto'
+import {
+  getAutoPilotStatus,
+  stopAutoPilot,
+  toggleAutoPilot,
+  toggleAutoPlatform,
+} from '@/lib/api/x-auto'
+
+// 平台标识 → 显示名(加平台 = registry 加一行后,这里补个显示名即可;缺省显示原标识)
+const PLATFORM_LABEL: Record<string, string> = {
+  binance_square: '币安广场',
+  x: '𝕏(Twitter)',
+}
 
 function StatChip({ label, value, tone }: { label: string; value: string; tone: string }) {
   return (
@@ -50,6 +61,17 @@ export function AutoPilotPanel({ token }: { token: string }) {
       invalidate()
     },
     onError: () => setNote('熔断失败,请重试'),
+  })
+
+  // ★平台勾选(架子刀 · ADR 0050)· 白名单外(X)后端 400 拒,UI 也灰显不可点
+  const platformMut = useMutation({
+    mutationFn: ({ platform, checked }: { platform: string; checked: boolean }) =>
+      toggleAutoPlatform(token, platform, checked),
+    onSuccess: (_s, v) => {
+      setNote(v.checked ? `✓ 已勾选 ${PLATFORM_LABEL[v.platform] ?? v.platform} 自动发布` : `已取消 ${PLATFORM_LABEL[v.platform] ?? v.platform} 自动发布`)
+      invalidate()
+    },
+    onError: (e) => setNote(e instanceof Error ? e.message : '平台勾选失败,请重试'),
   })
 
   const st = query.data
@@ -122,6 +144,43 @@ export function AutoPilotPanel({ token }: { token: string }) {
               value={st ? (st.in_window ? '在窗(7:30-22:30)' : '不在窗') : '—'}
               tone={st?.in_window ? 'text-foreground' : 'text-muted-foreground'}
             />
+          </div>
+
+          {/* ★平台多选(架子刀 · ADR 0050):勾选的平台才自动质检发布 · 总开关 AND 平台勾选双闸。
+              X 灰显「暂未启用」= auto_publish 白名单物理焊死(后端 400 双保险),待 Hans 验质量授权。 */}
+          <div className="mt-4 border-t border-paper pt-3">
+            <span className="text-[11px] text-muted-foreground">自动发布平台</span>
+            <div className="mt-1.5 flex flex-wrap items-center gap-4">
+              {(st?.platforms ?? []).map((p) => (
+                <label
+                  key={p.platform}
+                  className={`flex items-center gap-1.5 text-sm ${
+                    p.auto_allowed ? 'cursor-pointer text-foreground' : 'cursor-not-allowed text-muted-foreground'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={p.checked}
+                    disabled={!p.auto_allowed || platformMut.isPending || token === ''}
+                    onChange={(e) =>
+                      platformMut.mutate({ platform: p.platform, checked: e.target.checked })
+                    }
+                    className="h-3.5 w-3.5 accent-midas-red disabled:cursor-not-allowed"
+                  />
+                  {PLATFORM_LABEL[p.platform] ?? p.platform}
+                  {!p.auto_allowed && (
+                    <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                      暂未启用
+                    </span>
+                  )}
+                  {p.auto_allowed && !p.adapter_enabled && (
+                    <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] text-amber-700">
+                      未配 API Key
+                    </span>
+                  )}
+                </label>
+              ))}
+            </div>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-paper pt-3">

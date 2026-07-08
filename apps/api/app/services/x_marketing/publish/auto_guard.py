@@ -56,6 +56,32 @@ async def set_enabled(redis: Any, enabled: bool) -> None:  # noqa: FBT001
     await redis.set(_ENABLED, "1" if enabled else "0")
 
 
+# ── ①b ★平台勾选(架子刀 · per-platform 分闸 · ADR 0050)──────────────────
+# 自动发布 = 总开关(x:auto:enabled)AND 平台勾选(x:auto:platform:{p})双闸。
+# ★默认值按平台分:binance_square 默认 ON(未设 = 开 · 保持现状零语义变化);
+#   其它平台一律默认 OFF(★新平台加进 ADAPTERS 绝不自动开着发 · fail-safe 方向)。
+# ★★勾选只是配置层第一道门 —— X 能否自动发的【物理锁】在 auto_publish.AUTO_PUBLISH_ALLOWED
+#   硬编码白名单(勾选被误翻也发不出白名单外的平台),见 auto_publish.py + ADR 0050。
+_PLATFORM_KEY_PREFIX = "x:auto:platform:"
+_PLATFORM_DEFAULT_ON = frozenset({"binance_square"})  # 现状:自动托管本就只发币安
+
+
+def _platform_key(platform: str) -> str:
+    return f"{_PLATFORM_KEY_PREFIX}{platform}"
+
+
+async def is_platform_checked(redis: Any, platform: str) -> bool:
+    """平台勾选:未设 → binance 默认 ON(现状不变)· 其它默认 OFF(勾了才算 · =="1")。"""
+    v = await redis.get(_platform_key(platform))
+    if v is None:
+        return platform in _PLATFORM_DEFAULT_ON
+    return bool(v == "1")
+
+
+async def set_platform_checked(redis: Any, platform: str, *, checked: bool) -> None:
+    await redis.set(_platform_key(platform), "1" if checked else "0")
+
+
 # ── ② 时段窗(纯函数 · 7:30-22:30 CST 含两端)────────────────────────
 def is_in_publish_window(now: datetime | None = None) -> bool:
     t = (now or datetime.now(tz=CN_TZ)).timetz().replace(tzinfo=None)
