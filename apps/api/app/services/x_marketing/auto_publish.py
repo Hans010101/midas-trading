@@ -6,7 +6,8 @@ upsert_pending(source=auto)→ run_publish(复用发布层:撮合+台账+rate_li
 成功:mark_published(6h去重)+ incr_daily(日计数)+ reset_fail · 失败:record_fail,连续 3 次 → 开熔断。
 
 ★退避(护栏⑤):连续失败 FAIL_THRESHOLD 次自动开熔断 + TG 通知 Hans(best-effort)· 停所有自动发。
-★红线:只发分析推文 binance_square,零碰交易引擎(虚拟交易绝不真实下单)· 门禁不过 run_publish 内再拦。
+★红线:自动发布只可能发 _AUTO_PUBLISH_ALLOWED 白名单平台(现仅 binance_square·X 焊死待 Hans 授权·
+ADR 0050),零碰交易引擎(虚拟资金绝不真实下单)· 门禁不过 run_publish 内再拦。
 """
 
 from __future__ import annotations
@@ -27,9 +28,25 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_PLATFORM = "binance_square"  # 自动托管只发币安广场(唯一有官方发帖 API 的平台)
+# ★★自动发布平台【硬编码白名单】= manual-first 的物理锁(架子刀 · ADR 0050):
+#   自动路径读「平台勾选」配置(auto_guard.is_platform_checked),但只有白名单内的平台
+#   可能被自动发。X("x")不在白名单 → 即便 Redis 勾选被误翻 ON / 端点被绕,自动路径也
+#   【发不出 X】(代码级焊死 · 不降级成运行时 flag)。将来 Hans 验过 X 自动化质量并明确
+#   授权 → 白名单加 "x" 一行 + 后台勾选即启用,架构不动。
+_AUTO_PUBLISH_ALLOWED: frozenset[str] = frozenset({"binance_square"})
 _DELAY_MIN_S = 60   # 单条自动发布随机延迟下限 1min(频率调整 · Hans 定)
 _DELAY_MAX_S = 420  # 上限 7min
+
+
+async def resolve_auto_platforms(redis: Any) -> list[str]:
+    """自动发布目标平台 = 硬编码白名单 ∩ 勾选 ON(排序稳定)· 空 = 本轮不自动发。
+
+    ★勾选是分闸(admin 可只关币安自动发·总开关仍管起草);白名单是物理锁(X 焊死)。
+    """
+    return [
+        p for p in sorted(_AUTO_PUBLISH_ALLOWED)
+        if await auto_guard.is_platform_checked(redis, p)
+    ]
 
 
 def publish_delay_seconds() -> int:
@@ -60,10 +77,16 @@ async def run_auto_publish(
         return {"status": "skip", "reason": "daily_cap"}
     if await auto_guard.is_recently_published(redis, symbol):
         return {"status": "skip", "reason": "duplicate"}  # 6h 内已发(并发/重排兜底)
+    # ★架子刀(ADR 0050):平台 = 白名单 ∩ 勾选(现白名单仅 binance → 行为与旧 _PLATFORM 一致;
+    #   admin 取消勾选币安 → 本轮 skip 不自动发 · X 不在白名单永不出现在这里)
+    platforms = await resolve_auto_platforms(redis)
+    if not platforms:
+        return {"status": "skip", "reason": "no_platform_checked"}
+    platform = platforms[0]  # 白名单当前单平台;将来多平台由第二步扩循环(需 Hans 授权)
 
     # 发布(复用发布层 · source=auto 审计 · run_publish 内含门禁双保险 + rate_limit)
     dispatch = await upsert_pending(
-        session, tweet_id=tweet_id, platform=_PLATFORM, dispatched_by=None, source="auto",
+        session, tweet_id=tweet_id, platform=platform, dispatched_by=None, source="auto",
     )
     result = await run_publish(session, redis, dispatch.id)
 

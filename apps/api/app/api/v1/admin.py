@@ -1285,19 +1285,45 @@ async def publish_x_tweet(
 # ── X 营销自动托管(自动托管 PR-1)· 全局开关 + 紧急熔断 ─────────────────────
 
 
+class AutoPilotPlatformItem(BaseModel):
+    """★平台勾选项(架子刀 · ADR 0050)· 供 admin 面板渲染平台多选。"""
+
+    platform: str          # 平台标识(registry.ADAPTERS 键)
+    checked: bool          # Redis 勾选(binance 默认 ON · 其它默认 OFF)
+    auto_allowed: bool     # ★硬编码白名单内(False = UI 灰显「暂未启用」· X 现阶段 False)
+    adapter_enabled: bool  # API Key 配齐(X 未配 4 密钥 = False)
+
+
 class AutoPilotStatus(BaseModel):
     enabled: bool          # 自动托管总开关(默认 OFF)
     circuit_open: bool     # 熔断中(连续失败触发 · 开则停所有自动发)
     daily_used: int        # 今日已自动发布数
     daily_remaining: int   # 今日剩余配额(30 封顶)
     in_window: bool        # 当前是否在发布时段(7:30-22:30 CST)
+    platforms: list[AutoPilotPlatformItem] = []  # ★平台勾选(架子刀 · 默认空兼容旧客户端)
 
 
 class AutoPilotToggleIn(BaseModel):
     enabled: bool
 
 
-@router.get("/x-auto/status", summary="自动托管状态(开关/熔断/日配额/时段)")
+async def _platform_items(redis: Any) -> list[AutoPilotPlatformItem]:  # noqa: ANN401
+    """从 registry.ADAPTERS 派生平台勾选清单(加平台 = registry 加一行,面板自动出现)。"""
+    from app.services.x_marketing.auto_publish import _AUTO_PUBLISH_ALLOWED  # noqa: PLC0415
+    from app.services.x_marketing.publish.registry import ADAPTERS  # noqa: PLC0415
+
+    return [
+        AutoPilotPlatformItem(
+            platform=p,
+            checked=await auto_guard.is_platform_checked(redis, p),
+            auto_allowed=p in _AUTO_PUBLISH_ALLOWED,
+            adapter_enabled=adapter.enabled,
+        )
+        for p, adapter in sorted(ADAPTERS.items())
+    ]
+
+
+@router.get("/x-auto/status", summary="自动托管状态(开关/熔断/日配额/时段/平台勾选)")
 async def get_auto_pilot_status(_admin: AdminDep) -> AutoPilotStatus:
     redis = await get_redis()
     remaining = await auto_guard.daily_remaining(redis)
@@ -1307,7 +1333,42 @@ async def get_auto_pilot_status(_admin: AdminDep) -> AutoPilotStatus:
         daily_used=auto_guard.AUTO_DAILY_MAX - remaining,
         daily_remaining=remaining,
         in_window=auto_guard.is_in_publish_window(),
+        platforms=await _platform_items(redis),
     )
+
+
+class PlatformToggleIn(BaseModel):
+    checked: bool
+
+
+@router.post(
+    "/x-auto/platforms/{platform}",
+    summary="勾/取消自动发布平台(★白名单外 400 拒 · X 现阶段暂未启用 · ADR 0050)",
+)
+async def toggle_auto_platform(
+    platform: str, payload: PlatformToggleIn, _admin: AdminDep,
+) -> AutoPilotStatus:
+    """★平台分闸(总开关 AND 平台勾选)· 白名单外的平台(如 X)连勾选值都不可写:
+
+    配置层也焊死 —— 即便有人直改本端点,X 仍被 auto_publish._AUTO_PUBLISH_ALLOWED
+    物理锁挡(双保险)。将来 Hans 授权启用 X = 白名单加一行,本端点随之自动解锁。
+    """
+    from app.services.x_marketing.auto_publish import _AUTO_PUBLISH_ALLOWED  # noqa: PLC0415
+    from app.services.x_marketing.publish.registry import get_adapter  # noqa: PLC0415
+
+    if get_adapter(platform) is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"未知平台:{platform}",
+        )
+    if platform not in _AUTO_PUBLISH_ALLOWED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{platform} 自动发布暂未启用(白名单锁定 · 见 ADR 0050)",
+        )
+    redis = await get_redis()
+    await auto_guard.set_platform_checked(redis, platform, checked=payload.checked)
+    logger.info("[x-auto] 平台勾选 %s → %s", platform, payload.checked)
+    return await get_auto_pilot_status(_admin)
 
 
 @router.post("/x-auto/toggle", summary="开/关自动托管(★默认 OFF · 开=自动起草+自动发)")

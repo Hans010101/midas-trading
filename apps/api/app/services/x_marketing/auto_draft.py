@@ -108,7 +108,7 @@ async def run_auto_draft_xshort(
     - 守卫:is_enabled(总开关 · 共享)+ 时段窗 + 自有 x_short 日配额
       (★不受币安 daily_cap / circuit 影响 · 独立配额避免挤占)。
     - ★★x_short draft 永不自动发布:本函数【不返回 target】,只返回 (id,sym) 供截图;
-      x_short 只能人工发(auto_publish._PLATFORM 硬编码 binance · manual-first 不破)。
+      x_short 只能人工发(auto_publish._AUTO_PUBLISH_ALLOWED 白名单焊死不含 x · manual-first 不破)。
     - 选币同币安口径 b(每轮 ≤ 2 · 同一快照 → 同批热门币)· gen_style=x_short。
 
     返回 [(id, symbol)] 供截图;守卫不过 / 无候选 / 无生成行 → []。

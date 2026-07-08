@@ -161,3 +161,43 @@ def test_publish_delay_in_range() -> None:
     for _ in range(100):
         d = ap.publish_delay_seconds()
         assert 60 <= d <= 420
+
+
+# ── ★架子刀(ADR 0050):平台勾选分闸 + 白名单物理锁 ─────────────────────
+
+
+@pytest.mark.asyncio
+async def test_resolve_platforms_whitelist_welds_x() -> None:
+    """★★红线焊死:把 x 勾选强翻 ON(模拟配置层被绕),resolve 仍只可能返回白名单平台。
+
+    X 不在 _AUTO_PUBLISH_ALLOWED → 无论 Redis 勾选值如何,自动路径永远拿不到 "x"。
+    """
+    r = _FakeRedis()
+    await auto_guard.set_platform_checked(r, "x", checked=True)  # 强翻 X 勾选
+    platforms = await ap.resolve_auto_platforms(r)
+    assert "x" not in platforms                     # ★白名单物理锁:X 焊死
+    assert platforms == ["binance_square"]          # binance 默认 ON 照常
+
+
+@pytest.mark.asyncio
+async def test_publish_skips_when_binance_unchecked(db_session) -> None:  # noqa: ANN001
+    """★分闸:admin 取消勾选币安 → 自动发布 skip(总开关仍 ON·起草不受影响)。"""
+    r = await _enabled_redis()
+    await auto_guard.set_platform_checked(r, "binance_square", checked=False)
+    tweet = await _mk_tweet(db_session, passed=True)
+    out = await ap.run_auto_publish(
+        db_session, r, tweet_id=tweet.id, symbol=tweet.symbol, now=_in_window(),
+    )
+    assert out == {"status": "skip", "reason": "no_platform_checked"}
+
+
+@pytest.mark.asyncio
+async def test_publish_default_unset_platform_still_publishes(db_session, monkeypatch) -> None:  # noqa: ANN001
+    """★现状零变化:平台勾选键从未设置(存量部署)→ binance 默认 ON → 照常自动发。"""
+    _mock_publish(monkeypatch, "success")
+    r = await _enabled_redis()  # 无任何 platform 键
+    tweet = await _mk_tweet(db_session, passed=True)
+    out = await ap.run_auto_publish(
+        db_session, r, tweet_id=tweet.id, symbol=tweet.symbol, now=_in_window(),
+    )
+    assert out["status"] == "success"  # 行为与旧 _PLATFORM 硬编码逐字节一致

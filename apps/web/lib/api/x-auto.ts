@@ -10,12 +10,20 @@
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
+export interface AutoPilotPlatformItem {
+  platform: string // 平台标识(binance_square / x / …)
+  checked: boolean // Redis 勾选(binance 默认 ON · 其它默认 OFF)
+  auto_allowed: boolean // ★硬编码白名单内(false = 灰显「暂未启用」· X 现阶段 false)
+  adapter_enabled: boolean // API Key 配齐
+}
+
 export interface AutoPilotStatus {
   enabled: boolean // 总开关(默认 OFF)
   circuit_open: boolean // 熔断中(连续失败触发 · 开则停所有自动发)
   daily_used: number // 今日已自动发布
   daily_remaining: number // 今日剩余配额(30 封顶)
   in_window: boolean // 当前在发布时段(7:30-22:30 CST)
+  platforms: AutoPilotPlatformItem[] // ★平台勾选(架子刀 · ADR 0050)
 }
 
 export interface AutoPilotStopOut {
@@ -48,6 +56,24 @@ export async function toggleAutoPilot(token: string, enabled: boolean): Promise<
     body: JSON.stringify({ enabled }),
   })
   if (!r.ok) throw new Error(`x-auto toggle HTTP ${r.status}`)
+  return (await r.json()) as AutoPilotStatus
+}
+
+/** 勾/取消自动发布平台(★白名单外后端 400 拒 · X 现阶段「暂未启用」· ADR 0050)。 */
+export async function toggleAutoPlatform(
+  token: string,
+  platform: string,
+  checked: boolean,
+): Promise<AutoPilotStatus> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/x-auto/platforms/${platform}`, {
+    method: 'POST',
+    headers: { ...(_authHeaders(token) ?? {}), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ checked }),
+  })
+  if (!r.ok) {
+    const detail = await r.json().catch(() => null)
+    throw new Error(detail?.detail ?? `x-auto platform toggle HTTP ${r.status}`)
+  }
   return (await r.json()) as AutoPilotStatus
 }
 
