@@ -45,6 +45,9 @@ services:
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - ./clickhouse-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      # ★系统日志瘦身(磁盘 88% 根治):关 debug 日志表 + query/part_log 7 天 TTL。
+      #   生效需手动 recreate clickhouse 一次(update.sh 绝不碰 CH)· 详见该 xml 头注释。
+      - ./clickhouse-logs.xml:/etc/clickhouse-server/config.d/reduce-system-logs.xml:ro
     networks:
       - midas-net
     ulimits:

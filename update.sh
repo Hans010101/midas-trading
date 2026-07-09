@@ -115,6 +115,14 @@ cd /opt/midas
 COMPOSE="docker compose -f docker/docker-compose.yaml -f docker/docker-compose.prod.yaml --profile self-hosted"
 START_TIME=$(date +%s)
 
+# ── ★磁盘水位护栏(2026-07-09 磁盘 88% 事故)· ≥90% 大字告警【不阻塞】────────────
+#   满盘会让 docker pull / recreate 中途翻车(比告警更疼);告警不阻塞 = 留给人判断,
+#   紧急修复(往往正是磁盘导致的)不能被自己的护栏卡死。清理路径见 docs:CH 系统日志 / 旧镜像。
+DISK_PCT=$(df -P / | awk 'NR==2 {gsub("%",""); print $5}')
+if [ "${DISK_PCT:-0}" -ge 90 ]; then
+  warn "★★★ 磁盘水位 ${DISK_PCT}%(≥90%)· pull/recreate 可能中途失败 · 请尽快清理(CH 系统日志 / docker 旧镜像 / journalctl vacuum)"
+fi
+
 # ============================================================
 banner "1/7 · git pull · 拉最新代码"
 # ============================================================

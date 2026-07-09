@@ -20,6 +20,9 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 RETENTION_HOURS = 168  # ★保留窗口一周(7×24·Hans 定「最多存一周」· 曾 24h→72h→168h)
+# ★已发布推文的【截图】保留天数(磁盘治理 2026-07-09):行+dispatch 台账永久(审计),
+#   但图只是草稿预览素材——发布 30 天后删图留行(列表只显 7 天,早无人看;X/币安帖子本身有图)。
+PUBLISHED_IMAGE_RETENTION_DAYS = 30
 
 
 async def create_tweet(
@@ -109,3 +112,35 @@ async def cleanup_expired(
     await session.execute(delete(XTweet).where(*expired))
     await session.commit()
     return paths
+
+
+async def expire_published_images(
+    session: AsyncSession, *, now: datetime | None = None,
+) -> list[str]:
+    """★已发布推文的截图 30 天后【删图留行】· 返回待删文件路径给 worker unlink。
+
+    磁盘治理(2026-07-09):cleanup_expired 豁免已发布行(台账永久)→ 其 PNG 原本
+    永久积累。本函数补最后一环:发布满 PUBLISHED_IMAGE_RETENTION_DAYS 天的行,置
+    image_path=NULL(行/台账不动·审计完整),文件由调用方删。
+    ★零 UI 影响:列表只显 7 天窗口,30 天前的行早不在前端;/image 端点对 NULL 返 404(既有语义)。
+    """
+    now = now or datetime.now(tz=UTC)
+    before = now - timedelta(days=PUBLISHED_IMAGE_RETENTION_DAYS)
+    published = select(PlatformDispatch.tweet_id).distinct().scalar_subquery()
+    stale = (
+        XTweet.created_at < before,
+        XTweet.id.in_(published),
+        XTweet.image_path.isnot(None),
+    )
+    rows = (await session.execute(select(XTweet).where(*stale))).scalars().all()
+    paths = [r.image_path for r in rows if r.image_path]
+    for r in rows:
+        r.image_path = None
+    await session.commit()
+    return paths
+
+
+async def select_image_paths(session: AsyncSession) -> set[str]:
+    """全部行的 image_path 非空集合 · 供 worker 孤儿截图清扫比对(/shots 里不在集合内=孤儿)。"""
+    stmt = select(XTweet.image_path).where(XTweet.image_path.isnot(None))
+    return {p for p in (await session.execute(stmt)).scalars().all() if p}
