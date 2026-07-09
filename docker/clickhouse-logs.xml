@@ -1,0 +1,38 @@
+<!--
+  ClickHouse 系统日志瘦身(磁盘 88% 事故根治 · 2026-07-09)。
+
+  背景:CH 默认把自身运行诊断写进 system.*_log 表且【无 TTL 无限积累】——生产实测
+  text_log 7.43GB(2.17 亿行)+ processors_profile_log 2GB + query_log 1.36GB +
+  trace_log 1.33GB + part_log 522MB ≈ 12.6GB,全是 CH 自己的 debug 日志,非业务数据。
+
+  策略:
+  - 纯 debug / profiling 类 → 整个关闭(remove="1" 停止写入·我们不用这些做深度剖析):
+    text_log(server 日志入表·与容器 stdout 日志重复)/ processors_profile_log /
+    trace_log(采样剖析)/ metric_log / asynchronous_metric_log(监控面板用·我们没有)/
+    query_thread_log。
+  - 有诊断价值的 → 保留 + 7 天 TTL(慢查询 / 合并诊断·性能体检用得上):
+    query_log / part_log。★config.d 合并语义:只写 <ttl> 子项,database/table/
+    flush_interval 等继承默认配置不受影响。
+  - ★<ttl> 只在【建表时】生效;存量表的 TTL 已由运维手动 ALTER 补上
+    (ALTER TABLE system.query_log MODIFY TTL event_date + INTERVAL 7 DAY DELETE)。
+
+  挂载:docker-compose.yaml 只读挂到 /etc/clickhouse-server/config.d/。
+  ★生效需 recreate clickhouse 容器一次(update.sh 设计上绝不碰 CH·须手动):
+    cd /opt/midas 后用 update.sh 同款 COMPOSE 命令(两个 compose 文件 + self-hosted
+    profile)执行「up -d clickhouse」。(命令行含双连字符参数·XML 注释禁写·见 PR 描述)
+  recreate 后可 DROP 已停用的 system.text_log 等表收尾(停用后不再重建)。
+-->
+<clickhouse>
+    <text_log remove="1"/>
+    <processors_profile_log remove="1"/>
+    <trace_log remove="1"/>
+    <metric_log remove="1"/>
+    <asynchronous_metric_log remove="1"/>
+    <query_thread_log remove="1"/>
+    <query_log>
+        <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+    </query_log>
+    <part_log>
+        <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+    </part_log>
+</clickhouse>

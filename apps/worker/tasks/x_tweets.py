@@ -22,24 +22,24 @@ from sqlalchemy.pool import NullPool
 
 from app.services.clickhouse_client import ClickHouseClient
 from app.services.x_marketing.generate import generate_and_store, pick_contexts
-from app.services.x_marketing.store import cleanup_expired, set_image_path
+from app.services.x_marketing.store import (
+    cleanup_expired,
+    expire_published_images,
+    select_image_paths,
+    set_image_path,
+)
 
 logger = logging.getLogger(__name__)
 
 _SNAPSHOT_KEY = "boll:snapshot:latest"  # 做T A-1 快照(boll_scan 落 · 本任务只读挑币)
+_SHOTS_DIR = Path("/shots")             # x-shooter 写 · api/worker 读的共享卷(compose x_shots)
+# ★孤儿清扫竞态保护:截图落盘 → link 回调写 image_path 之间有秒级窗口,刚写的文件
+#   还没行引用会被误判孤儿 → 只清 mtime 超 24h 的(窗口秒级·24h 余量绝对安全)。
+_ORPHAN_MIN_AGE_S = 24 * 3600
 
 
-async def _cleanup() -> tuple[int, int]:
-    engine = create_async_engine(
-        os.environ["DATABASE_URL"], future=True, poolclass=NullPool,
-    )
-    session_maker = async_sessionmaker(engine, expire_on_commit=False)
-    try:
-        async with session_maker() as session:
-            paths = await cleanup_expired(session)
-    finally:
-        await engine.dispose()
-    # ★删截图文件(本地共享卷)· 单个失败不影响其他(文件可能已不在)
+def _unlink_all(paths: list[str]) -> int:
+    """删截图文件(本地共享卷)· 单个失败不影响其他(文件可能已不在)· 返回成功数。"""
     removed = 0
     for p in paths:
         try:
@@ -47,15 +47,66 @@ async def _cleanup() -> tuple[int, int]:
             removed += 1
         except OSError as exc:  # noqa: PERF203 · 逐个 best-effort
             logger.warning("[x-tweets] 删截图失败 %s · %s", p, exc)
-    return len(paths), removed
+    return removed
+
+
+def _sweep_orphan_shots(known_paths: set[str]) -> int:
+    """★孤儿截图清扫(磁盘治理):/shots 里没有任何行引用的 png 删除。
+
+    ★只清 mtime 超 _ORPHAN_MIN_AGE_S(24h)的——防误删「已落盘但 link 回调还没写
+    image_path」的新图(窗口秒级·24h 余量绝对安全)。目录不存在(如本地 dev)→ 0。
+    """
+    if not _SHOTS_DIR.is_dir():
+        return 0
+    import time  # noqa: PLC0415 · 只此处用
+
+    now_ts = time.time()
+    removed = 0
+    for f in _SHOTS_DIR.glob("*.png"):
+        try:
+            if str(f) in known_paths:
+                continue
+            if now_ts - f.stat().st_mtime < _ORPHAN_MIN_AGE_S:
+                continue  # 太新 · 可能回调在途
+            f.unlink(missing_ok=True)
+            removed += 1
+        except OSError as exc:  # noqa: PERF203 · 逐个 best-effort
+            logger.warning("[x-tweets] 孤儿截图清扫失败 %s · %s", f, exc)
+    return removed
+
+
+async def _cleanup() -> dict[str, int]:
+    engine = create_async_engine(
+        os.environ["DATABASE_URL"], future=True, poolclass=NullPool,
+    )
+    session_maker = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with session_maker() as session:
+            paths = await cleanup_expired(session)                 # 超 7 天未发布行(删行+图)
+            pub_paths = await expire_published_images(session)     # ★已发布满 30 天(删图留行)
+            known = await select_image_paths(session)              # 剩余引用集(孤儿比对基准)
+    finally:
+        await engine.dispose()
+    removed = _unlink_all(paths)
+    pub_removed = _unlink_all(pub_paths)
+    orphans = _sweep_orphan_shots(known)
+    return {
+        "image_files": len(paths), "removed": removed,
+        "published_images": len(pub_paths), "published_removed": pub_removed,
+        "orphans_removed": orphans,
+    }
 
 
 @shared_task(name="tasks.x_tweets.cleanup_expired", max_retries=0)
 def cleanup_expired_tweets() -> dict[str, int]:
-    """Celery 入口 · 每小时删 24h 前的 x_tweet 行 + 删其截图文件。"""
-    files, removed = asyncio.run(_cleanup())
-    logger.info("[x-tweets] 清理过期推文 · 截图文件 %d 删 %d", files, removed)
-    return {"image_files": files, "removed": removed}
+    """Celery 入口 · 删过期行+图 · ★已发布满 30 天删图留行 · ★/shots 孤儿清扫(磁盘治理)。"""
+    stats = asyncio.run(_cleanup())
+    logger.info(
+        "[x-tweets] 清理 · 过期行图 %d/%d · 已发布过期图 %d/%d · 孤儿 %d",
+        stats["image_files"], stats["removed"],
+        stats["published_images"], stats["published_removed"], stats["orphans_removed"],
+    )
+    return stats
 
 
 async def _generate(

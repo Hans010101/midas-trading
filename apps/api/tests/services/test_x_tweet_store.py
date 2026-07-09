@@ -106,3 +106,57 @@ async def test_cleanup_skips_published(db_session) -> None:  # noqa: ANN001
     survivors = (await db_session.execute(select(XTweet.symbol))).scalars().all()
     assert "PUBUSDT" in survivors  # ★已发布的留着(审计)
     assert "OLDUSDT" not in survivors  # 没发的(超窗 无 dispatch)被清
+
+
+# ── ★磁盘治理:已发布截图 30 天删图留行 + 全量引用集(孤儿清扫基准)──────────
+
+
+@pytest.mark.asyncio
+async def test_expire_published_images_old_only(db_session) -> None:  # noqa: ANN001
+    """已发布+满30天 → 返回图路径+image_path置NULL+★行与台账保留;未满30天/未发布不动。"""
+    from app.services.x_marketing.store import (
+        PUBLISHED_IMAGE_RETENTION_DAYS,
+        expire_published_images,
+    )
+
+    now = datetime(2026, 7, 9, 12, 0, tzinfo=UTC)
+    old = now - timedelta(days=PUBLISHED_IMAGE_RETENTION_DAYS + 1)
+    old_pub = XTweet(symbol="OLDPUB", bias="偏多", tweet_text="老已发", compliance_passed=True,
+                     image_path="/shots/old_pub.png", created_at=old)
+    new_pub = XTweet(symbol="NEWPUB", bias="偏多", tweet_text="新已发", compliance_passed=True,
+                     image_path="/shots/new_pub.png", created_at=now - timedelta(days=1))
+    old_draft = XTweet(symbol="OLDDRAFT", bias="偏空", tweet_text="老未发", compliance_passed=True,
+                       image_path="/shots/old_draft.png", created_at=old)
+    db_session.add_all([old_pub, new_pub, old_draft])
+    await db_session.commit()
+    db_session.add_all([
+        PlatformDispatch(tweet_id=old_pub.id, platform="binance_square", status="success"),
+        PlatformDispatch(tweet_id=new_pub.id, platform="x", status="success"),
+    ])
+    await db_session.commit()
+
+    paths = await expire_published_images(db_session, now=now)
+    assert paths == ["/shots/old_pub.png"]        # ★只有「已发布+满30天」的图
+    await db_session.refresh(old_pub)
+    assert old_pub.image_path is None             # 删图
+    assert old_pub.tweet_text == "老已发"          # ★留行(台账审计不动)
+    await db_session.refresh(new_pub)
+    assert new_pub.image_path == "/shots/new_pub.png"   # 未满30天不动
+    await db_session.refresh(old_draft)
+    assert old_draft.image_path == "/shots/old_draft.png"  # 未发布的归 cleanup_expired 管,此处不动
+
+
+@pytest.mark.asyncio
+async def test_select_image_paths_nonnull_set(db_session) -> None:  # noqa: ANN001
+    """全量 image_path 非空集合(孤儿清扫比对基准)· NULL 行不入集。"""
+    from app.services.x_marketing.store import select_image_paths
+
+    db_session.add_all([
+        XTweet(symbol="A1", bias="偏多", tweet_text="a", compliance_passed=True,
+               image_path="/shots/a.png"),
+        XTweet(symbol="B2", bias="偏空", tweet_text="b", compliance_passed=True),  # 无图
+    ])
+    await db_session.commit()
+    got = await select_image_paths(db_session)
+    assert "/shots/a.png" in got
+    assert None not in got
