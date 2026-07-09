@@ -175,8 +175,9 @@ export function MembershipSection() {
 }
 
 // ★其他购买方式(闲鱼法币通道)· ★辅助区沉底(Hans 定:加密支付主角、闲鱼配角、主次分开):
-//   三 SKU 二维码全部集中此框(月/季/年各带标签)· 视觉低调(muted 标题·不抢主角)。
-//   中性表述(不用「绕过/规避支付」「更便宜」等词 · 守教育+工具红线)。
+//   三 SKU 集中此框 · ★双通道覆盖两种设备(手机没法扫自己屏幕的码=硬伤):
+//   二维码(电脑用户拿手机闲鱼 App 扫)+ 可点击链接(手机用户点击直达/唤起闲鱼)。
+//   视觉低调(muted·不抢主角)· 中性表述(不用「绕过/规避支付」「更便宜」等词)。
 function OtherPurchaseBlock() {
   return (
     <div className="rounded-lg border border-paper bg-surface-card p-5">
@@ -193,11 +194,21 @@ function OtherPurchaseBlock() {
               <QRCodeSVG value={XIANYU_URLS[t.period]} size={96} level="M" />
             </div>
             <span className="text-[11px] text-muted-foreground">{t.label}</span>
+            {/* ★手机通道:点击直达对应闲鱼商品(手机扫不了自己屏幕的码) */}
+            <a
+              href={XIANYU_URLS[t.period]}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-md border border-paper px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-midas-red/40 hover:text-foreground"
+            >
+              打开闲鱼购买{t.label} ↗
+            </a>
           </div>
         ))}
       </div>
       <p className="mt-3 text-center text-[10px] text-muted-foreground/70 sm:text-left">
-        扫对应档位二维码进闲鱼购买 · 月度 / 季度 / 年度各自独立商品
+        电脑端:请用闲鱼 App 扫对应二维码 · 手机端:点「打开闲鱼购买」直达 ·
+        月度 / 季度 / 年度各自独立商品
       </p>
     </div>
   )
