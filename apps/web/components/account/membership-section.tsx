@@ -187,6 +187,12 @@ function OtherPurchaseBlock() {
       <p className="mt-1.5 text-xs text-muted-foreground">
         不便使用加密支付?可通过闲鱼购买会员兑换码,购买后填入上方兑换码框开通。
       </p>
+      {/* ★醒目扫码提示(三码正上方·扫之前第一眼看到·防拿微信误扫流失)·
+          浅色警示条:比底部小字突出,但仍在辅助框内不抢加密支付主角 · 深色模式配对色 */}
+      <div className="mt-3 flex items-center gap-1.5 rounded-md bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+        <span aria-hidden>⚠️</span>
+        请用【闲鱼 App】扫码 —— 微信 / 其他 App 扫码无效
+      </div>
       <div className="mt-4 flex flex-wrap justify-center gap-6 sm:justify-start">
         {PLAN_TIERS.map((t) => (
           <div key={t.period} className="flex flex-col items-center gap-1.5">
@@ -207,7 +213,7 @@ function OtherPurchaseBlock() {
         ))}
       </div>
       <p className="mt-3 text-center text-[10px] text-muted-foreground/70 sm:text-left">
-        电脑端:请用闲鱼 App 扫对应二维码 · 手机端:点「打开闲鱼购买」直达 ·
+        电脑端:打开手机闲鱼 App 扫上方对应二维码 · 手机端:点「打开闲鱼购买」按钮直达 ·
         月度 / 季度 / 年度各自独立商品
       </p>
     </div>
