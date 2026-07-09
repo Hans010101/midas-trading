@@ -5,8 +5,9 @@
  *
  * 价格如实(USDT)· 已是 Pro 显到期日 + 续费;免费版引导升级。开权益由后端回调核验。
  * 标题保留「会员 · 支持者计划」· 兑换码复用 /redeem 逻辑。
- * ★闲鱼法币通道(方案 A·就近对应):月/季/年三 SKU 各自链接,二维码放各价格卡底部
- *   (一商品一链接·看哪档扫哪档);「其他购买方式」块纯引导 · 中性表述(教育+工具定位)。
+ * ★布局主次(Hans 定):加密支付=主角(价格卡最上·卡内零二维码不被干扰)→ 兑换码框 →
+ *   「其他购买方式」=配角沉底(三 SKU 闲鱼二维码集中·月/季/年各带标签·视觉低调)。
+ *   一商品一链接 · 中性表述(教育+工具定位)。
  */
 
 import { useMutation } from '@tanstack/react-query'
@@ -110,28 +111,17 @@ export function MembershipSection() {
               >
                 {cta} Pro
               </button>
-              {/* ★闲鱼购买(方案 A·就近对应):本档 SKU 专属二维码 · 看哪档扫哪档 */}
-              <div className="mt-4 flex flex-col items-center gap-1.5 border-t border-paper pt-3">
-                <span className="text-[11px] text-muted-foreground">
-                  闲鱼购买{t.label}兑换码
-                </span>
-                <div className="rounded-md border border-paper bg-white p-1.5">
-                  <QRCodeSVG value={XIANYU_URLS[t.period]} size={88} level="M" />
-                </div>
-                <span className="text-[10px] text-muted-foreground/70">
-                  扫码进闲鱼购买 · 兑换码填下方开通
-                </span>
-              </div>
             </div>
           )
         })}
       </div>
 
-      {/* ★B · 其他购买方式(闲鱼法币通道)· 价格卡下方、兑换码上方 · 中性表述(教育+工具定位)*/}
-      <OtherPurchaseBlock />
-
-      {/* 兑换码(承接闲鱼购买 → 填码开通)· 复用 /redeem 兑换逻辑 */}
+      {/* 兑换码(输入兑换码开通)· 复用 /redeem 兑换逻辑 */}
       <RedeemPlanCard />
+
+      {/* ★其他购买方式(闲鱼法币通道·辅助区)· ★沉底配角:加密支付主角在上、卡内零二维码
+          不干扰主推路径;三 SKU 码集中此框 · 中性表述(教育+工具定位)*/}
+      <OtherPurchaseBlock />
 
       {/* Pro 权益对比 */}
       <div className="rounded-lg border border-paper bg-surface-card p-4">
@@ -184,17 +174,30 @@ export function MembershipSection() {
   )
 }
 
-// ★B · 其他购买方式说明(闲鱼法币通道)· 二维码已就近放各价格卡内(方案 A)· 此块纯引导。
+// ★其他购买方式(闲鱼法币通道)· ★辅助区沉底(Hans 定:加密支付主角、闲鱼配角、主次分开):
+//   三 SKU 二维码全部集中此框(月/季/年各带标签)· 视觉低调(muted 标题·不抢主角)。
 //   中性表述(不用「绕过/规避支付」「更便宜」等词 · 守教育+工具红线)。
 function OtherPurchaseBlock() {
   return (
     <div className="rounded-lg border border-paper bg-surface-card p-5">
-      <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-        <Store className="h-4 w-4 text-midas-red" /> 其他购买方式
+      <div className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+        <Store className="h-4 w-4" /> 其他购买方式
       </div>
-      <p className="mt-1.5 text-sm text-muted-foreground">
-        不便使用加密支付?可通过闲鱼购买会员兑换码——上方每档价格卡下有对应的闲鱼二维码
-        (月/季/年各自独立),扫码购买后将兑换码填入下方开通。
+      <p className="mt-1.5 text-xs text-muted-foreground">
+        不便使用加密支付?可通过闲鱼购买会员兑换码,购买后填入上方兑换码框开通。
+      </p>
+      <div className="mt-4 flex flex-wrap justify-center gap-6 sm:justify-start">
+        {PLAN_TIERS.map((t) => (
+          <div key={t.period} className="flex flex-col items-center gap-1.5">
+            <div className="rounded-md border border-paper bg-white p-1.5">
+              <QRCodeSVG value={XIANYU_URLS[t.period]} size={96} level="M" />
+            </div>
+            <span className="text-[11px] text-muted-foreground">{t.label}</span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-center text-[10px] text-muted-foreground/70 sm:text-left">
+        扫对应档位二维码进闲鱼购买 · 月度 / 季度 / 年度各自独立商品
       </p>
     </div>
   )
@@ -228,9 +231,9 @@ function RedeemPlanCard() {
           <span className="font-serif text-base font-bold">兑换码</span>
         </div>
         <span className="text-[11px] text-muted-foreground/70">输入兑换码开通 / 续期 Pro</span>
-        {/* ★C · 引导:还没有兑换码 → 指向上方价格卡内的对应闲鱼二维码 */}
-        <span className="ml-auto text-[11px] text-midas-red">
-          还没有兑换码?扫上方价格卡内的闲鱼二维码购买 ↑
+        {/* ★C · 引导:还没有兑换码 → 指向下方「其他购买方式」(闲鱼三码就在紧下方)*/}
+        <span className="ml-auto text-[11px] text-muted-foreground">
+          还没有兑换码?见下方「其他购买方式」经闲鱼购买 ↓
         </span>
       </div>
       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
