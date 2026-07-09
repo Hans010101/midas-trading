@@ -5,7 +5,8 @@
  *
  * 价格如实(USDT)· 已是 Pro 显到期日 + 续费;免费版引导升级。开权益由后端回调核验。
  * 标题保留「会员 · 支持者计划」· 兑换码复用 /redeem 逻辑。
- * ★其他购买方式:给不便用加密支付的用户一条法币通道(闲鱼买会员兑换码)· 中性表述(教育+工具定位)。
+ * ★闲鱼法币通道(方案 A·就近对应):月/季/年三 SKU 各自链接,二维码放各价格卡底部
+ *   (一商品一链接·看哪档扫哪档);「其他购买方式」块纯引导 · 中性表述(教育+工具定位)。
  */
 
 import { useMutation } from '@tanstack/react-query'
@@ -30,12 +31,13 @@ import { cn } from '@/lib/utils'
 import { PaymentDialog } from './payment-dialog'
 import { SupportTicketDialog } from './support-ticket-dialog'
 
-// ★闲鱼购买入口数据源(Hans 确认后填):
-//   · 给【链接】→ 填 XIANYU_SHOP_URL,前端用 qrcode.react 动态生成二维码;
-//   · 给【图片】→ 填 XIANYU_QR_IMAGE(如 '/xianyu-qr.png' 放 public/,优先级高于链接);
-//   · 二者都空 → 显占位框(区块架子/布局已就位,补数据即上线,无需再改结构)。
-const XIANYU_SHOP_URL: string = ''
-const XIANYU_QR_IMAGE: string = ''
+// ★闲鱼购买链接(Hans 提供 2026-07-09):一商品一链接 · 月/季/年三 SKU 各自二维码
+//   (方案 A · 就近对应:每个价格卡底部放该档二维码,看哪档扫哪档)。换链接改这里即可。
+const XIANYU_URLS: Record<Period, string> = {
+  month: 'https://m.tb.cn/h.RByCLbN?tk=B3a1go3qzBV',
+  quarter: 'https://m.tb.cn/h.RByBLUA?tk=W2R9go3IYoY',
+  year: 'https://m.tb.cn/h.RBBbl2Q?tk=WUdxgo3uErc',
+}
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—'
@@ -108,6 +110,18 @@ export function MembershipSection() {
               >
                 {cta} Pro
               </button>
+              {/* ★闲鱼购买(方案 A·就近对应):本档 SKU 专属二维码 · 看哪档扫哪档 */}
+              <div className="mt-4 flex flex-col items-center gap-1.5 border-t border-paper pt-3">
+                <span className="text-[11px] text-muted-foreground">
+                  闲鱼购买{t.label}兑换码
+                </span>
+                <div className="rounded-md border border-paper bg-white p-1.5">
+                  <QRCodeSVG value={XIANYU_URLS[t.period]} size={88} level="M" />
+                </div>
+                <span className="text-[10px] text-muted-foreground/70">
+                  扫码进闲鱼购买 · 兑换码填下方开通
+                </span>
+              </div>
             </div>
           )
         })}
@@ -170,7 +184,8 @@ export function MembershipSection() {
   )
 }
 
-// ★B · 其他购买方式(闲鱼法币通道)· 中性表述(不用「绕过/规避支付」「更便宜」等词 · 守教育+工具红线)
+// ★B · 其他购买方式说明(闲鱼法币通道)· 二维码已就近放各价格卡内(方案 A)· 此块纯引导。
+//   中性表述(不用「绕过/规避支付」「更便宜」等词 · 守教育+工具红线)。
 function OtherPurchaseBlock() {
   return (
     <div className="rounded-lg border border-paper bg-surface-card p-5">
@@ -178,37 +193,9 @@ function OtherPurchaseBlock() {
         <Store className="h-4 w-4 text-midas-red" /> 其他购买方式
       </div>
       <p className="mt-1.5 text-sm text-muted-foreground">
-        不便使用加密支付?可通过闲鱼购买会员兑换码。
+        不便使用加密支付?可通过闲鱼购买会员兑换码——上方每档价格卡下有对应的闲鱼二维码
+        (月/季/年各自独立),扫码购买后将兑换码填入下方开通。
       </p>
-      <div className="mt-4 flex flex-col items-center gap-3 sm:flex-row sm:items-start sm:gap-5">
-        <XianyuQr />
-        <p className="text-center text-xs text-muted-foreground sm:pt-1 sm:text-left">
-          扫码进店购买 · 购买后将兑换码填入下方开通。
-        </p>
-      </div>
-    </div>
-  )
-}
-
-// 闲鱼二维码:优先图片 → 其次链接动态生成(qrcode.react)→ 都无则占位(架子就位·补数据即上线)
-function XianyuQr() {
-  const box = 'flex h-32 w-32 shrink-0 items-center justify-center rounded-lg border border-paper bg-background'
-  if (XIANYU_QR_IMAGE) {
-    // eslint-disable-next-line @next/next/no-img-element -- 静态店铺二维码·非内容图·不走 next/image
-    return <img src={XIANYU_QR_IMAGE} alt="闲鱼店铺二维码" className="h-32 w-32 rounded-lg border border-paper" />
-  }
-  if (XIANYU_SHOP_URL) {
-    return (
-      <div className={box}>
-        <QRCodeSVG value={XIANYU_SHOP_URL} size={112} level="M" />
-      </div>
-    )
-  }
-  return (
-    <div className={`${box} px-2 text-center text-[11px] leading-tight text-muted-foreground/70`}>
-      闲鱼店铺二维码
-      <br />
-      即将上线
     </div>
   )
 }
@@ -241,9 +228,9 @@ function RedeemPlanCard() {
           <span className="font-serif text-base font-bold">兑换码</span>
         </div>
         <span className="text-[11px] text-muted-foreground/70">输入兑换码开通 / 续期 Pro</span>
-        {/* ★C · 引导:还没有兑换码 → 指向上方「其他购买方式」闲鱼入口 */}
+        {/* ★C · 引导:还没有兑换码 → 指向上方价格卡内的对应闲鱼二维码 */}
         <span className="ml-auto text-[11px] text-midas-red">
-          还没有兑换码?可在上方「其他购买方式」经闲鱼购买 ↑
+          还没有兑换码?扫上方价格卡内的闲鱼二维码购买 ↑
         </span>
       </div>
       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
