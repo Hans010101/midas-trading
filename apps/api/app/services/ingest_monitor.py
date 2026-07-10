@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     from clickhouse_connect.driver.asyncclient import AsyncClient
 
-    from app.schemas.crypto import EquityIngestStatus, IngestSourceStatus
+    from app.schemas.crypto import EconJobStatus, EquityIngestStatus, IngestSourceStatus
 
 
 class SourceSpec(NamedTuple):
@@ -122,3 +122,32 @@ def build_ingest_status(
     ]
     any_stale = any(item.stale for item in crypto_items)
     return crypto_items, equity_items, any_stale
+
+
+# ── 事件日程层 P0 · job last-run 新鲜度(★与上面「表 max(ts)」口径本质不同)──────────
+#   事件 scheduled_at 在【未来】,max(ts) 永远"新鲜"=假新鲜 → 只能按「采集任务上次成功
+#   时间」判(Redis econ:cal:last_success:{source} · worker 每源成功后写)。
+#   阈值 3 天(任务日更 ×3 缓冲);★stale ≠ 数据不可用:日程失效模式良性,存量未来日程
+#   源断后 30 天内仍有效(30 天硬阈在 econ_calendar.store.events_usable,决策卡侧生效)。
+ECON_JOB_STALE_SECONDS = 3 * 24 * 3600
+
+
+def build_econ_job_status(
+    freshness: dict[str, datetime | None], now: datetime,
+) -> tuple[list[EconJobStatus], bool]:
+    """组装事件日程 job 新鲜度(纯函数 · 可单测)· 返回 (items, any_stale)。"""
+    from app.schemas.crypto import EconJobStatus
+
+    items = []
+    for source, ts in freshness.items():
+        age = None
+        if ts is not None:
+            last = ts if ts.tzinfo is not None else ts.replace(tzinfo=UTC)
+            age = max(0.0, (now - last).total_seconds())
+        items.append(EconJobStatus(
+            source=source,
+            last_success=ts,
+            age_seconds=age,
+            stale=age is None or age > ECON_JOB_STALE_SECONDS,
+        ))
+    return items, any(i.stale for i in items)

@@ -79,6 +79,14 @@ export function CryptoAiCard({ klineSymbol, futuresSymbol, period }: CryptoAiCar
       {decision.status === 'success' && !decision.data.locked && (
         <TradingPlanBlock plan={plan} symbol={klineSymbol} market="crypto" actionable={adv} />
       )}
+
+      {/* ★事件日程层 P0:近期重大事件风险提示(后端纯模板·只提示波动不给方向·自带免责)
+          ★同功能双卡组件(AiDecisionCard + 本卡)都渲染 · 勿只改一处 */}
+      {decision.status === 'success' && !decision.data.locked && decision.data.event_risk && (
+        <p className="mt-3 rounded-md bg-muted px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
+          📅 {decision.data.event_risk}
+        </p>
+      )}
     </div>
   )
 }

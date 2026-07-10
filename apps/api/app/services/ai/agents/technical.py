@@ -32,6 +32,9 @@ _SYSTEM_BASE = (
     "  - rationale: 中文解读 · 不超过 200 字 · "
     "**绝对不能出现「建议买入」「建议卖出」「应该买」「快入场」等祈使句** · 只做陈述描述\n"
     "  - key_levels: 数组 · 1-2 个关键价位(支撑 / 阻力)\n"
+    # 🔴 事件日程层 P0 红线(锁死):事件只是波动风险背景,绝不是方向依据
+    "若输入含「重大事件」段:只能将其作为事件前后波动可能放大的风险背景提示,"
+    "**绝不能据此给出任何方向判断或操作暗示**(不因事件临近而看多或看空)。\n"
     "**必须严格返回 JSON,不能有其他文本。**"
 )
 
@@ -94,6 +97,9 @@ def _format_snapshot(snapshot: TechnicalSnapshot) -> str:
             price = p.get("price", 0.0)
             desc = p.get("description", "")
             lines.append(f"  {kind} @ {price:.2f} · {desc}")
+    # 事件日程层 P0:预格式化事件段(自带「仅风险背景·绝不给方向」红线尾句)· 空串零变化
+    if snapshot.econ_events_context:
+        lines.append(snapshot.econ_events_context)
     return "\n".join(lines)
 
 
@@ -130,6 +136,9 @@ def _format_snapshot_en(snapshot: TechnicalSnapshot) -> str:
             price = p.get("price", 0.0)
             desc = p.get("description", "")
             lines.append(f"  {kind} @ {price:.2f} · {desc}")
+    # Econ calendar P0: pre-formatted events section (carries its own risk-only red-line tail)
+    if snapshot.econ_events_context:
+        lines.append(snapshot.econ_events_context)
     return "\n".join(lines)
 
 

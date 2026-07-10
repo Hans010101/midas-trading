@@ -77,6 +77,10 @@ export interface DecisionCard {
   // 交易计划参考 · 后端规则算 · null 表示无(老缓存 / 中性 / 非 Pro 空壳)
   trading_plan: TradingPlan | null
 
+  // ★事件日程层 P0:近期重大事件风险提示(后端纯模板·只提示波动不给方向·尾带免责)·
+  //   可选:老缓存/旧后端无此字段 · null/undefined = 无事件不渲染
+  event_risk?: string | null
+
   disclaimer: string
   cached: boolean
   token_usage: number

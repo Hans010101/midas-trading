@@ -44,6 +44,9 @@ class TechnicalSnapshot(BaseModel):
     atr: float = 0.0                       # ATR(14) · 止损缓冲用(compute_atr 注入)
     zhongshu_high: float | None = None     # 最近中枢上沿(无中枢→None)
     zhongshu_low: float | None = None      # 最近中枢下沿
+    # 事件日程层 P0:预格式化「未来7天重大事件」prompt 段(econ_calendar.format 产出 ·
+    # 自带红线尾句「仅风险背景·绝不给方向」)· 空串=无事件=prompt 零变化 · 默认值保旧兼容
+    econ_events_context: str = ""
 
 
 # ===== Agent 输出 =====
@@ -173,6 +176,10 @@ class DecisionCardResponse(BaseModel):
 
     # 交易计划参考 · workflow 产出(三价位规则算 + plan_note)· 前端两卡共用 · 中性/非 Pro 可为 None
     trading_plan: TradingPlan | None = None
+
+    # ★事件日程层 P0 · 近期重大事件风险提示 · API 层【纯模板】派生(econ_calendar.format ·
+    #   零 LLM=红线机器可证:只陈述事件+波动放大提示,绝无方向词)· 尾带完整免责 · 无事件=None
+    event_risk: str | None = None
 
     # disclaimer 字段保留(API 契约不破)· 产品决策置空(平台层已说明全程虚拟)
     disclaimer: str = ""
