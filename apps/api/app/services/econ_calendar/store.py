@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -18,6 +19,8 @@ from app.models.econ_event import EconEvent
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+_CST = ZoneInfo("Asia/Shanghai")
 
 # Redis last-run 成功键(worker 每源成功后写 ISO 时间)
 LAST_SUCCESS_KEY = "econ:cal:last_success:{source}"
@@ -94,3 +97,24 @@ def events_usable(freshness: dict[str, datetime | None], now: datetime | None = 
     now = now or datetime.now(tz=UTC)
     hard = timedelta(days=STALE_HARD_DAYS)
     return any(ts is not None and now - ts < hard for ts in freshness.values())
+
+
+async def select_calendar(
+    session: AsyncSession, *, now: datetime | None = None, limit: int = 500,
+) -> list[EconEvent]:
+    """日历页全量查询:北京时间「今天零点」起的全部日程,时间升序。
+
+    ★与决策卡 select_upcoming(7 天窗 · importance≥2 · limit 5)口径刻意不同:
+    日历页是用户主动查,展示全——含 importance=1 的 ECB/BOJ/社融窗口(存库但
+    不注入决策卡的那批);市场/重要度筛选在前端做(全量 ~200 行,一次下发)。
+    今天已过时刻的事件仍列(「今天」分组的完整性),昨天以前的不列。
+    """
+    now = now or datetime.now(tz=UTC)
+    day_start_cst = now.astimezone(_CST).replace(hour=0, minute=0, second=0, microsecond=0)
+    stmt = (
+        select(EconEvent)
+        .where(EconEvent.scheduled_at >= day_start_cst.astimezone(UTC))
+        .order_by(EconEvent.scheduled_at.asc())
+        .limit(limit)
+    )
+    return list((await session.execute(stmt)).scalars().all())

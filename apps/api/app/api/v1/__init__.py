@@ -10,6 +10,7 @@ from app.api.v1.bot_preset import router as bot_preset_router
 from app.api.v1.chart import router as chart_router
 from app.api.v1.cn import router as cn_router
 from app.api.v1.crypto import router as crypto_router
+from app.api.v1.econ import router as econ_router
 from app.api.v1.feishu import router as feishu_router
 from app.api.v1.hk import router as hk_router
 from app.api.v1.intelligent_admin import router as intelligent_admin_router
@@ -53,6 +54,7 @@ router.include_router(bot_preset_router)
 # KLINE-001 · K线图 PNG 端点(bot sendPhoto · 只读渲染)
 router.include_router(chart_router)
 router.include_router(crypto_router)
+router.include_router(econ_router)  # 财经日历(PR-A · 公开只读零LLM)
 # 0023 阶段③ · A股/美股 市场首页(3.1 基建:状态 + 大盘指数)
 router.include_router(cn_router)
 router.include_router(us_router)

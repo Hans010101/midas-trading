@@ -204,3 +204,34 @@ def test_build_econ_job_status_stale_3d():
     assert by["rule_seed"].stale is True
     assert by["rule_seed"].last_success is None
     assert any_stale is True
+
+
+@pytest.mark.asyncio
+async def test_select_calendar_full_range(db_session) -> None:  # noqa: ANN001
+    """日历页查询:今天(CST 零点)起全量,含 importance=1 与今天已过时刻;昨天不列;升序。"""
+    from app.services.econ_calendar.store import select_calendar, upsert_events
+
+    now = _NOW  # 2026-07-10 12:00 UTC = 20:00 CST
+    rows = [
+        {"event_key": "boj-2026-07-31", "event_type": "boj", "title": "日央行BOJ利率决议",
+         "markets": ["us", "crypto"], "importance": 1,  # ★1 也要出现在日历页
+         "scheduled_at": now + timedelta(days=21), "time_confirmed": False, "source": "seed"},
+        {"event_key": "cn_cpi-2026-07-10", "event_type": "cn_cpi", "title": "中国CPI",
+         "markets": ["cn", "hk"], "importance": 2,
+         # 今天 09:30 CST(已过)→ 仍列(「今天」分组完整性)
+         "scheduled_at": now - timedelta(hours=10, minutes=30),
+         "time_confirmed": True, "source": "seed"},
+        {"event_key": "lpr-2026-06", "event_type": "lpr", "title": "LPR 贷款市场报价利率",
+         "markets": ["cn", "hk"], "importance": 2,
+         "scheduled_at": now - timedelta(days=18), "time_confirmed": True, "source": "rule"},
+        {"event_key": "fomc-2026-07-29", "event_type": "fomc", "title": "FOMC 利率决议",
+         "markets": ["us", "crypto", "hk", "cn"], "importance": 3,
+         "scheduled_at": now + timedelta(days=19), "time_confirmed": True, "source": "fed_json"},
+    ]
+    await upsert_events(db_session, rows)
+    db_session.expire_all()
+    got = await select_calendar(db_session, now=now)
+    keys = [e.event_key for e in got]
+    assert keys == ["cn_cpi-2026-07-10", "fomc-2026-07-29", "boj-2026-07-31"]  # 升序·无昨天
+    assert "lpr-2026-06" not in keys                     # 18 天前 → 不列
+    assert any(e.importance == 1 for e in got)           # ★1 展示全(与决策卡口径不同)
