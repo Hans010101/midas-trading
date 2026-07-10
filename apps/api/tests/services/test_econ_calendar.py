@@ -144,6 +144,9 @@ async def test_upsert_idempotent_and_reschedule(db_session) -> None:  # noqa: AN
     # 改期 +1 天 → 同 key UPDATE
     ev2 = {**ev, "scheduled_at": now + timedelta(days=4)}
     await upsert_events(db_session, [ev2])
+    # fixture expire_on_commit=False + Core upsert 不刷新 identity map → 显式过期才读到新值
+    # (生产无此路径:worker 写 / API 读跨进程)
+    db_session.expire_all()
     got2 = await select_upcoming(db_session, "crypto", days=7, now=now)
     assert len(got2) == 1
     assert got2[0].scheduled_at == now + timedelta(days=4)
