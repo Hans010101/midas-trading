@@ -50,6 +50,8 @@ export function MarketSwitcher({ className }: { className?: string }) {
   const onLab = pathname?.startsWith('/lab') ?? false
   // 训练营(教学内容)· 非市场 · /academy 及子页(stage/article/glossary)都算 · 单独高亮
   const onAcademy = pathname?.startsWith('/academy') ?? false
+  // 财经日历(PR-A)· 非市场中性页 · 单独高亮(market-nav 白名单默认不亮市场 Tab,无需改)
+  const onCalendar = pathname?.startsWith('/calendar') ?? false
   const active = resolveActiveMarket(pathname, storeMarket)
 
   function handleSelect(m: Market) {
@@ -144,6 +146,17 @@ export function MarketSwitcher({ className }: { className?: string }) {
         )}
       >
         训练营
+      </Link>
+      <Link
+        href="/calendar"
+        className={cn(
+          'whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+          onCalendar
+            ? 'bg-midas-red text-primary-foreground'
+            : 'text-muted-foreground hover:bg-midas-red-glow hover:text-foreground',
+        )}
+      >
+        财经日历
       </Link>
     </nav>
   )

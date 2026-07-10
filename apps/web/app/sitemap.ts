@@ -35,6 +35,7 @@ const STATIC_PAGES: Array<[path: string, priority: number]> = [
   ['/platinum', 0.5],
   ['/academy', 0.9],
   ['/academy/glossary', 0.9],
+  ['/calendar', 0.6],
   ['/about', 0.5],
   ['/privacy', 0.3],
   ['/terms', 0.3],
