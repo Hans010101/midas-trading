@@ -76,7 +76,14 @@ export function MarketSwitcher({ className }: { className?: string }) {
       router.push('/crypto-market')
       return
     }
-    setMarket(m)
+    if (pathname?.startsWith('/workbench')) {
+      setMarket(m)
+      return
+    }
+    // 中性页(/calendar /watchlist /lab /academy /account…)兜底:此前 cn/us 落到
+    // setMarket = 死点击(页面零反应,还静默持久化改写 workbench 的市场+默认标的)。
+    // 与 crypto/hk 在中性页的行为对齐:跳市场首页。
+    router.push(m === 'cn' ? '/cn-market' : '/us-market')
   }
 
   return (

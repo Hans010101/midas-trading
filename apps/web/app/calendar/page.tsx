@@ -119,6 +119,8 @@ export default function EconCalendarPage() {
     queryFn: ({ signal }) => fetchEconCalendar(signal),
     retry: 0,
     staleTime: 300_000, // 日程低频变化 · 5min 足够
+    // 页签长开自愈:全局关了 refetchOnWindowFocus,无此项则跨 CST 午夜数据/分组永久冻结
+    refetchInterval: 15 * 60_000,
   })
 
   const groups = useMemo(() => {
@@ -136,7 +138,10 @@ export default function EconCalendarPage() {
     ]
     for (const ev of events) {
       const d = cstDayNumber(new Date(ev.scheduled_at))
-      if (d <= today) buckets[0].items.push(ev)
+      // d < today 只可能来自跨午夜的陈旧缓存(后端只发今天零点起)→ 丢弃,
+      // 绝不把昨天的事件顶着「今天」标题展示
+      if (d < today) continue
+      if (d === today) buckets[0].items.push(ev)
       else if (d <= weekEnd) buckets[1].items.push(ev)
       else buckets[2].items.push(ev)
     }
