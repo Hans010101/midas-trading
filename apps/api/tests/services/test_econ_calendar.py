@@ -119,6 +119,21 @@ def test_parse_kostat_rows_three_indicators():
     assert cpi["time_confirmed"] is True
 
 
+def test_parse_kostat_date_format_variants():
+    """日期格式容错(对抗自审实锤:同一 xlsx 录入不一致)——尾点缺失/内嵌空格都要解析出。"""
+    from app.services.econ_calendar.fetchers import parse_kostat_rows
+
+    rows = [
+        ("8.31.(월)", "08:00", "2026년 7월 산업활동동향", "산업동향과"),   # 标准
+        ("8.31(월)", "08:00", "2026년 7월 소비자물가동향", "물가동향과"),  # 无尾点
+        ("9. 8.(화)", "08:00", "2026년 8월 고용동향", "고용통계과"),       # 内嵌空格
+    ]
+    by_key = {e["event_key"]: e for e in parse_kostat_rows(rows, 2026)}
+    assert set(by_key) == {
+        "kr_ind_activity-2026-08-31", "kr_cpi-2026-08-31", "kr_employment-2026-09-08",
+    }
+
+
 # ── 源解析器(实测形状 fixture · 2026-07-10 亲手 curl)───────────────────────
 
 

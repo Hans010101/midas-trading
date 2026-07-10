@@ -179,15 +179,20 @@ def parse_kostat_rows(rows: list[tuple[Any, ...]], year: int) -> list[dict[str, 
         if len(row) < 3 or not row[0] or not row[2]:
             continue
         date_raw, time_raw, title_raw = str(row[0]).strip(), row[1], str(row[2])
-        dm = re.match(r"(\d{1,2})\.(\d{1,2})\.", date_raw)   # "1.14.(수)" / "12.31.(목)"
-        if not dm:
-            continue
+        # ★先匹配指标(表头/其他报告类型静默跳过是对的);再解析日期——这样「三大指标却
+        #   日期解析失败」能留 warn(否则静默漏采:同一 xlsx 里日期格式按录入人不一致,
+        #   实测有 "8.31(월)" 无尾点 / "9. 8.(화)" 带空格等 8 种变体,对抗自审实锤)。
         etype = title = None
         for needle, et, zh in KOSTAT_INDICATORS:
             if needle in title_raw:
                 etype, title = et, zh
                 break
         if etype is None:
+            continue
+        # 容忍尾点缺失("8.31(월)")与内嵌空格("9. 8.(화)")· "1.14.(수)" 仍匹配
+        dm = re.match(r"(\d{1,2})\.\s*(\d{1,2})\.?", date_raw)
+        if not dm:
+            logger.warning("[econ-cal] kostat 指标行日期无法解析(疑格式漂移·漏采): %r", date_raw)
             continue
         month, day = int(dm.group(1)), int(dm.group(2))
         hour, minute = _parse_kostat_time(time_raw)
