@@ -24,7 +24,7 @@ _CST = ZoneInfo("Asia/Shanghai")
 
 # Redis last-run 成功键(worker 每源成功后写 ISO 时间)
 LAST_SUCCESS_KEY = "econ:cal:last_success:{source}"
-FRESH_SOURCES = ("fed_json", "bea_json", "rule_seed")   # 全部日更(beat 每日一轮)
+FRESH_SOURCES = ("fed_json", "bea_json", "kostat", "rule_seed")   # 全部日更(beat 每日一轮)
 STALE_SOFT_DAYS = 3     # 超 3 天没成功 → 监控标 stale(存量日程照用·仅标注)
 STALE_HARD_DAYS = 30    # 超 30 天 → 存量日程不再注入决策卡(降级为不可用)
 

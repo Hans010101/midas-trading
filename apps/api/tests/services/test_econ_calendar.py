@@ -75,11 +75,48 @@ def test_seed_events_tz_and_keys():
     assert by_key["boj-2026-07-31"]["time_confirmed"] is False
 
 
+def test_bok_seed_kst_and_importance():
+    """BOK 8 期议息:10:30:00 KST 极严格(7/16=01:30 UTC)· importance=1 · markets=["kr"]。"""
+    by_key = {e["event_key"]: e for e in gen_seed_events()}
+    bok = [e for e in by_key.values() if e["event_type"] == "bok"]
+    assert len(bok) == 8
+    jul = by_key["bok-2026-07-16"]
+    assert jul["scheduled_at"] == datetime(2026, 7, 16, 1, 30, tzinfo=UTC)  # 10:30 KST=01:30 UTC
+    assert jul["time_confirmed"] is True
+    assert all(e["importance"] == 1 and e["markets"] == ["kr"] for e in bok)
+
+
 def test_rule_and_seed_all_keys_unique_and_tz_aware():
     all_events = gen_rule_and_seed_events(_NOW)
     keys = [e["event_key"] for e in all_events]
     assert len(keys) == len(set(keys))
     assert all(e["scheduled_at"].tzinfo is not None for e in all_events)  # 铁律 tz-aware
+
+
+def test_parse_kostat_rows_three_indicators():
+    """KOSTAT 年表:只取 CPI/就业/产业活动三大指标 · "M.D.(요일)" 日期 · 08:00 KST · 去重。"""
+    from app.services.econ_calendar.fetchers import parse_kostat_rows
+
+    rows = [
+        ("보도일자", "보도시간", "보도자료명", "담당과"),        # 表头行 → 跳过
+        ("8.4.(화)", "08:00", "2026년 7월 소비자물가동향", "물가동향과"),
+        ("8.4.(화)", "08:00", "2026년 7월 소비자물가동향", "물가동향과"),  # 重复 → 去重
+        ("8.12.(수)", "08:00", "2026년 7월 고용동향", "고용통계과"),
+        ("8.31.(월)", "08:00", "2026년 7월 산업활동동향", "산업동향과"),
+        ("8.20.(목)", "12:00", "2026년 2/4분기 가축동향조사 결과", "농어업동향과"),  # 非三大指标 → 排除
+    ]
+    events = parse_kostat_rows(rows, 2026)
+    by_key = {e["event_key"]: e for e in events}
+    assert sorted(by_key) == [
+        "kr_cpi-2026-08-04", "kr_employment-2026-08-12", "kr_ind_activity-2026-08-31",
+    ]
+    cpi = by_key["kr_cpi-2026-08-04"]
+    assert cpi["title"] == "韩国CPI"
+    assert cpi["scheduled_at"] == datetime(2026, 8, 3, 23, 0, tzinfo=UTC)  # 08:00 KST=前日23:00 UTC
+    assert cpi["importance"] == 1
+    assert cpi["markets"] == ["kr"]
+    assert cpi["source"] == "kostat"
+    assert cpi["time_confirmed"] is True
 
 
 # ── 源解析器(实测形状 fixture · 2026-07-10 亲手 curl)───────────────────────
