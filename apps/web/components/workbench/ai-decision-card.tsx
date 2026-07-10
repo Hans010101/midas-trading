@@ -171,6 +171,13 @@ function CardBody({ card }: { card: DecisionCard }) {
       {/* 交易计划参考(三价位 + plan_note + 按计划价挂限价单)· 缠论买卖点区之后 */}
       <TradingPlanBlock plan={card.trading_plan} symbol={card.symbol} market={card.market} actionable={card.actionable} />
 
+      {/* ★事件日程层 P0:近期重大事件风险提示(后端纯模板·只提示波动不给方向·自带免责) */}
+      {card.event_risk && (
+        <p className="rounded-md bg-muted px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
+          📅 {card.event_risk}
+        </p>
+      )}
+
       {/* footer · cached + mock 标记 */}
       <div className="flex items-center justify-between border-t border-paper pt-2 text-[10px] text-muted-foreground/60">
         <span>{card.cached ? '· 缓存命中' : '· 实时计算'}</span>
