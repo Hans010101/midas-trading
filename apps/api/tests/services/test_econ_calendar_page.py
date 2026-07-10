@@ -45,12 +45,6 @@ def _read(p: Path) -> str:
     return p.read_text(encoding="utf-8")
 
 
-def _all_literals(src: str) -> str:
-    """全部字符串字面量(单/双引号 + 模板串)拼接,lowercase。"""
-    parts = re.findall(r"'([^'\\]*)'|\"([^\"\\]*)\"|`([^`]*)`", src)
-    return " ".join(s for tup in parts for s in tup if s).lower()
-
-
 def _copy_literals(src: str) -> str:
     """只取含中文的字面量(本页文案全中文;中文串里嵌英文方向词照样被抓)。"""
     parts = re.findall(r"'([^'\\]*)'|\"([^\"\\]*)\"|`([^`]*)`", src)
@@ -84,9 +78,12 @@ def test_no_direction_words_in_calendar_page_files():
         src = _read(p)
         for w in _DIRECTION_WORDS:
             assert w not in src, f"{p.name} 出现方向词:{w}"
-        all_lits = _all_literals(src)
+        # strict 组在剥注释后的【全源码】上 \b 匹配(交叉审 PoC:JSX 裸文本
+        # <p>Buy the dip</p> 与转义字面量 "sell now" 都不进引号字面量语料=绕过;
+        # 全源码 \b 两者都抓,sellPrice/buyLimit 等驼峰因 \b 不成立零误伤)
+        stripped = _strip_ts_comments(src).lower()
         for w in _DIRECTION_EN_STRICT:
-            assert not re.search(rf"\b{w}\b", all_lits), f"{p.name} 英文方向词:{w}"
+            assert not re.search(rf"\b{w}\b", stripped), f"{p.name} 英文方向词:{w}"
         lits = _copy_literals(src)
         for w in _DIRECTION_EN_COPY:
             assert f" {w} " not in f" {lits} ".replace("-", " "), f"{p.name} 英文方向词:{w}"
