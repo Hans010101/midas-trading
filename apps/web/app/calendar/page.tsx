@@ -160,26 +160,9 @@ export default function EconCalendarPage() {
       <TopNav />
       <main className="flex-1">
         <div className="mx-auto max-w-5xl px-6 py-6">
-          {/* 标题 + 保鲜标注(last-run 口径) */}
-          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-            <div>
-              <h1 className="font-serif text-xl font-bold">财经日历</h1>
-              <p className="mt-1 text-xs text-muted-foreground">
-                官方宏观事件日程 · 时间均为北京时间 · 重大事件公布前后市场波动可能放大,供参考
-              </p>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>{updatedText ? `数据更新:${updatedText}` : '数据更新中'}</span>
-              {calendarQ.data?.any_stale ? (
-                <span className="rounded-full bg-surface-subtle px-2 py-0.5 text-[11px]">
-                  部分数据更新中
-                </span>
-              ) : null}
-            </div>
-          </div>
-
-          {/* 筛选:地区 + 重要度 */}
-          <div className="mb-5 flex flex-wrap items-center gap-3">
+          {/* 筛选(地区 + 重要度)+ 保鲜标注(last-run 口径)。页内不设大标题:导航 Tab 已有同名入口 */}
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3">
             <div className="inline-flex rounded-lg border border-paper bg-surface-card p-0.5">
               {REGIONS.map((r) => (
                 <button
@@ -223,7 +206,21 @@ export default function EconCalendarPage() {
                 仅重要 ★2+
               </button>
             </div>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{updatedText ? `数据更新:${updatedText}` : '数据更新中'}</span>
+              {calendarQ.data?.any_stale ? (
+                <span className="rounded-full bg-surface-subtle px-2 py-0.5 text-[11px]">
+                  部分数据更新中
+                </span>
+              ) : null}
+            </div>
           </div>
+
+          {/* 说明句(红线文案的一部分 · 一字不改,仅从页顶挪到筛选行下方) */}
+          <p className="mb-5 text-xs text-muted-foreground">
+            官方宏观事件日程 · 时间均为北京时间 · 重大事件公布前后市场波动可能放大,供参考
+          </p>
 
           {/* 三态:加载 / 错误 / 内容(空态友好) */}
           {calendarQ.isPending ? (
@@ -242,12 +239,7 @@ export default function EconCalendarPage() {
             <div className="space-y-6">
               {groups.map((g) => (
                 <section key={g.key}>
-                  <h2 className="mb-2 font-serif text-base font-bold">
-                    {g.label}
-                    <span className="ml-2 font-sans text-xs font-normal text-muted-foreground">
-                      {g.items.length} 项
-                    </span>
-                  </h2>
+                  <h2 className="mb-2 font-serif text-base font-bold">{g.label}</h2>
                   <div className="overflow-hidden rounded-xl border border-paper bg-cream">
                     {g.items.map((ev, i) => {
                       const t = cstParts(ev.scheduled_at)
