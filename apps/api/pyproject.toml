@@ -125,6 +125,7 @@ module = [
     "reportlab.*",
     "oss2.*",
     "tweepy.*",
+    "openpyxl.*",   # KOSTAT 年表 xlsx 直接 import(无 stubs · 同其他三方)
     "yaml",
 ]
 ignore_missing_imports = true

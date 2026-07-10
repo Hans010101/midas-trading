@@ -1,9 +1,12 @@
 """事件日程层 · 每日刷新任务(P0 · 低频:日程提前数月已知)。
 
-三源各自隔离(单源失败不影响其他):fed_json(FOMC)/ bea_json(GDP/PCE)/
-rule_seed(LPR·PMI·社融窗口·非农惯例占位 + 统计局/ECB/BOJ 年度种子)。
+四源各自隔离(单源失败不影响其他):fed_json(FOMC)/ bea_json(GDP/PCE)/
+kostat(韩国 CPI·就业·产业活动 xlsx)/ rule_seed(LPR·PMI·社融窗口·非农惯例占位 +
+统计局/ECB/BOJ/BOK 年度种子)。
 每源成功 → 写 Redis last-run 键(econ:cal:last_success:{source})= 保鲜监控口径
 (★绝不用 max(事件ts) 判 stale——未来时间戳永远假新鲜)。
+★kostat 虽为年度年表,仍每日轮询(幂等 upsert · 成本≈1 次 GET):既统一 3 天保鲜模型,
+  又能及时捕捉年表改期与 mods.go.kr 改名/404(比年抓一次早发现)。见 ADR0053 自主决策。
 🔴 红线:纯日程采集 · 零 key · 零交易逻辑(不 import 任何 virtual_trading/conditional)。
 """
 
@@ -20,7 +23,11 @@ from redis import asyncio as aioredis
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.services.econ_calendar.fetchers import fetch_bea_events, fetch_fed_events
+from app.services.econ_calendar.fetchers import (
+    fetch_bea_events,
+    fetch_fed_events,
+    fetch_kostat_events,
+)
 from app.services.econ_calendar.rules import gen_rule_and_seed_events
 from app.services.econ_calendar.store import mark_source_success, upsert_events
 
@@ -60,7 +67,17 @@ async def _refresh() -> dict[str, int]:
             except Exception as exc:  # noqa: BLE001
                 await session.rollback()
                 logger.warning("[econ-cal] bea_json 刷新失败(存量日程仍有效): %s", exc)
-            # 源3 · 规则 + 年度种子(零网络 · 理论不会失败,仍隔离防御)
+            # 源3 · KOSTAT 韩国年表 xlsx(CPI/就业/产业活动)· 失败隔离 + 良性失效(存量 30 天)
+            try:
+                kostat = await fetch_kostat_events()
+                if not kostat:
+                    logger.warning("[econ-cal] kostat 解析 0 条(疑 xlsx 格式/路径漂移)")
+                stats["kostat"] = await upsert_events(session, kostat)
+                await mark_source_success(redis, "kostat")
+            except Exception as exc:  # noqa: BLE001
+                await session.rollback()
+                logger.warning("[econ-cal] kostat 刷新失败(存量日程仍有效): %s", exc)
+            # 源4 · 规则 + 年度种子(零网络 · 理论不会失败,仍隔离防御)
             try:
                 rs = gen_rule_and_seed_events(datetime.now(tz=UTC))
                 stats["rule_seed"] = await upsert_events(session, rs)
@@ -76,7 +93,7 @@ async def _refresh() -> dict[str, int]:
 
 @shared_task(name="tasks.econ_calendar.refresh_daily", max_retries=0)
 def refresh_daily() -> dict[str, Any]:
-    """Celery 入口(beat 每日)· 三源隔离刷新 → upsert → last-run 保鲜键。"""
+    """Celery 入口(beat 每日)· 四源隔离刷新 → upsert → last-run 保鲜键。"""
     stats = asyncio.run(_refresh())
     logger.info("[econ-cal] 日程刷新 · %s", stats)
     return stats

@@ -99,6 +99,15 @@ def test_nav_entry_labels_clean():
             assert w not in src, f"{rel[-1]} 出现方向词:{w}"
 
 
+def test_jpkr_bucket_and_country_labels_present():
+    """特性钉:「日韩」合并桶 + 单条国别(日本/韩国)+ KOSTAT 来源标注三者都在。"""
+    page = _read(_WEB / "app" / "calendar" / "page.tsx")
+    assert "日韩" in page, "缺「日韩」合并桶标签"
+    assert "韩国" in page, "缺韩国国别标注"
+    assert "日本" in page, "缺日本国别标注(合并桶内仍标各国)"
+    assert "kostat" in page, "缺 KOSTAT 来源标注映射"
+
+
 def test_i18n_canary_forces_lock_extension():
     """i18n 金丝雀:en 文案落地(next-intl/useTranslations)时英文锁对纯英文串会失明——
     此测逼停静默漏检,届时必须显式扩锁(纯英文文案全量过 strict 组)再放行。"""

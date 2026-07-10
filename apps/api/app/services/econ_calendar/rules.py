@@ -18,8 +18,13 @@
   用 Europe/Berlin 换算自动处理夏令时)。
 - BOJ 2026 全年 8 次 MPM(boj.or.jp 官方 · 决议=会议末日 · 无固定钟点 → 锚 12:00 JST,
   time_confirmed=False)。
+- BOK 2026 全年 8 次 MPB 议息(bok.or.kr 官方年表 · 前一年 10 月末公布 · 决议声明
+  10:30:00 KST 极严格,韩英双站 RSS 20+ 次实证)· 韩国全部事件 importance=1(★保守:
+  不注入决策卡 · 见 docs/research/kr-econ-calendar-sources.md)。
 
 🔴 红线:纯日程 · 标题白名单零方向词(test_econ_redline 机器钉死)· 零交易逻辑。
+🔴 韩国红线(写死):importance 恒 1 + markets=["kr"](非 cn/us/crypto/hk)→ 双重
+   保证决策卡永不注入韩国;绝不因「想让韩国在★2+下显示」提到 2(会穿透注入,red-line)。
 """
 
 from __future__ import annotations
@@ -32,6 +37,11 @@ _CST = ZoneInfo("Asia/Shanghai")
 _ET = ZoneInfo("America/New_York")
 _CET = ZoneInfo("Europe/Berlin")   # ECB 决议 14:15 当地(自动处理 CET/CEST)
 _JST = ZoneInfo("Asia/Tokyo")
+_KST = ZoneInfo("Asia/Seoul")
+
+# 韩国事件专用市场标签:非 Midas 四市场(cn/us/crypto/hk)→ select_upcoming 永不命中,
+# 叠加 importance=1 双重焊死「决策卡不注入韩国」(test_econ_redline 机器钉死)。
+KR_MARKETS = ["kr"]
 
 # 规则生成的前瞻月数(日程提前数月已知 · 6 个月够决策卡 7 天窗滚动使用)
 RULE_HORIZON_MONTHS = 6
@@ -156,6 +166,11 @@ _BOJ_DECISIONS_2026: tuple[tuple[int, int, int], ...] = (
     (2026, 1, 23), (2026, 3, 19), (2026, 4, 28), (2026, 6, 16),
     (2026, 7, 31), (2026, 9, 18), (2026, 10, 30), (2026, 12, 18),
 )
+# BOK 2026 全年 8 次 MPB 议息决议日(bok.or.kr 官方年表 · 决议声明 10:30:00 KST 极严格)
+_BOK_DECISIONS_2026: tuple[tuple[int, int, int], ...] = (
+    (2026, 1, 15), (2026, 2, 26), (2026, 4, 10), (2026, 5, 28),
+    (2026, 7, 16), (2026, 8, 27), (2026, 10, 22), (2026, 11, 26),
+)
 
 
 def gen_seed_events() -> list[dict[str, Any]]:
@@ -208,6 +223,18 @@ def gen_seed_events() -> list[dict[str, Any]]:
             "importance": 1,
             "scheduled_at": local.astimezone(UTC),
             "time_confirmed": False,  # 决议无固定钟点(会议末日中午前后)
+            "source": "seed",
+        })
+    for y, m, d in _BOK_DECISIONS_2026:
+        local = datetime(y, m, d, 10, 30, tzinfo=_KST)
+        out.append({
+            "event_key": f"bok-{y}-{m:02d}-{d:02d}",
+            "event_type": "bok",
+            "title": "韩国央行BOK利率决议",
+            "markets": KR_MARKETS,             # ★["kr"] · 非四市场 → 决策卡永不注入
+            "importance": 1,                   # ★恒 1(红线:绝不提 2)
+            "scheduled_at": local.astimezone(UTC),
+            "time_confirmed": True,            # 决议声明 10:30:00 KST 极严格(RSS 实证)
             "source": "seed",
         })
     return out

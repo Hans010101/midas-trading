@@ -21,7 +21,12 @@ from types import SimpleNamespace
 
 from app.services.ai.agents.technical import _SYSTEM_BASE, _format_snapshot
 from app.services.ai.prompts_en import TECHNICAL_SYSTEM_EN
-from app.services.econ_calendar.fetchers import BEA_RELEASES, parse_bea_events, parse_fed_events
+from app.services.econ_calendar.fetchers import (
+    BEA_RELEASES,
+    parse_bea_events,
+    parse_fed_events,
+    parse_kostat_rows,
+)
 from app.services.econ_calendar.format import build_event_risk, format_events_for_prompt
 from app.services.econ_calendar.rules import gen_rule_and_seed_events
 
@@ -45,14 +50,21 @@ _FED_FIXTURE = {"events": [
 _BEA_FIXTURE = {
     name: {"release_dates": ["2026-08-27T08:30:00-04:00"]} for name in BEA_RELEASES
 }
+# KOSTAT 年表行(实测形状:보도일자/보도시간/보도자료명)· 三大指标各一样本 → 进方向词语料
+_KOSTAT_FIXTURE = [
+    ("8.4.(화)", "08:00", "2026년 7월 소비자물가동향", "물가동향과"),
+    ("8.12.(수)", "08:00", "2026년 7월 고용동향", "고용통계과"),
+    ("8.31.(월)", "08:00", "2026년 7월 산업활동동향", "산업동향과"),
+]
 
 
 def _fake_events() -> list:
-    """规则+种子+两解析器产物全语料 → 伪 EconEvent(每个标题都过一遍输出面)。"""
+    """规则+种子+三解析器产物全语料 → 伪 EconEvent(每个标题都过一遍输出面)。"""
     corpus = [
         *gen_rule_and_seed_events(_NOW),
         *parse_fed_events(_FED_FIXTURE),
         *parse_bea_events(_BEA_FIXTURE),
+        *parse_kostat_rows(_KOSTAT_FIXTURE, 2026),
     ]
     assert len(corpus) > len(gen_rule_and_seed_events(_NOW))  # fixture 真解析出了事件
     return [
@@ -92,10 +104,27 @@ def test_no_direction_words_in_event_risk():
 
 
 def test_event_titles_whitelist_clean():
-    """标题白名单本身零方向词(纯模板拼接的源头保证)。"""
-    for e in gen_rule_and_seed_events(_NOW):
+    """标题白名单本身零方向词(纯模板拼接的源头保证)· 含 KOSTAT 解析产物。"""
+    corpus = [*gen_rule_and_seed_events(_NOW), *parse_kostat_rows(_KOSTAT_FIXTURE, 2026)]
+    for e in corpus:
         for w in _DIRECTION_WORDS:
             assert w not in e["title"], f"事件标题含方向词:{e['title']}"
+
+
+def test_kr_events_never_injectable_into_decision_card():
+    """🔴 韩国红线(写死):全部韩国事件 importance==1 且 markets 不含任何可注入市场
+    (cn/us/crypto/hk)——双重焊死决策卡永不注入韩国。绝不因『想让韩国在★2+下显示』提到 2
+    (提 2 会穿透注入 · 那是 importance 旋钮本尊,红线级,本模块不碰)。
+    """
+    corpus = [*gen_rule_and_seed_events(_NOW), *parse_kostat_rows(_KOSTAT_FIXTURE, 2026)]
+    kr = [e for e in corpus if e["event_type"] == "bok" or e["event_type"].startswith("kr_")]
+    assert kr, "语料里应有韩国事件(BOK 种子 + KOSTAT)"
+    injectable = {"cn", "us", "crypto", "hk"}
+    for e in kr:
+        assert e["importance"] == 1, f"韩国事件 importance 必须=1:{e['event_key']}"
+        assert not (set(e["markets"]) & injectable), (
+            f"韩国事件 markets 不得含可注入市场:{e['event_key']} {e['markets']}"
+        )
 
 
 # ── ② 免责口径不变 ─────────────────────────────────────────────────────
