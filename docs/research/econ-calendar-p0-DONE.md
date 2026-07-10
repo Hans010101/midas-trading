@@ -34,7 +34,9 @@
 **⏳ 待首次采集**:worker 重建(14:34 CST)错过当日 09:07 CST beat,首次自动刷新=
 次日 09:07 CST。Hans 可服务器一条命令立即触发:
 `docker exec midas-worker celery -A celery_app call tasks.econ_calendar.refresh_daily`
-触发后重跑上面的 curl,三源应变 `stale=false`;再按下方验收指引查决策卡。
+触发后重跑验收 curl(★注意必须带 https://,裸域名 curl 会拿到 0 字节):
+`curl -s https://api.midastrade.asia/api/v1/crypto/ingest-status | jq .econ_jobs`
+三源应变 `stale=false`;再按下方验收指引查决策卡。
 
 ## 已知降级 / P1(详见 ADR 0051 § P1)
 
