@@ -50,6 +50,8 @@ export function MarketSwitcher({ className }: { className?: string }) {
   const onLab = pathname?.startsWith('/lab') ?? false
   // 训练营(教学内容)· 非市场 · /academy 及子页(stage/article/glossary)都算 · 单独高亮
   const onAcademy = pathname?.startsWith('/academy') ?? false
+  // 财经日历(PR-A)· 非市场中性页 · 单独高亮(market-nav 白名单默认不亮市场 Tab,无需改)
+  const onCalendar = pathname?.startsWith('/calendar') ?? false
   const active = resolveActiveMarket(pathname, storeMarket)
 
   function handleSelect(m: Market) {
@@ -74,7 +76,14 @@ export function MarketSwitcher({ className }: { className?: string }) {
       router.push('/crypto-market')
       return
     }
-    setMarket(m)
+    if (pathname?.startsWith('/workbench')) {
+      setMarket(m)
+      return
+    }
+    // 中性页(/calendar /watchlist /lab /academy /account…)兜底:此前 cn/us 落到
+    // setMarket = 死点击(页面零反应,还静默持久化改写 workbench 的市场+默认标的)。
+    // 与 crypto/hk 在中性页的行为对齐:跳市场首页。
+    router.push(m === 'cn' ? '/cn-market' : '/us-market')
   }
 
   return (
@@ -144,6 +153,17 @@ export function MarketSwitcher({ className }: { className?: string }) {
         )}
       >
         训练营
+      </Link>
+      <Link
+        href="/calendar"
+        className={cn(
+          'whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+          onCalendar
+            ? 'bg-midas-red text-primary-foreground'
+            : 'text-muted-foreground hover:bg-midas-red-glow hover:text-foreground',
+        )}
+      >
+        财经日历
       </Link>
     </nav>
   )
