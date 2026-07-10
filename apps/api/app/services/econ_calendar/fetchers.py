@@ -182,9 +182,13 @@ def parse_kostat_rows(rows: list[tuple[Any, ...]], year: int) -> list[dict[str, 
         # ★先匹配指标(表头/其他报告类型静默跳过是对的);再解析日期——这样「三大指标却
         #   日期解析失败」能留 warn(否则静默漏采:同一 xlsx 里日期格式按录入人不一致,
         #   实测有 "8.31(월)" 无尾点 / "9. 8.(화)" 带空格等 8 种变体,对抗自审实锤)。
+        # ★结尾匹配(非子串):主报告标题恒为「…M월[및 연간]<指标>동향」,指标名在结尾。
+        #   子串匹配会把未来年「청년층 고용동향 부가조사」等含名副报告误采(交叉审 P2);
+        #   endswith 收紧 → 真 xlsx 36 条零变化,副报告排除(实测)。
+        stripped_title = title_raw.rstrip()
         etype = title = None
         for needle, et, zh in KOSTAT_INDICATORS:
-            if needle in title_raw:
+            if stripped_title.endswith(needle):
                 etype, title = et, zh
                 break
         if etype is None:
