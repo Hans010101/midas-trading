@@ -31,7 +31,9 @@ async def upsert_events(session: AsyncSession, events: list[dict[str, Any]]) -> 
     if not events:
         return 0
     now = datetime.now(tz=UTC)
-    rows = [{**e, "updated_at": now} for e in events]
+    # ★同批同 key 去重(后者胜):同 key 两行进同一条 INSERT..ON CONFLICT 会
+    #   CardinalityViolation(PG 禁止一条语句改同行两次)· 上游日历实测出过重复日期
+    rows = list({e["event_key"]: {**e, "updated_at": now} for e in events}.values())
     stmt = pg_insert(EconEvent).values(rows)
     stmt = stmt.on_conflict_do_update(
         index_elements=[EconEvent.event_key],

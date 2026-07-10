@@ -39,16 +39,26 @@ async def _refresh() -> dict[str, int]:
             # 源1 · Fed calendar.json(FOMC)· 失败隔离
             try:
                 fed = await fetch_fed_events()
+                # ★0 条仍记成功(拉取/解析没炸),但留 warn:上游格式漂移会呈现为
+                #   「新鲜度绿 + 数据静默停更」,这行日志是唯一线索(交叉审 P1-2)
+                if not fed:
+                    logger.warning("[econ-cal] fed_json 解析 0 条(疑上游格式漂移)")
                 stats["fed_json"] = await upsert_events(session, fed)
                 await mark_source_success(redis, "fed_json")
             except Exception as exc:  # noqa: BLE001 · 单源失败不影响其他(存量日程仍有效)
+                # ★rollback 必须:upsert 在 DB 层失败会把共享 session 打进 aborted 态,
+                #   不清掉后两源连坐全挂(违背单源隔离)· 照 perp_cross_liquidation 范式
+                await session.rollback()
                 logger.warning("[econ-cal] fed_json 刷新失败(存量日程仍有效): %s", exc)
             # 源2 · BEA release_dates.json(GDP/PCE)
             try:
                 bea = await fetch_bea_events()
+                if not bea:
+                    logger.warning("[econ-cal] bea_json 解析 0 条(疑上游格式漂移)")
                 stats["bea_json"] = await upsert_events(session, bea)
                 await mark_source_success(redis, "bea_json")
             except Exception as exc:  # noqa: BLE001
+                await session.rollback()
                 logger.warning("[econ-cal] bea_json 刷新失败(存量日程仍有效): %s", exc)
             # 源3 · 规则 + 年度种子(零网络 · 理论不会失败,仍隔离防御)
             try:
@@ -56,6 +66,7 @@ async def _refresh() -> dict[str, int]:
                 stats["rule_seed"] = await upsert_events(session, rs)
                 await mark_source_success(redis, "rule_seed")
             except Exception as exc:  # noqa: BLE001
+                await session.rollback()
                 logger.warning("[econ-cal] rule_seed 生成失败: %s", exc)
     finally:
         await redis.aclose()

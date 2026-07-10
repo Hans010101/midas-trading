@@ -320,6 +320,9 @@ async def get_decision_card(
             econ_ctx = format_events_for_prompt(econ_events, lang)
             econ_risk = build_event_risk(econ_events, lang)
     except Exception as exc:  # noqa: BLE001
+        # ★必须 rollback:select_upcoming 的 DB 错会把请求级 session 打进 aborted 态,
+        #   不清会静默丢后面 record_decision 的历史行(对抗自审真 PG 复现)
+        await db.rollback()
         logger.warning("[decision-card] 事件层注入失败(忽略·不影响卡本体): %s", exc)
 
     # 3. 跑 LangGraph workflow(mock 或 real,workflow 不关心)

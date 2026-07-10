@@ -21,6 +21,7 @@ from types import SimpleNamespace
 
 from app.services.ai.agents.technical import _SYSTEM_BASE, _format_snapshot
 from app.services.ai.prompts_en import TECHNICAL_SYSTEM_EN
+from app.services.econ_calendar.fetchers import BEA_RELEASES, parse_bea_events, parse_fed_events
 from app.services.econ_calendar.format import build_event_risk, format_events_for_prompt
 from app.services.econ_calendar.rules import gen_rule_and_seed_events
 
@@ -34,15 +35,32 @@ _DIRECTION_WORDS_EN = ("buy", "sell", "long", "short", "enter", "exit")
 
 _NOW = datetime(2026, 7, 10, 12, 0, tzinfo=UTC)
 
+# 交叉审补强A(点金-3):fetcher 解析产物的标题也必须进方向词语料——否则改
+# parse_fed_events 标题常量 / BEA_RELEASES 加脏标题时机器锁不响,「全语料」承诺不满。
+_FED_FIXTURE = {"events": [
+    {"type": "FOMC", "title": " FOMC Meeting", "month": "2026-09", "days": "15-16",
+     "time": "2:00 p.m."},
+]}
+# ★从注册表动态生成:今后往 BEA_RELEASES 加条目自动进语料,零人工同步
+_BEA_FIXTURE = {
+    name: {"release_dates": ["2026-08-27T08:30:00-04:00"]} for name in BEA_RELEASES
+}
+
 
 def _fake_events() -> list:
-    """全量规则+种子语料 → 伪 EconEvent(每个标题都过一遍输出面 · 语料全覆盖)。"""
+    """规则+种子+两解析器产物全语料 → 伪 EconEvent(每个标题都过一遍输出面)。"""
+    corpus = [
+        *gen_rule_and_seed_events(_NOW),
+        *parse_fed_events(_FED_FIXTURE),
+        *parse_bea_events(_BEA_FIXTURE),
+    ]
+    assert len(corpus) > len(gen_rule_and_seed_events(_NOW))  # fixture 真解析出了事件
     return [
         SimpleNamespace(
             title=e["title"], scheduled_at=e["scheduled_at"],
             time_confirmed=e["time_confirmed"],
         )
-        for e in gen_rule_and_seed_events(_NOW)
+        for e in corpus
     ]
 
 
@@ -62,11 +80,15 @@ def test_no_direction_words_in_prompt_section():
 
 def test_no_direction_words_in_event_risk():
     events = _fake_events()
-    # 滑窗打散:任意 3 条组合都干净(卡面最多显 3 条)
+    # 滑窗打散:任意 3 条组合都干净(卡面最多显 3 条)· 交叉审补强B:en 面同锁
     for i in range(0, len(events), 3):
         zh = build_event_risk(events[i : i + 3], "zh") or ""
         for w in _DIRECTION_WORDS:
             assert w not in zh, f"event_risk 出现方向词:{w}"
+        en = (build_event_risk(events[i : i + 3], "en") or "").lower()
+        for w in _DIRECTION_WORDS_EN:
+            assert f" {w} " not in en, f"en event_risk 方向词:{w}"
+            assert not en.startswith(f"{w} "), f"en event_risk 以方向词开头:{w}"
 
 
 def test_event_titles_whitelist_clean():
@@ -85,6 +107,11 @@ def test_event_risk_carries_full_disclaimer():
     assert zh is not None
     assert "仅供参考,不构成投资建议" in zh  # ★完整免责(非 x_short 精简版)
     assert build_event_risk([], "zh") is None  # 无事件 = None(不渲染)
+    # 交叉审补强B:en 面免责同锁
+    en = build_event_risk(events, "en")
+    assert en is not None
+    assert "not investment advice" in en
+    assert build_event_risk([], "en") is None
 
 
 # ── ③ prompt 红线句 + 既有约束未破 ────────────────────────────────────────

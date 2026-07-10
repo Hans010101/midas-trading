@@ -396,7 +396,7 @@ beat_schedule = {
     #   ★保鲜=每源成功写 econ:cal:last_success:*(绝不用 max(事件ts) 判 stale)。
     "econ-calendar-refresh": {
         "task": "tasks.econ_calendar.refresh_daily",
-        "schedule": crontab(hour="1", minute="7"),  # 每日 01:07 UTC(09:07 CST·避开整点洪峰)
+        "schedule": crontab(hour="9", minute="7"),  # 每日 09:07 CST(本文件 crontab 全按 CN 本地)
         "options": {"expires": 21600},
     },
 }
