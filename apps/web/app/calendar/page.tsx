@@ -17,7 +17,9 @@ import { fetchEconCalendar, type EconEvent } from '@/lib/api/econ-calendar'
 import { cn } from '@/lib/utils'
 
 // ── 地区(筛选维度):按 event_type 归属;「加密」单独用 markets 含 crypto 判 ──────
-const REGIONS = ['all', 'cn', 'us', 'eu', 'jp', 'crypto'] as const
+// ★「日韩」是合并桶(体例同「欧洲」= 多国合一):同出日本 BOJ + 韩国 BOK/KOSTAT,
+//   但事件行右侧仍标各自国别(日本/韩国),用户看得出哪条是哪国。
+const REGIONS = ['all', 'cn', 'us', 'eu', 'jpkr', 'crypto'] as const
 type Region = (typeof REGIONS)[number]
 
 const REGION_LABEL: Record<Region, string> = {
@@ -25,10 +27,11 @@ const REGION_LABEL: Record<Region, string> = {
   cn: '中国',
   us: '美国',
   eu: '欧洲',
-  jp: '日本',
+  jpkr: '日韩',
   crypto: '加密相关',
 }
 
+// event_type → 筛选桶(用于筛选匹配 · 合并桶把多国映到同一个 key)
 const REGION_OF_TYPE: Record<string, Exclude<Region, 'all' | 'crypto'>> = {
   lpr: 'cn',
   cn_cpi: 'cn',
@@ -41,13 +44,27 @@ const REGION_OF_TYPE: Record<string, Exclude<Region, 'all' | 'crypto'>> = {
   us_gdp: 'us',
   us_pce: 'us',
   ecb: 'eu',
-  boj: 'jp',
+  boj: 'jpkr',
+  bok: 'jpkr',
+  kr_cpi: 'jpkr',
+  kr_employment: 'jpkr',
+  kr_ind_activity: 'jpkr',
+}
+
+// event_type → 事件行右侧国别标注(只有合并桶内的类型需要覆盖 · 其余落桶标签)
+const COUNTRY_LABEL_OF_TYPE: Record<string, string> = {
+  boj: '日本',
+  bok: '韩国',
+  kr_cpi: '韩国',
+  kr_employment: '韩国',
+  kr_ind_activity: '韩国',
 }
 
 // 来源标注(客观出处 · 与库 source 字段一一对应)
 const SOURCE_LABEL: Record<string, string> = {
   fed_json: '美联储官网',
   bea_json: '美国经济分析局',
+  kostat: '韩国国家数据处',
   rule: '官方惯例规则',
   seed: '官方年表·策展',
 }
@@ -102,6 +119,14 @@ function regionOf(ev: EconEvent): Exclude<Region, 'all' | 'crypto'> | null {
   return REGION_OF_TYPE[ev.event_type] ?? null
 }
 
+// 事件行右侧国别标注:合并桶(日韩)内单条仍标各自国别;其余落桶标签
+function countryLabelOf(ev: EconEvent): string | null {
+  const specific = COUNTRY_LABEL_OF_TYPE[ev.event_type]
+  if (specific) return specific
+  const bucket = regionOf(ev)
+  return bucket ? REGION_LABEL[bucket] : null
+}
+
 function matchesRegion(ev: EconEvent, region: Region): boolean {
   if (region === 'all') return true
   if (region === 'crypto') return ev.markets.includes('crypto')
@@ -123,14 +148,15 @@ export default function EconCalendarPage() {
     refetchInterval: 15 * 60_000,
   })
 
-  const groups = useMemo(() => {
-    // 防御性排序:不依赖 API 返回顺序的隐式契约(后端确实 ORDER BY,但页面自保)
-    const events = (calendarQ.data?.events ?? [])
-      .filter((ev) => matchesRegion(ev, region) && (!majorOnly || ev.importance >= 2))
-      .sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at))
+  const { groups, emptyReason } = useMemo(() => {
     const now = new Date()
     const today = cstDayNumber(now)
     const weekEnd = today + (7 - cstIsoWeekday(now)) // 本周日(CST)
+    // 该地区今天起的全部事件(不看重要度)· 排序防御(不依赖 API 返回顺序的隐式契约)
+    const regionEvents = (calendarQ.data?.events ?? [])
+      .filter((ev) => matchesRegion(ev, region) && cstDayNumber(new Date(ev.scheduled_at)) >= today)
+      .sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at))
+    const events = majorOnly ? regionEvents.filter((ev) => ev.importance >= 2) : regionEvents
     const buckets: { key: string; label: string; items: EconEvent[] }[] = [
       { key: 'today', label: '今天', items: [] },
       { key: 'week', label: '本周', items: [] },
@@ -138,14 +164,19 @@ export default function EconCalendarPage() {
     ]
     for (const ev of events) {
       const d = cstDayNumber(new Date(ev.scheduled_at))
-      // d < today 只可能来自跨午夜的陈旧缓存(后端只发今天零点起)→ 丢弃,
-      // 绝不把昨天的事件顶着「今天」标题展示
-      if (d < today) continue
       if (d === today) buckets[0].items.push(ev)
       else if (d <= weekEnd) buckets[1].items.push(ev)
       else buckets[2].items.push(ev)
     }
-    return buckets.filter((b) => b.items.length > 0)
+    const built = buckets.filter((b) => b.items.length > 0)
+    // 空态诊断:该地区本有事件、但全被「仅重要 ★2+」清空(全★1)→ 精确提示防困惑
+    const reason =
+      built.length > 0
+        ? null
+        : majorOnly && regionEvents.length > 0
+          ? 'major-filtered'
+          : 'generic'
+    return { groups: built, emptyReason: reason }
   }, [calendarQ.data, region, majorOnly])
 
   const updatedText = useMemo(() => {
@@ -233,7 +264,9 @@ export default function EconCalendarPage() {
             </div>
           ) : groups.length === 0 ? (
             <div className="rounded-xl border border-paper bg-cream p-8 text-center text-sm text-muted-foreground">
-              该筛选条件下暂无日程,试试切换地区或重要度
+              {emptyReason === 'major-filtered'
+                ? `「${REGION_LABEL[region]}」地区近期事件均为次要(★1),已被「仅重要 ★2+」过滤;关闭该筛选即可查看`
+                : '该筛选条件下暂无日程,试试切换地区或重要度'}
             </div>
           ) : (
             <div className="space-y-6">
@@ -243,7 +276,7 @@ export default function EconCalendarPage() {
                   <div className="overflow-hidden rounded-xl border border-paper bg-cream">
                     {g.items.map((ev, i) => {
                       const t = cstParts(ev.scheduled_at)
-                      const r = regionOf(ev)
+                      const country = countryLabelOf(ev)
                       return (
                         <div
                           key={ev.event_key}
@@ -271,9 +304,9 @@ export default function EconCalendarPage() {
                           <span className="min-w-[14rem] flex-1 text-sm font-medium">
                             {ev.title}
                           </span>
-                          {r ? (
+                          {country ? (
                             <span className="rounded-full bg-surface-subtle px-2 py-0.5 text-[11px] text-muted-foreground">
-                              {REGION_LABEL[r]}
+                              {country}
                             </span>
                           ) : null}
                           {ev.markets.includes('crypto') ? (
