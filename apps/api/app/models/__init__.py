@@ -10,6 +10,7 @@ from app.models.daily_crawler_stat import DailyCrawlerStat  # noqa: F401
 from app.models.daily_referrer_stat import DailyReferrerStat  # noqa: F401
 from app.models.daily_source_stat import DailySourceStat  # noqa: F401
 from app.models.daily_visit_stat import DailyVisitStat  # noqa: F401
+from app.models.econ_event import EconEvent  # noqa: F401
 from app.models.hk_board_lot import HkBoardLot  # noqa: F401
 from app.models.hk_sector import HkSector  # noqa: F401
 from app.models.intelligent_review import IntelligentReview  # noqa: F401

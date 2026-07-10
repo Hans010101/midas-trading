@@ -61,6 +61,9 @@ class DecisionState(TypedDict, total=False):
     period: Period
     klines: list[Kline]
     language: str  # i18n Phase4 刀1:'zh'(默认)/'en' · 穿给 agent prompt 分发 + validator
+    # 事件日程层 P0:预格式化「未来7天重大事件」段(API 层生成 · 空串=无事件)·
+    # 🔴 红线:仅作波动风险背景注入 prompt,绝不参与任何方向/交易逻辑
+    econ_events_context: str
 
     # DataPrepareNode 产出
     chan_result: ChanAnalysisResult
@@ -144,6 +147,8 @@ async def _node_data_prepare(state: DecisionState) -> dict[str, Any]:
         atr=atr,
         zhongshu_high=last_zs.high if last_zs else None,
         zhongshu_low=last_zs.low if last_zs else None,
+        # 事件日程层 P0:预格式化事件段透传(空串=无事件=prompt 零变化 · 红线尾句在段内)
+        econ_events_context=state.get("econ_events_context", ""),
     )
 
     return {"chan_result": chan_result, "snapshot": snapshot}
@@ -311,11 +316,13 @@ _compiled = _build_workflow()
 
 async def run_decision_workflow(
     symbol: str, market: Market, period: Period, klines: list[Kline],
-    *, language: str = "zh",
+    *, language: str = "zh", econ_events_context: str = "",
 ) -> DecisionCardResponse:
     """跑完整 workflow · 返回 DecisionCardResponse。
 
     ★i18n Phase4 刀1:language 穿进 state → agent prompt 分发 + validator(默认 zh · zh 走原路径)。
+    ★事件日程层 P0:econ_events_context = 预格式化事件段(API 层生成 · 默认空串=零变化)·
+      🔴 仅作波动风险背景注入 prompt,绝不参与方向/交易逻辑(test_econ_redline 机器钉死)。
     """
     state: DecisionState = {
         "symbol": symbol,
@@ -323,6 +330,7 @@ async def run_decision_workflow(
         "period": period,
         "klines": klines,
         "language": language,
+        "econ_events_context": econ_events_context,
     }
     final_state = await _compiled.ainvoke(state)
     return cast("DecisionCardResponse", final_state["card"])

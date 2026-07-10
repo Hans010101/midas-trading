@@ -24,6 +24,7 @@ from app.api.deps import (
     UsSourceDep,
 )
 from app.core.database import get_db
+from app.core.redis_client import get_redis
 from app.schemas.ai_accuracy import AiAccuracyResponse
 from app.schemas.ai_decision import DecisionCardResponse
 from app.schemas.chan import (
@@ -49,6 +50,12 @@ from app.services.ai.strategy_signals import scan_signals
 from app.services.ai.workflow import run_decision_workflow
 from app.services.analysis.chan import analyze as analyze_chan
 from app.services.data_sources.base import BaseDataSource
+from app.services.econ_calendar.format import build_event_risk, format_events_for_prompt
+from app.services.econ_calendar.store import (
+    events_usable,
+    read_source_freshness,
+    select_upcoming,
+)
 from app.services.i18n import translate
 from app.services.membership import resolve_plan
 
@@ -301,8 +308,27 @@ async def get_decision_card(
                     detail=translate("analysis.kline_insufficient_decision_card", lang, e=e),
                 ) from e
 
+    # 2b. 事件日程层 P0:该市场未来 7 天重大事件 → prompt 风险背景 + 卡面纯模板提示。
+    #    ★失败隔离:事件层任何异常绝不影响决策卡本体(空串/None 即零变化)。
+    #    ★30 天硬阈(events_usable):采集断供 30 天内存量日程仍有效(良性失效),超 30 天降级不注入。
+    econ_ctx = ""
+    econ_risk: str | None = None
+    try:
+        redis = await get_redis()
+        if events_usable(await read_source_freshness(redis)):
+            econ_events = await select_upcoming(db, market, days=7, min_importance=2)
+            econ_ctx = format_events_for_prompt(econ_events, lang)
+            econ_risk = build_event_risk(econ_events, lang)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[decision-card] 事件层注入失败(忽略·不影响卡本体): %s", exc)
+
     # 3. 跑 LangGraph workflow(mock 或 real,workflow 不关心)
-    card = await run_decision_workflow(symbol, market, period, klines, language=lang)
+    card = await run_decision_workflow(
+        symbol, market, period, klines, language=lang, econ_events_context=econ_ctx,
+    )
+    # ★event_risk = API 层纯模板派生(零 LLM · 红线机器可证)· 随卡入缓存(TTL 内事件不变)
+    if econ_risk:
+        card = card.model_copy(update={"event_risk": econ_risk})
 
     logger.info(
         "[decision-card] symbol=%s market=%s period=%s score=%d label=%s"

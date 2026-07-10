@@ -41,6 +41,7 @@ from app.schemas.crypto import (
     BollScanResponse,
     BollStructureResponse,
     CryptoOverviewResponse,
+    EconJobStatus,
     FearGreedResponse,
     FundingRateResponse,
     FuturesMetricItem,
@@ -69,7 +70,11 @@ from app.services.clickhouse_crypto import (
     select_tickers_by_symbols,
 )
 from app.services.i18n import translate
-from app.services.ingest_monitor import build_ingest_status, select_ingest_freshness
+from app.services.ingest_monitor import (
+    build_econ_job_status,
+    build_ingest_status,
+    select_ingest_freshness,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -614,8 +619,21 @@ async def get_ingest_status(ch: ClickHouseDep) -> IngestStatusResponse:
     latest_map = await select_ingest_freshness(ch._client)  # noqa: SLF001
     now = datetime.now(tz=UTC)
     crypto_items, equity_items, any_stale = build_ingest_status(latest_map, now)
+    # 事件日程层 P0 · job last-run 口径(事件 ts 在未来 → 绝不用 max(ts) 判)· 失败隔离
+    econ_items: list[EconJobStatus] = []
+    try:
+        from app.core.redis_client import get_redis  # noqa: PLC0415
+        from app.services.econ_calendar.store import read_source_freshness  # noqa: PLC0415
+
+        econ_items, econ_stale = build_econ_job_status(
+            await read_source_freshness(await get_redis()), now,
+        )
+        any_stale = any_stale or econ_stale
+    except Exception:  # noqa: BLE001 · 监控辅助段挂了不影响主监控
+        logger.warning("[ingest-status] econ job 段读取失败(忽略)")
     return IngestStatusResponse(
         as_of=now, any_stale=any_stale, crypto=crypto_items, equities=equity_items,
+        econ_jobs=econ_items,
     )
 
 

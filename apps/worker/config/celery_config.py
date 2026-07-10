@@ -391,4 +391,12 @@ beat_schedule = {
         "schedule": crontab(minute="0"),  # 每小时整点
         "options": {"expires": 1800},
     },
+    # ── 事件日程层(P0)· 每日一次刷新前瞻宏观日历(日程提前数月已知·低频足够)──
+    #   三源隔离:Fed calendar.json(FOMC)/ BEA JSON(GDP·PCE)/ 规则+年度种子。
+    #   ★保鲜=每源成功写 econ:cal:last_success:*(绝不用 max(事件ts) 判 stale)。
+    "econ-calendar-refresh": {
+        "task": "tasks.econ_calendar.refresh_daily",
+        "schedule": crontab(hour="1", minute="7"),  # 每日 01:07 UTC(09:07 CST·避开整点洪峰)
+        "options": {"expires": 21600},
+    },
 }

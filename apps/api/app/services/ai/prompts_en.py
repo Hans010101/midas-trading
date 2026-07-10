@@ -32,6 +32,8 @@ RED_LINE_PREAMBLE_EN = (
     '- FORBIDDEN marketing: "guaranteed profit", "risk-free", "sure win", '
     '"to the moon", "can\'t lose". Never promise or guarantee any return.\n'
     '- Frame opportunities as "worth watching" and risks as "warrant caution".\n'
+    "- If the input contains an upcoming-macro-events section: treat it ONLY as "
+    "volatility-risk context. NEVER derive any directional view or action from events.\n"
     "- End your answer with EXACTLY this disclaimer, verbatim:\n"
     f'  "{ADVISORY_DISCLAIMER_EN}"\n\n'
     "[TERMINOLOGY — use these exact English terms] Chan Theory / Central Hub / "

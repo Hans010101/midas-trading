@@ -24,6 +24,7 @@ from tasks import (  # noqa: E402, F401
     conditional_orders,
     crypto_metrics_ingest,
     data_ingest,
+    econ_calendar,
     equity_snapshot,
     hk_board_lot_ingest,
     hk_sector_ingest,

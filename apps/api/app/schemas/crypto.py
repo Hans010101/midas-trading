@@ -436,6 +436,17 @@ class EquityIngestStatus(BaseModel):
     age_seconds: float | None = Field(default=None, ge=0)
 
 
+class EconJobStatus(BaseModel):
+    """事件日程层采集任务新鲜度(★job last-run 口径:事件 ts 在未来,max(ts) 判 stale 永远假新鲜)。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source: str                             # fed_json / bea_json / rule_seed
+    last_success: AwareDatetime | None      # 任务上次成功时间(None=从未成功)
+    age_seconds: float | None = Field(default=None, ge=0)
+    stale: bool                             # 超 3 天没成功(★存量未来日程仍有效·仅标注)
+
+
 class IngestStatusResponse(BaseModel):
     """采集监控总览 · any_stale 给一眼/脚本判断。"""
 
@@ -445,3 +456,5 @@ class IngestStatusResponse(BaseModel):
     any_stale: bool
     crypto: list[IngestSourceStatus]
     equities: list[EquityIngestStatus]
+    # 事件日程层 P0(job 口径 · 默认空保旧构造/旧消费方兼容)
+    econ_jobs: list[EconJobStatus] = Field(default_factory=list)
