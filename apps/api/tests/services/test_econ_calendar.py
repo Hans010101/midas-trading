@@ -210,6 +210,47 @@ def test_parse_boj_tankan_pairs_time_and_date():
     assert e["scheduled_at"] == datetime(2026, 10, 1, 8, 50, tzinfo=UTC) - timedelta(hours=9)
 
 
+@pytest.mark.asyncio
+async def test_fetch_jp_estat_raises_on_survey_drift(monkeypatch) -> None:  # noqa: ANN001
+    """🔴 保鲜(对抗自审 P2):任一调查 os_code 漂移(换基年重命名节点)→ 解析 0 条 →
+    fetch 抛 → worker 不 mark_success 转 stale。绝不「部分成功」假新鲜掩盖单调查静默停更。
+    """
+    from app.services.econ_calendar import fetchers as fmod
+
+    good_rou = _jp_cpi_xml(os_name="労働力調査", class1="2026年7月分",
+                           class2="基本集計（2026年7月分）")
+
+    def _client(cpi_bytes: bytes):
+        class _Resp:
+            def __init__(self, c: bytes) -> None:
+                self.content = c
+
+            def raise_for_status(self) -> None: ...
+
+        class _Client:
+            async def __aenter__(self) -> _Client:
+                return self
+
+            async def __aexit__(self, *a: object) -> bool:
+                return False
+
+            async def get(self, url: str) -> _Resp:
+                return _Resp(cpi_bytes if "cpi" in url else good_rou)
+
+        return _Client()
+
+    # CPI os_code 漂移 + 失业率正常 → 旧版会聚合成「部分成功」假新鲜;新版应抛
+    drift = _jp_cpi_xml(os_name="消費者物価指数（2025年基準）")
+    monkeypatch.setattr(fmod.httpx, "AsyncClient", lambda **_kw: _client(drift))
+    with pytest.raises(ValueError, match="jp_cpi"):
+        await fmod.fetch_jp_estat_events()
+    # 两源都正常 → 不抛,返回非空 · 全 markets=["jp"]
+    monkeypatch.setattr(fmod.httpx, "AsyncClient", lambda **_kw: _client(_jp_cpi_xml()))
+    evs = await fmod.fetch_jp_estat_events()
+    assert evs
+    assert all(e["markets"] == ["jp"] for e in evs)
+
+
 # ── 源解析器(实测形状 fixture · 2026-07-10 亲手 curl)───────────────────────
 
 

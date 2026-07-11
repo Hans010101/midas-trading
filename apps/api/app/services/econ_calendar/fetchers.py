@@ -272,6 +272,14 @@ async def _fetch_kostat_year(year: int) -> list[dict[str, Any]]:
 # 🔴 日本全 importance=1 + markets=["jp"](非四交易市场 → 决策卡永不注入,同韩国双重锁)。
 
 
+def _safe_int(raw: str | None, default: int) -> int:
+    """不可信文本 → int · 非数字(「未定」/空白/None)回退 default(绝不裸抛拖垮整份调查)。"""
+    try:
+        return int(raw) if raw and raw.strip() else default
+    except (TypeError, ValueError):
+        return default
+
+
 def _cpi_keep(class_1_name: str, class_2_name: str) -> bool:
     """全国(非東京都区部速報)· 月度数据期(排除「2025年基準…遡及…接続指数」等特殊发布)。"""
     return class_1_name == "全国" and class_2_name.endswith("月分")
@@ -325,7 +333,9 @@ def parse_estat_xml(
                 except ValueError:
                     continue
                 hh_raw, mm_raw = _g("release_hour"), _g("release_minute")
-                seen.setdefault(key, (int(hh_raw) if hh_raw else 8, int(mm_raw) if mm_raw else 30))
+                # ★时刻字段与日期字段同属不可信输入,必须同样容错:非数字(如「未定」/
+                #   空白)不能裸 int() 抛异常拖垮整份调查(对抗自审 P2 · 只丢该行的粒度)
+                seen.setdefault(key, (_safe_int(hh_raw, 8), _safe_int(mm_raw, 30)))
     out: list[dict[str, Any]] = []
     for key, (hh, mm) in seen.items():
         yy, mo, dd = (int(x) for x in key.split("-"))
@@ -347,26 +357,25 @@ def parse_estat_xml(
 
 
 async def fetch_jp_estat_events() -> list[dict[str, Any]]:
-    """拉統計局 CPI + 失業率 XML → 解析。★每 XML 独立隔离(一个 404 不拖累另一个);
-    全部失败才向上抛(→ worker 不 mark_success → 3 天保鲜转 stale);部分成功返回已得。
+    """拉統計局 CPI + 失業率 XML → 解析。★两源恒有未来发布(滚动 9 个月)→ 任一调查解析
+    0 条 = os_code/class_1 名漂移(CPI 换基年重命名节点是真实场景)或断供 → 直接抛,让
+    worker 不 mark_success → 3 天保鲜转 stale。绝不「部分成功也 mark_success」掩盖单调查
+    静默停更(对抗自审 P2:旧版一份 XML 漂移、另一份正常时,聚合非空→假新鲜→漂移无人知)。
     """
     out: list[dict[str, Any]] = []
-    errors: list[Exception] = []
     async with httpx.AsyncClient(timeout=_TIMEOUT, headers=_UA) as client:
         for url, (os_name, etype, title, keep) in zip(
             (JP_ESTAT_CPI_URL, JP_ESTAT_ROUDOU_URL), JP_ESTAT_SPECS, strict=True,
         ):
-            try:
-                resp = await client.get(url)
-                resp.raise_for_status()
-                out += parse_estat_xml(
-                    resp.content, os_name=os_name, event_type=etype, title=title, keep=keep,
-                )
-            except Exception as exc:  # noqa: BLE001 · 单 XML 失败隔离
-                errors.append(exc)
-                logger.warning("[econ-cal] jp_estat %s 拉取失败(隔离): %s", etype, exc)
-    if errors and not out:                                # 全挂 → 抛,让 worker 记 fail
-        raise errors[-1]
+            resp = await client.get(url)                  # 网络/404 自然抛 → 记 fail
+            resp.raise_for_status()
+            evs = parse_estat_xml(
+                resp.content, os_name=os_name, event_type=etype, title=title, keep=keep,
+            )
+            if not evs:                                    # ★恒有未来发布 · 0 条=漂移/断供
+                msg = f"jp_estat {etype} 解析 0 条(疑 os_code/class_1 漂移),不 mark_success"
+                raise ValueError(msg)
+            out += evs
     logger.info("[econ-cal] jp_estat 解析 %d 条", len(out))
     return out
 

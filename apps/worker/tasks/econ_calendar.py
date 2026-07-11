@@ -81,10 +81,9 @@ async def _refresh() -> dict[str, int]:
                 await session.rollback()
                 logger.warning("[econ-cal] kostat 刷新失败(存量日程仍有效): %s", exc)
             # 源4 · 日本統計局 e-Stat CPI/失業率 XML(★UTF-16)· 失败隔离 + 良性失效
+            #   ★fetch 内任一调查 0 条即抛(恒有未来发布 → 0=漂移)→ 落到 except 转 stale
             try:
                 jp_estat = await fetch_jp_estat_events()
-                if not jp_estat:
-                    logger.warning("[econ-cal] jp_estat 解析 0 条(疑 XML 格式/UTF-16/路径漂移)")
                 stats["jp_estat"] = await upsert_events(session, jp_estat)
                 await mark_source_success(redis, "jp_estat")
             except Exception as exc:  # noqa: BLE001

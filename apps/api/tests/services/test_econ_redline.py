@@ -23,8 +23,9 @@ from app.services.ai.agents.technical import _SYSTEM_BASE, _format_snapshot
 from app.services.ai.prompts_en import TECHNICAL_SYSTEM_EN
 from app.services.econ_calendar.fetchers import (
     BEA_RELEASES,
-    _cpi_keep,
-    _unemp_keep,
+    BOJ_STATS,
+    JP_ESTAT_SPECS,
+    KOSTAT_INDICATORS,
     parse_bea_events,
     parse_boj_rows,
     parse_estat_xml,
@@ -85,17 +86,23 @@ _BOJ_FIXTURE = [
 ]
 
 
+# event_type → 能过该 spec keep 的 (class_1, class_2) fixture 参数(仅测试造数据用)
+_JP_ESTAT_FIXTURE_CLASS = {
+    "jp_cpi": ("全国", "2026年7月分"),
+    "jp_unemp": ("2026年7月分", "基本集計（2026年7月分）"),
+}
+
+
 def _jp_events() -> list[dict]:
-    """日本三指标解析产物(CPI/失業率 XML + 短観 xlsx)· 进方向词语料 + 不注入不变量。"""
-    return [
-        *parse_estat_xml(_estat_fixture("消費者物価指数", "全国", "2026年7月分"),
-                         os_name="消費者物価指数", event_type="jp_cpi", title="日本CPI",
-                         keep=_cpi_keep),
-        *parse_estat_xml(_estat_fixture("労働力調査", "2026年7月分", "基本集計(2026年7月分)"),
-                         os_name="労働力調査", event_type="jp_unemp", title="日本失业率",
-                         keep=_unemp_keep),
-        *parse_boj_rows(_BOJ_FIXTURE),
-    ]
+    """日本三指标解析产物 · ★title 从生产注册表 JP_ESTAT_SPECS / BOJ_STATS 取(绝不硬编码
+    ——否则改坏 title 常量注入方向词时红线语料锁不响,对抗自审 P2 假绿)。"""
+    out: list[dict] = []
+    for os_name, etype, title, keep in JP_ESTAT_SPECS:
+        c1, c2 = _JP_ESTAT_FIXTURE_CLASS[etype]
+        out += parse_estat_xml(_estat_fixture(os_name, c1, c2), os_name=os_name,
+                               event_type=etype, title=title, keep=keep)
+    out += parse_boj_rows(_BOJ_FIXTURE)  # parse_boj_rows 内部从 BOJ_STATS 常量取 title
+    return out
 
 
 def _fake_events() -> list:
@@ -152,6 +159,19 @@ def test_event_titles_whitelist_clean():
     for e in corpus:
         for w in _DIRECTION_WORDS:
             assert w not in e["title"], f"事件标题含方向词:{e['title']}"
+
+
+def test_source_title_constants_have_no_direction_words():
+    """🔴 直接锁源头 title 常量(注册表 · 比语料流转更硬 · 对抗自审 P2):韩/日事件标题
+    零方向词。KOSTAT_INDICATORS / JP_ESTAT_SPECS / BOJ_STATS 的中文 title 都在 idx 2。
+    """
+    titles = ([k[2] for k in KOSTAT_INDICATORS]
+              + [s[2] for s in JP_ESTAT_SPECS]
+              + [b[2] for b in BOJ_STATS])
+    assert titles  # 注册表非空(防路径漂移后空转全绿)
+    for t in titles:
+        for w in _DIRECTION_WORDS:
+            assert w not in t, f"源 title 常量含方向词:{t}"
 
 
 def test_kr_events_never_injectable_into_decision_card():
