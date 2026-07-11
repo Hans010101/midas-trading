@@ -174,7 +174,6 @@ function matchesRegion(ev: EconEvent, region: Region): boolean {
 
 export default function EconCalendarPage() {
   const [region, setRegion] = useState<Region>('all')
-  const [majorOnly, setMajorOnly] = useState(false)
 
   const calendarQ = useQuery({
     queryKey: ['econ-calendar'],
@@ -185,15 +184,14 @@ export default function EconCalendarPage() {
     refetchInterval: 15 * 60_000,
   })
 
-  const { groups, emptyReason } = useMemo(() => {
+  const groups = useMemo(() => {
     const now = new Date()
     const today = cstDayNumber(now)
     const weekEnd = today + (7 - cstIsoWeekday(now)) // 本周日(CST)
-    // 该地区今天起的全部事件(不看重要度)· 排序防御(不依赖 API 返回顺序的隐式契约)
-    const regionEvents = (calendarQ.data?.events ?? [])
+    // 该地区今天起的全部事件(展示全 · 无重要度过滤)· 排序防御(不依赖 API 顺序隐式契约)
+    const events = (calendarQ.data?.events ?? [])
       .filter((ev) => matchesRegion(ev, region) && cstDayNumber(new Date(ev.scheduled_at)) >= today)
       .sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at))
-    const events = majorOnly ? regionEvents.filter((ev) => ev.importance >= 2) : regionEvents
     const buckets: { key: string; label: string; items: EconEvent[] }[] = [
       { key: 'today', label: '今天', items: [] },
       { key: 'week', label: '本周', items: [] },
@@ -205,16 +203,8 @@ export default function EconCalendarPage() {
       else if (d <= weekEnd) buckets[1].items.push(ev)
       else buckets[2].items.push(ev)
     }
-    const built = buckets.filter((b) => b.items.length > 0)
-    // 空态诊断:该地区本有事件、但全被「仅重要 ★2+」清空(全★1)→ 精确提示防困惑
-    const reason =
-      built.length > 0
-        ? null
-        : majorOnly && regionEvents.length > 0
-          ? 'major-filtered'
-          : 'generic'
-    return { groups: built, emptyReason: reason }
-  }, [calendarQ.data, region, majorOnly])
+    return buckets.filter((b) => b.items.length > 0)
+  }, [calendarQ.data, region])
 
   const updatedText = useMemo(() => {
     const iso = calendarQ.data?.updated_at
@@ -228,7 +218,7 @@ export default function EconCalendarPage() {
       <TopNav />
       <main className="flex-1">
         <div className="mx-auto max-w-5xl px-6 py-6">
-          {/* 筛选(地区 + 重要度)+ 保鲜标注(last-run 口径)。页内不设大标题:导航 Tab 已有同名入口 */}
+          {/* 筛选(仅地区)+ 保鲜标注(last-run 口径)。页内不设大标题:导航 Tab 已有同名入口 */}
           <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-3">
             <div className="inline-flex rounded-lg border border-paper bg-surface-card p-0.5">
@@ -247,32 +237,6 @@ export default function EconCalendarPage() {
                   {REGION_LABEL[r]}
                 </button>
               ))}
-            </div>
-            <div className="inline-flex rounded-lg border border-paper bg-surface-card p-0.5">
-              <button
-                type="button"
-                onClick={() => setMajorOnly(false)}
-                className={cn(
-                  'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-                  !majorOnly
-                    ? 'bg-midas-red text-white shadow-sm'
-                    : 'text-muted-foreground hover:text-midas-red',
-                )}
-              >
-                全部重要度
-              </button>
-              <button
-                type="button"
-                onClick={() => setMajorOnly(true)}
-                className={cn(
-                  'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-                  majorOnly
-                    ? 'bg-midas-red text-white shadow-sm'
-                    : 'text-muted-foreground hover:text-midas-red',
-                )}
-              >
-                仅重要 ★2+
-              </button>
             </div>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -301,9 +265,7 @@ export default function EconCalendarPage() {
             </div>
           ) : groups.length === 0 ? (
             <div className="rounded-xl border border-paper bg-cream p-8 text-center text-sm text-muted-foreground">
-              {emptyReason === 'major-filtered'
-                ? `「${REGION_LABEL[region]}」地区近期事件均为次要(★1),已被「仅重要 ★2+」过滤;关闭该筛选即可查看`
-                : '该筛选条件下暂无日程,试试切换地区或重要度'}
+              该地区近期暂无日程,试试切换地区
             </div>
           ) : (
             <div className="space-y-6">
