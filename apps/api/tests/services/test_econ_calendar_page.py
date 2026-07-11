@@ -100,12 +100,17 @@ def test_nav_entry_labels_clean():
 
 
 def test_jpkr_bucket_and_country_labels_present():
-    """特性钉:「日韩」合并桶 + 单条国别(日本/韩国)+ KOSTAT 来源标注三者都在。"""
+    """特性钉:「日韩」合并桶 + 单条国别(日本/韩国)+ 韩/日来源标注都在。"""
     page = _read(_WEB / "app" / "calendar" / "page.tsx")
     assert "日韩" in page, "缺「日韩」合并桶标签"
     assert "韩国" in page, "缺韩国国别标注"
     assert "日本" in page, "缺日本国别标注(合并桶内仍标各国)"
     assert "kostat" in page, "缺 KOSTAT 来源标注映射"
+    # 日本三指标 event_type 归入 jpkr 桶 + 单条标日本 + 来源(統計局/BOJ)映射
+    for et in ("jp_cpi", "jp_unemp", "jp_tankan"):
+        assert et in page, f"缺日本 event_type 桶/国别映射:{et}"
+    assert "jp_estat" in page, "缺日本統計局来源标注映射"
+    assert "boj_xlsx" in page, "缺日本 BOJ 来源标注映射"
 
 
 def test_i18n_canary_forces_lock_extension():

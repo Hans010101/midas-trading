@@ -15,7 +15,9 @@ from __future__ import annotations
 import io
 import logging
 import re
-from datetime import UTC, datetime, time
+import xml.etree.ElementTree as ET  # noqa: N817 · 标准库惯用别名
+from collections.abc import Callable
+from datetime import UTC, date, datetime, time
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -27,12 +29,17 @@ FED_CALENDAR_URL = "https://www.federalreserve.gov/json/calendar.json"
 BEA_RELEASE_DATES_URL = "https://apps.bea.gov/API/signup/release_dates.json"
 # KOSTAT(2026 改名 국가데이터처/MODS)官方年度 xlsx · 路径纯约定按年份填充(调研实测 200)
 KOSTAT_XLSX_URL = "https://mods.go.kr/ansk/file/schedule_{year}.xlsx"
+# 日本:総務省統計局 e-Stat 公表予定 XML(★UTF-16 编码 · 调研实测坑)+ BOJ 统计公表予定 xlsx
+JP_ESTAT_CPI_URL = "https://www.stat.go.jp/data/kouhyou/e-stat_cpi.xml"
+JP_ESTAT_ROUDOU_URL = "https://www.stat.go.jp/data/kouhyou/e-stat_roudou.xml"
+BOJ_SCHEDULE_XLSX_URL = "https://www.boj.or.jp/statistics/outline/tkohyos.xlsx"
 # 零 key 公共源 · UA 自我标识(公共数据礼仪·非绕反爬)
 _UA = {"User-Agent": "MidasTerminal/1.0 (data-schedule; contact via midastrade.asia)"}
 _TIMEOUT = 30.0
 
 _ET = ZoneInfo("America/New_York")
 _KST = ZoneInfo("Asia/Seoul")
+_JST = ZoneInfo("Asia/Tokyo")
 
 # BEA release 名 → (event_type, 中文标题, importance)· ★最小集:GDP + PCE(FOMC 关注的通胀口径)
 BEA_RELEASES: dict[str, tuple[str, str, int]] = {
@@ -254,3 +261,188 @@ async def _fetch_kostat_year(year: int) -> list[dict[str, Any]]:
         resp = await client.get(KOSTAT_XLSX_URL.format(year=year))
         resp.raise_for_status()
     return parse_kostat_rows(_extract_kostat_rows(resp.content), year)
+
+
+# ── 日本 · 総務省統計局 e-Stat 公表予定 XML(CPI / 失業率)──────────────────────
+# ★实测形状(2026-07-11 亲手下载解包):★★UTF-16 LE 编码(BOM · resp.text 会误按 UTF-8
+#   噎成乱码 → 必须 content.decode("utf-16"))· os_code>class_1>class_2(数据期)>…>class_5
+#   叶承载 release_year/month/day/hour/minute(精确到分)+ internet_url。滚动约 9 个月未来。
+#   同一 os_code 内混有非目标发布(CPI 東京都区部速報 / 遡及結果、失業率 詳細集計 14:00)→
+#   keep 谓词按 class_1/class_2 名筛出目标(全国月度 CPI / 基本集計 失業率)。
+# 🔴 日本全 importance=1 + markets=["jp"](非四交易市场 → 决策卡永不注入,同韩国双重锁)。
+
+
+def _cpi_keep(class_1_name: str, class_2_name: str) -> bool:
+    """全国(非東京都区部速報)· 月度数据期(排除「2025年基準…遡及…接続指数」等特殊发布)。"""
+    return class_1_name == "全国" and class_2_name.endswith("月分")
+
+
+def _unemp_keep(class_1_name: str, class_2_name: str) -> bool:  # noqa: ARG001
+    """基本集計(失業率头条 · 08:30)· 排除詳細集計(季度 14:00 · 非市场事件)。"""
+    return class_2_name.startswith("基本集計")
+
+
+# (os_code name 校验, event_type, 中文标题, keep 谓词)· os_code 校验防路径漂移/换文件
+JP_ESTAT_SPECS: tuple[tuple[str, str, str, Callable[[str, str], bool]], ...] = (
+    ("消費者物価指数", "jp_cpi", "日本CPI", _cpi_keep),
+    ("労働力調査", "jp_unemp", "日本失业率", _unemp_keep),
+)
+
+
+def parse_estat_xml(
+    content: bytes, *, os_name: str, event_type: str, title: str,
+    keep: Callable[[str, str], bool],
+) -> list[dict[str, Any]]:
+    """統計局 e-Stat XML(UTF-16 bytes)→ 目标指标未来发布(纯函数 · 同日去重 · 可单测)。"""
+    text = content.decode("utf-16")                       # ★UTF-16(别当 UTF-8)
+    text = re.sub(r"^\s*<\?xml[^>]*\?>", "", text, count=1)  # ET 拒带 encoding 声明的 str
+    try:
+        root = ET.fromstring(text)                        # noqa: S314 · 官方源·非不可信输入
+    except ET.ParseError as exc:
+        logger.warning("[econ-cal] estat %s XML 解析失败(疑源漂移): %s", event_type, exc)
+        return []
+    os_el = root.find("os_code")
+    if os_el is None or os_el.get("name") != os_name:
+        got = os_el.get("name") if os_el is not None else None
+        logger.warning("[econ-cal] estat os_code 不符(疑源漂移):期望 %r 实得 %r", os_name, got)
+        return []
+    seen: dict[str, tuple[int, int]] = {}                 # date_key → (h,m)· 同日首见胜(头条 08:30)
+    for c1 in root.iter("class_1"):
+        c1n = c1.get("name") or ""
+        for c2 in c1.iter("class_2"):
+            c2n = c2.get("name") or ""
+            if not keep(c1n, c2n):
+                continue
+            for c5 in c2.iter("class_5"):
+                def _g(tag: str, el: ET.Element = c5) -> str | None:
+                    found = el.find(tag)
+                    return found.text if found is not None else None
+                y, m, d = _g("release_year"), _g("release_month"), _g("release_day")
+                if not (y and m and d):
+                    continue
+                try:
+                    key = f"{int(y):04d}-{int(m):02d}-{int(d):02d}"
+                except ValueError:
+                    continue
+                hh_raw, mm_raw = _g("release_hour"), _g("release_minute")
+                seen.setdefault(key, (int(hh_raw) if hh_raw else 8, int(mm_raw) if mm_raw else 30))
+    out: list[dict[str, Any]] = []
+    for key, (hh, mm) in seen.items():
+        yy, mo, dd = (int(x) for x in key.split("-"))
+        try:
+            local = datetime(yy, mo, dd, hh, mm, tzinfo=_JST)
+        except ValueError:
+            continue
+        out.append({
+            "event_key": f"{event_type}-{key}",
+            "event_type": event_type,
+            "title": title,
+            "markets": ["jp"],       # ★非四市场 → 决策卡永不注入(叠加 importance=1)
+            "importance": 1,         # ★日本恒 1(红线:绝不提 2)
+            "scheduled_at": local.astimezone(UTC),
+            "time_confirmed": True,
+            "source": "jp_estat",
+        })
+    return out
+
+
+async def fetch_jp_estat_events() -> list[dict[str, Any]]:
+    """拉統計局 CPI + 失業率 XML → 解析。★每 XML 独立隔离(一个 404 不拖累另一个);
+    全部失败才向上抛(→ worker 不 mark_success → 3 天保鲜转 stale);部分成功返回已得。
+    """
+    out: list[dict[str, Any]] = []
+    errors: list[Exception] = []
+    async with httpx.AsyncClient(timeout=_TIMEOUT, headers=_UA) as client:
+        for url, (os_name, etype, title, keep) in zip(
+            (JP_ESTAT_CPI_URL, JP_ESTAT_ROUDOU_URL), JP_ESTAT_SPECS, strict=True,
+        ):
+            try:
+                resp = await client.get(url)
+                resp.raise_for_status()
+                out += parse_estat_xml(
+                    resp.content, os_name=os_name, event_type=etype, title=title, keep=keep,
+                )
+            except Exception as exc:  # noqa: BLE001 · 单 XML 失败隔离
+                errors.append(exc)
+                logger.warning("[econ-cal] jp_estat %s 拉取失败(隔离): %s", etype, exc)
+    if errors and not out:                                # 全挂 → 抛,让 worker 记 fail
+        raise errors[-1]
+    logger.info("[econ-cal] jp_estat 解析 %d 条", len(out))
+    return out
+
+
+# ── 日本 · 日本銀行 BOJ 統計公表予定 xlsx(短観 Tankan · 非议息)────────────────────
+# ★实测形状(2026-07-11 亲手下载解包):2 sheet,第 2 sheet「統計データ」308 行 = 统计 ×
+#   月份矩阵。每统计两行:时刻行(col3="08:50:00")+ 日期行(col3="(四半期)"·月列含原生
+#   datetime `2026-10-01`,无需令和转换)· 同 col1 名配对。短観概要 08:50 JST = 市场事件。
+
+
+# (col1 統計名子串, event_type, 中文标题)· 短観概要及び要旨(头条速報 · 非調査全容/時系列)
+BOJ_STATS: tuple[tuple[str, str, str], ...] = (
+    ("短観（全国企業短期経済観測調査）／概要", "jp_tankan", "日本短观Tankan"),
+)
+
+
+def parse_boj_rows(rows: list[tuple[Any, ...]]) -> list[dict[str, Any]]:
+    """BOJ 統計データ sheet 全行 → 短観等目标统计未来发布(纯函数 · 同日去重 · 可单测)。
+
+    每统计的时刻在「时刻行」col3、日期在「日期行」月列(原生 datetime)· 同 col1 名配对。
+    """
+    out: list[dict[str, Any]] = []
+    for needle, etype, title in BOJ_STATS:
+        time_hm: tuple[int, int] | None = None
+        dates: list[date] = []
+        for row in rows:
+            name = str(row[1]) if len(row) > 1 and row[1] else ""
+            if needle not in name:
+                continue
+            c3 = str(row[3]) if len(row) > 3 and row[3] else ""
+            tm = re.match(r"(\d{1,2}):(\d{2})", c3)       # 时刻行 "08:50:00"
+            if tm:
+                time_hm = (int(tm.group(1)), int(tm.group(2)))
+            for cell in row[4:]:                          # 月列:原生 datetime = 排定发布
+                if isinstance(cell, datetime):
+                    dates.append(cell.date())
+                elif isinstance(cell, date):
+                    dates.append(cell)
+        hh, mm = time_hm or (8, 50)                        # 短観概要惯例 08:50 JST
+        seen: set[str] = set()
+        for dd in dates:
+            key = f"{dd:%Y-%m-%d}"
+            if key in seen:
+                continue
+            seen.add(key)
+            local = datetime(dd.year, dd.month, dd.day, hh, mm, tzinfo=_JST)
+            out.append({
+                "event_key": f"{etype}-{key}",
+                "event_type": etype,
+                "title": title,
+                "markets": ["jp"],   # ★非四市场 → 决策卡永不注入(叠加 importance=1)
+                "importance": 1,     # ★日本恒 1(红线:绝不提 2)
+                "scheduled_at": local.astimezone(UTC),
+                "time_confirmed": True,
+                "source": "boj_xlsx",
+            })
+    return out
+
+
+def _extract_boj_rows(content: bytes) -> list[tuple[Any, ...]]:
+    """xlsx 字节 →「統計データ」sheet 全行(无则退回末个 sheet)· openpyxl 惰性 import。"""
+    import openpyxl  # noqa: PLC0415
+
+    wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    try:
+        name = "統計データ" if "統計データ" in wb.sheetnames else wb.sheetnames[-1]
+        return [tuple(r) for r in wb[name].iter_rows(values_only=True)]
+    finally:
+        wb.close()
+
+
+async def fetch_boj_events() -> list[dict[str, Any]]:
+    """拉 BOJ tkohyos.xlsx → 解析短観。失败抛给调用方记 fail(存量 30 天仍有效)。"""
+    async with httpx.AsyncClient(timeout=_TIMEOUT, headers=_UA) as client:
+        resp = await client.get(BOJ_SCHEDULE_XLSX_URL)
+        resp.raise_for_status()
+    events = parse_boj_rows(_extract_boj_rows(resp.content))
+    logger.info("[econ-cal] boj_xlsx 解析短観 %d 条", len(events))
+    return events
