@@ -358,6 +358,56 @@ def test_boe_seed_thursday_noon_and_redline():
     assert jul["title"] == "英国央行BoE利率决议"
 
 
+@pytest.mark.asyncio
+async def test_fetch_dsbb_raises_on_single_country_drop(monkeypatch) -> None:  # noqa: ANN001
+    """🔴 保鲜(对抗自审 P2):单国 SDDS 节点漂移(如意大利)→ 该国 0 条 → fetch 抛 →
+    worker 不 mark_success 转 stale。绝不「三国正常也 mark_success」掩盖单国静默停更。
+    """
+    from app.services.econ_calendar import fetchers as fmod
+
+    am = [{"MonthNum": 7, "MonthText": "Jul"}]
+    healthy = [{"CountryCode": "X", "CategoryCode": "CPI00",
+                "MonthValues": [None] * 7 + [{"Day": "15", "Period": "Jun/26"}] + [None] * 5}]
+
+    def _client(drop_iso: str):
+        class _Resp:
+            def __init__(self, payload: object) -> None:
+                self._p = payload
+
+            def raise_for_status(self) -> None: ...
+
+            def json(self) -> object:
+                return self._p
+
+        class _Client:
+            async def __aenter__(self) -> _Client:
+                return self
+
+            async def __aexit__(self, *a: object) -> bool:
+                return False
+
+            async def get(self, url: str, params: dict | None = None) -> _Resp:
+                if url.endswith("getAdvanceMonths"):
+                    return _Resp(am)
+                iso = (params or {}).get("Countries")
+                if iso == drop_iso:          # 该国全部类目返 []
+                    return _Resp([])
+                rec = dict(healthy[0], CountryCode=iso)
+                return _Resp([rec])
+
+        return _Client()
+
+    # 意大利(ITA)整国掉线 · 英德法正常 → 应抛(不被三国正常掩盖)
+    monkeypatch.setattr(fmod.httpx, "AsyncClient", lambda **_kw: _client("ITA"))
+    with pytest.raises(ValueError, match="ITA"):
+        await fmod.fetch_dsbb_events(datetime(2026, 7, 11, tzinfo=UTC))
+    # 四国都正常 → 不抛,返回非空
+    monkeypatch.setattr(fmod.httpx, "AsyncClient", lambda **_kw: _client("NONE"))
+    evs = await fmod.fetch_dsbb_events(datetime(2026, 7, 11, tzinfo=UTC))
+    assert evs
+    assert all(e["markets"] == ["eu"] for e in evs)
+
+
 # ── 存储(DB · CI 跑)────────────────────────────────────────────────────
 
 

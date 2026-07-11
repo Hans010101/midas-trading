@@ -584,6 +584,7 @@ async def fetch_dsbb_events(now: datetime | None = None) -> list[dict[str, Any]]
         am_resp.raise_for_status()
         year_map = build_dsbb_year_map(am_resp.json(), now)
         for iso, _pre, _zh, _tz in DSBB_COUNTRIES:
+            before = len(out)
             for code, _suf, _czh in DSBB_CATEGORIES:
                 resp = await client.get(
                     f"{DSBB_BASE}/getARCReportList",
@@ -593,8 +594,11 @@ async def fetch_dsbb_events(now: datetime | None = None) -> list[dict[str, Any]]
                 data = resp.json()
                 if isinstance(data, list):
                     out += parse_dsbb_records(data, year_map)
-    if not out:                # 四国 CPI 恒有未来 · 0 条 = 端点/WAF 漂移
-        msg = "dsbb 解析 0 条(疑 WAF/端点漂移),不 mark_success"
-        raise ValueError(msg)
+            # ★逐国校验(非聚合):每国 CPI 月度恒有未来条 → 该国 0 条 = 单国 SDDS 节点
+            #   迁移/改码静默停更(KOSTAT 2026 改名即先例)· 抛→转 stale。绝不「三国正常
+            #   也 mark_success」掩盖单国漂移(对抗自审 P2:聚合 0 守卫会漏单国停更)。
+            if len(out) == before:
+                msg = f"dsbb {iso} 解析 0 条(疑单国 SDDS 节点漂移/WAF),不 mark_success"
+                raise ValueError(msg)
     logger.info("[econ-cal] dsbb 解析 %d 条", len(out))
     return out
