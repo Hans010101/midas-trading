@@ -309,7 +309,11 @@ export default function EconCalendarPage() {
             <div className="space-y-6">
               {groups.map((g) => (
                 <section key={g.key}>
-                  <h2 className="mb-2 font-serif text-base font-bold">{g.label}</h2>
+                  {/* 「今天/本周」保留(紧迫度信号有值);「未来」是冗余 catch-all 标题——
+                      列表已按时间排序、每条带日期,无信息价值 → 删(同删「N 项」计数道理) */}
+                  {g.key !== 'later' && (
+                    <h2 className="mb-2 font-serif text-base font-bold">{g.label}</h2>
+                  )}
                   <div className="overflow-hidden rounded-xl border border-paper bg-cream">
                     {g.items.map((ev, i) => {
                       const t = cstParts(ev.scheduled_at)
