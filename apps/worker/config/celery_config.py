@@ -50,6 +50,13 @@ beat_schedule = {
         # ★不设 expires:防复发监控在【正是要监控的积压/磁盘满场景】不能被丢弃 —— worker 恢复后
         #   这条仍要执行发告警(去抖 Redis 1h 防恢复瞬间刷屏)。异于数据采集 sibling(过期丢弃靠下个 beat 补)。
     },
+    # 硬编码年度种子枯竭告警:每日查各种子 max(scheduled_at),最远日期 <3 月 → TG 提醒补次年
+    #   (中国CPI/PPI/GDP + BOJ/BOK/BoE/ECB 议息)· 枯竭慢变量日频足够 · 去抖 7 天(见任务头)。
+    "monitor-seed-depletion": {
+        "task": "tasks.monitor.check_seed_depletion",
+        "schedule": crontab(hour="9", minute="17"),  # 每日 09:17 CST(本文件 crontab 全按 CN 本地)
+        # ★同 disk 监控不设 expires:枯竭告警不能因 worker 短暂积压被丢(去抖 7 天防刷屏)。
+    },
     "update-cn-demo": {
         "task": "tasks.incremental.update_cn_demo",
         # A 股每个交易日 15:30 收盘后跑
