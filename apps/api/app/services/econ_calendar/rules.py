@@ -38,10 +38,13 @@ _ET = ZoneInfo("America/New_York")
 _CET = ZoneInfo("Europe/Berlin")   # ECB 决议 14:15 当地(自动处理 CET/CEST)
 _JST = ZoneInfo("Asia/Tokyo")
 _KST = ZoneInfo("Asia/Seoul")
+_LONDON = ZoneInfo("Europe/London")
 
 # 韩国事件专用市场标签:非 Midas 四市场(cn/us/crypto/hk)→ select_upcoming 永不命中,
 # 叠加 importance=1 双重焊死「决策卡不注入韩国」(test_econ_redline 机器钉死)。
 KR_MARKETS = ["kr"]
+# 欧洲四国 + BoE 同款非四市场标签(同韩日范式 · 决策卡永不注入)
+EU_MARKETS = ["eu"]
 
 # 规则生成的前瞻月数(日程提前数月已知 · 6 个月够决策卡 7 天窗滚动使用)
 RULE_HORIZON_MONTHS = 6
@@ -171,6 +174,12 @@ _BOK_DECISIONS_2026: tuple[tuple[int, int, int], ...] = (
     (2026, 1, 15), (2026, 2, 26), (2026, 4, 10), (2026, 5, 28),
     (2026, 7, 16), (2026, 8, 27), (2026, 10, 22), (2026, 11, 26),
 )
+# BoE 2026 全年 8 次 MPC 议息决议日(bankofengland.co.uk 官方 · 恒周四 12:00 London ·
+#   ★TLS 指纹墙 curl 不通 → 年度种子;WebFetch 官方页 + 二源交叉核对,已逐日校验全周四)
+_BOE_DECISIONS_2026: tuple[tuple[int, int, int], ...] = (
+    (2026, 2, 5), (2026, 3, 19), (2026, 4, 30), (2026, 6, 18),
+    (2026, 7, 30), (2026, 9, 17), (2026, 11, 5), (2026, 12, 17),
+)
 
 
 def gen_seed_events() -> list[dict[str, Any]]:
@@ -235,6 +244,18 @@ def gen_seed_events() -> list[dict[str, Any]]:
             "importance": 1,                   # ★恒 1(红线:绝不提 2)
             "scheduled_at": local.astimezone(UTC),
             "time_confirmed": True,            # 决议声明 10:30:00 KST 极严格(RSS 实证)
+            "source": "seed",
+        })
+    for y, m, d in _BOE_DECISIONS_2026:
+        local = datetime(y, m, d, 12, 0, tzinfo=_LONDON)
+        out.append({
+            "event_key": f"gb_boe-{y}-{m:02d}-{d:02d}",
+            "event_type": "gb_boe",
+            "title": "英国央行BoE利率决议",
+            "markets": EU_MARKETS,             # ★["eu"] · 非四市场 → 决策卡永不注入
+            "importance": 1,                   # ★恒 1(红线:绝不提 2)
+            "scheduled_at": local.astimezone(UTC),
+            "time_confirmed": True,            # 恒周四 12:00 London(官方极严格)
             "source": "seed",
         })
     return out

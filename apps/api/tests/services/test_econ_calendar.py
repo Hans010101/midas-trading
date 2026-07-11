@@ -292,6 +292,72 @@ def test_parse_bea_events_dedup_and_tz():
     assert "crypto" in pce["markets"]                               # PCE=通胀口径 · crypto 关注
 
 
+# ── IMF DSBB 欧洲四国(实测形状 · 2026-07-11 亲手 curl · ONS/ISTAT 权威对表验证)──
+
+
+def _dsbb_rec(country: str, cat: str, slots: dict) -> dict:
+    """DSBB getARCReportList 记录 fixture · MonthValues 13 槽(下标=发布日历月)。"""
+    mv = [None] * 13
+    for idx, (day, period) in slots.items():
+        mv[idx] = {"Day": day, "Period": period}
+    return {"CountryCode": country, "CategoryCode": cat, "MonthValues": mv}
+
+
+def test_build_dsbb_year_map_wraps_year():
+    """getAdvanceMonths 有序月号跨年 wrap:月号回落 → 年 +1。"""
+    from app.services.econ_calendar.fetchers import build_dsbb_year_map
+
+    now = datetime(2026, 11, 1, tzinfo=UTC)
+    am = [{"MonthNum": 11, "MonthText": "Nov"}, {"MonthNum": 12, "MonthText": "Dec"},
+          {"MonthNum": 1, "MonthText": "Jan"}, {"MonthNum": 2, "MonthText": "Feb"}]
+    assert build_dsbb_year_map(am, now) == {11: 2026, 12: 2026, 1: 2027, 2: 2027}
+
+
+def test_parse_dsbb_index_is_release_month_and_redline():
+    """★槽下标=发布月(非数据期)· ONS 实证:GBR CPI 槽7/8=07-22/08-19 · 红线 eu/imp1。"""
+    from app.services.econ_calendar.fetchers import parse_dsbb_records
+
+    rec = _dsbb_rec("GBR", "CPI00", {7: ("22", "Jun/26"), 8: ("19", "Jul/26")})
+    evs = parse_dsbb_records([rec], {7: 2026, 8: 2026})
+    by = {e["event_key"]: e for e in evs}
+    assert set(by) == {"gb_cpi-2026-07-22", "gb_cpi-2026-08-19"}   # 下标7=7月,非数据期 Jun
+    e = by["gb_cpi-2026-07-22"]
+    assert e["title"] == "英国CPI"
+    assert e["markets"] == ["eu"]
+    assert e["importance"] == 1
+    assert e["time_confirmed"] is False       # DSBB 无时刻
+    # 10:00 London → CST 同日(不跨午夜)
+    assert e["scheduled_at"].astimezone(ZoneInfo("Asia/Shanghai")).date().isoformat() == "2026-07-22"
+
+
+def test_parse_dsbb_nlt_and_comma_double():
+    """NLT(不晚于·日不确定)+ 意大利逗号双值(同槽月双发布 · ISTAT 实证 09-01/09-30)。"""
+    from app.services.econ_calendar.fetchers import parse_dsbb_records
+
+    # DEU GDP NLT 25 @ 槽8(8月)· Period=Q2 数据期(解析日期不用)
+    de = parse_dsbb_records([_dsbb_rec("DEU", "NAG00", {8: ("NLT 25", "Q2/26")})], {8: 2026})
+    assert [e["event_key"] for e in de] == ["de_gdp-2026-08-25"]
+    assert de[0]["title"] == "德国GDP"
+    # ITA CPI "1,30" @ 槽9(9月)→ 09-01 + 09-30(ISTAT 实证)
+    it = parse_dsbb_records([_dsbb_rec("ITA", "CPI00", {9: ("1,30", "Aug/26, Sep/26")})], {9: 2026})
+    assert sorted(e["event_key"] for e in it) == ["it_cpi-2026-09-01", "it_cpi-2026-09-30"]
+    assert all(e["markets"] == ["eu"] and e["importance"] == 1 for e in it)
+
+
+def test_boe_seed_thursday_noon_and_redline():
+    """BoE 2026 全 8 期议息:恒周四 12:00 London · gb_boe · markets=["eu"] · importance=1。"""
+    by = {e["event_key"]: e for e in gen_seed_events()}
+    boe = [e for e in by.values() if e["event_type"] == "gb_boe"]
+    assert len(boe) == 8
+    for e in boe:
+        assert e["markets"] == ["eu"]
+        assert e["importance"] == 1
+        assert e["scheduled_at"].astimezone(ZoneInfo("Europe/London")).weekday() == 3  # 周四
+    jul = by["gb_boe-2026-07-30"]
+    assert jul["scheduled_at"].astimezone(ZoneInfo("Europe/London")).hour == 12
+    assert jul["title"] == "英国央行BoE利率决议"
+
+
 # ── 存储(DB · CI 跑)────────────────────────────────────────────────────
 
 

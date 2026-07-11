@@ -52,6 +52,20 @@ const REGION_OF_TYPE: Record<string, Exclude<Region, 'all' | 'crypto'>> = {
   jp_cpi: 'jpkr',
   jp_unemp: 'jpkr',
   jp_tankan: 'jpkr',
+  // 欧洲四国(英/德/法/意)· IMF DSBB + BoE 种子 · 全归「欧洲」桶(英国按 Hans 定归欧洲)
+  gb_cpi: 'eu',
+  gb_gdp: 'eu',
+  gb_unemp: 'eu',
+  gb_boe: 'eu',
+  de_cpi: 'eu',
+  de_gdp: 'eu',
+  de_unemp: 'eu',
+  fr_cpi: 'eu',
+  fr_gdp: 'eu',
+  fr_unemp: 'eu',
+  it_cpi: 'eu',
+  it_gdp: 'eu',
+  it_unemp: 'eu',
 }
 
 // event_type → 事件行右侧国别标注(只有合并桶内的类型需要覆盖 · 其余落桶标签)
@@ -64,6 +78,20 @@ const COUNTRY_LABEL_OF_TYPE: Record<string, string> = {
   jp_cpi: '日本',
   jp_unemp: '日本',
   jp_tankan: '日本',
+  // 欧洲桶内单条标各自国别(同 jpkr 桶范式)· ECB 保持「欧元区」不覆盖(落桶标签「欧洲」)
+  gb_cpi: '英国',
+  gb_gdp: '英国',
+  gb_unemp: '英国',
+  gb_boe: '英国',
+  de_cpi: '德国',
+  de_gdp: '德国',
+  de_unemp: '德国',
+  fr_cpi: '法国',
+  fr_gdp: '法国',
+  fr_unemp: '法国',
+  it_cpi: '意大利',
+  it_gdp: '意大利',
+  it_unemp: '意大利',
 }
 
 // 来源标注(客观出处 · 与库 source 字段一一对应)
@@ -73,6 +101,7 @@ const SOURCE_LABEL: Record<string, string> = {
   kostat: '韩国国家数据处',
   jp_estat: '日本总务省统计局',
   boj_xlsx: '日本银行',
+  dsbb: 'IMF 数据标准公报',
   rule: '官方惯例规则',
   seed: '官方年表·策展',
 }

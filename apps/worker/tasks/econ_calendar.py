@@ -1,9 +1,9 @@
 """事件日程层 · 每日刷新任务(P0 · 低频:日程提前数月已知)。
 
-六源各自隔离(单源失败不影响其他):fed_json(FOMC)/ bea_json(GDP/PCE)/
+七源各自隔离(单源失败不影响其他):fed_json(FOMC)/ bea_json(GDP/PCE)/
 kostat(韩国 CPI·就业·产业活动 xlsx)/ jp_estat(日本 CPI·失業率 XML·★UTF-16)/
-boj_xlsx(日本短観 Tankan)/ rule_seed(LPR·PMI·社融窗口·非农惯例占位 +
-统计局/ECB/BOJ 议息/BOK 年度种子)。
+boj_xlsx(日本短観 Tankan)/ dsbb(IMF DSBB 欧洲四国 CPI/GDP/失业率)/
+rule_seed(LPR·PMI·社融窗口·非农惯例占位 + 统计局/ECB/BOJ 议息/BOK/BoE 年度种子)。
 每源成功 → 写 Redis last-run 键(econ:cal:last_success:{source})= 保鲜监控口径
 (★绝不用 max(事件ts) 判 stale——未来时间戳永远假新鲜)。
 ★kostat 虽为年度年表,仍每日轮询(幂等 upsert · 成本≈1 次 GET):既统一 3 天保鲜模型,
@@ -27,6 +27,7 @@ from sqlalchemy.pool import NullPool
 from app.services.econ_calendar.fetchers import (
     fetch_bea_events,
     fetch_boj_events,
+    fetch_dsbb_events,
     fetch_fed_events,
     fetch_jp_estat_events,
     fetch_kostat_events,
@@ -99,7 +100,16 @@ async def _refresh() -> dict[str, int]:
             except Exception as exc:  # noqa: BLE001
                 await session.rollback()
                 logger.warning("[econ-cal] boj_xlsx 刷新失败(存量日程仍有效): %s", exc)
-            # 源6 · 规则 + 年度种子(零网络 · 理论不会失败,仍隔离防御)
+            # 源6 · IMF DSBB 欧洲四国(英/德/法/意)CPI/GDP/失业率 · 失败隔离 + 良性失效
+            #   ★fetch 内 0 条即抛(四国 CPI 月度恒有未来 → 0=WAF/端点漂移)→ 转 stale
+            try:
+                dsbb = await fetch_dsbb_events()
+                stats["dsbb"] = await upsert_events(session, dsbb)
+                await mark_source_success(redis, "dsbb")
+            except Exception as exc:  # noqa: BLE001
+                await session.rollback()
+                logger.warning("[econ-cal] dsbb 刷新失败(存量日程仍有效): %s", exc)
+            # 源7 · 规则 + 年度种子(零网络 · 理论不会失败,仍隔离防御)
             try:
                 rs = gen_rule_and_seed_events(datetime.now(tz=UTC))
                 stats["rule_seed"] = await upsert_events(session, rs)
@@ -115,7 +125,7 @@ async def _refresh() -> dict[str, int]:
 
 @shared_task(name="tasks.econ_calendar.refresh_daily", max_retries=0)
 def refresh_daily() -> dict[str, Any]:
-    """Celery 入口(beat 每日)· 六源隔离刷新 → upsert → last-run 保鲜键。"""
+    """Celery 入口(beat 每日)· 七源隔离刷新 → upsert → last-run 保鲜键。"""
     stats = asyncio.run(_refresh())
     logger.info("[econ-cal] 日程刷新 · %s", stats)
     return stats
