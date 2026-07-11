@@ -24,10 +24,13 @@ from app.services.ai.prompts_en import TECHNICAL_SYSTEM_EN
 from app.services.econ_calendar.fetchers import (
     BEA_RELEASES,
     BOJ_STATS,
+    DSBB_CATEGORIES,
+    DSBB_COUNTRIES,
     JP_ESTAT_SPECS,
     KOSTAT_INDICATORS,
     parse_bea_events,
     parse_boj_rows,
+    parse_dsbb_records,
     parse_estat_xml,
     parse_fed_events,
     parse_kostat_rows,
@@ -105,14 +108,27 @@ def _jp_events() -> list[dict]:
     return out
 
 
+def _dsbb_events() -> list[dict]:
+    """DSBB 四国×三指标解析产物 · ★title 从 DSBB_COUNTRIES/DSBB_CATEGORIES 注册表流出
+    (改坏国名/指标名常量注入方向词时红线语料/源头锁都要响)。"""
+    recs = []
+    for iso, _pre, _zh, _tz in DSBB_COUNTRIES:
+        for code, _suf, _czh in DSBB_CATEGORIES:
+            mv: list = [None] * 13
+            mv[7] = {"Day": "15", "Period": "Jun/26"}   # 槽7=7月
+            recs.append({"CountryCode": iso, "CategoryCode": code, "MonthValues": mv})
+    return parse_dsbb_records(recs, {7: 2026})
+
+
 def _fake_events() -> list:
-    """规则+种子+全解析器产物(美/中/韩/日)全语料 → 伪 EconEvent(每标题过一遍输出面)。"""
+    """规则+种子+全解析器产物(美/中/韩/日/欧)全语料 → 伪 EconEvent(每标题过一遍输出面)。"""
     corpus = [
         *gen_rule_and_seed_events(_NOW),
         *parse_fed_events(_FED_FIXTURE),
         *parse_bea_events(_BEA_FIXTURE),
         *parse_kostat_rows(_KOSTAT_FIXTURE, 2026),
         *_jp_events(),
+        *_dsbb_events(),
     ]
     assert len(corpus) > len(gen_rule_and_seed_events(_NOW))  # fixture 真解析出了事件
     return [
@@ -154,8 +170,9 @@ def test_no_direction_words_in_event_risk():
 def test_event_titles_whitelist_clean():
     """标题白名单本身零方向词(纯模板拼接的源头保证)· 含 KOSTAT + 日本解析产物。"""
     corpus = [*gen_rule_and_seed_events(_NOW), *parse_kostat_rows(_KOSTAT_FIXTURE, 2026),
-              *_jp_events()]
+              *_jp_events(), *_dsbb_events()]
     assert any(e["event_type"].startswith("jp_") for e in corpus)  # 日本产物真进语料
+    assert any(e["event_type"].startswith(("gb_", "de_", "fr_", "it_")) for e in corpus)  # 欧洲
     for e in corpus:
         for w in _DIRECTION_WORDS:
             assert w not in e["title"], f"事件标题含方向词:{e['title']}"
@@ -167,7 +184,9 @@ def test_source_title_constants_have_no_direction_words():
     """
     titles = ([k[2] for k in KOSTAT_INDICATORS]
               + [s[2] for s in JP_ESTAT_SPECS]
-              + [b[2] for b in BOJ_STATS])
+              + [b[2] for b in BOJ_STATS]
+              + [c[2] for c in DSBB_COUNTRIES]      # 欧洲四国国名(DSBB title = 国名+指标名)
+              + [c[2] for c in DSBB_CATEGORIES])    # 指标名 CPI/GDP/失业率
     assert titles  # 注册表非空(防路径漂移后空转全绿)
     for t in titles:
         for w in _DIRECTION_WORDS:
@@ -201,6 +220,23 @@ def test_jp_events_never_injectable_into_decision_card():
         assert e["event_type"].startswith("jp_"), f"非日本类型混入:{e['event_key']}"
         assert e["importance"] == 1, f"日本事件 importance 必须=1:{e['event_key']}"
         assert e["markets"] == ["jp"], f"日本事件 markets 必须=['jp']:{e['event_key']}"
+        assert not (set(e["markets"]) & injectable)
+
+
+def test_eu_events_never_injectable_into_decision_card():
+    """🔴 欧洲四国红线(写死 · 同韩日双重焊死):全部欧洲事件(DSBB 四国 + BoE 种子)
+    importance==1 且 markets=["eu"](非 cn/us/crypto/hk)——决策卡永不注入。绝不提到 2。
+    """
+    boe = [e for e in gen_rule_and_seed_events(_NOW) if e["event_type"] == "gb_boe"]
+    eu = [*_dsbb_events(), *boe]
+    assert eu, "语料里应有欧洲事件(DSBB 四国 + BoE 种子)"
+    assert boe, "语料里应有 BoE 种子"
+    injectable = {"cn", "us", "crypto", "hk"}
+    prefixes = ("gb_", "de_", "fr_", "it_")
+    for e in eu:
+        assert e["event_type"].startswith(prefixes), f"非欧洲类型混入:{e['event_key']}"
+        assert e["importance"] == 1, f"欧洲事件 importance 必须=1:{e['event_key']}"
+        assert e["markets"] == ["eu"], f"欧洲事件 markets 必须=['eu']:{e['event_key']}"
         assert not (set(e["markets"]) & injectable)
 
 

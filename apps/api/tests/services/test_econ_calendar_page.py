@@ -113,6 +113,17 @@ def test_jpkr_bucket_and_country_labels_present():
     assert "boj_xlsx" in page, "缺日本 BOJ 来源标注映射"
 
 
+def test_eu4_bucket_and_country_labels_present():
+    """特性钉:欧洲四国(英/德/法/意)event_type 归「欧洲」桶 + 单条标各国别 + dsbb 来源。"""
+    page = _read(_WEB / "app" / "calendar" / "page.tsx")
+    for label in ("英国", "德国", "法国", "意大利"):
+        assert label in page, f"缺欧洲国别标注:{label}"
+    # 每国 CPI/GDP/失业率 + 英国 BoE 都进 eu 桶映射
+    for et in ("gb_cpi", "gb_gdp", "gb_unemp", "gb_boe", "de_cpi", "fr_cpi", "it_cpi"):
+        assert et in page, f"缺欧洲 event_type 桶/国别映射:{et}"
+    assert "dsbb" in page, "缺 DSBB 来源标注映射"
+
+
 def test_i18n_canary_forces_lock_extension():
     """i18n 金丝雀:en 文案落地(next-intl/useTranslations)时英文锁对纯英文串会失明——
     此测逼停静默漏检,届时必须显式扩锁(纯英文文案全量过 strict 组)再放行。"""

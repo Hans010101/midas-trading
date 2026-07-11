@@ -40,6 +40,8 @@ _TIMEOUT = 30.0
 _ET = ZoneInfo("America/New_York")
 _KST = ZoneInfo("Asia/Seoul")
 _JST = ZoneInfo("Asia/Tokyo")
+_LONDON = ZoneInfo("Europe/London")
+_CET = ZoneInfo("Europe/Berlin")   # 德/法/意同 CET 偏移(仅用于日期不跨 CST 午夜,10:00 本地存储)
 
 # BEA release 名 → (event_type, 中文标题, importance)· ★最小集:GDP + PCE(FOMC 关注的通胀口径)
 BEA_RELEASES: dict[str, tuple[str, str, int]] = {
@@ -455,3 +457,148 @@ async def fetch_boj_events() -> list[dict[str, Any]]:
     events = parse_boj_rows(_extract_boj_rows(resp.content))
     logger.info("[econ-cal] boj_xlsx 解析短観 %d 条", len(events))
     return events
+
+
+# ── 欧洲四国(英/德/法/意)· IMF DSBB SDDS Advance Release Calendar ─────────────────
+# ★实测形状(2026-07-11 亲手 curl · getARCReportList JSON):数组,每记录 = 国×指标,
+#   MonthValues = 定长 13 槽数组,★槽下标 i = 发布【日历月】(1..12),非数据期;
+#   槽值 {"Day":"22","Period":"Jun/26"} · Period = 数据参考期(仅信息,解析日期【不用】);
+#   ★★发布日 = (槽下标月, 年) + Day —— 已用 ONS(英)+ ISTAT(意)权威日程逐日对表验证
+#   (研究文档的 Period+Day 解码【错位一个月】,ONS 实证纠正)。年份用 getAdvanceMonths
+#   有序列表跨年 wrap 推导。Day 三形态:普通"22" / "NLT 25"(不晚于·日不确定) /
+#   "1,30"(意大利同月双发布·逗号拆·均落槽月)。DSBB 只到日无时刻 → 存本地 10:00 +
+#   time_confirmed=False(不编造时刻·显示「时刻待定」)。
+# 🔴 四国全 importance=1 + markets=["eu"](非四交易市场 → 决策卡永不注入,同韩日双重锁)。
+
+DSBB_BASE = "https://dsbb.imf.org/api/customquery"
+# ★未文档化端点走 Akamai WAF:必须浏览器 UA(自标识 UA 会被挡)
+_DSBB_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+    ),
+    "Accept": "application/json",
+}
+# (ISO3, 国别前缀, 中文国名, tz)· 英国按 Hans 定归欧洲桶
+DSBB_COUNTRIES: tuple[tuple[str, str, str, ZoneInfo], ...] = (
+    ("GBR", "gb", "英国", _LONDON),
+    ("DEU", "de", "德国", _CET),
+    ("FRA", "fr", "法国", _CET),
+    ("ITA", "it", "意大利", _CET),
+)
+# (DSBB Category code, 指标后缀, 中文指标名)· CPI 月度恒有未来条(保鲜锚)· GDP/部分失业率季度
+DSBB_CATEGORIES: tuple[tuple[str, str, str], ...] = (
+    ("CPI00", "cpi", "CPI"),
+    ("NAG00", "gdp", "GDP"),
+    ("UEM00", "unemp", "失业率"),
+)
+
+
+def build_dsbb_year_map(advance_months: list[dict[str, Any]], now: datetime) -> dict[int, int]:
+    """getAdvanceMonths 有序 [{MonthNum,MonthText}] → {月:年}· 跨年 wrap(月号回落即 +1 年)。"""
+    year = now.year
+    prev: int | None = None
+    out: dict[int, int] = {}
+    for item in advance_months:
+        try:
+            mn = int(item["MonthNum"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if prev is not None and mn < prev:
+            year += 1
+        out[mn] = year
+        prev = mn
+    return out
+
+
+def _parse_dsbb_days(raw: str) -> list[tuple[int, bool]]:
+    """Day 字段 → [(日, time_confirmed)]· "22"→普通· "NLT 25"→日不确定· "1,30"→双发布同槽月。
+
+    ★DSBB 无时刻 → time_confirmed 恒 False(不编造);NLT 日本身也不确定,同 False。
+    """
+    out: list[tuple[int, bool]] = []
+    for tok_raw in raw.split(","):
+        tok = tok_raw.strip()
+        if tok.upper().startswith("NLT"):
+            tok = tok[3:].strip()      # "NLT 25" → "25"(不晚于日)
+        if tok.isdigit():
+            out.append((int(tok), False))  # DSBB 全 time_confirmed=False
+    return out
+
+
+def parse_dsbb_records(
+    records: list[dict[str, Any]], year_map: dict[int, int],
+) -> list[dict[str, Any]]:
+    """DSBB getARCReportList 数组 → 事件(纯函数 · 槽下标=发布月 · 同日去重 · 可单测)。"""
+    cty = {iso: (pre, zh, tz) for iso, pre, zh, tz in DSBB_COUNTRIES}
+    cat = {code: (suf, zh) for code, suf, zh in DSBB_CATEGORIES}
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for rec in records:
+        if not isinstance(rec, dict):
+            continue
+        c, k = rec.get("CountryCode"), rec.get("CategoryCode")
+        if c not in cty or k not in cat:
+            continue
+        prefix, country_zh, tz = cty[c]
+        suffix, cat_zh = cat[k]
+        etype = f"{prefix}_{suffix}"
+        title = f"{country_zh}{cat_zh}"
+        for i, slot in enumerate(rec.get("MonthValues") or []):
+            if not slot or i not in year_map:   # 槽下标 = 发布日历月;不在活跃窗口跳过
+                continue
+            for day, conf in _parse_dsbb_days(str(slot.get("Day", ""))):
+                try:
+                    # 10:00 本地(无时刻·存以保 CST 显示日期不跨午夜)
+                    local = datetime(year_map[i], i, day, 10, 0, tzinfo=tz)
+                except ValueError:
+                    continue
+                key = f"{etype}-{year_map[i]}-{i:02d}-{day:02d}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append({
+                    "event_key": key,
+                    "event_type": etype,
+                    "title": title,
+                    "markets": ["eu"],   # ★非四市场 → 决策卡永不注入(叠加 importance=1)
+                    "importance": 1,     # ★欧洲恒 1(红线:绝不提 2)
+                    "scheduled_at": local.astimezone(UTC),
+                    "time_confirmed": conf,   # DSBB 无时刻 → False(显示「时刻待定」)
+                    "source": "dsbb",
+                })
+    return out
+
+
+async def fetch_dsbb_events(now: datetime | None = None) -> list[dict[str, Any]]:
+    """拉 DSBB 四国×三指标(12 次小 GET)+ getAdvanceMonths 定年。CPI 月度恒有未来条 →
+    0 条 = WAF/端点漂移 → 抛(worker 不 mark_success 转 stale)· 同 jp_estat 范式。
+    """
+    now = now or datetime.now(tz=UTC)
+    out: list[dict[str, Any]] = []
+    async with httpx.AsyncClient(timeout=_TIMEOUT, headers=_DSBB_HEADERS) as client:
+        am_resp = await client.get(
+            f"{DSBB_BASE}/getAdvanceMonths",
+            params={"Countries": "GBR", "Categories": "CPI00"},
+        )
+        am_resp.raise_for_status()
+        year_map = build_dsbb_year_map(am_resp.json(), now)
+        for iso, _pre, _zh, _tz in DSBB_COUNTRIES:
+            before = len(out)
+            for code, _suf, _czh in DSBB_CATEGORIES:
+                resp = await client.get(
+                    f"{DSBB_BASE}/getARCReportList",
+                    params={"Countries": iso, "Categories": code},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                if isinstance(data, list):
+                    out += parse_dsbb_records(data, year_map)
+            # ★逐国校验(非聚合):每国 CPI 月度恒有未来条 → 该国 0 条 = 单国 SDDS 节点
+            #   迁移/改码静默停更(KOSTAT 2026 改名即先例)· 抛→转 stale。绝不「三国正常
+            #   也 mark_success」掩盖单国漂移(对抗自审 P2:聚合 0 守卫会漏单国停更)。
+            if len(out) == before:
+                msg = f"dsbb {iso} 解析 0 条(疑单国 SDDS 节点漂移/WAF),不 mark_success"
+                raise ValueError(msg)
+    logger.info("[econ-cal] dsbb 解析 %d 条", len(out))
+    return out
