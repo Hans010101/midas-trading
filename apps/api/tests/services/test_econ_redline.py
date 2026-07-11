@@ -23,7 +23,12 @@ from app.services.ai.agents.technical import _SYSTEM_BASE, _format_snapshot
 from app.services.ai.prompts_en import TECHNICAL_SYSTEM_EN
 from app.services.econ_calendar.fetchers import (
     BEA_RELEASES,
+    BOJ_STATS,
+    JP_ESTAT_SPECS,
+    KOSTAT_INDICATORS,
     parse_bea_events,
+    parse_boj_rows,
+    parse_estat_xml,
     parse_fed_events,
     parse_kostat_rows,
 )
@@ -58,13 +63,56 @@ _KOSTAT_FIXTURE = [
 ]
 
 
+def _estat_fixture(os_name: str, class1: str, class2: str) -> bytes:
+    """最小 e-Stat 公表予定 XML fixture(★UTF-16 编码 · 同真源)· 解出 1 条未来发布。"""
+    xml = (
+        '<?xml version="1.0" encoding="UTF-16" ?>'
+        f'<e-stat><os_code name="{os_name}"><class_1 name="{class1}">'
+        f'<class_2 name="{class2}"><class_3 name=""><class_4 name=""><class_5 name="">'
+        "<release_year>2026</release_year><release_month>8</release_month>"
+        "<release_day>21</release_day><release_hour>8</release_hour>"
+        "<release_minute>30</release_minute>"
+        "</class_5></class_4></class_3></class_2></class_1></os_code></e-stat>"
+    )
+    return xml.encode("utf-16")
+
+
+# BOJ 統計データ行(实测形状:col1 分类/col2 統計名/col3 时刻或频度/col4+ 月列 datetime)
+_BOJ_FIXTURE = [
+    ("８．短観", "短観（全国企業短期経済観測調査）／概要及び要旨", "", "08:50:00", "(9月調査)"),
+    # openpyxl 返回 naive datetime(与真 xlsx 一致 · parse 只取 .date())
+    ("８．短観", "短観（全国企業短期経済観測調査）／概要及び要旨", "", "(四半期)",
+     datetime(2026, 10, 1)),  # noqa: DTZ001
+]
+
+
+# event_type → 能过该 spec keep 的 (class_1, class_2) fixture 参数(仅测试造数据用)
+_JP_ESTAT_FIXTURE_CLASS = {
+    "jp_cpi": ("全国", "2026年7月分"),
+    "jp_unemp": ("2026年7月分", "基本集計（2026年7月分）"),
+}
+
+
+def _jp_events() -> list[dict]:
+    """日本三指标解析产物 · ★title 从生产注册表 JP_ESTAT_SPECS / BOJ_STATS 取(绝不硬编码
+    ——否则改坏 title 常量注入方向词时红线语料锁不响,对抗自审 P2 假绿)。"""
+    out: list[dict] = []
+    for os_name, etype, title, keep in JP_ESTAT_SPECS:
+        c1, c2 = _JP_ESTAT_FIXTURE_CLASS[etype]
+        out += parse_estat_xml(_estat_fixture(os_name, c1, c2), os_name=os_name,
+                               event_type=etype, title=title, keep=keep)
+    out += parse_boj_rows(_BOJ_FIXTURE)  # parse_boj_rows 内部从 BOJ_STATS 常量取 title
+    return out
+
+
 def _fake_events() -> list:
-    """规则+种子+三解析器产物全语料 → 伪 EconEvent(每个标题都过一遍输出面)。"""
+    """规则+种子+全解析器产物(美/中/韩/日)全语料 → 伪 EconEvent(每标题过一遍输出面)。"""
     corpus = [
         *gen_rule_and_seed_events(_NOW),
         *parse_fed_events(_FED_FIXTURE),
         *parse_bea_events(_BEA_FIXTURE),
         *parse_kostat_rows(_KOSTAT_FIXTURE, 2026),
+        *_jp_events(),
     ]
     assert len(corpus) > len(gen_rule_and_seed_events(_NOW))  # fixture 真解析出了事件
     return [
@@ -104,11 +152,26 @@ def test_no_direction_words_in_event_risk():
 
 
 def test_event_titles_whitelist_clean():
-    """标题白名单本身零方向词(纯模板拼接的源头保证)· 含 KOSTAT 解析产物。"""
-    corpus = [*gen_rule_and_seed_events(_NOW), *parse_kostat_rows(_KOSTAT_FIXTURE, 2026)]
+    """标题白名单本身零方向词(纯模板拼接的源头保证)· 含 KOSTAT + 日本解析产物。"""
+    corpus = [*gen_rule_and_seed_events(_NOW), *parse_kostat_rows(_KOSTAT_FIXTURE, 2026),
+              *_jp_events()]
+    assert any(e["event_type"].startswith("jp_") for e in corpus)  # 日本产物真进语料
     for e in corpus:
         for w in _DIRECTION_WORDS:
             assert w not in e["title"], f"事件标题含方向词:{e['title']}"
+
+
+def test_source_title_constants_have_no_direction_words():
+    """🔴 直接锁源头 title 常量(注册表 · 比语料流转更硬 · 对抗自审 P2):韩/日事件标题
+    零方向词。KOSTAT_INDICATORS / JP_ESTAT_SPECS / BOJ_STATS 的中文 title 都在 idx 2。
+    """
+    titles = ([k[2] for k in KOSTAT_INDICATORS]
+              + [s[2] for s in JP_ESTAT_SPECS]
+              + [b[2] for b in BOJ_STATS])
+    assert titles  # 注册表非空(防路径漂移后空转全绿)
+    for t in titles:
+        for w in _DIRECTION_WORDS:
+            assert w not in t, f"源 title 常量含方向词:{t}"
 
 
 def test_kr_events_never_injectable_into_decision_card():
@@ -125,6 +188,20 @@ def test_kr_events_never_injectable_into_decision_card():
         assert not (set(e["markets"]) & injectable), (
             f"韩国事件 markets 不得含可注入市场:{e['event_key']} {e['markets']}"
         )
+
+
+def test_jp_events_never_injectable_into_decision_card():
+    """🔴 日本红线(写死 · 同韩国双重焊死):全部日本事件 importance==1 且 markets=["jp"]
+    (非 cn/us/crypto/hk)——决策卡永不注入日本。绝不因『想让日本在★2+下显示』提到 2。
+    """
+    jp = _jp_events()
+    assert jp, "语料里应有日本事件(CPI/失業率/短観)"
+    injectable = {"cn", "us", "crypto", "hk"}
+    for e in jp:
+        assert e["event_type"].startswith("jp_"), f"非日本类型混入:{e['event_key']}"
+        assert e["importance"] == 1, f"日本事件 importance 必须=1:{e['event_key']}"
+        assert e["markets"] == ["jp"], f"日本事件 markets 必须=['jp']:{e['event_key']}"
+        assert not (set(e["markets"]) & injectable)
 
 
 # ── ② 免责口径不变 ─────────────────────────────────────────────────────

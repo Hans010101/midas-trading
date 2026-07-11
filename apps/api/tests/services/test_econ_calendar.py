@@ -135,6 +135,122 @@ def test_parse_kostat_date_format_variants():
     }
 
 
+# ── 日本 統計局 e-Stat XML(★UTF-16)+ BOJ xlsx(实测形状 · 2026-07-11 亲手下载解包)──
+
+
+def _jp_cpi_xml(os_name: str = "消費者物価指数", class1: str = "全国",
+                class2: str = "2026年7月分") -> bytes:
+    """最小 e-Stat XML fixture · ★UTF-16 编码(同真源)· 一条 08:30 全国月度发布。"""
+    xml = (
+        '<?xml version="1.0" encoding="UTF-16" ?>'
+        f'<e-stat><os_code name="{os_name}"><class_1 name="{class1}">'
+        f'<class_2 name="{class2}"><class_3 name=""><class_4 name=""><class_5 name="">'
+        "<release_year>2026</release_year><release_month>8</release_month>"
+        "<release_day>21</release_day><release_hour>8</release_hour>"
+        "<release_minute>30</release_minute>"
+        "</class_5></class_4></class_3></class_2></class_1></os_code></e-stat>"
+    )
+    return xml.encode("utf-16")
+
+
+def test_parse_estat_cpi_utf16_and_keep():
+    """★UTF-16 解码 + 全国月度 keep + JST→UTF 换算 + 红线(imp=1/markets=jp)。"""
+    from app.services.econ_calendar.fetchers import _cpi_keep, parse_estat_xml
+
+    evs = parse_estat_xml(_jp_cpi_xml(), os_name="消費者物価指数",
+                          event_type="jp_cpi", title="日本CPI", keep=_cpi_keep)
+    assert len(evs) == 1
+    e = evs[0]
+    assert e["event_key"] == "jp_cpi-2026-08-21"
+    assert e["title"] == "日本CPI"
+    assert e["markets"] == ["jp"]
+    assert e["importance"] == 1
+    # 08:30 JST = 前日 23:30 UTC
+    assert e["scheduled_at"] == datetime(2026, 8, 20, 23, 30, tzinfo=UTC)
+
+
+def test_parse_estat_excludes_tokyo_and_wrong_oscode():
+    """keep 排除東京都区部速報;os_code 名不符(路径漂移/换文件)→ 返回 [](不误采)。"""
+    from app.services.econ_calendar.fetchers import _cpi_keep, parse_estat_xml
+
+    # 東京都区部 → _cpi_keep(class1!="全国") 排除
+    tokyo = _jp_cpi_xml(class1="東京都区部（中旬速報値）")
+    assert parse_estat_xml(tokyo, os_name="消費者物価指数", event_type="jp_cpi",
+                           title="日本CPI", keep=_cpi_keep) == []
+    # os_code 名不符 → 空(防换文件静默误采)
+    assert parse_estat_xml(_jp_cpi_xml(), os_name="錯誤統計", event_type="jp_cpi",
+                           title="日本CPI", keep=_cpi_keep) == []
+
+
+def test_parse_estat_unemp_basic_only():
+    """失業率 keep 只取基本集計(排除詳細集計 14:00 · 非市场事件)。"""
+    from app.services.econ_calendar.fetchers import _unemp_keep
+
+    assert _unemp_keep("2026年7月分", "基本集計（2026年7月分）") is True
+    assert _unemp_keep("2026年7月分", "詳細集計（2026年4～6月期平均）") is False
+
+
+def test_parse_boj_tankan_pairs_time_and_date():
+    """BOJ 短観:时刻行(08:50)+ 日期行(原生 datetime)同名配对 · 同日去重 · 红线。"""
+    from app.services.econ_calendar.fetchers import parse_boj_rows
+
+    rows = [
+        ("８．短観", "短観（全国企業短期経済観測調査）／概要及び要旨", "", "08:50:00", "(9月調査)"),
+        ("８．短観", "短観（全国企業短期経済観測調査）／概要及び要旨", "", "(四半期)",
+         datetime(2026, 10, 1)),  # noqa: DTZ001 · openpyxl naive(同真源)
+        ("８．短観", "短観（全国企業短期経済観測調査）／調査全容", "", "08:50:00", "(9月調査)"),
+        ("８．短観", "短観（全国企業短期経済観測調査）／調査全容", "", "(四半期)",
+         datetime(2026, 10, 2)),  # noqa: DTZ001 · 調査全容不含「概要」→ 不采
+    ]
+    evs = parse_boj_rows(rows)
+    assert [e["event_key"] for e in evs] == ["jp_tankan-2026-10-01"]  # 只采概要 · 全容排除
+    e = evs[0]
+    assert e["markets"] == ["jp"]
+    assert e["importance"] == 1
+    assert e["scheduled_at"] == datetime(2026, 10, 1, 8, 50, tzinfo=UTC) - timedelta(hours=9)
+
+
+@pytest.mark.asyncio
+async def test_fetch_jp_estat_raises_on_survey_drift(monkeypatch) -> None:  # noqa: ANN001
+    """🔴 保鲜(对抗自审 P2):任一调查 os_code 漂移(换基年重命名节点)→ 解析 0 条 →
+    fetch 抛 → worker 不 mark_success 转 stale。绝不「部分成功」假新鲜掩盖单调查静默停更。
+    """
+    from app.services.econ_calendar import fetchers as fmod
+
+    good_rou = _jp_cpi_xml(os_name="労働力調査", class1="2026年7月分",
+                           class2="基本集計（2026年7月分）")
+
+    def _client(cpi_bytes: bytes):
+        class _Resp:
+            def __init__(self, c: bytes) -> None:
+                self.content = c
+
+            def raise_for_status(self) -> None: ...
+
+        class _Client:
+            async def __aenter__(self) -> _Client:
+                return self
+
+            async def __aexit__(self, *a: object) -> bool:
+                return False
+
+            async def get(self, url: str) -> _Resp:
+                return _Resp(cpi_bytes if "cpi" in url else good_rou)
+
+        return _Client()
+
+    # CPI os_code 漂移 + 失业率正常 → 旧版会聚合成「部分成功」假新鲜;新版应抛
+    drift = _jp_cpi_xml(os_name="消費者物価指数（2025年基準）")
+    monkeypatch.setattr(fmod.httpx, "AsyncClient", lambda **_kw: _client(drift))
+    with pytest.raises(ValueError, match="jp_cpi"):
+        await fmod.fetch_jp_estat_events()
+    # 两源都正常 → 不抛,返回非空 · 全 markets=["jp"]
+    monkeypatch.setattr(fmod.httpx, "AsyncClient", lambda **_kw: _client(_jp_cpi_xml()))
+    evs = await fmod.fetch_jp_estat_events()
+    assert evs
+    assert all(e["markets"] == ["jp"] for e in evs)
+
+
 # ── 源解析器(实测形状 fixture · 2026-07-10 亲手 curl)───────────────────────
 
 

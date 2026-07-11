@@ -49,6 +49,9 @@ const REGION_OF_TYPE: Record<string, Exclude<Region, 'all' | 'crypto'>> = {
   kr_cpi: 'jpkr',
   kr_employment: 'jpkr',
   kr_ind_activity: 'jpkr',
+  jp_cpi: 'jpkr',
+  jp_unemp: 'jpkr',
+  jp_tankan: 'jpkr',
 }
 
 // event_type → 事件行右侧国别标注(只有合并桶内的类型需要覆盖 · 其余落桶标签)
@@ -58,6 +61,9 @@ const COUNTRY_LABEL_OF_TYPE: Record<string, string> = {
   kr_cpi: '韩国',
   kr_employment: '韩国',
   kr_ind_activity: '韩国',
+  jp_cpi: '日本',
+  jp_unemp: '日本',
+  jp_tankan: '日本',
 }
 
 // 来源标注(客观出处 · 与库 source 字段一一对应)
@@ -65,6 +71,8 @@ const SOURCE_LABEL: Record<string, string> = {
   fed_json: '美联储官网',
   bea_json: '美国经济分析局',
   kostat: '韩国国家数据处',
+  jp_estat: '日本总务省统计局',
+  boj_xlsx: '日本银行',
   rule: '官方惯例规则',
   seed: '官方年表·策展',
 }
