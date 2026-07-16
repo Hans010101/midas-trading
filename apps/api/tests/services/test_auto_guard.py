@@ -78,12 +78,12 @@ async def test_dedup_6h() -> None:
     assert await ag.is_recently_published(r, "ETHUSDT") is False  # 别的币不受影响
 
 
-# ── ④ 日上限(30 封顶)────────────────────────────────────────────
+# ── ④ 日上限(50 封顶)────────────────────────────────────────────
 @pytest.mark.asyncio
 async def test_daily_cap() -> None:
     r = _FakeRedis()
     now = _cst(12, 0)
-    assert await ag.daily_remaining(r, now) == ag.AUTO_DAILY_MAX  # 30
+    assert await ag.daily_remaining(r, now) == ag.AUTO_DAILY_MAX  # = 日上限
     for _ in range(ag.AUTO_DAILY_MAX):
         await ag.incr_daily(r, now)
     assert await ag.daily_remaining(r, now) == 0  # 顶到 0

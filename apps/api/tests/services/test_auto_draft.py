@@ -103,7 +103,7 @@ async def test_skip_daily_cap(db_session) -> None:  # noqa: ANN001
     r = _FakeRedis()
     await auto_guard.set_enabled(r, enabled=True)
     now = _in_window()
-    r.kv[auto_guard._daily_key(now)] = auto_guard.AUTO_DAILY_MAX  # 顶到 30
+    r.kv[auto_guard._daily_key(now)] = auto_guard.AUTO_DAILY_MAX  # 顶到日上限
     out = await auto_draft.run_auto_draft(db_session, r, now=now)
     assert out["reason"] == "daily_cap"
 
@@ -277,7 +277,7 @@ async def test_xshort_quota_independent_of_binance_cap(db_session, monkeypatch) 
     r = _FakeRedis()
     await auto_guard.set_enabled(r, enabled=True)
     now = _in_window()
-    r.kv[auto_guard._daily_key(now)] = auto_guard.AUTO_DAILY_MAX  # 币安顶到 30
+    r.kv[auto_guard._daily_key(now)] = auto_guard.AUTO_DAILY_MAX  # 币安顶到日上限
     _seed_snapshot(r, [
         _snap_item("BBBUSDT", -9.0, transition=True),
         _snap_item("CCCUSDT", 4.0, transition=True),

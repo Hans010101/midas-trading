@@ -21,7 +21,7 @@ export interface AutoPilotStatus {
   enabled: boolean // 总开关(默认 OFF)
   circuit_open: boolean // 熔断中(连续失败触发 · 开则停所有自动发)
   daily_used: number // 今日已自动发布
-  daily_remaining: number // 今日剩余配额(30 封顶)
+  daily_remaining: number // 今日剩余配额(50 封顶)
   in_window: boolean // 当前在发布时段(7:30-22:30 CST)
   platforms: AutoPilotPlatformItem[] // ★平台勾选(架子刀 · ADR 0050)
 }

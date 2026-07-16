@@ -40,7 +40,7 @@ async def create_tweet(
 ) -> XTweet:
     """存一条推文记录(status 默认 draft)· ★门禁不过的也存(passed=false + reason)。
 
-    auto_drafted=True:自动托管起草(待补发素材识别 + 计入 30 日配额)· 默认 False(手动生成)。
+    auto_drafted=True:自动托管起草(待补发素材识别 + 计入日配额)· 默认 False(手动生成)。
     gen_style:内容生成风格/平台(default 币安长文 / x_short X 短推)· step1 分平台地基。
     """
     row = XTweet(

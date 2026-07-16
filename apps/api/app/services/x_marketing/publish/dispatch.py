@@ -88,7 +88,7 @@ async def run_publish(session: AsyncSession, redis: Any, dispatch_id: int) -> di
             platform_post_id=result.platform_post_id, url=result.url,
         )
         await record_post(redis, dispatch.platform)  # ★成功才计入频率(失败不耗配额)
-        # ★自动托管素材成功发布 → 计入 30 日配额(单点 · 自动发 + 人工补发共用)。
+        # ★自动托管素材成功发布 → 计入日配额(单点 · 自动发 + 人工补发共用)。
         # ★★仅【币安广场】(auto_publish 平台)计入其配额;X 等其它平台不计入(step1·x_short 独立配额)。
         if tweet.auto_drafted and dispatch.platform == "binance_square":
             from app.services.x_marketing.publish import auto_guard  # noqa: PLC0415

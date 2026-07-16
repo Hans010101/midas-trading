@@ -146,7 +146,7 @@ async def generate_and_store(
 
     返回行(含 id+symbol)供 worker 逐条 enqueue 截图(image_path 后续由截图回调填)。
     单币失败(LLM 异常)隔离:log + 跳过,不影响其他币(批量稳健)。
-    auto_drafted=True:自动托管起草(待补发素材 + 计入 30 日配额)· 默认 False(手动)。
+    auto_drafted=True:自动托管起草(待补发素材 + 计入日配额)· 默认 False(手动)。
     ★ch 给定(刀2):先富化 5 扩字段(做T零碰·失败整体降级到基础字段);None=不富化(向后兼容)。
     ★style(step1 分平台):default=币安广场长文 / x_short=X 短推 · 决定 prompt+标签+入库 gen_style。
     """
