@@ -173,8 +173,77 @@ docker info >/dev/null && echo "已回滚 · Docker 正常"
 
 ---
 
+## 5. ClickHouse 系统日志瘦身(Stage B · 需手动 recreate CH 一次)
+
+> 背景:CH 默认把自身运行诊断写进 `system.*_log` 表且**无 TTL 无限积累**——事故实测
+> `text_log` 7.43GB(2.17 亿行)+ processors_profile_log 2GB + query_log 1.36GB +
+> trace_log 1.33GB + part_log 522MB ≈ **12.6GB 全是 CH 自己的 debug 日志**(非业务数据)。
+> 根治配置 `docker/clickhouse-logs.xml` 已挂进容器 `config.d/`(关 6 张 debug 表 remove="1" +
+> query/part_log 7 天 TTL),**但 CH 只在启动时读 config.d/**——`update.sh` 设计上**绝不碰 CH
+> 容器**,所以配置在磁盘上、运行中的 CH 进程没加载 → debug 日志仍按旧配置无限增长。
+> ★**必须手动 recreate CH 一次**(挑低峰),让配置生效 + DROP 停用表回收空间。
+>
+> ★这套「recreate 容器加载 config.d/ + DROP 停用表」流程,是**任何需手动重建 CH/长驻容器
+> 加载新配置**的通用模板(update.sh 只重建 api/worker/web,永不动 CH/PG/redis)。
+
+### 第一步 · 现状确认(只读)
+```bash
+df -h /
+# CH 各系统表体积(用容器自身 env 里的凭证,不用手打密码)
+docker exec midas-clickhouse sh -c 'clickhouse-client -u "$CLICKHOUSE_USER" --password "$CLICKHOUSE_PASSWORD" -q "SELECT table, formatReadableSize(sum(bytes_on_disk)) sz, sum(rows) rows FROM system.parts WHERE database='"'"'system'"'"' AND active GROUP BY table ORDER BY sum(bytes_on_disk) DESC"'
+```
+→ 若 `text_log` / `trace_log` 等仍在几 GB 且行数持续涨 = 配置未加载(没 recreate 过)。
+
+### 第二步 · recreate CH(加载 TTL 配置 · 挑低峰)
+```bash
+cd /opt/midas && docker compose -f docker/docker-compose.yaml -f docker/docker-compose.prod.yaml --profile self-hosted up -d clickhouse
+# 若回「clickhouse is up-to-date」(没重建)→ 补 --force-recreate:
+#   … --profile self-hosted up -d --force-recreate clickhouse
+```
+- ★命令与 `update.sh` 的 `COMPOSE` 变量逐字一致(两个 compose 文件 + `self-hosted` profile)。
+- 用**本地缓存**的 `:latest` 镜像(不 pull)→ CH 版本不变,只加载新配置。
+- ★**recreate 只「止住增长」,不「回收已积的 12.6GB」** —— 必须紧接第三步 DROP。
+
+### 第三步 · DROP 已停用的 debug 表(真正腾空间)
+```bash
+docker exec midas-clickhouse sh -c 'clickhouse-client -u "$CLICKHOUSE_USER" --password "$CLICKHOUSE_PASSWORD" -q "DROP TABLE IF EXISTS system.text_log; DROP TABLE IF EXISTS system.trace_log; DROP TABLE IF EXISTS system.processors_profile_log; DROP TABLE IF EXISTS system.metric_log; DROP TABLE IF EXISTS system.asynchronous_metric_log; DROP TABLE IF EXISTS system.query_thread_log"'
+```
+- 这 6 张是 `clickhouse-logs.xml` 里 `remove="1"` 的表(纯 debug/profiling,已停写);DROP 后不再重建。
+- ★**不要 DROP `query_log` / `part_log`** —— 这两张有诊断价值(慢查询/合并·性能体检用),配置是**保留 + 7 天 TTL**,不是删。
+
+### 第三步之补 · 存量 query_log / part_log 补 TTL(★易漏)
+`clickhouse-logs.xml` 的 `<ttl>` **只在建表时生效**;recreate 前就存在的 `query_log` / `part_log`
+不会自动获得 TTL,需**手动 ALTER 一次**(之后新建的表才自带):
+```bash
+docker exec midas-clickhouse sh -c 'clickhouse-client -u "$CLICKHOUSE_USER" --password "$CLICKHOUSE_PASSWORD" -q "ALTER TABLE system.query_log MODIFY TTL event_date + INTERVAL 7 DAY DELETE; ALTER TABLE system.part_log MODIFY TTL event_date + INTERVAL 7 DAY DELETE"'
+```
+（生产存量表此 ALTER 已在初次治理时补过;此处留档供**换环境/重装**后照做。）
+
+### 第四步 · 验证 TTL / 配置生效
+```bash
+# a) debug 日志表已停 + DROP → 应返回空
+docker exec midas-clickhouse sh -c 'clickhouse-client -u "$CLICKHOUSE_USER" --password "$CLICKHOUSE_PASSWORD" -q "SELECT name FROM system.tables WHERE database='"'"'system'"'"' AND name IN ('"'"'text_log'"'"','"'"'trace_log'"'"','"'"'metric_log'"'"','"'"'processors_profile_log'"'"','"'"'asynchronous_metric_log'"'"','"'"'query_thread_log'"'"')"'
+# b) query_log 带 7 天 TTL → 输出应含 TTL event_date + toIntervalDay(7)
+docker exec midas-clickhouse sh -c 'clickhouse-client -u "$CLICKHOUSE_USER" --password "$CLICKHOUSE_PASSWORD" -q "SHOW CREATE TABLE system.query_log"'
+# c) 空间回收 → df 应明显下降
+df -h /
+```
+
+### 影响面 + 是否丢数据
+- **窗口**:CH 重建 + healthcheck 正常 ~15–30s;★若系统日志已巨量膨胀,首启要 attach 全部
+  parts,**这次可能偏慢(1–5 分钟到 healthy)**——DROP 后未来重启恢复快。**挑低峰。**
+- **影响**:窗口内依赖 CH 的功能瞬时报错后自愈(加密行情/K线/资金费率/持仓量、30s 报价、
+  价格异动、回测、决策卡取 K线);**api/worker 容器不重启**(depends_on 只在启动判健康,
+  运行时 CH 掉不连带重启,只是这段连不上 → 报错 → CH 起来自动重连)。PG 系功能(登录/
+  虚拟交易/财经日历页)不受影响。
+- **不丢数据**:业务数据(K线/加密快照)在命名卷 `clickhouse_data`,`up -d` 重建容器**不删
+  命名卷**;DROP 的只是 CH 自己的 debug 日志表(非业务)。
+
+---
+
 ## 速查(TL;DR)
 - **又满了?** → `df -h /` → `docker system df` → `docker builder prune -af` → 复查 `df -h /`。
-- **护栏现状**:部署后 prune 到 10GB(update.sh)+ daemon GC 硬顶 15GB(daemon.json)+ 85% TG 告警(disk_alert.sh)。
+- **CH 系统日志膨胀?(§5)** → recreate CH(update.sh 同款 COMPOSE `up -d clickhouse`)→ DROP text_log 等停用表 → 验 TTL + `df -h /`。★挑低峰,不丢业务数据。
+- **护栏现状**:部署后 prune 到 10GB(update.sh)+ daemon GC 硬顶 15GB(daemon.json)+ 85% TG 告警(disk_alert.sh)+ CH debug 日志 7 天 TTL(§5,须手动 recreate 一次生效)。
 - **改 daemon.json**:先备份 + `python3 -m json.tool` 校验 + restart(live-restore 不停容器)+ 失败 cp 备份回滚。
 - **别做**:不手删 `/var/lib/docker/` 文件;prune 不碰容器/镜像/卷/备份,放心清。

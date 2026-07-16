@@ -261,6 +261,8 @@ OSS_ACCESS_KEY_SECRET=<AccessKey Secret>
 | `GOOGLE_CLIENT_SECRET` | § 4 步骤 C | 同上 |
 | `OSS_ACCESS_KEY_ID` | § 3 步骤 2 | 只在 `/etc/midas/backup.env` |
 | `OSS_ACCESS_KEY_SECRET` | § 3 步骤 2 | 同上 |
+| `TG_BOT_TOKEN` | 统一 bot(0024) | 行情推送 + admin 告警共用 |
+| `ADMIN_TG_CHAT_ID` | Hans 的 TG 数字 chat_id(复用 `/start` 已绑的,或 @userinfobot 读) | ★**app 侧 `/opt/midas/.env` 必配**:celery admin 告警(种子枯竭 / system_health 磁盘 / X 熔断)都发它,**空则三条告警集体静默失效**(worker 启动会打显著 WARNING 提示)。★与 disk_alert.sh 用的 `/etc/midas/alert.env` 那个 `ADMIN_TG_CHAT_ID` 是【两处独立】配置,别只配一处 |
 | GitHub PAT 或 deploy key | § 2 | 服务器拉 repo 用 |
 
 ---
