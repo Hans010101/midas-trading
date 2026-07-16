@@ -14,6 +14,7 @@ app.config_from_object("config.celery_config")
 # 在模块加载期(celery 解析 -A celery_app 时 CWD 在 sys.path 上)就 import,
 # 缓存进 sys.modules。worker_ready 信号晚于此触发,届时 CWD 可能已不在 sys.path —
 # 若把 import 放进 handler 里会 ModuleNotFoundError(实测踩过)。
+from app.core.config import settings  # noqa: E402
 from ch_schema import ensure_crypto_ch_tables  # noqa: E402
 from tasks import (  # noqa: E402, F401
     ai_reflection,
@@ -57,6 +58,15 @@ def _on_worker_ready(**_kwargs: object) -> None:
     ② 入队港股 lot 表采集(部署即填 ~2406,不必等 16:45 beat · 幂等 upsert · A2a)。
     ★ 每步独立 try:① 失败不阻断 ②(否则 ensure_ch 抛异常会吞掉 lot 采集入队)。
     """
+    # ★运维护栏(2026-07-16):admin 告警线(种子枯竭 seed_depletion / 磁盘 system_health /
+    #   X 熔断 x_auto)都发往 settings.admin_tg_chat_id · 空 = 三条告警集体【静默】失效
+    #   (曾静默数周·种子告警手动测试才照出)。启动显著 WARNING 防换环境/重装又漏配。
+    #   ★与 disk_alert.sh 用的 /etc/midas/alert.env 那个 ADMIN_TG_CHAT_ID 是【两处独立】配置。
+    if not settings.admin_tg_chat_id:
+        logger.warning(
+            "[worker_ready] ★★★ ADMIN_TG_CHAT_ID 未配置 —— admin 告警(种子枯竭/磁盘/X 熔断)"
+            "全部静默失效!请在 /opt/midas/.env 配 ADMIN_TG_CHAT_ID=<Hans TG chat id> 后重建 worker。",
+        )
     try:
         ensure_crypto_ch_tables()
     except Exception:  # noqa: BLE001
