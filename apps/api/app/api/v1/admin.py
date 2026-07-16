@@ -1259,7 +1259,7 @@ async def publish_x_tweet(
     ok, reason = await check_rate(redis, payload.platform)
     if not ok:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=reason)
-    # ★自动托管素材的人工补发也计入 30 日配额(自动发+补发 ≤30 · 封号总量可控)。
+    # ★自动托管素材的人工补发也计入日配额(自动发+补发 ≤50 · 封号总量可控)。
     # ★★仅【币安广场】受此配额约束;X 等其它平台不受币安配额拦(step1·x_short 独立配额)。
     if (
         tweet.auto_drafted
@@ -1298,7 +1298,7 @@ class AutoPilotStatus(BaseModel):
     enabled: bool          # 自动托管总开关(默认 OFF)
     circuit_open: bool     # 熔断中(连续失败触发 · 开则停所有自动发)
     daily_used: int        # 今日已自动发布数
-    daily_remaining: int   # 今日剩余配额(30 封顶)
+    daily_remaining: int   # 今日剩余配额(50 封顶)
     in_window: bool        # 当前是否在发布时段(7:30-22:30 CST)
     platforms: list[AutoPilotPlatformItem] = []  # ★平台勾选(架子刀 · 默认空兼容旧客户端)
 

@@ -3,7 +3,7 @@
 5 条护栏的状态读写(Redis · 纯函数化便于测):
 - 开关:x:auto:enabled(默认 OFF · worker beat 读它决定跑不跑)
 - 6h 去重:x:auto:published:{symbol}(TTL 6h · 同币 6h 内不重发)
-- 日上限:x:auto:daily_count:{CST date}(30 封顶 · date-stamped 自然跨日重置)
+- 日上限:x:auto:daily_count:{CST date}(50 封顶 · date-stamped 自然跨日重置)
 - 时段窗:7:30-22:30 大中华区(CST/UTC+8 · 纯函数 · 时段外不发 → 更像真人、降封号)
 - 熔断:x:auto:circuit_open(连续失败触发 · 开 → 停所有自动发)+ 连续失败计数
 
@@ -18,7 +18,7 @@ from typing import Any
 from app.services.visit_stats import CN_TZ
 
 # ── 护栏常量(Hans 定 · 不走 env)──────────────────────────────────────
-AUTO_DAILY_MAX = 30                  # 自动托管每日发布上限(独立于 TG 200 / 手动 100)
+AUTO_DAILY_MAX = 50                  # 自动托管每日发布上限(独立于 TG 200 / 手动 100)
 XSHORT_DRAFT_DAILY_MAX = 30          # ★X 短推每日【自动起草】上限 · 独立于币安配额 · 手动发 · 可调
 DEDUP_TTL_S = 6 * 3600               # 同 symbol 6h 去重(发布侧)
 GEN_DEDUP_TTL_S = 6 * 3600           # ★生成侧 6h 去重(同风格同币 6h 内不重复【自动起草】· Hans 定)
@@ -113,7 +113,7 @@ async def mark_generated(redis: Any, gen_style: str, symbol: str) -> None:
     await redis.set(_gen_key(gen_style, symbol), "1", ex=GEN_DEDUP_TTL_S)
 
 
-# ── ④ 日上限(30 封顶 · date-stamped)──────────────────────────────────
+# ── ④ 日上限(50 封顶 · date-stamped)──────────────────────────────────
 async def daily_remaining(redis: Any, now: datetime | None = None) -> int:
     used = int(await redis.get(_daily_key(now)) or 0)
     return max(0, AUTO_DAILY_MAX - used)
