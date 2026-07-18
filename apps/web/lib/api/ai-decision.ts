@@ -11,6 +11,7 @@
 import type { Market, Period } from '@midas/shared'
 
 import type { BuySellPoint, BuySellPointKind } from '@/lib/api/chan'
+import { withLang } from '@/lib/i18n/lang-headers'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -123,7 +124,9 @@ export async function fetchDecisionCard(
     `${API_BASE}/api/v1/analysis/decision-card?${params.toString()}`,
     {
       signal: args.signal,
-      headers: args.token ? { Authorization: `Bearer ${args.token}` } : undefined,
+      // ★X-Lang(cookie locale)→ 后端 resolve_lang 出对应语言的 AI 分析/免责。
+      //   guest 靠它、登录用户切换即时生效(server 侧另有 language_pref 扩回兜底)。
+      headers: withLang(args.token ? { Authorization: `Bearer ${args.token}` } : undefined),
     },
   )
   if (!r.ok) {

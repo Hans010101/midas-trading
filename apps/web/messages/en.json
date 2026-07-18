@@ -760,8 +760,11 @@
         "actionableAdvice": "Action Plan",
         "cached": "· Cached",
         "chanSignals": "Chan Theory Signals",
+        "confidence": "Confidence",
         "error": "Unable to generate decision card",
         "keyLevels": "Key Levels",
+        "levelN": "Level {n}",
+        "position": "Position",
         "realtime": "· Real-time",
         "resistance": "Resistance",
         "retry": "Retry",
@@ -792,7 +795,8 @@
       "strongLong": "Strongly Bullish",
       "strongShort": "Strongly Bearish",
       "weakLong": "Weakly Bullish",
-      "weakShort": "Weakly Bearish"
+      "weakShort": "Weakly Bearish",
+      "neutral": "Neutral"
     },
     "direction": {
       "buy": "Buy",

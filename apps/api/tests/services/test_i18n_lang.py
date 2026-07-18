@@ -1,7 +1,9 @@
-"""i18n · 后端本地化地基测试(resolve_lang ★收窄=X-Lang>zh + translate + ★zh 逐字节铁证)。
+"""i18n · 后端本地化地基测试(resolve_lang 三级=X-Lang>language_pref>zh + translate + ★zh 逐字节铁证)。
 
-★2026-07-05 收窄(docs/decisions/0047):resolve_lang 停用 ② language_pref 与 ③ Accept-Language
-  两级 —— 无语言切换 UI 时任何自动 en 判定都是 bug。现仅 ① 显式 X-Lang/?lang → ④ zh。
+★2026-07-16 海外版激活:扩回 ② language_pref(与前端语言切换 UI 原子上线)。现三级:
+  ① 显式 X-Lang/?lang → ② 登录用户 language_pref → ④ zh。
+★★守住 0047 红线不变式:③ Accept-Language 仍【停用】—— 浏览器语言【绝不】自动判 en
+  (那是 0047 的 bug 源);en 只能来自用户显式动作(切换 UI 的 X-Lang 注入 / 落库的 language_pref)。
 """
 
 from __future__ import annotations
@@ -41,24 +43,32 @@ def test_resolve_lang_explicit_header_top_priority() -> None:
     assert resolve_lang(cast("Any", _req(query="lang=en")), "zh") == "en"
 
 
-def test_resolve_lang_ignores_language_pref() -> None:
-    """★收窄:② language_pref 已停用 —— 无显式 X-Lang 时 language_pref='en' 也返 zh。
+def test_resolve_lang_honors_language_pref() -> None:
+    """★扩回:② language_pref 已启用 —— 无显式 X-Lang 时按登录用户 language_pref 出语言。
 
-    这是生产 bug 根治点:Hans 账号 pref='en' 曾致决策卡英文;现 pref 彻底不参与解析。
+    安全前提=前端已有语言切换 UI:language_pref 由用户显式设定(切换 UI PATCH 落库),
+    可随时切回 zh,不再是"被自动判成 en 却切不回"(0047 的 bug 已由切换 UI 消除)。
     """
-    r = _req({"accept-language": "zh-CN"})
-    assert resolve_lang(r, "en") == "zh"          # pref='en' 被忽略 → zh
-    assert resolve_lang(_req(), "en") == "zh"     # 无任何头 · pref='en' → zh
-    # 但显式 X-Lang 仍生效(能力保留):pref 无关
+    assert resolve_lang(_req(), "en") == "en"     # 无头 · pref='en' → en(扩回生效)
+    assert resolve_lang(_req(), "zh") == "zh"     # pref='zh' → zh
+    assert resolve_lang(_req(), None) == "zh"     # 未设 pref → 默认 zh
+    # ① X-Lang 仍压过 ② pref:X-Lang=zh 显式切回 → zh(即便 pref=en)
+    assert resolve_lang(_req({"x-lang": "zh"}), "en") == "zh"
     assert resolve_lang(_req({"x-lang": "en"}), "zh") == "en"
 
 
 def test_resolve_lang_ignores_accept_language() -> None:
-    """★收窄:③ Accept-Language 已停用 —— 英文浏览器(无 X-Lang)也返 zh(纯中文产品)。"""
+    """★★守住 0047 红线:③ Accept-Language 仍【停用】—— 英文浏览器【绝不】自动判 en。
+
+    这是 0047 bug 的根源(浏览器语言自动判 en 用户切不回),扩回 ② 时坚决不扩 ③。
+    en 只能来自显式动作(X-Lang / 落库 language_pref),浏览器 Accept-Language 一律不参与。
+    """
+    # 英文浏览器 · 无 pref · 无 X-Lang → 仍 zh(Accept-Language 不参与)
     assert resolve_lang(_req({"accept-language": "en-US,en;q=0.9,zh;q=0.8"}), None) == "zh"
-    assert resolve_lang(_req({"accept-language": "en-US,en;q=0.9"}), "en") == "zh"  # pref 也忽略
-    # X-Lang 显式仍出英文(能力铁证)
-    assert resolve_lang(_req({"x-lang": "en", "accept-language": "en-US"}), None) == "en"
+    assert resolve_lang(_req({"accept-language": "en-US,en;q=0.9"}), "zh") == "zh"
+    # 显式来源仍生效:X-Lang(en)或落库 pref(en)才出英文,与 Accept-Language 无关
+    assert resolve_lang(_req({"x-lang": "en", "accept-language": "zh-CN"}), None) == "en"
+    assert resolve_lang(_req({"accept-language": "zh-CN"}), "en") == "en"  # pref=en(显式)→ en
 
 
 def test_resolve_lang_normalize_x_lang() -> None:

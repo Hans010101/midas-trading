@@ -19,6 +19,7 @@
  */
 
 import { Loader2 } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 import { TradingPlanBlock } from '@/components/ai/trading-plan-block'
 import { ProLock } from '@/components/account/pro-lock'
@@ -29,6 +30,7 @@ import {
   useOpenInterest,
 } from '@/hooks/use-crypto'
 import type { CompositeLabel, DecisionCard } from '@/lib/api/ai-decision'
+import { COMPOSITE_LABEL_KEY } from '@/lib/i18n/composite-label'
 import { cn } from '@/lib/utils'
 import type { Period } from '@midas/shared'
 
@@ -39,6 +41,7 @@ interface CryptoAiCardProps {
 }
 
 export function CryptoAiCard({ klineSymbol, futuresSymbol, period }: CryptoAiCardProps) {
+  const t = useTranslations('workbench.ai.decisionCard')
   // 合约(perp)技术面 · 跟主图/缠论/Header 同源,保证全链路一致
   const decision = useAiDecision({ symbol: klineSymbol, market: 'crypto', period, instrument: 'perp' })
   // 操作建议(0036 批次甲)· crypto → open_long/open_short(合约)· hold/中性不出文案
@@ -48,7 +51,7 @@ export function CryptoAiCard({ klineSymbol, futuresSymbol, period }: CryptoAiCar
   return (
     <div className="rounded-lg border border-paper bg-cream p-4 shadow-sm">
       <div className="mb-3">
-        <span className="font-serif text-base font-bold text-midas-red">AI 决策卡</span>
+        <span className="font-serif text-base font-bold text-midas-red">{t('title')}</span>
       </div>
 
       {/* A · 技术面综合评分 */}
@@ -58,16 +61,16 @@ export function CryptoAiCard({ klineSymbol, futuresSymbol, period }: CryptoAiCar
       )}
       {decision.status === 'success' &&
         (decision.data.locked
-          ? <ProLock title="AI 决策分析" className="mb-3" />
+          ? <ProLock title={t('title')} className="mb-3" />
           : <CompositeBlock card={decision.data} />)}
 
       {/* A2 · AI 操作建议 + 一键模拟下单(0036 批次甲 · 走 ai-order → 同一虚拟撮合引擎 execute)*/}
       {adv && (
         <div className="mb-3 border-t border-paper pt-2">
-          <p className="mb-1 text-[10px] text-muted-foreground/70">操作建议</p>
+          <p className="mb-1 text-[10px] text-muted-foreground/70">{t('actionableAdvice')}</p>
           <p className="text-xs leading-relaxed text-foreground">{adv.hint}</p>
           <p className="mt-0.5 text-[10px] text-muted-foreground/60">
-            {adv.basis} · 仓位:{adv.size_note}
+            {adv.basis} · {t('position')}:{adv.size_note}
           </p>
         </div>
       )}
@@ -93,7 +96,12 @@ export function CryptoAiCard({ klineSymbol, futuresSymbol, period }: CryptoAiCar
 
 // ── A · 技术面综合评分 ─────────────────────────────────────────────────────
 function CompositeBlock({ card }: { card: DecisionCard }) {
+  const t = useTranslations('workbench.ai.decisionCard')
+  const tc = useTranslations('workbench.composite')
   const color = labelColor(card.composite_label)
+  // composite_label:wire value 恒中文(色/逻辑 code)· 仅 display 本地化(scope-A · chan 描述另拆刀)
+  const labelKey = COMPOSITE_LABEL_KEY[card.composite_label]
+  const labelText = labelKey ? tc(labelKey) : card.composite_label
   return (
     <div className="mb-3">
       <div className="mb-2 flex items-end gap-2">
@@ -102,7 +110,7 @@ function CompositeBlock({ card }: { card: DecisionCard }) {
           {card.composite_score}
         </span>
         <span className={cn('mb-1 text-sm', color)}>
-          {card.composite_label} · 置信度 {(card.composite_confidence * 100).toFixed(0)}%
+          {labelText} · {t('confidence')} {(card.composite_confidence * 100).toFixed(0)}%
         </span>
       </div>
 
@@ -133,7 +141,7 @@ function CompositeBlock({ card }: { card: DecisionCard }) {
       )}
 
       <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground/60">
-        <span>{card.cached ? '· 缓存命中' : '· 实时计算'}</span>
+        <span>{card.cached ? t('cached') : t('realtime')}</span>
         {card.llm_mode === 'mock' && (
           <span className="rounded bg-gold/10 px-1.5 py-0.5 font-mono text-gold">
             mock(待填 KEY)
@@ -260,24 +268,26 @@ function FactorLine({
 
 // ── states ─────────────────────────────────────────────────────────────────
 function Skeleton() {
+  const t = useTranslations('workbench.ai.decisionCard')
   return (
     <div className="mb-3 flex flex-col items-center justify-center gap-2 py-6">
       <Loader2 className="h-6 w-6 animate-spin text-midas-red" />
-      <p className="text-xs text-muted-foreground/70">AI 思考中…</p>
+      <p className="text-xs text-muted-foreground/70">{t('thinking')}</p>
     </div>
   )
 }
 
 function ErrorNote({ onRetry }: { onRetry: () => void }) {
+  const t = useTranslations('workbench.ai.decisionCard')
   return (
     <div className="mb-3 rounded-md border border-dashed border-paper bg-background/60 p-3 text-center">
-      <p className="mb-2 text-xs text-muted-foreground/80">暂时无法生成技术面决策</p>
+      <p className="mb-2 text-xs text-muted-foreground/80">{t('error')}</p>
       <button
         type="button"
         onClick={onRetry}
         className="inline-flex items-center rounded-md border border-midas-red px-3 py-1 text-xs text-midas-red transition-colors hover:bg-midas-red-glow"
       >
-        重试
+        {t('retry')}
       </button>
     </div>
   )

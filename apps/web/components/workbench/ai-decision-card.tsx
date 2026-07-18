@@ -16,12 +16,14 @@
  */
 
 import { Loader2 } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { useMemo } from 'react'
 
 import { TradingPlanBlock } from '@/components/ai/trading-plan-block'
 import { ProLock } from '@/components/account/pro-lock'
 import { useAiDecision } from '@/hooks/use-ai-decision'
 import type { CompositeLabel, DecisionCard } from '@/lib/api/ai-decision'
+import { COMPOSITE_LABEL_KEY } from '@/lib/i18n/composite-label'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
 import { cn } from '@/lib/utils'
 import type { Market, Period } from '@midas/shared'
@@ -47,12 +49,13 @@ export function AiDecisionCard({
   const period = propPeriod ?? storePeriod
 
   const query = useAiDecision({ symbol, market, period })
+  const t = useTranslations('workbench.ai.decisionCard')
 
   return (
     <div className="rounded-md border border-paper bg-background p-3">
       <header className="mb-2">
         <p className="font-serif text-sm font-bold text-foreground">
-          AI 决策卡
+          {t('title')}
         </p>
       </header>
 
@@ -60,7 +63,7 @@ export function AiDecisionCard({
       {query.status === 'error' && <CardError onRetry={() => void query.refetch()} />}
       {query.status === 'success' &&
         (query.data.locked
-          ? <ProLock title="AI 决策分析" />
+          ? <ProLock title={t('title')} />
           : <CardBody card={query.data} />)}
     </div>
   )
@@ -71,8 +74,13 @@ export function AiDecisionCard({
 
 
 function CardBody({ card }: { card: DecisionCard }) {
+  const t = useTranslations('workbench.ai.decisionCard')
+  const tc = useTranslations('workbench.composite')
   const labelColor = useMemo(() => composeLabelColor(card.composite_label), [card.composite_label])
   const adv = card.actionable
+  // composite_label:wire value 恒中文(色/逻辑 code)· 仅 display 本地化(未识别值兜底原样)
+  const labelKey = COMPOSITE_LABEL_KEY[card.composite_label]
+  const labelText = labelKey ? tc(labelKey) : card.composite_label
 
   return (
     <div className="space-y-3">
@@ -84,16 +92,16 @@ function CardBody({ card }: { card: DecisionCard }) {
             'bg-midas-red-glow font-mono text-xl font-bold tabular-nums',
             labelColor,
           )}
-          aria-label={`综合评分 ${card.composite_score}`}
+          aria-label={`${labelText} ${card.composite_score}`}
         >
           {card.composite_score > 0 ? '+' : ''}{card.composite_score}
         </div>
         <div className="flex-1">
           <p className={cn('font-serif text-lg font-bold leading-tight', labelColor)}>
-            {card.composite_label}
+            {labelText}
           </p>
           <p className="font-mono text-[11px] text-muted-foreground/80">
-            置信度 {(card.composite_confidence * 100).toFixed(0)}%
+            {t('confidence')} {(card.composite_confidence * 100).toFixed(0)}%
           </p>
         </div>
       </div>
@@ -101,12 +109,12 @@ function CardBody({ card }: { card: DecisionCard }) {
       {/* 关键位 */}
       {card.agent_scores[0]?.key_levels.length ? (
         <div className="border-t border-paper pt-2">
-          <p className="mb-1 text-[10px] text-muted-foreground/70">关键位</p>
+          <p className="mb-1 text-[10px] text-muted-foreground/70">{t('keyLevels')}</p>
           <ul className="space-y-0.5 font-mono text-xs tabular-nums">
             {card.agent_scores[0].key_levels.map((lvl, i) => (
               <li key={`${lvl}-${i}`} className="flex items-center justify-between">
                 <span className="text-muted-foreground/60">
-                  {i === 0 ? '支撑' : i === 1 ? '阻力' : `位 ${i + 1}`}
+                  {i === 0 ? t('support') : i === 1 ? t('resistance') : t('levelN', { n: i + 1 })}
                 </span>
                 <span className="text-foreground">{lvl.toFixed(2)}</span>
               </li>
@@ -115,9 +123,9 @@ function CardBody({ card }: { card: DecisionCard }) {
         </div>
       ) : null}
 
-      {/* 技术面分析(narrative · 已过 Validator)*/}
+      {/* 技术面分析(narrative · 已过 Validator · 后端按 X-Lang 出对应语言)*/}
       <div className="border-t border-paper pt-2">
-        <p className="mb-1 text-[10px] text-muted-foreground/70">技术面分析</p>
+        <p className="mb-1 text-[10px] text-muted-foreground/70">{t('technicalAnalysis')}</p>
         <p className="text-xs leading-relaxed text-foreground">
           {card.narrative}
         </p>
@@ -126,18 +134,18 @@ function CardBody({ card }: { card: DecisionCard }) {
       {/* AI 操作建议 + 一键模拟下单(0036 批次甲 · 走 ai-order → 同一虚拟撮合引擎)*/}
       {adv && (
         <div className="border-t border-paper pt-2">
-          <p className="mb-1 text-[10px] text-muted-foreground/70">操作建议</p>
+          <p className="mb-1 text-[10px] text-muted-foreground/70">{t('actionableAdvice')}</p>
           <p className="text-xs leading-relaxed text-foreground">{adv.hint}</p>
           <p className="mt-0.5 text-[10px] text-muted-foreground/60">
-            {adv.basis} · 仓位:{adv.size_note}
+            {adv.basis} · {t('position')}:{adv.size_note}
           </p>
         </div>
       )}
 
-      {/* 缠论买卖点列表 */}
+      {/* 缠论买卖点列表(★描述文本仍中文 · scope-A chan 描述英文化另拆一刀 · kind 徽章语言中性)*/}
       {card.chan_signals.length > 0 && (
         <div className="border-t border-paper pt-2">
-          <p className="mb-1 text-[10px] text-muted-foreground/70">缠论买卖点</p>
+          <p className="mb-1 text-[10px] text-muted-foreground/70">{t('chanSignals')}</p>
           <ul className="space-y-1">
             {card.chan_signals.slice(-4).reverse().map((s, i) => {
               const isBuy = s.kind.startsWith('B')
@@ -180,7 +188,7 @@ function CardBody({ card }: { card: DecisionCard }) {
 
       {/* footer · cached + mock 标记 */}
       <div className="flex items-center justify-between border-t border-paper pt-2 text-[10px] text-muted-foreground/60">
-        <span>{card.cached ? '· 缓存命中' : '· 实时计算'}</span>
+        <span>{card.cached ? t('cached') : t('realtime')}</span>
         {card.llm_mode === 'mock' && (
           <span className="rounded bg-gold/10 px-1.5 py-0.5 font-mono text-gold">
             mock(待填 KEY)
@@ -194,20 +202,22 @@ function CardBody({ card }: { card: DecisionCard }) {
 
 
 function CardSkeleton() {
+  const t = useTranslations('workbench.ai.decisionCard')
   return (
     <div className="flex flex-col items-center justify-center gap-2 py-6">
       <Loader2 className="h-6 w-6 animate-spin text-midas-red" />
-      <p className="text-xs text-muted-foreground/70">AI 思考中...</p>
+      <p className="text-xs text-muted-foreground/70">{t('thinking')}</p>
     </div>
   )
 }
 
 
 function CardError({ onRetry }: { onRetry: () => void }) {
+  const t = useTranslations('workbench.ai.decisionCard')
   return (
     <div className="rounded-md border border-dashed border-paper bg-cream p-4 text-center">
       <p className="mb-2 text-xs text-muted-foreground/80">
-        暂时无法生成决策卡
+        {t('error')}
       </p>
       <button
         type="button"
@@ -217,7 +227,7 @@ function CardError({ onRetry }: { onRetry: () => void }) {
           'text-xs text-midas-red transition-colors hover:bg-midas-red-glow',
         )}
       >
-        重试
+        {t('retry')}
       </button>
     </div>
   )
