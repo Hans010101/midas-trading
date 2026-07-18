@@ -2,8 +2,8 @@
 
 ★沿革:
   · 2026-07-05 收窄(docs/decisions/0047):产品纯中文无切换 UI 时,四级里的自动 en 判定会让用户
-    看到英文却切不回 = bug。故当时收窄为二级(仅 ① X-Lang / ④ zh),停用 ② language_pref + ③ Accept-Language。
-  · 2026-07-16 海外版激活(docs/decisions/00xx):前端语言切换 UI 上线(LanguageToggle + 设置页),
+    看到英文却切不回 = bug。故当时收窄为二级(仅 ① X-Lang / ④ zh),停用 ② + ③ 两级。
+  · 2026-07-16 海外版激活(docs/decisions/0056):前端语言切换 UI 上线(LanguageToggle + 设置页),
     ★与本次扩回【原子】。扩回 ② language_pref —— 现在安全:用户可随时切回 zh、language_pref 由用户
     显式设定,不再是"被自动判成 en"。现三级:
       ① 显式 `?lang` / `X-Lang`(前端切换即时注入 · guest 也走它)
