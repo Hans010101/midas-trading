@@ -14,6 +14,7 @@ export interface MeResponse {
   has_password: boolean // false = OAuth-only(无密码)→ 不显示改密码表单
   avatar_id: number | null // NULL/0=首字母 · 1-16=预设头像
   is_platinum: boolean // 铂金标记 · 前端据此显/隐铂金自助入口(PR-6 · 真边界在后端 PlatinumDep)
+  language_pref: string | null // 'zh' | 'en' | null(未设)· i18n 跨设备同步用(后端 resolve_lang level②)
 }
 
 export class MeApiError extends Error {
@@ -51,6 +52,16 @@ export async function changePassword(
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+  })
+  if (!r.ok) throw new MeApiError(r.status, await readDetail(r))
+}
+
+/** 保存语言偏好(登录用户跨设备同步)· PATCH /user/language · 后端写 User.language_pref。 */
+export async function setLanguage(token: string, language: 'zh' | 'en'): Promise<void> {
+  const r = await fetch(`${API_BASE}/api/v1/user/language`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ language }),
   })
   if (!r.ok) throw new MeApiError(r.status, await readDetail(r))
 }

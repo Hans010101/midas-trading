@@ -1,17 +1,21 @@
-import { defineRouting } from 'next-intl/routing'
-
 /**
- * i18n 路由配置(Phase 0 地基 · 决策 2 as-needed:中文 `/` 无前缀 · 英文 `/en`)。
+ * i18n locale 常量(cookie 模式 · 无 [locale] 路由)。
  *
- * ★当前【未激活】:真正启用需 activation 三件——① next.config 挂 createNextIntlPlugin
- *   ② middleware.ts locale 检测/重写 ③ app/[locale]/ 页面迁移 + 根 layout 挂
- *   NextIntlClientProvider。这三件 touches next.config / layout / 全站页面,属"改全站组件/layout"
- *   的道(错层并行避让暗黑模式)。故本文件先作为【就绪骨架】存在,activation 延后到进场换 key 时统一做。
+ * ★方案定案(2026-07-16 · 复活英文版前端激活):放弃 as-needed [locale] 路由
+ *   (历史 4 次翻车:两次生产 redirect loop + 两次 SSG 页翻倍撞内存墙),改 cookie-locale——
+ *   URL 不变、middleware 逐字节零改、无 [locale] 段,结构性消除上述两类事故。
+ *   locale 从 NEXT_LOCALE cookie 取(见 request.ts / lib/i18n/locale-cookie.ts)。
+ *
+ * ★本文件【只放纯常量】(zh/en 两端都 import):不得引入 next/headers 等服务端专用模块,
+ *   否则 client 组件 import 会炸。
  */
-export const routing = defineRouting({
-  locales: ['zh', 'en'],
-  defaultLocale: 'zh',
-  localePrefix: 'as-needed',
-})
+export const locales = ['zh', 'en'] as const
+export type Locale = (typeof locales)[number]
+export const defaultLocale: Locale = 'zh'
 
-export type Locale = (typeof routing.locales)[number]
+/** 客户端 + 服务端共用的 locale cookie 名(1 年 · 非 HttpOnly · 客户端需读写)。 */
+export const LOCALE_COOKIE = 'NEXT_LOCALE'
+
+export function isLocale(value: unknown): value is Locale {
+  return typeof value === 'string' && (locales as readonly string[]).includes(value)
+}

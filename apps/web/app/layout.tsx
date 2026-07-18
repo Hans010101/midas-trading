@@ -1,4 +1,6 @@
 import type { Metadata } from 'next'
+import { NextIntlClientProvider } from 'next-intl'
+import { getLocale, getMessages } from 'next-intl/server'
 import localFont from 'next/font/local'
 
 import { RewardToastWatcher } from '@/components/growth/reward-toast-watcher'
@@ -75,14 +77,18 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  // i18n(cookie 模式):locale + messages 从 request.ts(读 NEXT_LOCALE cookie)取。
+  // force-static 页构建期 cookies() 无值 → locale=zh 静态(见 i18n/request.ts)。
+  const locale = await getLocale()
+  const messages = await getMessages()
   return (
     <html
-      lang="zh-CN"
+      lang={locale === 'en' ? 'en' : 'zh-CN'}
       className={`${notoSerifSC.variable} ${notoSansSC.variable} ${jetbrainsMono.variable}`}
       suppressHydrationWarning
     >
@@ -95,15 +101,17 @@ export default function RootLayout({
               "(function(){try{var m=document.cookie.match(/(?:^|; )color_pref=([^;]+)/);document.documentElement.dataset.colorPref=(m&&decodeURIComponent(m[1])==='green-up')?'green-up':'red-up';}catch(e){}})();",
           }}
         />
-        <SessionProvider>
-          <ThemeProvider>
-            <QueryProvider>
-              <UiStoreProvider>
-                <TooltipProvider>{children}</TooltipProvider>
-              </UiStoreProvider>
-            </QueryProvider>
-          </ThemeProvider>
-        </SessionProvider>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <SessionProvider>
+            <ThemeProvider>
+              <QueryProvider>
+                <UiStoreProvider>
+                  <TooltipProvider>{children}</TooltipProvider>
+                </UiStoreProvider>
+              </QueryProvider>
+            </ThemeProvider>
+          </SessionProvider>
+        </NextIntlClientProvider>
         {/* Phase 1.5 刀B:OAuth 到账 toast(读一次性 midas_reward cookie) */}
         <RewardToastWatcher />
         <Toaster position="top-center" closeButton />

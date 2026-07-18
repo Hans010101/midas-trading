@@ -14,12 +14,14 @@
 import { Search } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import { signOut, useSession } from 'next-auth/react'
 import { useEffect, useState } from 'react'
 
 import { UserAvatar } from '@/components/account/user-avatar'
 import { CommandPalette } from '@/components/layout/command-palette'
 import { MarketSwitcher } from '@/components/layout/market-switcher'
+import { LanguageToggle } from '@/components/layout/language-toggle'
 import { ThemeToggle } from '@/components/layout/theme-toggle'
 import {
   DropdownMenu,
@@ -36,6 +38,7 @@ export function TopNav() {
   const { data: me } = useMe() // 头像编号(选了预设则渲染预设图)
   const email = session?.user?.email ?? ''
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const tNav = useTranslations('common.nav')
 
   // ★全局 Cmd/Ctrl+K → 打开命令面板(preventDefault 挡浏览器默认 · ESC/遮罩/X 关闭)。
   //   TopNav 挂在所有产品页 → 全局生效;landing 用自己的 nav(不渲染本组件)→ 天然排除(方案 C)。
@@ -65,17 +68,19 @@ export function TopNav() {
 
         {/* 右:主题切换 + Cmd+K 搜索入口 + 用户头像下拉(登录态)/ 登录入口(未登录)/ loading 占位 */}
         <div className="flex items-center gap-3">
+          {/* i18n 激活:中↔EN 语言切换(cookie 模式 · 与暗黑独立) */}
+          <LanguageToggle />
           {/* ★暗黑模式 P0:浅↔深 一键切(与用户菜单里的设置页三档独立·都能用) */}
           <ThemeToggle />
           {/* Cmd+K 命令面板入口(搜品种 / 跳功能页)· 移动端只显 🔍 图标 */}
           <button
             type="button"
             onClick={() => setPaletteOpen(true)}
-            aria-label="搜索品种(⌘K)"
+            aria-label={tNav('top')}
             className="flex shrink-0 items-center gap-2 rounded-md border border-paper bg-surface-subtle/40 px-2.5 py-1 text-muted-foreground transition-colors hover:border-midas-red/30 hover:text-foreground"
           >
             <Search className="h-3.5 w-3.5" />
-            <span className="hidden text-sm sm:inline">搜索品种…</span>
+            <span className="hidden text-sm sm:inline">{tNav('top')}</span>
             <kbd className="hidden rounded bg-paper px-1.5 py-0.5 font-mono text-[10px] leading-none text-muted-foreground sm:inline">
               ⌘K
             </kbd>

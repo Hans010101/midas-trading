@@ -1,8 +1,9 @@
 import type { NextConfig } from 'next'
+import createNextIntlPlugin from 'next-intl/plugin'
 
-// ★部署基建根治 阶段4:无害注释级改动·触发一次 web 重建走【默认 pull 链 + 镜像清理】验证
-//   (Actions build+push → ACR → VPS docker compose pull → recreate·VPS 零构建负载·
-//   7/7 pull 模式旧 sha 镜像催收在真机跑一次)。验证通过后可移除本行(纯占位·零功能影响)。
+// i18n 激活(2026-07-16):挂 next-intl plugin,引用 cookie 模式的 request.ts(无 [locale] 路由)。
+const withNextIntl = createNextIntlPlugin('./i18n/request.ts')
+
 const nextConfig: NextConfig = {
   transpilePackages: ['@midas/shared'],
   // SEO 批5(docs/seo/2026-07-seo-geo-audit.md)三行优化:
@@ -29,4 +30,4 @@ const nextConfig: NextConfig = {
   },
 }
 
-export default nextConfig
+export default withNextIntl(nextConfig)

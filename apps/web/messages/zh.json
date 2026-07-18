@@ -760,8 +760,11 @@
         "actionableAdvice": "操作建议",
         "cached": "· 缓存命中",
         "chanSignals": "缠论买卖点",
+        "confidence": "置信度",
         "error": "暂时无法生成决策卡",
         "keyLevels": "关键位",
+        "levelN": "位 {n}",
+        "position": "仓位",
         "realtime": "· 实时计算",
         "resistance": "阻力",
         "retry": "重试",
@@ -792,7 +795,8 @@
       "strongLong": "强多",
       "strongShort": "强空",
       "weakLong": "弱多",
-      "weakShort": "弱空"
+      "weakShort": "弱空",
+      "neutral": "中性"
     },
     "direction": {
       "buy": "买入",

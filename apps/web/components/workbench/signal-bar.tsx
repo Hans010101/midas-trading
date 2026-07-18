@@ -12,11 +12,13 @@
  * 数据来源:复用 useAiDecision · 跟右栏 AI 决策卡共享 cache · 不发额外请求。
  */
 
+import { useTranslations } from 'next-intl'
 import { useMemo } from 'react'
 
 import { ProLock } from '@/components/account/pro-lock'
 import { useAiDecision } from '@/hooks/use-ai-decision'
 import type { CompositeLabel, DecisionCard } from '@/lib/api/ai-decision'
+import { COMPOSITE_LABEL_KEY } from '@/lib/i18n/composite-label'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
 import { cn } from '@/lib/utils'
 
@@ -51,6 +53,8 @@ export function SignalBar() {
 
 
 function SignalBarBody({ card }: { card: DecisionCard }) {
+  const tc = useTranslations('workbench.composite')
+  const td = useTranslations('workbench.ai.decisionCard')
   const labelColor = useMemo(
     () => composeLabelColor(card.composite_label), [card.composite_label],
   )
@@ -64,10 +68,10 @@ function SignalBarBody({ card }: { card: DecisionCard }) {
           {card.composite_score > 0 ? '+' : ''}{card.composite_score}
         </span>
         <span className={cn('text-xs font-medium', labelColor)}>
-          {card.composite_label}
+          {COMPOSITE_LABEL_KEY[card.composite_label] ? tc(COMPOSITE_LABEL_KEY[card.composite_label]) : card.composite_label}
         </span>
         <span className="font-mono text-[10px] text-muted-foreground/60">
-          置信度 {(card.composite_confidence * 100).toFixed(0)}%
+          {td('confidence')} {(card.composite_confidence * 100).toFixed(0)}%
         </span>
       </div>
 
