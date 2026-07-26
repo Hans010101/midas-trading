@@ -405,6 +405,85 @@ describe('independent membership growth', () => {
   })
 })
 
+describe('independent redeem codes', () => {
+  it('lets an admin generate codes and allows exactly one redemption', async () => {
+    const admin = await createTestSession()
+    const member = await createTestSession()
+    await env.DB
+      .prepare("UPDATE users SET role = 'admin' WHERE id = ?")
+      .bind(admin.userId)
+      .run()
+
+    const generateResponse = await exports.default.fetch(
+      apiRequest('/api/v1/admin/redeem-codes', {
+        method: 'POST',
+        token: admin.token,
+        body: { period: 'month', count: 2, note: 'worker test' },
+      }),
+    )
+    expect(generateResponse.status).toBe(200)
+    const generated = (await generateResponse.json()) as {
+      codes: string[]
+      days: number
+    }
+    expect(generated.codes).toHaveLength(2)
+    expect(generated.days).toBe(30)
+    expect(generated.codes[0]).toMatch(/^[0-9A-HJKMNP-TV-Z]{12}$/u)
+
+    const listResponse = await exports.default.fetch(
+      apiRequest('/api/v1/admin/redeem-codes?page=1&page_size=20', {
+        token: admin.token,
+      }),
+    )
+    expect(listResponse.status).toBe(200)
+    await expect(listResponse.json()).resolves.toMatchObject({
+      total: 2,
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          code: generated.codes[0],
+          status: 'unused',
+          note: 'worker test',
+        }),
+      ]),
+    })
+
+    const redeemResponse = await exports.default.fetch(
+      apiRequest('/api/v1/redeem', {
+        method: 'POST',
+        token: member.token,
+        body: { code: ` ${generated.codes[0]?.toLowerCase()} ` },
+      }),
+    )
+    expect(redeemResponse.status).toBe(200)
+    await expect(redeemResponse.json()).resolves.toMatchObject({
+      plan: 'pro',
+      days_added: 30,
+    })
+
+    const redeemAgain = await exports.default.fetch(
+      apiRequest('/api/v1/redeem', {
+        method: 'POST',
+        token: member.token,
+        body: { code: generated.codes[0] },
+      }),
+    )
+    expect(redeemAgain.status).toBe(409)
+    await expect(redeemAgain.json()).resolves.toEqual({
+      detail: {
+        error: 'already_used',
+        message: '兑换码已被使用',
+      },
+    })
+
+    const memberQuota = await exports.default.fetch(
+      apiRequest('/api/v1/quota/me', { token: member.token }),
+    )
+    await expect(memberQuota.json()).resolves.toMatchObject({
+      plan: 'pro',
+    })
+  })
+})
+
 describe('email authentication lifecycle', () => {
   it('registers, verifies, logs in, reads the session, and logs out', async () => {
     const email = `worker-test-${crypto.randomUUID()}@example.com`

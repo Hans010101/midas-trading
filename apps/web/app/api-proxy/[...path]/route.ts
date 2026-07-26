@@ -22,6 +22,8 @@ async function proxy(request: NextRequest, context: RouteContext) {
     pathname.startsWith('/api/v1/academy/') ||
     pathname.startsWith('/api/v1/quota/') ||
     pathname.startsWith('/api/v1/invite/') ||
+    pathname === '/api/v1/redeem' ||
+    pathname === '/api/v1/admin/redeem-codes' ||
     pathname.startsWith('/api/v1/overview/') ||
     pathname.startsWith('/api/v1/market/') ||
     pathname === '/api/v1/health' ||

@@ -5,6 +5,7 @@ import { HttpError, jsonResponse } from './http'
 import { handleMarketRoute } from './market'
 import { handleOverviewRoute, refreshGlobalOverview } from './overview'
 import { handleProfileRoute } from './profile'
+import { handleRedeemRoute } from './redeem'
 import { handleWatchlistRoute } from './watchlist'
 
 async function databaseReady(db: D1Database): Promise<boolean> {
@@ -111,6 +112,7 @@ export default {
         (await handleAccountRoute(request, env, requestId)) ??
         (await handleProfileRoute(request, env, requestId)) ??
         (await handleWatchlistRoute(request, env, requestId)) ??
+        (await handleRedeemRoute(request, env, requestId)) ??
         (await handleAcademyRoute(request, env, requestId)) ??
         (await handleOverviewRoute(request, env, requestId)) ??
         (await handleMarketRoute(request, env, requestId)) ??
