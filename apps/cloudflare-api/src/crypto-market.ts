@@ -1,0 +1,666 @@
+import { HttpError, jsonResponse } from './http'
+
+const FUTURES_TICKERS_URL =
+  'https://futures.kraken.com/derivatives/api/v3/tickers'
+const FUTURES_ANALYTICS_URL =
+  'https://futures.kraken.com/api/charts/v1/analytics'
+const SPOT_TICKER_URL = 'https://api.kraken.com/0/public/Ticker'
+const CACHE_CONTROL = 'public, max-age=15, s-maxage=60'
+// Each symbol needs three analytics requests. Keep the Worker invocation below
+// Cloudflare Free's 50 external-subrequest ceiling.
+const MAX_METRICS_SYMBOLS = 15
+
+type KrakenFutureTicker = Readonly<{
+  symbol?: string
+  pair?: string
+  tag?: string
+  last?: number
+  lastTime?: string
+  markPrice?: number
+  indexPrice?: number
+  vol24h?: number
+  volumeQuote?: number
+  openInterest?: number
+  fundingRate?: number
+  change24h?: number
+  high24h?: number
+  low24h?: number
+}>
+
+type Ticker24h = Readonly<{
+  symbol: string
+  instrument: 'spot' | 'perp'
+  ts: string
+  last_price: number
+  change_pct_24h: number
+  high_24h: number
+  low_24h: number
+  volume_24h: number
+  quote_volume_24h: number
+  count_24h: number
+}>
+
+function finite(value: unknown, fallback = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function numeric(value: unknown, fallback = 0): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function cachedJson(
+  body: unknown,
+  requestId: string,
+  method = 'GET',
+): Response {
+  const response = jsonResponse(body, 200, requestId, method)
+  response.headers.set('cache-control', CACHE_CONTROL)
+  return response
+}
+
+async function fetchJson<T>(url: URL | string): Promise<T> {
+  const response = await fetch(url, {
+    headers: {
+      accept: 'application/json',
+      'user-agent': 'Midas-Trading-Cloudflare/1.0',
+    },
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (!response.ok) {
+    throw new HttpError(503, `Kraken 行情暂不可用（HTTP ${response.status}）`)
+  }
+  return (await response.json()) as T
+}
+
+function publicBase(pair: string | undefined): string | null {
+  const base = pair?.split(':')[0]?.toUpperCase()
+  if (!base) return null
+  if (base === 'XBT') return 'BTC'
+  if (base === 'XDG') return 'DOGE'
+  return base
+}
+
+function krakenBase(base: string): string {
+  if (base === 'BTC') return 'XBT'
+  if (base === 'DOGE') return 'DOGE'
+  return base
+}
+
+function parsePublicSymbol(symbol: string): {
+  publicSymbol: string
+  futuresSymbol: string
+  base: string
+} {
+  const normalized = symbol.trim().toUpperCase()
+  if (!/^[A-Z0-9]{2,20}USDT$/u.test(normalized)) {
+    throw new HttpError(400, '数字资产合约标的格式无效')
+  }
+  const base = normalized.slice(0, -4)
+  return {
+    publicSymbol: normalized,
+    futuresSymbol: `PF_${krakenBase(base)}USD`,
+    base,
+  }
+}
+
+async function futuresTickers(): Promise<KrakenFutureTicker[]> {
+  const payload = await fetchJson<{
+    result?: string
+    tickers?: KrakenFutureTicker[]
+  }>(FUTURES_TICKERS_URL)
+  if (payload.result !== 'success' || !Array.isArray(payload.tickers)) {
+    throw new HttpError(503, 'Kraken 合约行情返回格式异常')
+  }
+  return payload.tickers
+}
+
+function toPerpTicker(ticker: KrakenFutureTicker): Ticker24h | null {
+  if (!ticker.symbol?.startsWith('PF_') || !ticker.symbol.endsWith('USD')) {
+    return null
+  }
+  const base = publicBase(ticker.pair)
+  const last = finite(ticker.last)
+  if (!base || last <= 0) return null
+  return {
+    symbol: `${base}/USDT`,
+    instrument: 'perp',
+    ts: ticker.lastTime ?? new Date().toISOString(),
+    last_price: last,
+    change_pct_24h: finite(ticker.change24h),
+    high_24h: finite(ticker.high24h),
+    low_24h: finite(ticker.low24h),
+    volume_24h: finite(ticker.vol24h),
+    quote_volume_24h: finite(ticker.volumeQuote),
+    count_24h: 0,
+  }
+}
+
+async function perpTickerItems(): Promise<Ticker24h[]> {
+  return (await futuresTickers()).flatMap((ticker) => {
+    const item = toPerpTicker(ticker)
+    return item ? [item] : []
+  })
+}
+
+const SPOT_PAIRS = Object.freeze([
+  ['XBTUSD', 'BTC'],
+  ['ETHUSD', 'ETH'],
+  ['SOLUSD', 'SOL'],
+  ['XRPUSD', 'XRP'],
+  ['XDGUSD', 'DOGE'],
+  ['BNBUSD', 'BNB'],
+  ['TRXUSD', 'TRX'],
+] as const)
+
+async function spotTickerItems(): Promise<Ticker24h[]> {
+  const url = new URL(SPOT_TICKER_URL)
+  url.searchParams.set('pair', SPOT_PAIRS.map(([pair]) => pair).join(','))
+  const payload = await fetchJson<{
+    error?: string[]
+    result?: Record<
+      string,
+      {
+        c?: string[]
+        v?: string[]
+        p?: string[]
+        t?: number[]
+        l?: string[]
+        h?: string[]
+        o?: string
+      }
+    >
+  }>(url)
+  if (payload.error?.length) {
+    throw new HttpError(503, payload.error.join(', '))
+  }
+  const results = payload.result ?? {}
+  const aliases: Readonly<Record<string, readonly string[]>> = {
+    BTC: ['XXBTZUSD', 'XBTUSD'],
+    ETH: ['XETHZUSD', 'ETHUSD'],
+    SOL: ['SOLUSD'],
+    XRP: ['XXRPZUSD', 'XRPUSD'],
+    DOGE: ['XDGUSD', 'DOGEUSD'],
+    BNB: ['BNBUSD'],
+    TRX: ['TRXUSD'],
+  }
+  return SPOT_PAIRS.flatMap(([, base]) => {
+    const ticker = aliases[base]
+      ?.map((key) => results[key])
+      .find((item) => item !== undefined)
+    if (!ticker) return []
+    const last = numeric(ticker.c?.[0])
+    const open = numeric(ticker.o)
+    if (last <= 0 || open <= 0) return []
+    const volume = numeric(ticker.v?.[1])
+    const vwap = numeric(ticker.p?.[1], last)
+    return [{
+      symbol: `${base}/USDT`,
+      instrument: 'spot' as const,
+      ts: new Date().toISOString(),
+      last_price: last,
+      change_pct_24h: ((last - open) / open) * 100,
+      high_24h: numeric(ticker.h?.[1]),
+      low_24h: numeric(ticker.l?.[1]),
+      volume_24h: volume,
+      quote_volume_24h: volume * vwap,
+      count_24h: numeric(ticker.t?.[1]),
+    }]
+  })
+}
+
+function sortedItems(
+  items: Ticker24h[],
+  sortBy: string,
+  order: string,
+  top: number,
+): Ticker24h[] {
+  const fields: Readonly<Record<string, keyof Ticker24h>> = {
+    change_pct_24h: 'change_pct_24h',
+    quote_volume_24h: 'quote_volume_24h',
+    last_price: 'last_price',
+  }
+  const field = fields[sortBy]
+  if (!field) throw new HttpError(400, 'sort_by 格式无效')
+  if (order !== 'asc' && order !== 'desc') {
+    throw new HttpError(400, 'order 格式无效')
+  }
+  const direction = order === 'asc' ? 1 : -1
+  return [...items]
+    .sort((left, right) => {
+      const a = left[field]
+      const b = right[field]
+      return (Number(a) - Number(b)) * direction
+    })
+    .slice(0, top)
+}
+
+async function analytics(
+  futuresSymbol: string,
+  kind: 'funding' | 'open-interest' | 'long-short-ratio',
+  hours = 168,
+): Promise<{
+  timestamp?: number[]
+  data?: unknown
+}> {
+  const url = new URL(
+    `${FUTURES_ANALYTICS_URL}/${encodeURIComponent(futuresSymbol)}/${kind}`,
+  )
+  url.searchParams.set('since', String(Math.floor(Date.now() / 1_000) - hours * 3_600))
+  url.searchParams.set('interval', '3600')
+  const payload = await fetchJson<{
+    result?: { timestamp?: number[]; data?: unknown }
+  }>(url)
+  return payload.result ?? {}
+}
+
+function timestampsToIso(values: number[] | undefined): string[] {
+  return (values ?? []).map((timestamp) =>
+    new Date(timestamp > 10_000_000_000 ? timestamp : timestamp * 1_000).toISOString(),
+  )
+}
+
+function closeValue(row: unknown): number {
+  return Array.isArray(row) ? numeric(row[3]) : numeric(row)
+}
+
+async function metricsItem(symbol: string): Promise<{
+  symbol: string
+  funding_rate: number | null
+  account_long_short_ratio: number | null
+  oi_change_pct_24h: number | null
+}> {
+  const parsed = parsePublicSymbol(symbol)
+  const [funding, ratio, oi] = await Promise.all([
+    analytics(parsed.futuresSymbol, 'funding', 4),
+    analytics(parsed.futuresSymbol, 'long-short-ratio', 4),
+    analytics(parsed.futuresSymbol, 'open-interest', 25),
+  ])
+  const relativeRate = (
+    funding.data as { relativeRate?: unknown[] } | undefined
+  )?.relativeRate
+  const ratios = Array.isArray(ratio.data) ? ratio.data : []
+  const oiRows = Array.isArray(oi.data) ? oi.data : []
+  const lastOi = closeValue(oiRows.at(-1))
+  const firstOi = closeValue(oiRows.at(0))
+  return {
+    symbol: parsed.publicSymbol,
+    funding_rate:
+      relativeRate && relativeRate.length > 0
+        ? closeValue(relativeRate.at(-1))
+        : null,
+    account_long_short_ratio:
+      ratios.length > 0 ? numeric(ratios.at(-1)) : null,
+    oi_change_pct_24h:
+      firstOi > 0 && lastOi > 0 ? ((lastOi - firstOi) / firstOi) * 100 : null,
+  }
+}
+
+async function getTickers(
+  request: Request,
+  requestId: string,
+): Promise<Response> {
+  const url = new URL(request.url)
+  const instrument = url.searchParams.get('instrument') ?? 'perp'
+  const sortBy = url.searchParams.get('sort_by') ?? 'change_pct_24h'
+  const order = url.searchParams.get('order') ?? 'desc'
+  const top = Number(url.searchParams.get('top') ?? '100')
+  if (instrument !== 'spot' && instrument !== 'perp') {
+    throw new HttpError(400, 'instrument 仅支持 spot 或 perp')
+  }
+  if (!Number.isSafeInteger(top) || top < 1 || top > 1_000) {
+    throw new HttpError(400, 'top 必须在 1 到 1000 之间')
+  }
+  const items =
+    instrument === 'perp' ? await perpTickerItems() : await spotTickerItems()
+  return cachedJson(
+    {
+      instrument,
+      sort_by: sortBy,
+      order,
+      items: sortedItems(items, sortBy, order, top),
+      source: 'Kraken public market data',
+    },
+    requestId,
+    request.method,
+  )
+}
+
+async function getOverview(
+  request: Request,
+  requestId: string,
+): Promise<Response> {
+  const items = await perpTickerItems()
+  const byChange = [...items].sort(
+    (left, right) => right.change_pct_24h - left.change_pct_24h,
+  )
+  const byVolume = [...items].sort(
+    (left, right) => right.quote_volume_24h - left.quote_volume_24h,
+  )
+  const now = new Date().toISOString()
+  const rawTickers = await futuresTickers()
+  const derivativesOiUsd = rawTickers.reduce(
+    (sum, ticker) =>
+      ticker.symbol?.startsWith('PF_')
+        ? sum + finite(ticker.openInterest) * finite(ticker.markPrice)
+        : sum,
+    0,
+  )
+  return cachedJson(
+    {
+      market_overview: {
+        ts: now,
+        total_market_cap_usd: 0,
+        total_volume_24h_usd: 0,
+        btc_dominance: 0,
+        eth_dominance: 0,
+        fear_greed_value: 0,
+        fear_greed_classification: 'N/A',
+        derivatives_oi_usd: derivativesOiUsd,
+        derivatives_volume_24h_usd: items.reduce(
+          (sum, item) => sum + item.quote_volume_24h,
+          0,
+        ),
+      },
+      top_gainers: byChange.slice(0, 10),
+      top_losers: byChange.slice(-10).reverse(),
+      top_volume: byVolume.slice(0, 10),
+      btc_ticker: items.find((item) => item.symbol === 'BTC/USDT') ?? null,
+      eth_ticker: items.find((item) => item.symbol === 'ETH/USDT') ?? null,
+      source: 'Kraken public derivatives market data',
+      unavailable_fields: [
+        'total_market_cap_usd',
+        'total_volume_24h_usd',
+        'btc_dominance',
+        'eth_dominance',
+        'fear_greed_value',
+      ],
+    },
+    requestId,
+    request.method,
+  )
+}
+
+async function getMetrics(
+  request: Request,
+  requestId: string,
+): Promise<Response> {
+  const url = new URL(request.url)
+  const symbols = [...new Set(
+    (url.searchParams.get('symbols') ?? '')
+      .split(',')
+      .map((symbol) => symbol.trim().toUpperCase())
+      .filter(Boolean),
+  )]
+  if (symbols.length === 0) throw new HttpError(400, 'symbols 不能为空')
+  const selected = symbols.slice(0, MAX_METRICS_SYMBOLS)
+  const settled = await Promise.allSettled(selected.map(metricsItem))
+  const items = settled.flatMap((result) =>
+    result.status === 'fulfilled' ? [result.value] : [],
+  )
+  return cachedJson(
+    {
+      items,
+      requested: symbols.length,
+      processed: selected.length,
+      truncated: symbols.length > selected.length,
+      source: 'Kraken futures analytics',
+    },
+    requestId,
+    request.method,
+  )
+}
+
+async function getFuturesInfo(
+  request: Request,
+  requestId: string,
+  symbol: string,
+): Promise<Response> {
+  const parsed = parsePublicSymbol(symbol)
+  const ticker = (await futuresTickers()).find(
+    (item) => item.symbol === parsed.futuresSymbol,
+  )
+  if (!ticker) throw new HttpError(404, '未找到该 Kraken 永续合约')
+  const mark = finite(ticker.markPrice)
+  const index = finite(ticker.indexPrice)
+  const fundingRate =
+    index > 0 ? finite(ticker.fundingRate) / index : 0
+  const nextHour = new Date()
+  nextHour.setUTCMinutes(0, 0, 0)
+  nextHour.setUTCHours(nextHour.getUTCHours() + 1)
+  return cachedJson(
+    {
+      symbol: parsed.publicSymbol,
+      base_asset: parsed.base,
+      quote_asset: 'USDT',
+      contract_type: 'perpetual',
+      mark_price: mark,
+      index_price: index,
+      last_funding_rate: fundingRate,
+      next_funding_time: nextHour.toISOString(),
+      max_leverage: 0,
+      open_interest_coin: finite(ticker.openInterest),
+      open_interest_usd: finite(ticker.openInterest) * mark,
+      source: 'Kraken perpetual futures',
+    },
+    requestId,
+    request.method,
+  )
+}
+
+async function getOpenInterest(
+  request: Request,
+  requestId: string,
+  symbol: string,
+): Promise<Response> {
+  const parsed = parsePublicSymbol(symbol)
+  const url = new URL(request.url)
+  const limit = boundedLimit(url, 96, 500)
+  const [series, tickers] = await Promise.all([
+    analytics(parsed.futuresSymbol, 'open-interest', Math.max(limit, 24)),
+    futuresTickers(),
+  ])
+  const timestamps = timestampsToIso(series.timestamp)
+  const rows = Array.isArray(series.data) ? series.data : []
+  const mark = finite(
+    tickers.find((ticker) => ticker.symbol === parsed.futuresSymbol)?.markPrice,
+  )
+  const items = rows.slice(-limit).map((row, index) => {
+    const oiCoin = closeValue(row)
+    const timestamp = timestamps.at(timestamps.length - rows.slice(-limit).length + index)
+    return {
+      symbol: parsed.publicSymbol,
+      ts: timestamp ?? new Date().toISOString(),
+      oi_coin: oiCoin,
+      oi_usd: oiCoin * mark,
+    }
+  })
+  return cachedJson(
+    { symbol: parsed.publicSymbol, items, source: 'Kraken futures analytics' },
+    requestId,
+    request.method,
+  )
+}
+
+async function getLongShortRatio(
+  request: Request,
+  requestId: string,
+  symbol: string,
+): Promise<Response> {
+  const parsed = parsePublicSymbol(symbol)
+  const limit = boundedLimit(new URL(request.url), 96, 500)
+  const series = await analytics(
+    parsed.futuresSymbol,
+    'long-short-ratio',
+    Math.max(limit, 24),
+  )
+  const timestamps = timestampsToIso(series.timestamp)
+  const rows = Array.isArray(series.data) ? series.data : []
+  const start = Math.max(0, rows.length - limit)
+  const items = rows.slice(-limit).map((row, index) => {
+    const ratio = numeric(row)
+    const long = ratio > 0 ? ratio / (1 + ratio) : 0
+    const short = ratio > 0 ? 1 / (1 + ratio) : 0
+    return {
+      symbol: parsed.publicSymbol,
+      ts: timestamps[start + index] ?? new Date().toISOString(),
+      top_account_long: long,
+      top_account_short: short,
+      top_account_ratio: ratio,
+      top_position_long: 0,
+      top_position_short: 0,
+      top_position_ratio: 0,
+      taker_buy_vol: 0,
+      taker_sell_vol: 0,
+      taker_ratio: 0,
+      global_account_long: 0,
+      global_account_short: 0,
+      global_account_ratio: 0,
+    }
+  })
+  return cachedJson(
+    {
+      symbol: parsed.publicSymbol,
+      items,
+      source: 'Kraken futures long-short ratio',
+      unavailable_fields: ['top_position_ratio', 'taker_ratio', 'global_account_ratio'],
+    },
+    requestId,
+    request.method,
+  )
+}
+
+async function getFundingRate(
+  request: Request,
+  requestId: string,
+  symbol: string,
+): Promise<Response> {
+  const parsed = parsePublicSymbol(symbol)
+  const limit = boundedLimit(new URL(request.url), 100, 500)
+  const [series, tickers] = await Promise.all([
+    analytics(parsed.futuresSymbol, 'funding', Math.max(limit, 24)),
+    futuresTickers(),
+  ])
+  const timestamps = timestampsToIso(series.timestamp)
+  const rates = (
+    series.data as { relativeRate?: unknown[] } | undefined
+  )?.relativeRate ?? []
+  const start = Math.max(0, rates.length - limit)
+  const mark = finite(
+    tickers.find((ticker) => ticker.symbol === parsed.futuresSymbol)?.markPrice,
+  )
+  const items = rates.slice(-limit).map((row, index) => ({
+    symbol: parsed.publicSymbol,
+    ts: timestamps[start + index] ?? new Date().toISOString(),
+    rate: closeValue(row),
+    mark_price: mark,
+  }))
+  return cachedJson(
+    { symbol: parsed.publicSymbol, items, source: 'Kraken futures funding analytics' },
+    requestId,
+    request.method,
+  )
+}
+
+async function getBasis(
+  request: Request,
+  requestId: string,
+  symbol: string,
+): Promise<Response> {
+  const parsed = parsePublicSymbol(symbol)
+  const ticker = (await futuresTickers()).find(
+    (item) => item.symbol === parsed.futuresSymbol,
+  )
+  if (!ticker) throw new HttpError(404, '未找到该 Kraken 永续合约')
+  const mark = finite(ticker.markPrice)
+  const index = finite(ticker.indexPrice)
+  const items = index > 0
+    ? [{
+        ts: ticker.lastTime ?? new Date().toISOString(),
+        mark_price: mark,
+        index_price: index,
+        basis_pct: ((mark - index) / index) * 100,
+      }]
+    : []
+  return cachedJson(
+    { symbol: parsed.publicSymbol, items, source: 'Kraken current mark/index price' },
+    requestId,
+    request.method,
+  )
+}
+
+function boundedLimit(url: URL, fallback: number, max: number): number {
+  const limit = Number(url.searchParams.get('limit') ?? String(fallback))
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > max) {
+    throw new HttpError(400, `limit 必须在 1 到 ${max} 之间`)
+  }
+  return limit
+}
+
+export async function handleCryptoMarketRoute(
+  request: Request,
+  requestId: string,
+): Promise<Response | null> {
+  const path = new URL(request.url).pathname
+  if (!path.startsWith('/api/v1/crypto/')) return null
+  if (request.method !== 'GET') {
+    return jsonResponse({ detail: 'Method not allowed' }, 405, requestId, request.method)
+  }
+  if (path === '/api/v1/crypto/tickers/24h') {
+    return getTickers(request, requestId)
+  }
+  if (path === '/api/v1/crypto/overview') {
+    return getOverview(request, requestId)
+  }
+  if (path === '/api/v1/crypto/futures/metrics-batch') {
+    return getMetrics(request, requestId)
+  }
+  if (path === '/api/v1/crypto/boll-scan') {
+    return cachedJson(
+      {
+        as_of: null,
+        count: 0,
+        disclaimer: 'Kraken 官方公开源暂不提供本策略快照，因此不生成模拟信号。',
+        items: [],
+      },
+      requestId,
+      request.method,
+    )
+  }
+  const bollMatch = path.match(/^\/api\/v1\/crypto\/boll-structure\/([^/]+)$/u)
+  if (bollMatch?.[1]) {
+    const parsed = parsePublicSymbol(decodeURIComponent(bollMatch[1]))
+    return cachedJson(
+      {
+        symbol: parsed.publicSymbol,
+        available: false,
+        source: 'none',
+        layer: '布林结构',
+        as_of: null,
+        item: null,
+        disclaimer: 'Kraken 官方公开源暂不提供本策略快照，因此不生成模拟信号。',
+      },
+      requestId,
+      request.method,
+    )
+  }
+  const futuresMatch = path.match(
+    /^\/api\/v1\/crypto\/futures\/([^/]+)\/(open-interest|long-short-ratio|funding-rate|info|basis)$/u,
+  )
+  if (futuresMatch?.[1] && futuresMatch[2]) {
+    const symbol = decodeURIComponent(futuresMatch[1])
+    switch (futuresMatch[2]) {
+      case 'open-interest':
+        return getOpenInterest(request, requestId, symbol)
+      case 'long-short-ratio':
+        return getLongShortRatio(request, requestId, symbol)
+      case 'funding-rate':
+        return getFundingRate(request, requestId, symbol)
+      case 'info':
+        return getFuturesInfo(request, requestId, symbol)
+      case 'basis':
+        return getBasis(request, requestId, symbol)
+    }
+  }
+  return jsonResponse({ detail: 'Route not found' }, 404, requestId, request.method)
+}
