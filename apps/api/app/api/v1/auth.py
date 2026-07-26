@@ -127,8 +127,25 @@ class ChangePasswordOut(BaseModel):
 # =====================
 
 
-def _public_base_url() -> str:
-    return os.getenv("PUBLIC_WEB_URL", "http://localhost:3000")
+def _public_base_url(request: Request | None = None) -> str:
+    """Return the frontend base URL used in verification emails.
+
+    A shared API may serve more than one trusted frontend. The caller can select
+    one of the explicitly configured aliases with ``x-public-web-url``; arbitrary
+    hosts are ignored so this cannot turn verification emails into phishing links.
+    """
+    default_url = os.getenv("PUBLIC_WEB_URL", "http://localhost:3000").rstrip("/")
+    if request is None:
+        return default_url
+
+    requested_url = request.headers.get("x-public-web-url", "").rstrip("/")
+    aliases = {
+        item.strip().rstrip("/")
+        for item in os.getenv("PUBLIC_WEB_URL_ALIASES", "").split(",")
+        if item.strip()
+    }
+    allowed_urls = {default_url, *aliases}
+    return requested_url if requested_url in allowed_urls else default_url
 
 
 @router.post(
@@ -163,7 +180,7 @@ async def register(payload: RegisterIn, db: DbDep, request: Request) -> Register
     await attribute_invite(db, user.id, payload.ref)
 
     token = await create_verification_token(db, user_id=user.id)
-    verify_url = f"{_public_base_url()}/verify-email?token={token}"
+    verify_url = f"{_public_base_url(request)}/verify-email?token={token}"
     try:
         await send_verification_email(to=email, verify_url=verify_url)
     except Exception:  # noqa: BLE001
@@ -280,19 +297,26 @@ async def oauth_google(
     - 如果 client_id 不在 env 配置 · 返回 503(开关未开)
     """
     lang = resolve_lang(request)
-    google_client_id = os.getenv("GOOGLE_CLIENT_ID", "")
-    if not google_client_id:
-        logger.error("[oauth.google] GOOGLE_CLIENT_ID 未配置 · 返回 503")
+    google_client_ids = [
+        item.strip()
+        for item in os.getenv("GOOGLE_CLIENT_IDS", "").split(",")
+        if item.strip()
+    ]
+    legacy_client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+    if legacy_client_id and legacy_client_id not in google_client_ids:
+        google_client_ids.append(legacy_client_id)
+    if not google_client_ids:
+        logger.error("[oauth.google] GOOGLE_CLIENT_ID(S) 未配置 · 返回 503")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=translate("auth.google_oauth_disabled", lang),
         )
-    logger.info("[oauth.google] 收到 id_token · client_id 前 12 字符=%s", google_client_id[:12])
+    logger.info("[oauth.google] 收到 id_token · 允许 %d 个 audience", len(google_client_ids))
 
     # 验签 + 解析 · Google 公钥 JWKS
     # 注:_verify_google_id_token 会把 httpx / jose 错误都归类成 ValueError
     try:
-        claims = await _verify_google_id_token(payload.id_token, google_client_id)
+        claims = await _verify_google_id_token(payload.id_token, google_client_ids)
     except ValueError as e:
         logger.warning("[oauth.google] id_token 验证失败:%s", e)
         raise HTTPException(
@@ -373,7 +397,7 @@ _GOOGLE_ISSUERS = ("https://accounts.google.com", "accounts.google.com")
 
 
 async def _verify_google_id_token(
-    token: str, expected_aud: str,
+    token: str, expected_aud: str | list[str],
 ) -> dict[str, object]:
     """验签 Google id_token · 失败抛 ValueError。"""
     import httpx  # noqa: PLC0415
@@ -395,6 +419,7 @@ async def _verify_google_id_token(
     try:
         # 不带签名解 header 拿 kid
         unverified_header = jose_jwt.get_unverified_header(token)
+        unverified_claims = jose_jwt.get_unverified_claims(token)
     except JWTError as e:
         raise ValueError(f"无法解析 token header: {e}") from e
 
@@ -406,12 +431,19 @@ async def _verify_google_id_token(
     if key is None:
         raise ValueError(f"未找到 kid={kid} 对应的 Google 公钥")
 
+    allowed_audiences = (
+        [expected_aud] if isinstance(expected_aud, str) else expected_aud
+    )
+    token_audience = unverified_claims.get("aud")
+    if not isinstance(token_audience, str) or token_audience not in allowed_audiences:
+        raise ValueError("token audience 不在允许列表")
+
     try:
         claims = jose_jwt.decode(
             token,
             key,
             algorithms=["RS256"],
-            audience=expected_aud,
+            audience=token_audience,
             issuer=_GOOGLE_ISSUERS,
             # NextAuth 走 id_token 流程 · 只把 id_token 转给后端 · 没有 access_token。
             # jose 默认 verify_at_hash=True · 检测到 id_token 里有 at_hash claim 但
@@ -459,14 +491,16 @@ async def verify_email(payload: VerifyIn, db: DbDep, request: Request) -> Verify
 
 
 @router.post("/resend-verification", status_code=status.HTTP_202_ACCEPTED)
-async def resend_verification(payload: ResendIn, db: DbDep) -> dict[str, str]:
+async def resend_verification(
+    payload: ResendIn, db: DbDep, request: Request,
+) -> dict[str, str]:
     """重发验证邮件 · 即使邮箱不存在也返回 202(防枚举攻击)。"""
     email = payload.email.lower()
     user = await find_user_by_email(db, email)
     if user is None or user.email_verified_at is not None:
         return {"status": "ok"}
     token = await create_verification_token(db, user_id=user.id)
-    verify_url = f"{_public_base_url()}/verify-email?token={token}"
+    verify_url = f"{_public_base_url(request)}/verify-email?token={token}"
     try:
         await send_verification_email(to=email, verify_url=verify_url)
     except Exception:  # noqa: BLE001

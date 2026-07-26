@@ -14,7 +14,9 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
+from app.api.v1.auth import _public_base_url
 from app.models.user import User
 from app.models.verification_token import VerificationToken
 from app.services.auth import issue_session
@@ -24,6 +26,41 @@ from tests.factories import (
     make_verification_token,
     random_email,
 )
+
+
+def _request_with_public_web_url(url: str) -> Request:
+    return Request({
+        "type": "http",
+        "method": "POST",
+        "path": "/api/v1/auth/register",
+        "headers": [(b"x-public-web-url", url.encode())],
+    })
+
+
+def test_public_base_url_accepts_configured_alias(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("PUBLIC_WEB_URL", "https://midastrade.asia")
+    monkeypatch.setenv(
+        "PUBLIC_WEB_URL_ALIASES",
+        "https://midas-trading.hans-pan007.workers.dev",
+    )
+
+    request = _request_with_public_web_url(
+        "https://midas-trading.hans-pan007.workers.dev",
+    )
+    assert _public_base_url(request) == (
+        "https://midas-trading.hans-pan007.workers.dev"
+    )
+
+
+def test_public_base_url_rejects_untrusted_alias(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("PUBLIC_WEB_URL", "https://midastrade.asia")
+    monkeypatch.setenv(
+        "PUBLIC_WEB_URL_ALIASES",
+        "https://midas-trading.hans-pan007.workers.dev",
+    )
+
+    request = _request_with_public_web_url("https://attacker.example")
+    assert _public_base_url(request) == "https://midastrade.asia"
 
 
 @pytest.mark.asyncio

@@ -17,6 +17,7 @@ async function proxy(request: NextRequest, context: RouteContext) {
   headers.delete('host')
   headers.delete('origin')
   headers.delete('referer')
+  headers.set('x-public-web-url', incomingUrl.origin)
 
   const response = await fetch(upstreamUrl, {
     method: request.method,
