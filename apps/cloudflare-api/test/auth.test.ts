@@ -91,6 +91,67 @@ describe('global market overview', () => {
   })
 })
 
+describe('cross-market data', () => {
+  it('searches the independent symbol catalog', async () => {
+    const response = await exports.default.fetch(
+      apiRequest('/api/v1/market/symbols?q=腾讯&market=hk'),
+    )
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject([
+      { symbol: '00700', market: 'hk', name: '腾讯控股' },
+    ])
+  })
+
+  it('normalizes Yahoo chart data to the shared kline contract', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      async json() {
+        return {
+        chart: {
+          error: null,
+          result: [
+            {
+              timestamp: [1_785_000_000, 1_785_086_400],
+              indicators: {
+                quote: [
+                  {
+                    open: [200, 205],
+                    high: [210, 212],
+                    low: [198, 203],
+                    close: [206, 211],
+                    volume: [1_000_000, 1_200_000],
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        }
+      },
+    } as Response)
+    const response = await exports.default.fetch(
+      apiRequest('/api/v1/market/kline?symbol=AAPL&market=us&period=1d&limit=1'),
+    )
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      symbol: 'AAPL',
+      market: 'us',
+      period: '1d',
+      items: [
+        {
+          open: 205,
+          high: 212,
+          low: 203,
+          close: 211,
+          volume: 1_200_000,
+          amount: null,
+        },
+      ],
+    })
+  })
+})
+
 describe('email authentication lifecycle', () => {
   it('registers, verifies, logs in, reads the session, and logs out', async () => {
     const email = `worker-test-${crypto.randomUUID()}@example.com`

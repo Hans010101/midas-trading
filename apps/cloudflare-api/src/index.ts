@@ -1,5 +1,6 @@
 import { handleAuthRoute } from './auth'
 import { HttpError, jsonResponse } from './http'
+import { handleMarketRoute } from './market'
 import { handleOverviewRoute, refreshGlobalOverview } from './overview'
 import { handleProfileRoute } from './profile'
 import { handleWatchlistRoute } from './watchlist'
@@ -108,6 +109,7 @@ export default {
         (await handleProfileRoute(request, env, requestId)) ??
         (await handleWatchlistRoute(request, env, requestId)) ??
         (await handleOverviewRoute(request, env, requestId)) ??
+        (await handleMarketRoute(request, env, requestId)) ??
         (await routeRequest(
           request,
           {
