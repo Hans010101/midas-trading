@@ -5,7 +5,7 @@
  *   页面据此降级(无权限提示),前端不做任何"安全"判定。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export type RegisterMethod = 'google' | 'password' | 'both'
 

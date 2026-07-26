@@ -9,7 +9,7 @@
  * ★ 进度存后端(不用 localStorage)· fetch 透传 session token(后端按用户存)。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export interface AcademyProgress {
   completed_slugs: string[]

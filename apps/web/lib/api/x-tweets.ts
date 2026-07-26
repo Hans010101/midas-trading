@@ -9,7 +9,7 @@
  * ★ 止于展示 + 触发生成 · 不发 X(发布=4b)· 截图字段 image_path 现阶段为 null(PR-4 填)。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export interface XTweetDispatchItem {
   platform: string
@@ -108,7 +108,9 @@ export async function publishXTweet(
     body: JSON.stringify({ platform }),
   })
   if (!r.ok) {
-    const detail = await r.json().catch(() => null)
+    const detail = (await r.json().catch(() => null)) as
+      | { detail?: string }
+      | null
     throw new Error(detail?.detail ?? `x-tweets publish HTTP ${r.status}`)
   }
   return (await r.json()) as XTweetPublishOut

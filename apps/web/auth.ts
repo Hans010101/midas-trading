@@ -21,8 +21,7 @@ import Credentials from 'next-auth/providers/credentials'
 import Google from 'next-auth/providers/google'
 
 import { REWARD_COOKIE, buildRewardCookieValue } from '@/lib/reward-toast'
-
-const API_BASE = process.env.API_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+import { midasTradingApiFetch } from '@/lib/server/midas-trading-api'
 
 // 仅扩展 Session / User · JWT 字段用内联 cast,避免 'next-auth/jwt' 模块增强
 // 在 moduleResolution: bundler 下的解析问题
@@ -63,7 +62,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const password = credentials?.password as string | undefined
         if (!email || !password) return null
 
-        const r = await fetch(`${API_BASE}/api/v1/auth/login`, {
+        const r = await midasTradingApiFetch('/api/v1/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password }),
@@ -106,7 +105,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const accessToken = tk?.accessToken
       if (!accessToken) return
       try {
-        await fetch(`${API_BASE}/api/v1/auth/logout`, {
+        await midasTradingApiFetch('/api/v1/auth/logout', {
           method: 'POST',
           headers: { Authorization: `Bearer ${accessToken}` },
         })
@@ -124,14 +123,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           console.error('[auth.google] account.id_token 缺失 · 无法换 session · 检查 scope 是否含 openid')
           return false
         }
-        console.info('[auth.google] 拿到 id_token · POST 后端换 session · API_BASE=%s', API_BASE)
+        console.info('[auth.google] 拿到 id_token · POST 独立 Cloudflare API 换 session')
         // Phase 1.5 刀B:OAuth ref 归因唯一路径 —— register 页落地写的 midas_ref
         // cookie 在此读出(signIn callback 是 server-side route handler · cookies()
         // 可用),进 /oauth/google body。仅 create 分支后端才兑现(刀A)。
         const { cookies } = await import('next/headers')
         const ref = (await cookies()).get('midas_ref')?.value ?? null
         try {
-          const r = await fetch(`${API_BASE}/api/v1/auth/oauth/google`, {
+          const r = await midasTradingApiFetch('/api/v1/auth/oauth/google', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id_token: idToken, ref }),

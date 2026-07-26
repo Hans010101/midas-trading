@@ -5,7 +5,7 @@
  * 公开只读端点(同榜单)· 不带 token。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export type StockMarket = 'cn' | 'us' | 'hk'
 

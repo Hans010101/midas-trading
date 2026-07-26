@@ -2,7 +2,7 @@
  * 告警规则 API client · 0026 G5(复用 G2b CRUD + G5 一键应用推荐)。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export type Operator = 'gt' | 'gte' | 'lt' | 'lte'
 

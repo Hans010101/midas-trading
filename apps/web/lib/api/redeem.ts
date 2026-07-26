@@ -3,7 +3,7 @@
  * 管理员生成/列表 + 用户兑换。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export type RedeemPeriod = 'month' | 'quarter' | 'year'
 export type RedeemStatus = 'unused' | 'redeemed' | 'expired'

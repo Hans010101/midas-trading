@@ -11,7 +11,7 @@ import { AuthShell } from '@/components/auth/auth-shell'
 import { Button } from '@/components/ui/button'
 import { rewardToastMessage } from '@/lib/reward-toast'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 type State =
   | { status: 'loading' }

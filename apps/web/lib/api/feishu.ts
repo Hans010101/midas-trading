@@ -6,7 +6,7 @@
  * 应用未配置(FEISHU_APP_ID/SECRET 未设)→ bind-token 返回 503,UI 降级为「绑定即将开放」。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export interface FeishuBindTokenResult {
   token: string

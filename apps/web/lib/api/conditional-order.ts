@@ -14,7 +14,7 @@ import type { ConditionalKind, ConditionalStatus } from '@/lib/conditional'
 import type { OrderSide, PositionSide } from '@/lib/api/virtual'
 import type { Market } from '@midas/shared'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 /** perp 保证金模式(与后端 MarginMode 同口径) */
 export type MarginMode = 'cross' | 'isolated'

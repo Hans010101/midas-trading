@@ -7,7 +7,7 @@
  * 🔴 红线:订阅费非交易 · 前端只跳转托管页 + 查状态,不判付款真伪(后端回调 HMAC 验签开权益)。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export type Period = 'month' | 'quarter' | 'year'
 

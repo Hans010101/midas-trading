@@ -13,7 +13,7 @@ import type { Market, Period } from '@midas/shared'
 import type { BuySellPoint, BuySellPointKind } from '@/lib/api/chan'
 import { withLang } from '@/lib/i18n/lang-headers'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export type AgentName =
   | 'technical' | 'fundamental' | 'news' | 'value'

@@ -7,7 +7,7 @@
 
 import type { QuoteUnit } from '@/components/market-home/index-card'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export interface OverviewQuote {
   market: string // 地区码(us/jp/hk/global/fx/crypto)· 非交易市场

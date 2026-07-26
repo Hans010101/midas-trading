@@ -7,7 +7,7 @@
  * ★ 不手动设 Content-Type —— 让浏览器为 FormData 自动带 multipart boundary。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export type TicketCategory =
   | 'not_received'

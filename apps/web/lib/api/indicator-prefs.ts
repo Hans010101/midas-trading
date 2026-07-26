@@ -7,7 +7,7 @@
  *   bollinger/chan 后端已存(默认 ON)但前端本期不暴露 toggle(避免与 cookie 版详情页偏好重叠)。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export interface IndicatorPrefs {
   bollinger: boolean

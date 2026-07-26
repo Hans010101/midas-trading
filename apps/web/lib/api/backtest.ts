@@ -5,7 +5,7 @@
  * 🔴 红线:纯研究记录的【只读展示 + 发起】· 绝不下单 / 撮合 / 真实交易 · market 锁 crypto。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 const PREFIX = '/api/v1/backtest'
 
 export type BacktestStatus = 'pending' | 'done' | 'error'

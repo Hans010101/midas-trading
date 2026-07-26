@@ -14,7 +14,7 @@
  * 原则不变:接不上 = 前端占位/空态 · 绝不硬编假数据(CLAUDE.md 红线)。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export class CryptoApiError extends Error {
   constructor(

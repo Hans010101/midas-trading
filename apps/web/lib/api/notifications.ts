@@ -6,7 +6,7 @@
  * POST /test?channel=telegram 经统一 bot 发测试消息。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export interface NotificationConfig {
   tg_chat_id: string | null

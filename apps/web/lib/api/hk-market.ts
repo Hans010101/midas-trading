@@ -6,7 +6,7 @@
  * 板块暂不做(港股全市场无现成行业源 · 对比 cn 的 sectors)。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export interface HkSpotRow {
   symbol: string // 5 位港股代码 '00700'

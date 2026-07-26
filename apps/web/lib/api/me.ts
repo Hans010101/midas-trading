@@ -4,7 +4,7 @@
  * 🔴 密码明文只在请求体传输,不入任何前端持久化;头像只传编号(零图片存储)。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export interface MeResponse {
   user_id: string

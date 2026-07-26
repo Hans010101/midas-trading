@@ -8,7 +8,7 @@
  * 🔴 防作弊:正确答案只在后端 · 前端拿题不拿答案 · 提交选项后端重新判分 · 成绩存后端(非 localStorage)。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export interface ExamQuestionPublic {
   stem: string

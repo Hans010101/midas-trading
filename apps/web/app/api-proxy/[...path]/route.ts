@@ -1,7 +1,11 @@
+import { getCloudflareContext } from '@opennextjs/cloudflare'
 import type { NextRequest } from 'next/server'
 
-const API_UPSTREAM =
-  process.env.API_UPSTREAM_URL ?? 'https://api.midastrade.asia'
+const LEGACY_API_UPSTREAM =
+  process.env.LEGACY_API_UPSTREAM_URL ?? 'http://localhost:8000'
+const INDEPENDENT_API_ORIGIN = 'https://midas-trading-api.internal'
+const INDEPENDENT_API_FALLBACK =
+  process.env.API_AUTH_FALLBACK_URL ?? 'http://localhost:8787'
 
 type RouteContext = {
   params: Promise<{ path: string[] }>
@@ -9,8 +13,16 @@ type RouteContext = {
 
 async function proxy(request: NextRequest, context: RouteContext) {
   const { path } = await context.params
+  const pathname = `/${path.join('/')}`
   const incomingUrl = new URL(request.url)
-  const upstreamUrl = new URL(`/${path.join('/')}`, API_UPSTREAM)
+  const isIndependentApi =
+    pathname.startsWith('/api/v1/auth/') ||
+    pathname === '/api/v1/health' ||
+    pathname === '/api/v1/ready'
+  const upstreamUrl = new URL(
+    pathname,
+    isIndependentApi ? INDEPENDENT_API_ORIGIN : LEGACY_API_UPSTREAM,
+  )
   upstreamUrl.search = incomingUrl.search
 
   const headers = new Headers(request.headers)
@@ -19,7 +31,8 @@ async function proxy(request: NextRequest, context: RouteContext) {
   headers.delete('referer')
   headers.set('x-public-web-url', incomingUrl.origin)
 
-  const response = await fetch(upstreamUrl, {
+  let response: Response
+  const init: RequestInit = {
     method: request.method,
     headers,
     body:
@@ -27,7 +40,21 @@ async function proxy(request: NextRequest, context: RouteContext) {
         ? undefined
         : request.body,
     redirect: 'manual',
-  })
+  }
+  if (isIndependentApi) {
+    try {
+      const { env } = getCloudflareContext()
+      response = await env.MIDAS_TRADING_API.fetch(
+        new Request(upstreamUrl, init),
+      )
+    } catch {
+      const fallbackUrl = new URL(pathname, INDEPENDENT_API_FALLBACK)
+      fallbackUrl.search = incomingUrl.search
+      response = await fetch(fallbackUrl, init)
+    }
+  } else {
+    response = await fetch(upstreamUrl, init)
+  }
 
   const responseHeaders = new Headers(response.headers)
   responseHeaders.delete('access-control-allow-origin')

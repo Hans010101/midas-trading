@@ -5,7 +5,7 @@
  * 数据 Sina 源 · 只读。换手率/量比本期界面不体现(Sina 无字段 · 东财不可达)。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export interface CnSpotRow {
   symbol: string // 纯代码 '600519'

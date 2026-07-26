@@ -2,7 +2,7 @@
  * AI 额度 API client(会员刀2)· GET /quota/me · 沙盘/回测/profile 三处共用。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export interface QuotaItem {
   feature: string

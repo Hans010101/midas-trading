@@ -3,7 +3,7 @@
  * GET 无行 → 默认值(与 G4 常量一致)· PUT upsert(MC-4 起 perp_margin_mode 可选 isolated/cross)。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export type PerpMarginMode = 'isolated' | 'cross'
 

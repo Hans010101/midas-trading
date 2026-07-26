@@ -5,7 +5,7 @@
  * 🔴 红线:纯【客观结构描述】—— 非价格预测 · 不下单 · 后端 prompt 三红线焊死(prompts.py)。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 const PREFIX = '/api/v1/structure'
 
 // 与后端 schemas/structure.py 逐字对照

@@ -2,7 +2,7 @@
  * 邀请 API client(Phase 1.5 刀B)· GET /invite/me · 照 quota.ts Bearer 范式。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export interface InviteMe {
   code: string

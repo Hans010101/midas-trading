@@ -10,7 +10,7 @@
 
 import type { Market, Period } from '@midas/shared'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export type StrategyKind =
   | 'ma_cross'

@@ -8,7 +8,7 @@
  * 红线:接不上的字段交给页面显示空态,绝不在此伪造数据。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export type MarketKind = 'cn' | 'us' | 'hk'
 

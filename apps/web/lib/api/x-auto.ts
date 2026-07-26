@@ -8,7 +8,7 @@
  * 🔴 全 admin 端点(后端 AdminDep 403 强制)· fetch 透传 session token。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export interface AutoPilotPlatformItem {
   platform: string // 平台标识(binance_square / x / …)
@@ -71,7 +71,9 @@ export async function toggleAutoPlatform(
     body: JSON.stringify({ checked }),
   })
   if (!r.ok) {
-    const detail = await r.json().catch(() => null)
+    const detail = (await r.json().catch(() => null)) as
+      | { detail?: string }
+      | null
     throw new Error(detail?.detail ?? `x-auto platform toggle HTTP ${r.status}`)
   }
   return (await r.json()) as AutoPilotStatus

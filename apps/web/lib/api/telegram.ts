@@ -7,7 +7,7 @@
  * bot 未配置(TG_BOT_TOKEN 未设)→ bind-token 返回 503,UI 优雅降级为「绑定即将开放」。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export interface BindTokenResult {
   token: string

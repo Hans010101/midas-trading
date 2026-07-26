@@ -5,7 +5,7 @@
  * 行业板块 + 中概股板块。数据 yfinance 批量 · 只读 · 成交额为美元估(close×volume)。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export interface UsSpotRow {
   symbol: string

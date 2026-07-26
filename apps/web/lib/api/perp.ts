@@ -6,7 +6,7 @@
  * 金额字段全部 string(后端 Decimal 序列化为 string,避免 JS 浮点损失)。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export type PerpSide = 'long' | 'short'
 export type PerpIntent = 'open_long' | 'open_short' | 'close'

@@ -7,7 +7,7 @@
  * (apps/api tests/services/test_econ_calendar_page.py 机器钉死)。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export interface EconEvent {
   event_key: string

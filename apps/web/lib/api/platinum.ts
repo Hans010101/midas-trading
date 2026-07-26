@@ -35,7 +35,7 @@ import {
   MANAGED_POSITIONS_PAGE_SIZE,
 } from '@/lib/api/managed'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 function _h(token?: string): HeadersInit | undefined {
   return token ? { Authorization: `Bearer ${token}` } : undefined
