@@ -1,5 +1,7 @@
 import { handleAuthRoute } from './auth'
 import { HttpError, jsonResponse } from './http'
+import { handleProfileRoute } from './profile'
+import { handleWatchlistRoute } from './watchlist'
 
 async function databaseReady(db: D1Database): Promise<boolean> {
   const row = await db.prepare('SELECT 1 AS ok').first<{ ok: number }>()
@@ -102,6 +104,8 @@ export default {
     try {
       const response =
         (await handleAuthRoute(request, env, requestId)) ??
+        (await handleProfileRoute(request, env, requestId)) ??
+        (await handleWatchlistRoute(request, env, requestId)) ??
         (await routeRequest(
           request,
           {

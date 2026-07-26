@@ -25,10 +25,13 @@ export function jsonResponse(
 ): Response {
   const headers = new Headers(SECURITY_HEADERS)
   headers.set('x-request-id', requestId)
-  return new Response(method === 'HEAD' ? null : JSON.stringify(body), {
+  return new Response(
+    method === 'HEAD' || status === 204 ? null : JSON.stringify(body),
+    {
     status,
     headers,
-  })
+    },
+  )
 }
 
 export async function readJsonObject(

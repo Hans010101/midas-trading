@@ -109,6 +109,68 @@ describe('email authentication lifecycle', () => {
     expect(login.access_token.length).toBeGreaterThan(32)
     expect(login.role).toBe('user')
 
+    const defaultWatchlistResponse = await exports.default.fetch(
+      apiRequest('/api/v1/watchlist', { token: login.access_token }),
+    )
+    expect(defaultWatchlistResponse.status).toBe(200)
+    const defaultWatchlist = (await defaultWatchlistResponse.json()) as Array<{
+      id: number
+      symbol: string
+      market: string
+    }>
+    expect(defaultWatchlist).toHaveLength(3)
+    expect(defaultWatchlist.map(({ symbol }) => symbol)).toEqual([
+      'BTC/USDT',
+      'NVDA',
+      '600519',
+    ])
+
+    const addWatchlistResponse = await exports.default.fetch(
+      apiRequest('/api/v1/watchlist', {
+        method: 'POST',
+        token: login.access_token,
+        body: { symbol: 'aapl', market: 'us' },
+      }),
+    )
+    expect(addWatchlistResponse.status).toBe(201)
+    await expect(addWatchlistResponse.json()).resolves.toMatchObject({
+      symbol: 'AAPL',
+      market: 'us',
+      sort_order: 3,
+    })
+
+    const preferencesResponse = await exports.default.fetch(
+      apiRequest('/api/v1/user/indicator-prefs', {
+        method: 'PATCH',
+        token: login.access_token,
+        body: { day_trade: true },
+      }),
+    )
+    expect(preferencesResponse.status).toBe(200)
+    await expect(preferencesResponse.json()).resolves.toEqual({
+      bollinger: true,
+      chan: true,
+      day_trade: true,
+    })
+
+    const avatarResponse = await exports.default.fetch(
+      apiRequest('/api/v1/user/avatar', {
+        method: 'PATCH',
+        token: login.access_token,
+        body: { avatar_id: 7 },
+      }),
+    )
+    expect(avatarResponse.status).toBe(200)
+
+    const languageResponse = await exports.default.fetch(
+      apiRequest('/api/v1/user/language', {
+        method: 'PATCH',
+        token: login.access_token,
+        body: { language: 'en' },
+      }),
+    )
+    expect(languageResponse.status).toBe(200)
+
     const meResponse = await exports.default.fetch(
       apiRequest('/api/v1/auth/me', { token: login.access_token }),
     )
@@ -118,6 +180,8 @@ describe('email authentication lifecycle', () => {
       email,
       email_verified: true,
       has_password: true,
+      avatar_id: 7,
+      language_pref: 'en',
     })
 
     const logoutResponse = await exports.default.fetch(

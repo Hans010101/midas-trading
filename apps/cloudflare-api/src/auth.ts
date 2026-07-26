@@ -28,7 +28,7 @@ type UserRow = Readonly<{
   email_verified_at: number | null
 }>
 
-type AuthenticatedUser = Readonly<{
+export type AuthenticatedUser = Readonly<{
   sessionId: string
   user: UserRow
 }>
@@ -164,7 +164,7 @@ async function issueSession(
   return token
 }
 
-async function authenticate(
+export async function authenticate(
   request: Request,
   env: Env,
 ): Promise<AuthenticatedUser> {
@@ -632,6 +632,14 @@ async function me(
   requestId: string,
 ): Promise<Response> {
   const { user } = await authenticate(request, env)
+  const profile = await env.DB
+    .prepare(
+      `SELECT avatar_id, language_pref
+       FROM users
+       WHERE id = ?`,
+    )
+    .bind(user.id)
+    .first<{ avatar_id: number | null; language_pref: string | null }>()
   return jsonResponse(
     {
       user_id: user.id,
@@ -639,9 +647,9 @@ async function me(
       email_verified: user.email_verified_at !== null,
       role: user.role,
       has_password: user.password_hash !== null,
-      avatar_id: null,
+      avatar_id: profile?.avatar_id ?? null,
       is_platinum: false,
-      language_pref: null,
+      language_pref: profile?.language_pref ?? null,
     },
     200,
     requestId,

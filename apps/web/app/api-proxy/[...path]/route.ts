@@ -17,6 +17,8 @@ async function proxy(request: NextRequest, context: RouteContext) {
   const incomingUrl = new URL(request.url)
   const isIndependentApi =
     pathname.startsWith('/api/v1/auth/') ||
+    pathname.startsWith('/api/v1/user/') ||
+    pathname.startsWith('/api/v1/watchlist') ||
     pathname === '/api/v1/health' ||
     pathname === '/api/v1/ready'
   const upstreamUrl = new URL(
