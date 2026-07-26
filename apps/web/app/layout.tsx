@@ -93,6 +93,15 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <body className="font-sans antialiased bg-background text-foreground">
+        {/* OpenNext/esbuild 会给 next-themes 的首屏内联脚本注入 __name 调用,
+            但浏览器内联上下文没有该 helper。先提供等价的 identity helper,
+            避免主题初始化抛 ReferenceError；Function 构造器可防止构建器再次改写。 */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "globalThis.__name=globalThis.__name||Function('target','return target');",
+          }}
+        />
         {/* 涨跌色偏好 · 首屏前置脚本读 cookie 设 <html data-color-pref>(无闪烁 ·
             不依赖 SSR 读 cookie,故不破坏 / 等静态页的 force-static · 0023 §7)*/}
         <script
