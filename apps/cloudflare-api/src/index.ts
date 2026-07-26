@@ -2,6 +2,7 @@ import { handleAccountRoute } from './account'
 import { handleAcademyRoute } from './academy'
 import { handleAuthRoute } from './auth'
 import { handleCryptoMarketRoute } from './crypto-market'
+import { handleEconRoute } from './econ'
 import { HttpError, jsonResponse } from './http'
 import { handleMarketRoute } from './market'
 import {
@@ -120,6 +121,7 @@ export default {
         (await handleRedeemRoute(request, env, requestId)) ??
         (await handleAcademyRoute(request, env, requestId)) ??
         (await handleCryptoMarketRoute(request, requestId)) ??
+        (await handleEconRoute(request, requestId)) ??
         (await handleOverviewRoute(request, env, requestId)) ??
         (await handleMarketHomeRoute(request, env, requestId)) ??
         (await handleMarketRoute(request, env, requestId)) ??
