@@ -3,6 +3,10 @@ import { handleAcademyRoute } from './academy'
 import { handleAuthRoute } from './auth'
 import { HttpError, jsonResponse } from './http'
 import { handleMarketRoute } from './market'
+import {
+  handleMarketHomeRoute,
+  refreshMarketBoards,
+} from './market-home'
 import { handleOverviewRoute, refreshGlobalOverview } from './overview'
 import { handleProfileRoute } from './profile'
 import { handleRedeemRoute } from './redeem'
@@ -115,6 +119,7 @@ export default {
         (await handleRedeemRoute(request, env, requestId)) ??
         (await handleAcademyRoute(request, env, requestId)) ??
         (await handleOverviewRoute(request, env, requestId)) ??
+        (await handleMarketHomeRoute(request, env, requestId)) ??
         (await handleMarketRoute(request, env, requestId)) ??
         (await routeRequest(
           request,
@@ -171,10 +176,15 @@ export default {
     }
   },
   async scheduled(
-    _controller: ScheduledController,
+    controller: ScheduledController,
     env: Env,
     ctx: ExecutionContext,
   ): Promise<void> {
-    ctx.waitUntil(refreshGlobalOverview(env))
+    const minute = new Date(controller.scheduledTime).getUTCMinutes()
+    ctx.waitUntil(
+      minute % 10 === 5
+        ? refreshMarketBoards(env)
+        : refreshGlobalOverview(env).then(() => undefined),
+    )
   },
 } satisfies ExportedHandler<Env>

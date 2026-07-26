@@ -99,8 +99,12 @@ export function HkSections() {
       {/* 市场情绪条 · ★标注主要成分股(非全市场) */}
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-serif text-sm font-bold text-foreground">市场情绪 · 主要成分股</h2>
-          <span className="text-xs text-muted-foreground/70">活跃精选 ~900 只 · 非全市场</span>
+          <h2 className="font-serif text-sm font-bold text-foreground">
+            市场情绪 · {q.data?.scope_label ?? '活跃精选池'}
+          </h2>
+          <span className="text-xs text-muted-foreground/70">
+            池内 {q.data?.pool_size ?? 0} 只 · 策展非全市场
+          </span>
         </div>
         {q.isPending && <LoadingNote className="py-6" />}
         {q.isError && <EmptyState title="暂时无法读取榜单" hint="后端不可达 · 稍后自动重试" />}
@@ -116,7 +120,7 @@ export function HkSections() {
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <h2 className="font-serif text-sm font-bold text-foreground">行业板块</h2>
             <span className="text-xs text-muted-foreground/70">
-              活跃精选 ~900 只 · 色深=涨跌幅强弱 · 悬停看领涨/家数/成交
+              活跃精选池 · 色深=涨跌幅强弱 · 悬停看领涨/家数/成交
             </span>
           </div>
           <SectorHeatmap sectors={sectors} fmtAmount={fmtAmount} />
@@ -151,7 +155,7 @@ export function HkSections() {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="搜索港股(主要成分股)"
+                placeholder="搜索港股活跃精选池"
                 className="w-44 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
               />
             </div>
@@ -201,7 +205,7 @@ export function HkSections() {
           <p className="mt-2 text-center text-[11px] text-muted-foreground/60">
             {query.trim()
               ? `命中 ${viewRows.length} 只 · 显示前 ${Math.min(BOARD_SIZE, viewRows.length)}`
-              : '榜单显示前 100 · 更多请搜索查询'}
+              : `当前活跃池 ${q.data?.pool_size ?? viewRows.length} 只 · 定时更新`}
           </p>
         </section>
       )}

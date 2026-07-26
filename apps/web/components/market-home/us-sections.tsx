@@ -140,7 +140,7 @@ export function UsSections() {
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="搜索重点关注池(策展 128 · 非全美股)"
+                placeholder="搜索重点关注池(非全美股)"
                   className="w-56 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
                 />
               </div>
@@ -191,8 +191,8 @@ export function UsSections() {
             </DataTable>
             <p className="mt-2 text-center text-[11px] text-muted-foreground/60">
               {isSearching
-                ? `命中 ${rows.length} 只 · 点击看详情`
-                : '榜单显示前 100 · 更多请搜索查询'}
+                ? `池内命中 ${rows.length} 只 · 点击看详情`
+                : `当前重点池 ${poolSize} 只 · 定时更新`}
             </p>
           </>
         )}

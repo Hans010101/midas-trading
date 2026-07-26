@@ -90,7 +90,16 @@ export function CnSections() {
     <div className="mt-8 space-y-6">
       {/* 市场情绪条 */}
       <section>
-        <h2 className="mb-3 font-serif text-sm font-bold text-foreground">市场情绪</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-serif text-sm font-bold text-foreground">
+            市场情绪 · {q.data?.scope_label ?? '重点标的池'}
+          </h2>
+          {q.data?.pool_size !== undefined && (
+            <span className="text-xs text-muted-foreground/70">
+              池内 {q.data.pool_size} 只 · 策展非全市场
+            </span>
+          )}
+        </div>
         {q.isPending && <LoadingNote className="py-6" />}
         {q.isError && <EmptyState title="暂时无法读取榜单" hint="后端不可达 · 稍后自动重试" />}
         {q.isSuccess && !breadth && (
@@ -118,7 +127,7 @@ export function CnSections() {
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             {/* 搜索态隐藏 tab(搜索是全市场,与涨跌/成交额排序无关)*/}
             {isSearching ? (
-              <span className="text-sm text-muted-foreground">全市场搜索结果</span>
+              <span className="text-sm text-muted-foreground">重点标的池搜索结果</span>
             ) : (
               <div className="flex overflow-hidden rounded-md border border-paper text-sm">
                 {TABS.map((t) => (
@@ -145,7 +154,7 @@ export function CnSections() {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="搜索 A股全市场(代码 / 名称 · ~5500)"
+                placeholder="搜索重点标的池(代码 / 名称)"
                 className="w-52 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
               />
             </div>
@@ -201,8 +210,8 @@ export function CnSections() {
           </DataTable>
           <p className="mt-2 text-center text-[11px] text-muted-foreground/60">
             {isSearching
-              ? `命中 ${rows.length} 只 · 点击看详情`
-              : '榜单显示前 100 · 更多请搜索查询'}
+              ? `池内命中 ${rows.length} 只 · 点击看详情`
+              : `当前重点池 ${q.data?.pool_size ?? rows.length} 只 · 定时更新`}
           </p>
         </section>
       )}

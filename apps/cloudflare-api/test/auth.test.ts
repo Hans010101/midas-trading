@@ -193,6 +193,72 @@ describe('cross-market data', () => {
       ],
     })
   })
+
+  it('serves independently cached stock-market home boards', async () => {
+    const quotedAt = Date.parse('2026-07-25T08:00:00.000Z')
+    const rows = [
+      {
+        symbol: '600519',
+        name: '贵州茅台',
+        market: 'cn',
+        sector: '消费',
+        last_price: 1_500,
+        prev_close: 1_470,
+        change_amount: 30,
+        change_pct: 2.0408,
+        amount: 15_000_000_000,
+        volume: 10_000_000,
+        quoted_at: quotedAt,
+      },
+      {
+        symbol: '601318',
+        name: '中国平安',
+        market: 'cn',
+        sector: '金融',
+        last_price: 58,
+        prev_close: 60,
+        change_amount: -2,
+        change_pct: -3.3333,
+        amount: 5_800_000_000,
+        volume: 100_000_000,
+        quoted_at: quotedAt,
+      },
+    ]
+    await env.DB
+      .prepare(
+        `INSERT INTO market_home_boards
+          (market, payload_json, quoted_at, updated_at)
+         VALUES ('cn', ?, ?, ?)`,
+      )
+      .bind(
+        JSON.stringify({ market: 'cn', rows, quoted_at: quotedAt }),
+        quotedAt,
+        quotedAt,
+      )
+      .run()
+
+    const board = await exports.default.fetch(
+      apiRequest('/api/v1/cn/board?limit=100'),
+    )
+    expect(board.status).toBe(200)
+    await expect(board.json()).resolves.toMatchObject({
+      pool_size: 2,
+      scope_label: '重点标的池',
+      breadth: {
+        up_count: 1,
+        down_count: 1,
+      },
+      gainers: [{ symbol: '600519' }, { symbol: '601318' }],
+      losers: [{ symbol: '601318' }, { symbol: '600519' }],
+    })
+
+    const search = await exports.default.fetch(
+      apiRequest('/api/v1/cn/search?q=茅台&limit=30'),
+    )
+    await expect(search.json()).resolves.toMatchObject([
+      { symbol: '600519', name: '贵州茅台' },
+    ])
+  })
 })
 
 describe('academy learning state', () => {

@@ -39,6 +39,8 @@ export interface CnSector {
 export interface CnBoardResponse {
   breadth: CnBreadth | null
   data_as_of: string | null
+  pool_size?: number
+  scope_label?: string
   gainers: CnSpotRow[]
   losers: CnSpotRow[]
   top_amount: CnSpotRow[]

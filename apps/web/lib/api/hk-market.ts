@@ -29,6 +29,8 @@ export interface HkBreadth {
 export interface HkBoardResponse {
   breadth: HkBreadth | null
   data_as_of: string | null
+  pool_size?: number
+  scope_label?: string
   gainers: HkSpotRow[]
   losers: HkSpotRow[]
   top_amount: HkSpotRow[]
