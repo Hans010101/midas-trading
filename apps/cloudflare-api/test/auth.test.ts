@@ -48,6 +48,49 @@ describe('password storage', () => {
   })
 })
 
+describe('global market overview', () => {
+  it('serves independently stored D1 market snapshots', async () => {
+    const quotedAt = Date.parse('2026-07-26T09:00:00.000Z')
+    await env.DB
+      .prepare(
+        `INSERT INTO market_overview_quotes
+          (symbol, market, name, category, unit, quoted_at, last_point,
+           prev_close, change_point, change_pct, source, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        '^GSPC',
+        'us',
+        '标普500',
+        'index',
+        'point',
+        quotedAt,
+        7_411.98,
+        7_408.3,
+        3.68,
+        0.05,
+        'yahoo',
+        quotedAt,
+      )
+      .run()
+
+    const response = await exports.default.fetch(
+      apiRequest('/api/v1/overview/global'),
+    )
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      as_of: '2026-07-26T09:00:00.000Z',
+      groups: [
+        {
+          category: 'index',
+          items: [{ symbol: '^GSPC', last_point: 7_411.98 }],
+        },
+      ],
+    })
+    expect(response.headers.get('cache-control')).toContain('s-maxage=300')
+  })
+})
+
 describe('email authentication lifecycle', () => {
   it('registers, verifies, logs in, reads the session, and logs out', async () => {
     const email = `worker-test-${crypto.randomUUID()}@example.com`

@@ -1,5 +1,6 @@
 import { handleAuthRoute } from './auth'
 import { HttpError, jsonResponse } from './http'
+import { handleOverviewRoute, refreshGlobalOverview } from './overview'
 import { handleProfileRoute } from './profile'
 import { handleWatchlistRoute } from './watchlist'
 
@@ -106,6 +107,7 @@ export default {
         (await handleAuthRoute(request, env, requestId)) ??
         (await handleProfileRoute(request, env, requestId)) ??
         (await handleWatchlistRoute(request, env, requestId)) ??
+        (await handleOverviewRoute(request, env, requestId)) ??
         (await routeRequest(
           request,
           {
@@ -159,5 +161,12 @@ export default {
         request.method,
       )
     }
+  },
+  async scheduled(
+    _controller: ScheduledController,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<void> {
+    ctx.waitUntil(refreshGlobalOverview(env))
   },
 } satisfies ExportedHandler<Env>
