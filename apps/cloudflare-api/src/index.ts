@@ -1,3 +1,4 @@
+import { handleAcademyRoute } from './academy'
 import { handleAuthRoute } from './auth'
 import { HttpError, jsonResponse } from './http'
 import { handleMarketRoute } from './market'
@@ -108,6 +109,7 @@ export default {
         (await handleAuthRoute(request, env, requestId)) ??
         (await handleProfileRoute(request, env, requestId)) ??
         (await handleWatchlistRoute(request, env, requestId)) ??
+        (await handleAcademyRoute(request, env, requestId)) ??
         (await handleOverviewRoute(request, env, requestId)) ??
         (await handleMarketRoute(request, env, requestId)) ??
         (await routeRequest(

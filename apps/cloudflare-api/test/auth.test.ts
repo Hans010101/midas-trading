@@ -1,6 +1,8 @@
 import { env, exports } from 'cloudflare:workers'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import examBank from '../../api/app/services/academy/exam_questions.json'
+import { sha256Hex } from '../src/crypto'
 import { hashPassword, verifyPassword } from '../src/password'
 
 function apiRequest(
@@ -26,6 +28,47 @@ function apiRequest(
 afterEach(() => {
   vi.restoreAllMocks()
 })
+
+async function createTestSession(): Promise<{
+  token: string
+  userId: string
+}> {
+  const userId = crypto.randomUUID()
+  const token = `test-session-${crypto.randomUUID()}`
+  const timestamp = Date.now()
+  await env.DB.batch([
+    env.DB
+      .prepare(
+        `INSERT INTO users
+          (id, email, google_sub, role, age_confirmed, email_verified_at,
+           created_at, updated_at)
+         VALUES (?, ?, ?, 'user', 1, ?, ?, ?)`,
+      )
+      .bind(
+        userId,
+        `${userId}@example.com`,
+        `google-${userId}`,
+        timestamp,
+        timestamp,
+        timestamp,
+      ),
+    env.DB
+      .prepare(
+        `INSERT INTO sessions
+          (id, user_id, token_hash, expires_at, last_seen_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        crypto.randomUUID(),
+        userId,
+        await sha256Hex(token),
+        timestamp + 60_000,
+        timestamp,
+        timestamp,
+      ),
+  ])
+  return { token, userId }
+}
 
 describe('password storage', () => {
   it('hashes with scrypt and verifies in constant time', async () => {
@@ -149,6 +192,116 @@ describe('cross-market data', () => {
         },
       ],
     })
+  })
+})
+
+describe('academy learning state', () => {
+  it('stores progress, grades server-side, and awards each stage once', async () => {
+    const { token, userId } = await createTestSession()
+
+    const guestProgress = await exports.default.fetch(
+      apiRequest('/api/v1/academy/progress'),
+    )
+    expect(guestProgress.status).toBe(200)
+    await expect(guestProgress.json()).resolves.toMatchObject({
+      completed_slugs: [],
+      total_articles: 118,
+    })
+
+    const complete = await exports.default.fetch(
+      apiRequest('/api/v1/academy/progress/complete', {
+        method: 'POST',
+        token,
+        body: { article_slug: 'A2' },
+      }),
+    )
+    expect(complete.status).toBe(200)
+    await expect(complete.json()).resolves.toMatchObject({
+      article_slug: 'A2',
+      stage: 'basics',
+      newly_completed: true,
+    })
+
+    const completeAgain = await exports.default.fetch(
+      apiRequest('/api/v1/academy/progress/complete', {
+        method: 'POST',
+        token,
+        body: { article_slug: 'A2' },
+      }),
+    )
+    await expect(completeAgain.json()).resolves.toMatchObject({
+      newly_completed: false,
+    })
+
+    const questions = await exports.default.fetch(
+      apiRequest('/api/v1/academy/exam?stage=basics'),
+    )
+    expect(questions.status).toBe(200)
+    const publicQuestions = (await questions.json()) as {
+      questions: Array<Record<string, unknown>>
+      total: number
+    }
+    expect(publicQuestions.total).toBe(examBank.basics.length)
+    expect(publicQuestions.questions[0]).not.toHaveProperty('answerIndex')
+    expect(publicQuestions.questions[0]).not.toHaveProperty('correct_answer')
+
+    const answers = examBank.basics.map((question) => question.answerIndex)
+    const firstPass = await exports.default.fetch(
+      apiRequest('/api/v1/academy/exam/submit', {
+        method: 'POST',
+        token,
+        body: { stage: 'basics', answers },
+      }),
+    )
+    expect(firstPass.status).toBe(200)
+    await expect(firstPass.json()).resolves.toMatchObject({
+      stage: 'basics',
+      score: examBank.basics.length,
+      passed: true,
+      membership_awarded: true,
+    })
+
+    const secondPass = await exports.default.fetch(
+      apiRequest('/api/v1/academy/exam/submit', {
+        method: 'POST',
+        token,
+        body: { stage: 'basics', answers },
+      }),
+    )
+    await expect(secondPass.json()).resolves.toMatchObject({
+      passed: true,
+      membership_awarded: false,
+      new_expires_at: null,
+    })
+
+    const status = await exports.default.fetch(
+      apiRequest('/api/v1/academy/exam/results', { token }),
+    )
+    await expect(status.json()).resolves.toEqual({
+      results: [
+        {
+          stage: 'basics',
+          passed: true,
+          best_score: examBank.basics.length,
+          total: examBank.basics.length,
+          attempts: 2,
+        },
+      ],
+    })
+
+    const stored = await env.DB
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM academy_exam_awards
+             WHERE user_id = ?) AS awards,
+           subscription_expires_at
+         FROM users
+         WHERE id = ?`,
+      )
+      .bind(userId, userId)
+      .first<{ awards: number; subscription_expires_at: number | null }>()
+    expect(stored?.awards).toBe(1)
+    expect(stored?.subscription_expires_at).toBeGreaterThan(Date.now())
   })
 })
 
