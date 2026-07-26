@@ -100,6 +100,8 @@ coverage/
 # Cloudflare Workers / OpenNext 本地构建产物
 apps/web/.open-next/
 apps/web/.wrangler/
+apps/cloudflare-api/.wrangler/
+apps/cloudflare-api/.dev.vars
 
 # =====================
 # 数据库 / 数据卷

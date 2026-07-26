@@ -1,0 +1,33 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "midas-trading-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-26",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "ENVIRONMENT": "production",
+    "PROJECT_NAME": "midas-trading",
+    "API_VERSION": "v1",
+    "PUBLIC_WEB_URL": "https://midas-trading.hans-pan007.workers.dev",
+    "EMAIL_FROM": "Midas Trading <noreply@midastrade.asia>",
+    "GOOGLE_CLIENT_ID": "85423363850-6ot32sau6gffb9k4mgj9ish8bo6el8gu.apps.googleusercontent.com"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "midas-trading-db",
+      "database_id": "46969153-ff86-4cf1-b013-617d280d3536",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.05
+    }
+  }
+}

@@ -1,0 +1,159 @@
+import { handleAuthRoute } from './auth'
+import { HttpError, jsonResponse } from './http'
+
+async function databaseReady(db: D1Database): Promise<boolean> {
+  const row = await db.prepare('SELECT 1 AS ok').first<{ ok: number }>()
+  return row?.ok === 1
+}
+
+export async function routeRequest(
+  request: Request,
+  config: Readonly<{
+    environment: string
+    projectName: string
+    apiVersion: string
+  }>,
+  requestId: string,
+  now: string,
+  db?: D1Database,
+): Promise<Response> {
+  const url = new URL(request.url)
+
+  if (url.pathname === '/' && (request.method === 'GET' || request.method === 'HEAD')) {
+    return jsonResponse(
+      {
+        name: `${config.projectName}-api`,
+        version: config.apiVersion,
+        runtime: 'cloudflare-workers',
+      },
+      200,
+      requestId,
+      request.method,
+    )
+  }
+
+  if (
+    (url.pathname === '/health' || url.pathname === '/api/v1/health') &&
+    (request.method === 'GET' || request.method === 'HEAD')
+  ) {
+    return jsonResponse(
+      {
+        status: 'ok',
+        project: config.projectName,
+        environment: config.environment,
+        runtime: 'cloudflare-workers',
+        independent: true,
+        timestamp: now,
+      },
+      200,
+      requestId,
+      request.method,
+    )
+  }
+
+  if (
+    (url.pathname === '/ready' || url.pathname === '/api/v1/ready') &&
+    (request.method === 'GET' || request.method === 'HEAD')
+  ) {
+    const ready = db ? await databaseReady(db) : false
+    return jsonResponse(
+      {
+        status: ready ? 'ok' : 'unavailable',
+        database: ready ? 'ok' : 'unavailable',
+      },
+      ready ? 200 : 503,
+      requestId,
+      request.method,
+    )
+  }
+
+  if (url.pathname === '/health' || url.pathname === '/api/v1/health') {
+    return jsonResponse(
+      {
+        error: {
+          code: 'method_not_allowed',
+          message: 'Method not allowed',
+        },
+      },
+      405,
+      requestId,
+      request.method,
+    )
+  }
+
+  return jsonResponse(
+    {
+      error: {
+        code: 'not_found',
+        message: 'Route not found',
+      },
+    },
+    404,
+    requestId,
+    request.method,
+  )
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const requestId = request.headers.get('cf-ray') ?? crypto.randomUUID()
+    const startedAt = Date.now()
+
+    try {
+      const response =
+        (await handleAuthRoute(request, env, requestId)) ??
+        (await routeRequest(
+          request,
+          {
+            environment: env.ENVIRONMENT,
+            projectName: env.PROJECT_NAME,
+            apiVersion: env.API_VERSION,
+          },
+          requestId,
+          new Date().toISOString(),
+          env.DB,
+        ))
+
+      console.log(
+        JSON.stringify({
+          event: 'request.complete',
+          requestId,
+          method: request.method,
+          path: new URL(request.url).pathname,
+          status: response.status,
+          durationMs: Date.now() - startedAt,
+        }),
+      )
+      return response
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: 'request.failed',
+          requestId,
+          method: request.method,
+          path: new URL(request.url).pathname,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      )
+      if (error instanceof HttpError) {
+        return jsonResponse(
+          { detail: error.detail },
+          error.status,
+          requestId,
+          request.method,
+        )
+      }
+      return jsonResponse(
+        {
+          error: {
+            code: 'internal_error',
+            message: 'Internal server error',
+          },
+        },
+        500,
+        requestId,
+        request.method,
+      )
+    }
+  },
+} satisfies ExportedHandler<Env>
