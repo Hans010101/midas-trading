@@ -37,6 +37,7 @@ jobs:
   # job 1 · build+push 三镜像到 ACR(在 Actions runner·内存充足·build 物理离开 VPS)
   # ══════════════════════════════════════════════════════════════════════════
   build-push:
+    if: github.repository == 'Hans010101/midas'
     name: build+push ${{ matrix.service }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -89,6 +90,7 @@ jobs:
   # job 2 · SSH VPS · pull 已 build 好的镜像 + recreate(VPS 零构建负载)
   # ══════════════════════════════════════════════════════════════════════════
   deploy:
+    if: github.repository == 'Hans010101/midas'
     name: SSH 部署（pull 模式）+ 健康检查
     needs: build-push # ★三镜像 build+push 全成功才部署;任一失败 → 此 job 不跑 → 生产不动
     runs-on: ubuntu-latest
