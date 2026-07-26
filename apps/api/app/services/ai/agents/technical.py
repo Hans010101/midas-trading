@@ -77,13 +77,17 @@ def _format_snapshot(snapshot: TechnicalSnapshot) -> str:
         "## MA 均线",
         f"  MA5={snapshot.ma[5]:.4f}  MA20={snapshot.ma[20]:.4f}  MA60={snapshot.ma[60]:.4f}",
         "## MACD(12,26,9)",
-        f"  DIF={snapshot.macd['dif']:.4f}  DEA={snapshot.macd['dea']:.4f}  "
-        f"MACD={snapshot.macd['macd']:.4f}",
+        (
+            f"  DIF={snapshot.macd['dif']:.4f}  DEA={snapshot.macd['dea']:.4f}  "
+            f"MACD={snapshot.macd['macd']:.4f}"
+        ),
         "## RSI",
         f"  RSI14={snapshot.rsi.get(14, 0):.2f}",
         "## 布林带(20, 2σ)",
-        f"  上轨={snapshot.boll['upper']:.4f}  中轨={snapshot.boll['mid']:.4f}"
-        f"  下轨={snapshot.boll['lower']:.4f}",
+        (
+            f"  上轨={snapshot.boll['upper']:.4f}  中轨={snapshot.boll['mid']:.4f}"
+            f"  下轨={snapshot.boll['lower']:.4f}"
+        ),
         "",
         "## 缠论结构摘要",
         f"  笔数量:{snapshot.chan_bi_count}",
@@ -116,13 +120,17 @@ def _format_snapshot_en(snapshot: TechnicalSnapshot) -> str:
         "## MA",
         f"  MA5={snapshot.ma[5]:.4f}  MA20={snapshot.ma[20]:.4f}  MA60={snapshot.ma[60]:.4f}",
         "## MACD(12,26,9)",
-        f"  DIF={snapshot.macd['dif']:.4f}  DEA={snapshot.macd['dea']:.4f}  "
-        f"MACD={snapshot.macd['macd']:.4f}",
+        (
+            f"  DIF={snapshot.macd['dif']:.4f}  DEA={snapshot.macd['dea']:.4f}  "
+            f"MACD={snapshot.macd['macd']:.4f}"
+        ),
         "## RSI",
         f"  RSI14={snapshot.rsi.get(14, 0):.2f}",
         "## Bollinger Bands (20, 2σ)",
-        f"  upper={snapshot.boll['upper']:.4f}  mid={snapshot.boll['mid']:.4f}"
-        f"  lower={snapshot.boll['lower']:.4f}",
+        (
+            f"  upper={snapshot.boll['upper']:.4f}  mid={snapshot.boll['mid']:.4f}"
+            f"  lower={snapshot.boll['lower']:.4f}"
+        ),
         "",
         "## Chan Theory structure",
         f"  Stroke count: {snapshot.chan_bi_count}",
