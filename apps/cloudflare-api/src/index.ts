@@ -12,6 +12,7 @@ import {
 import { handleOverviewRoute, refreshGlobalOverview } from './overview'
 import { handleProfileRoute } from './profile'
 import { handleRedeemRoute } from './redeem'
+import { handleScreenerRoute } from './screener'
 import { handleWatchlistRoute } from './watchlist'
 
 async function databaseReady(db: D1Database): Promise<boolean> {
@@ -125,6 +126,7 @@ export default {
         (await handleOverviewRoute(request, env, requestId)) ??
         (await handleMarketHomeRoute(request, env, requestId)) ??
         (await handleMarketRoute(request, env, requestId)) ??
+        (await handleScreenerRoute(request, env, requestId)) ??
         (await routeRequest(
           request,
           {
