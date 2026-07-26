@@ -1,3 +1,4 @@
+import { handleAccountRoute } from './account'
 import { handleAcademyRoute } from './academy'
 import { handleAuthRoute } from './auth'
 import { HttpError, jsonResponse } from './http'
@@ -107,6 +108,7 @@ export default {
     try {
       const response =
         (await handleAuthRoute(request, env, requestId)) ??
+        (await handleAccountRoute(request, env, requestId)) ??
         (await handleProfileRoute(request, env, requestId)) ??
         (await handleWatchlistRoute(request, env, requestId)) ??
         (await handleAcademyRoute(request, env, requestId)) ??

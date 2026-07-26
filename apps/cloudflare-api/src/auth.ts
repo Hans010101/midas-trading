@@ -2,6 +2,10 @@ import { base64UrlEncode, hmacSha256, randomToken, sha256Hex } from './crypto'
 import { sendVerificationEmail } from './email'
 import { verifyGoogleIdToken } from './google'
 import {
+  activateVerifiedGrowth,
+  attributeInviteStatement,
+} from './growth'
+import {
   HttpError,
   bearerToken,
   jsonResponse,
@@ -244,38 +248,46 @@ async function register(
   const token = randomToken(48)
   const tokenHash = await sha256Hex(token)
   const ipHash = await requestIpHash(request, env.PASSWORD_PEPPER)
+  const registrationStatements = [
+    env.DB
+      .prepare(
+        `INSERT INTO users
+          (id, email, password_hash, role, age_confirmed, created_at, updated_at)
+         VALUES (?, ?, ?, 'user', 1, ?, ?)`,
+      )
+      .bind(userId, email, passwordHash, timestamp, timestamp),
+    env.DB
+      .prepare(
+        `INSERT INTO verification_tokens
+          (id, user_id, token_hash, purpose, expires_at, created_at)
+         VALUES (?, ?, ?, 'verify_email', ?, ?)`,
+      )
+      .bind(
+        crypto.randomUUID(),
+        userId,
+        tokenHash,
+        timestamp + VERIFICATION_TTL_MS,
+        timestamp,
+      ),
+    authEventStatement(env.DB, {
+      userId,
+      eventType: 'auth.registered',
+      requestId,
+      ipHash,
+      userAgent: userAgent(request),
+      createdAt: timestamp,
+    }),
+  ]
+  const inviteAttribution = attributeInviteStatement(
+    env.DB,
+    userId,
+    body.ref,
+    timestamp,
+  )
+  if (inviteAttribution) registrationStatements.push(inviteAttribution)
 
   try {
-    await env.DB.batch([
-      env.DB
-        .prepare(
-          `INSERT INTO users
-            (id, email, password_hash, role, age_confirmed, created_at, updated_at)
-           VALUES (?, ?, ?, 'user', 1, ?, ?)`,
-        )
-        .bind(userId, email, passwordHash, timestamp, timestamp),
-      env.DB
-        .prepare(
-          `INSERT INTO verification_tokens
-            (id, user_id, token_hash, purpose, expires_at, created_at)
-           VALUES (?, ?, ?, 'verify_email', ?, ?)`,
-        )
-        .bind(
-          crypto.randomUUID(),
-          userId,
-          tokenHash,
-          timestamp + VERIFICATION_TTL_MS,
-          timestamp,
-        ),
-      authEventStatement(env.DB, {
-        userId,
-        eventType: 'auth.registered',
-        requestId,
-        ipHash,
-        userAgent: userAgent(request),
-        createdAt: timestamp,
-      }),
-    ])
+    await env.DB.batch(registrationStatements)
   } catch (error) {
     if (
       error instanceof Error &&
@@ -437,12 +449,30 @@ async function verifyEmail(
     createdAt: timestamp,
   }).run()
 
+  let growth = { trialGranted: false, inviteRewarded: false }
+  try {
+    growth = await activateVerifiedGrowth(
+      env.DB,
+      consumed.user_id,
+      timestamp,
+    )
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: 'growth.activation_failed',
+        requestId,
+        userId: consumed.user_id,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+  }
+
   return jsonResponse(
     {
       verified: true,
       email: user.email,
-      trial_granted: false,
-      invite_rewarded: false,
+      trial_granted: growth.trialGranted,
+      invite_rewarded: growth.inviteRewarded,
     },
     200,
     requestId,
@@ -520,7 +550,7 @@ async function googleOauth(
     min: 10,
     max: 10_000,
   })
-  optionalString(body, 'ref', 12)
+  const ref = optionalString(body, 'ref', 12)
   const identity = await verifyGoogleIdToken(idToken, env.GOOGLE_CLIENT_ID)
   const email = normalizeEmail(identity.email)
   const timestamp = nowMs()
@@ -535,6 +565,7 @@ async function googleOauth(
     .bind(identity.subject)
     .first<UserRow>()
   let isNewUser = false
+  let growth = { trialGranted: false, inviteRewarded: false }
 
   if (!user) {
     const emailUser = await findUserByEmail(env.DB, email)
@@ -599,6 +630,25 @@ async function googleOauth(
         email_verified_at: timestamp,
       }
       isNewUser = true
+      const inviteAttribution = attributeInviteStatement(
+        env.DB,
+        userId,
+        ref,
+        timestamp,
+      )
+      if (inviteAttribution) await inviteAttribution.run()
+      try {
+        growth = await activateVerifiedGrowth(env.DB, userId, timestamp)
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            event: 'growth.activation_failed',
+            requestId,
+            userId,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        )
+      }
     }
   }
 
@@ -617,8 +667,8 @@ async function googleOauth(
       email: user.email,
       role: user.role,
       is_new_user: isNewUser,
-      trial_granted: false,
-      invite_rewarded: false,
+      trial_granted: growth.trialGranted,
+      invite_rewarded: growth.inviteRewarded,
     },
     200,
     requestId,

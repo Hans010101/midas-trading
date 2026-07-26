@@ -305,6 +305,106 @@ describe('academy learning state', () => {
   })
 })
 
+describe('independent membership growth', () => {
+  it('attributes an invite, grants trial plus rewards, and reports quota', async () => {
+    const inviter = await createTestSession()
+    const inviteResponse = await exports.default.fetch(
+      apiRequest('/api/v1/invite/me', { token: inviter.token }),
+    )
+    expect(inviteResponse.status).toBe(200)
+    const invite = (await inviteResponse.json()) as {
+      code: string
+      invite_url: string
+    }
+    expect(invite.code).toMatch(/^[0-9A-HJKMNP-TV-Z]{8}$/u)
+    expect(invite.invite_url).toContain(`/register?ref=${invite.code}`)
+
+    const beforeReward = await exports.default.fetch(
+      apiRequest('/api/v1/quota/me', { token: inviter.token }),
+    )
+    await expect(beforeReward.json()).resolves.toMatchObject({
+      plan: 'free',
+      items: [
+        { feature: 'diagnose', limit: 5, used: 0 },
+        { feature: 'backtest', limit: 3, used: 0 },
+      ],
+    })
+
+    const email = `invitee-${crypto.randomUUID()}@example.com`
+    const password = 'Independent-Invite-Password-2026'
+    const resendFetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        Response.json({ id: crypto.randomUUID() }, { status: 200 }),
+      )
+    const registerResponse = await exports.default.fetch(
+      apiRequest('/api/v1/auth/register', {
+        method: 'POST',
+        body: {
+          email,
+          password,
+          age_confirmed: true,
+          ref: invite.code,
+        },
+      }),
+    )
+    expect(registerResponse.status).toBe(201)
+    const emailPayload = JSON.parse(
+      String(resendFetch.mock.calls[0]?.[1]?.body),
+    ) as { html: string }
+    const verificationToken =
+      /token=([^"&<\s]+)/u.exec(emailPayload.html)?.[1]
+    expect(verificationToken).toBeTruthy()
+
+    const verifyResponse = await exports.default.fetch(
+      apiRequest('/api/v1/auth/verify', {
+        method: 'POST',
+        body: {
+          token: decodeURIComponent(verificationToken ?? ''),
+        },
+      }),
+    )
+    expect(verifyResponse.status).toBe(200)
+    await expect(verifyResponse.json()).resolves.toMatchObject({
+      trial_granted: true,
+      invite_rewarded: true,
+    })
+
+    const loginResponse = await exports.default.fetch(
+      apiRequest('/api/v1/auth/login', {
+        method: 'POST',
+        body: { email, password },
+      }),
+    )
+    const login = (await loginResponse.json()) as { access_token: string }
+    const inviteeQuota = await exports.default.fetch(
+      apiRequest('/api/v1/quota/me', { token: login.access_token }),
+    )
+    await expect(inviteeQuota.json()).resolves.toMatchObject({
+      plan: 'pro',
+      items: [
+        { feature: 'diagnose', limit: 300 },
+        { feature: 'backtest', limit: 150 },
+      ],
+    })
+
+    const inviterStats = await exports.default.fetch(
+      apiRequest('/api/v1/invite/me', { token: inviter.token }),
+    )
+    await expect(inviterStats.json()).resolves.toMatchObject({
+      invited_count: 1,
+      rewarded_count: 1,
+      earned_days: 15,
+    })
+    const inviterQuota = await exports.default.fetch(
+      apiRequest('/api/v1/quota/me', { token: inviter.token }),
+    )
+    await expect(inviterQuota.json()).resolves.toMatchObject({
+      plan: 'pro',
+    })
+  })
+})
+
 describe('email authentication lifecycle', () => {
   it('registers, verifies, logs in, reads the session, and logs out', async () => {
     const email = `worker-test-${crypto.randomUUID()}@example.com`
