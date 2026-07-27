@@ -91,6 +91,65 @@ describe('password storage', () => {
   })
 })
 
+describe('independent alerts and notification settings', () => {
+  it('stores notification settings and alert rules in D1 per user', async () => {
+    const { token } = await createTestSession()
+    const update = await exports.default.fetch(
+      apiRequest('/api/v1/notifications/config', {
+        method: 'PUT',
+        token,
+        body: {
+          price_alert_enabled: false,
+          quiet_hours_enabled: true,
+          quiet_hours_start: 22,
+          quiet_hours_end: 8,
+          quiet_hours_tz: 'Asia/Singapore',
+        },
+      }),
+    )
+    expect(update.status).toBe(200)
+    await expect(update.json()).resolves.toMatchObject({
+      price_alert_enabled: false,
+      quiet_hours_enabled: true,
+      quiet_hours_start: 22,
+      quiet_hours_end: 8,
+      quiet_hours_tz: 'Asia/Singapore',
+      has_telegram: false,
+      has_feishu: false,
+    })
+
+    const created = await exports.default.fetch(
+      apiRequest('/api/v1/alert-rules', {
+        method: 'POST',
+        token,
+        body: {
+          market: 'us',
+          symbol: 'NVDA',
+          indicator: 'rsi_14',
+          operator: 'gt',
+          threshold: 75,
+          timeframe: '1d',
+        },
+      }),
+    )
+    expect(created.status).toBe(201)
+    await expect(created.json()).resolves.toMatchObject({
+      market: 'us',
+      symbol: 'NVDA',
+      indicator: 'rsi_14',
+      threshold: '75',
+      enabled: true,
+    })
+
+    const listed = await exports.default.fetch(
+      apiRequest('/api/v1/alert-rules', { token }),
+    )
+    expect(listed.status).toBe(200)
+    const rules = (await listed.json()) as unknown[]
+    expect(rules).toHaveLength(1)
+  })
+})
+
 describe('global market overview', () => {
   it('serves independently stored D1 market snapshots', async () => {
     const quotedAt = Date.parse('2026-07-26T09:00:00.000Z')

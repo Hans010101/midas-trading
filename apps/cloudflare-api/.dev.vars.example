@@ -1,2 +1,8 @@
 RESEND_API_KEY=local-resend-placeholder
 PASSWORD_PEPPER=local-password-pepper-placeholder
+TELEGRAM_BOT_TOKEN=local-telegram-token-placeholder
+TELEGRAM_BOT_USERNAME=local_telegram_bot
+TELEGRAM_WEBHOOK_SECRET=local-telegram-webhook-secret
+FEISHU_APP_ID=cli_local_placeholder
+FEISHU_APP_SECRET=local-feishu-secret-placeholder
+FEISHU_VERIFICATION_TOKEN=local-feishu-verification-placeholder

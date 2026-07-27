@@ -1,10 +1,12 @@
 import { handleAccountRoute } from './account'
 import { handleAcademyRoute } from './academy'
+import { handleAlertRulesRoute } from './alert-rules'
 import { handleAuthRoute } from './auth'
 import { handleCryptoMarketRoute } from './crypto-market'
 import { handleEconRoute } from './econ'
 import { HttpError, jsonResponse } from './http'
 import { handleMarketRoute } from './market'
+import { handleNotificationRoute } from './notifications'
 import {
   handleMarketHomeRoute,
   refreshMarketBoards,
@@ -117,6 +119,8 @@ export default {
       const response =
         (await handleAuthRoute(request, env, requestId)) ??
         (await handleAccountRoute(request, env, requestId)) ??
+        (await handleAlertRulesRoute(request, env, requestId)) ??
+        (await handleNotificationRoute(request, env, requestId)) ??
         (await handleProfileRoute(request, env, requestId)) ??
         (await handleWatchlistRoute(request, env, requestId)) ??
         (await handleRedeemRoute(request, env, requestId)) ??
