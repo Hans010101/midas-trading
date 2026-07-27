@@ -1,0 +1,165 @@
+name: Midas Trading · Cloudflare CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/cloudflare-api/**'
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - '.github/workflows/cloudflare.yml'
+  pull_request:
+    paths:
+      - 'apps/cloudflare-api/**'
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - '.github/workflows/cloudflare.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: midas-trading-cloudflare-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TURBO_TELEMETRY_DISABLED: '1'
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+jobs:
+  verify:
+    name: 验证 · lint + type-check + test + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: 安装锁定依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type check
+        run: pnpm type-check
+
+      - name: Tests
+        run: pnpm test
+
+      - name: Production build
+        run: pnpm build
+
+  deploy-api:
+    name: 部署 · D1 migrations + API Worker
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: 安装锁定依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 应用远端 D1 migrations
+        run: pnpm --filter @midas-trading/cloudflare-api exec wrangler d1 migrations apply midas-trading-db --remote
+
+      - name: 部署 API Worker
+        run: pnpm --filter @midas-trading/cloudflare-api exec wrangler deploy --message "${GITHUB_SHA}"
+
+  deploy-web:
+    name: 部署 · Web Worker
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: deploy-api
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: 安装锁定依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 构建并部署 Web Worker
+        run: pnpm --filter @midas/web deploy:cloudflare
+
+  smoke:
+    name: 验收 · Cloudflare 生产健康检查
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: deploy-web
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 检查 API 与 Web
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          check_200() {
+            local url="$1"
+            local label="$2"
+            local code
+            local attempt
+
+            for attempt in 1 2 3 4 5; do
+              code="$(curl --silent --show-error --location \
+                --output /dev/null --write-out '%{http_code}' \
+                --max-time 30 "$url" || true)"
+              if [ "$code" = "200" ]; then
+                echo "✓ ${label}: HTTP 200（第 ${attempt} 次）"
+                return 0
+              fi
+              echo "${label}: HTTP ${code}（第 ${attempt}/5 次）"
+              sleep 5
+            done
+
+            echo "✗ ${label}: 健康检查失败"
+            return 1
+          }
+
+          check_200 "https://midas-trading-api.openclaw007.online/health" "API custom domain"
+          check_200 "https://midas-trading-api.hans-pan007.workers.dev/health" "API workers.dev"
+          check_200 "https://midas-trading.hans-pan007.workers.dev/" "Web workers.dev"
