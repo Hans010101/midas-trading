@@ -47,7 +47,7 @@ export function PosterMinimal({ inviter, code, qrUrl }: PosterProps) {
         <div className="m-serif" style={{ fontSize: 27, fontWeight: 600 }}>
           <span style={{ color: B.red }}>{inviter}</span> 邀请你一起 · 各得 15 天 Pro
         </div>
-        <div className="m-sans" style={{ marginTop: 14, fontSize: 14, color: B.inkFaint, letterSpacing: '.18em' }}>midastrade.asia</div>
+        <div className="m-sans" style={{ marginTop: 14, fontSize: 14, color: B.inkFaint, letterSpacing: '.18em' }}>MIDAS TRADING · CLOUDFLARE</div>
       </div>
     </div>
   )

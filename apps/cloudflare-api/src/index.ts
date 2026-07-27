@@ -2,6 +2,7 @@ import { handleAccountRoute } from './account'
 import { handleAcademyRoute } from './academy'
 import { handleAlertRulesRoute } from './alert-rules'
 import { handleAuthRoute } from './auth'
+import { handleBotPresetRoute } from './bot-preset'
 import { handleCryptoMarketRoute } from './crypto-market'
 import { handleEconRoute } from './econ'
 import { HttpError, jsonResponse } from './http'
@@ -15,6 +16,7 @@ import { handleOverviewRoute, refreshGlobalOverview } from './overview'
 import { handleProfileRoute } from './profile'
 import { handleRedeemRoute } from './redeem'
 import { handleScreenerRoute } from './screener'
+import { handleSupportRoute } from './support'
 import { handleWatchlistRoute } from './watchlist'
 
 async function databaseReady(db: D1Database): Promise<boolean> {
@@ -118,6 +120,7 @@ export default {
     try {
       const response =
         (await handleAuthRoute(request, env, requestId)) ??
+        (await handleBotPresetRoute(request, env, requestId)) ??
         (await handleAccountRoute(request, env, requestId)) ??
         (await handleAlertRulesRoute(request, env, requestId)) ??
         (await handleNotificationRoute(request, env, requestId)) ??
@@ -131,6 +134,7 @@ export default {
         (await handleMarketHomeRoute(request, env, requestId)) ??
         (await handleMarketRoute(request, env, requestId)) ??
         (await handleScreenerRoute(request, env, requestId)) ??
+        (await handleSupportRoute(request, env, requestId)) ??
         (await routeRequest(
           request,
           {

@@ -16,7 +16,8 @@ export default function RefundPage() {
   return (
     <LegalPage title="退款政策">
       <LegalP>
-        本退款政策适用于点金 Midas(midastrade.asia)Pro 会员订阅的退款申请。购买前请阅读本政策;完成订阅即视为您已知悉并接受本政策。
+        本退款政策适用于 Midas Trading Pro
+        会员订阅的退款申请。购买前请阅读本政策;完成订阅即视为您已知悉并接受本政策。
       </LegalP>
 
       <LegalH2>一、冷静期无理由退款</LegalH2>
@@ -43,7 +44,7 @@ export default function RefundPage() {
 
       <LegalH2>五、申请方式</LegalH2>
       <LegalP>
-        5.1 请发送邮件至 support@midastrade.asia,并附订单号与退款原因。
+        5.1 请登录后通过页脚“联系客服”提交工单,并附订单号与退款原因。
       </LegalP>
       <LegalP>5.2 我们将在收到申请后 5 个工作日内响应,并告知处理结果。</LegalP>
 

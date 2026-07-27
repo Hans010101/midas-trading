@@ -2,6 +2,7 @@ import type { MetadataRoute } from 'next'
 
 import { ACADEMY_ARTICLES, ACADEMY_STAGES } from '@/content/academy/manifest'
 import { DETAIL_MARKETS, DETAIL_SYMBOLS } from '@/lib/seo/detail-symbols'
+import { PRODUCTION_WEB_URL } from '@/lib/site'
 
 /**
  * sitemap.xml(SEO 批1 · docs/seo/2026-07-seo-geo-audit.md)。
@@ -16,7 +17,7 @@ import { DETAIL_MARKETS, DETAIL_SYMBOLS } from '@/lib/seo/detail-symbols'
  * lastModified 不填(无可靠日期源 · D7 git 回填是批3 的事 · 宁缺毋假)。
  */
 
-const BASE = 'https://midastrade.asia'
+const BASE = PRODUCTION_WEB_URL
 
 // 公开静态页(路径 · 相对权重)——与 app/ 目录实际路由对齐
 const STATIC_PAGES: Array<[path: string, priority: number]> = [

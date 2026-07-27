@@ -1,8 +1,8 @@
 {
-  "name": "midas",
+  "name": "midas-trading",
   "version": "0.1.0",
   "private": true,
-  "description": "点金 Midas · AI 原生跨市场分析终端 (monorepo root)",
+  "description": "Midas Trading · 独立运行于 Cloudflare 的 AI 原生跨市场分析终端",
   "packageManager": "pnpm@10.32.1",
   "engines": {
     "node": ">=20",
@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
+    "check:boundary": "node scripts/check-cloudflare-boundary.mjs",
     "lint": "turbo run lint",
     "type-check": "turbo run type-check",
     "test": "turbo run test",

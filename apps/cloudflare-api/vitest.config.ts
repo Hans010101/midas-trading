@@ -21,6 +21,7 @@ export default defineConfig({
             path.join(projectDir, 'migrations'),
           ),
           RESEND_API_KEY: 'test-resend-key',
+          SUPPORT_EMAIL_TO: 'support@example.test',
           PASSWORD_PEPPER: 'test-password-pepper-with-sufficient-entropy',
         },
       },

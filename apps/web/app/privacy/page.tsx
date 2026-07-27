@@ -15,7 +15,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage title="隐私政策">
       <LegalP>
-        点金 Midas(以下简称“本平台”,midastrade.asia)重视您的隐私。本隐私政策说明我们收集哪些信息、如何使用这些信息,以及您对自己信息所享有的权利。
+        Midas Trading(以下简称“本平台”)重视您的隐私。本隐私政策说明我们收集哪些信息、如何使用这些信息,以及您对自己信息所享有的权利。
       </LegalP>
       <LegalP>您使用本平台即表示您理解并同意本隐私政策所述的信息处理方式。</LegalP>
 
@@ -74,7 +74,10 @@ export default function PrivacyPage() {
       <LegalP>
         4.1 我们采取合理的技术与管理措施保护您的信息安全,包括密码加密存储、访问控制等。
       </LegalP>
-      <LegalP>4.2 您的数据存储于阿里云香港的服务器。</LegalP>
+      <LegalP>
+        4.2 您的账户、偏好、提醒与站内通知等数据存储于本项目独立的 Cloudflare D1
+        数据库,不与其他 Midas 项目共用数据库。
+      </LegalP>
       <LegalP>
         4.3 请注意:没有任何互联网传输或存储方式是绝对安全的。我们尽力保护您的信息,但无法保证绝对的安全性。请妥善保管您的账户凭证。
       </LegalP>

@@ -15,7 +15,8 @@ export default function TermsPage() {
   return (
     <LegalPage title="服务条款">
       <LegalP>
-        欢迎使用点金 Midas(以下简称“本平台”,midastrade.asia)。本服务条款(以下简称“本条款”)是您与本平台运营方之间就使用本平台服务所订立的协议。
+        欢迎使用 Midas
+        Trading(以下简称“本平台”)。本服务条款(以下简称“本条款”)是您与本平台运营方之间就使用本平台服务所订立的协议。
       </LegalP>
       <LegalP>
         您注册、访问或使用本平台,即表示您已阅读、理解并同意接受本条款的全部内容。如您不同意,请勿使用本平台。

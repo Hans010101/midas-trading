@@ -13,7 +13,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { BRAND } from '@/components/poster/brand'
 
 interface PosterQRProps {
-  /** 邀请链接 https://midastrade.asia/register?ref=CODE */
+  /** Midas Trading Cloudflare 生产站邀请链接 */
   url: string
   size?: number
   /** 模块色(对齐 Design 占位的 dark 参数:多为 BRAND.ink,dark 版用底色) */

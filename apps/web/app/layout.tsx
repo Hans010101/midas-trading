@@ -8,6 +8,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { QueryProvider } from '@/lib/providers/query-provider'
 import { SessionProvider } from '@/lib/providers/session-provider'
+import { PRODUCTION_WEB_URL } from '@/lib/site'
 import { ThemeProvider } from '@/lib/providers/theme-provider'
 import { UiStoreProvider } from '@/lib/store/ui-store-provider'
 
@@ -49,7 +50,7 @@ const jetbrainsMono = localFont({
 // 官网刀1:description 重写(加密打头 · 平等措辞 · 补港股 + 沙盘/回测关键词)
 // + openGraph / twitter 卡(分享到 TG / X 出预览图)
 export const metadata: Metadata = {
-  metadataBase: new URL('https://midastrade.asia'),
+  metadataBase: new URL(PRODUCTION_WEB_URL),
   // SEO 批1:title 模板 —— 子页只写短 title,'%s · 点金 Midas' 统一品牌后缀(防手写漂移);
   // 未定义 title 的页面用 default(现状不变)。
   title: {

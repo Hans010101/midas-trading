@@ -15,7 +15,8 @@ export default function RiskPage() {
   return (
     <LegalPage title="风险提示">
       <LegalP>
-        请在使用点金 Midas(以下简称“本平台”,midastrade.asia)前,仔细阅读并充分理解本风险提示。您使用本平台即表示您已阅读、理解并接受本风险提示的全部内容。
+        请在使用 Midas
+        Trading(以下简称“本平台”)前,仔细阅读并充分理解本风险提示。您使用本平台即表示您已阅读、理解并接受本风险提示的全部内容。
       </LegalP>
 
       <LegalH2>一、本平台的性质:全程虚拟,不涉及真实交易</LegalH2>

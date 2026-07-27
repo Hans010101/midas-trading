@@ -4,7 +4,7 @@ export interface PosterProps {
   inviter: string
   /** 邀请码 */
   code: string
-  /** 邀请链接(真 QR 内容)https://midastrade.asia/register?ref=CODE */
+  /** 邀请链接(真 QR 内容)Midas Trading Cloudflare Web /register?ref=CODE */
   qrUrl: string
 }
 

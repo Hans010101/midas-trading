@@ -1,4 +1,5 @@
 RESEND_API_KEY=local-resend-placeholder
+SUPPORT_EMAIL_TO=support@example.com
 PASSWORD_PEPPER=local-password-pepper-placeholder
 TELEGRAM_BOT_TOKEN=local-telegram-token-placeholder
 TELEGRAM_BOT_USERNAME=local_telegram_bot

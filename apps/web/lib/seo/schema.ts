@@ -6,7 +6,9 @@
  *   Cmd+K 客户端面板,无可爬的 /search?q= 结果页,硬加属误标(审计明确)。
  */
 
-const BASE = 'https://midastrade.asia'
+import { PRODUCTION_WEB_URL } from '@/lib/site'
+
+const BASE = PRODUCTION_WEB_URL
 export const ORG_ID = `${BASE}/#organization`
 const WEBSITE_ID = `${BASE}/#website`
 
@@ -21,11 +23,6 @@ export const organizationSchema = {
   logo: `${BASE}/brand/seal.png`,
   description:
     '覆盖加密、美股、A 股、港股四大市场的 AI 原生分析终端;全程虚拟资金,分析内容仅供参考,不构成投资建议。',
-  contactPoint: {
-    '@type': 'ContactPoint',
-    contactType: 'customer support',
-    email: 'support@midastrade.asia',
-  },
 } as const
 
 /** WebSite —— 站点实体(publisher 指向 Organization)。 */

@@ -27,7 +27,8 @@ export default function AboutPage() {
       {/* SEO 批3:Organization JSON-LD(与 landing 同 @id · 让知识图谱把 about 归入品牌实体)*/}
       <JsonLd data={organizationSchema} />
       <LegalP>
-        点金 Midas(midastrade.asia)是一款 AI 原生的跨市场分析与交易学习终端,覆盖加密货币、
+        Midas Trading 是一款独立运行于 Cloudflare 的 AI
+        原生跨市场分析与交易学习终端,覆盖加密货币、
         美股、A股与港股四大市场。我们把行情数据、技术指标、缠论结构、合约数据与 AI
         分析整合在一个终端里,并配套一套免费公开的系统化交易教学内容——训练营六阶教学文章与
         交易名词词典。

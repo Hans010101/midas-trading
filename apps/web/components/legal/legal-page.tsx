@@ -1,7 +1,7 @@
 /**
  * 法律静态页骨架(服务条款 / 隐私政策 / 风险提示 共用)· 纯静态展示,不依赖后端/登录。
  *
- * Logo 头(返回首页)+ max-w-3xl 居中正文(移动端友好)+ 页脚客服邮箱 mailto(访客可用)。
+ * Logo 头(返回首页)+ max-w-3xl 居中正文(移动端友好)+ 独立项目客服入口说明。
  * 复用官网设计语言(背景/字色/衬线标题)。
  */
 
@@ -33,16 +33,8 @@ export function LegalPage({ title, children }: { title: string; children: React.
 
       <footer className="border-t border-paper bg-surface-card">
         <div className="mx-auto max-w-3xl px-6 py-6 text-xs text-muted-foreground">
-          <p>
-            客服邮箱:
-            <a
-              href="mailto:support@midastrade.asia"
-              className="text-midas-red transition-colors hover:underline"
-            >
-              support@midastrade.asia
-            </a>
-          </p>
-          <p className="mt-1">© 2026 点金 Midas · 仅供模拟交易,不构成投资建议</p>
+          <p>客服:请登录后通过站内“联系我们”提交工单</p>
+          <p className="mt-1">© 2026 Midas Trading · 仅供模拟交易,不构成投资建议</p>
         </div>
       </footer>
     </main>

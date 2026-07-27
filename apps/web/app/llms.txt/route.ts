@@ -10,10 +10,11 @@
  *   直接给 AI 爬虫规范 URL,不走 ?slug= 的 308 薄壳重定向)。
  */
 import { ACADEMY_ARTICLES, ACADEMY_STAGES } from '@/content/academy/manifest'
+import { PRODUCTION_WEB_URL } from '@/lib/site'
 
 export const dynamic = 'force-static'
 
-const BASE = 'https://midastrade.asia'
+const BASE = PRODUCTION_WEB_URL
 
 export function GET(): Response {
   const sections = ACADEMY_STAGES.map((stage) => {
@@ -33,7 +34,7 @@ export function GET(): Response {
 > Midas is an AI-native multi-market (crypto / US / CN / HK equities) analysis & trading-education
 > terminal. All trading is simulated with virtual funds only; nothing here is investment advice.
 
-点金 Midas(midastrade.asia)提供:跨市场 K 线与行情、AI 决策卡与结构诊断(对市场结构的
+Midas Trading(${BASE})提供:跨市场 K 线与行情、AI 决策卡与结构诊断(对市场结构的
 描述性参考,不预测价格)、经典策略信号标注、虚拟资金模拟交易,以及一套免费公开的系统化
 交易教学内容 —— 训练营 ${ACADEMY_ARTICLES.length} 篇文章(六阶,从零基础到交易体系)与
 名词词典(K线 / 技术指标 / 缠论 / 合约 / 策略等交易术语,一句话定义 + 展开 + 关联词条)。

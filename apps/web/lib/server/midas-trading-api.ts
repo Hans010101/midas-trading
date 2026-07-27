@@ -10,7 +10,7 @@ const LOCAL_FALLBACK =
  * Server-side calls to the independent Midas Trading API.
  *
  * Production uses a Cloudflare Service Binding so auth traffic never leaves
- * Cloudflare or falls back to the legacy Aliyun API. The URL fallback exists
+ * Cloudflare or falls back to the legacy project API. The URL fallback exists
  * only for `next dev`, where Cloudflare bindings are not always available.
  */
 export async function midasTradingApiFetch(

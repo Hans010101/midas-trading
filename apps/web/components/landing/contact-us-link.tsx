@@ -4,7 +4,7 @@
  * 页脚「联系我们」· 复用现有工单系统(不新建后端端点)。
  *
  * 登录用户 → 打开工单弹层(同个人中心提工单)· 未登录 → 提示并跳登录(工单需登录)。
- * 访客兜底:页脚另有客服邮箱 mailto(始终可见,无需登录)。
+ * 未登录访客先进入独立登录流程,避免把工单发送到旧项目邮箱。
  */
 
 import { useSession } from 'next-auth/react'
@@ -23,7 +23,7 @@ export function ContactUsLink({ className }: { className?: string }) {
     if (session?.accessToken) {
       setOpen(true)
     } else {
-      toast('请先登录后提交工单(或直接邮件 support@midastrade.asia)')
+      toast('请先登录后通过站内客服通道提交工单')
       router.push('/login')
     }
   }

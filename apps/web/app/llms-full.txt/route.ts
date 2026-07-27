@@ -10,17 +10,18 @@
  */
 import { getArticleBySlug, getGlossary } from '@/lib/academy'
 import { ACADEMY_ARTICLES, ACADEMY_STAGES } from '@/content/academy/manifest'
+import { PRODUCTION_WEB_URL } from '@/lib/site'
 
 export const dynamic = 'force-static'
 
-const BASE = 'https://midastrade.asia'
+const BASE = PRODUCTION_WEB_URL
 
 export function GET(): Response {
   const parts: string[] = []
 
   parts.push(`# 点金 Midas · 训练营与词典全文(llms-full)
 
-> 点金 Midas(midastrade.asia)是 AI 原生的跨市场(加密 / 美股 / A股 / 港股)分析与交易
+> Midas Trading(${BASE})是 AI 原生的跨市场(加密 / 美股 / A股 / 港股)分析与交易
 > 学习终端:全程虚拟资金,不涉及任何真实交易。本文件为训练营全部教学文章与名词词典的
 > 完整正文,仅供学习参考,不构成任何形式的投资建议;不预测价格、不保证盈利。
 > 索引版见 ${BASE}/llms.txt · 网页版见 ${BASE}/academy`)
@@ -56,7 +57,7 @@ ${md.trim()}`)
   }
 
   parts.push(`\n\n================================================================
-以上全部内容 © 点金 Midas(midastrade.asia)· 仅供学习参考,不构成投资建议。
+以上全部内容 © Midas Trading(${BASE})· 仅供学习参考,不构成投资建议。
 ================================================================\n`)
 
   return new Response(parts.join('\n'), {

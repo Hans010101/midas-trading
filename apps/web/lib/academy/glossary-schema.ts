@@ -6,8 +6,9 @@
  */
 
 import { getGlossary } from '@/lib/academy'
+import { PRODUCTION_WEB_URL } from '@/lib/site'
 
-const BASE = 'https://midastrade.asia'
+const BASE = PRODUCTION_WEB_URL
 
 interface GlossaryTerm {
   name: string

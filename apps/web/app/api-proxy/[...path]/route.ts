@@ -31,11 +31,13 @@ async function proxy(request: NextRequest, context: RouteContext) {
     pathname.startsWith('/api/v1/econ/') ||
     pathname.startsWith('/api/v1/screener/') ||
     pathname.startsWith('/api/v1/alert-rules') ||
+    pathname === '/api/v1/bot-preset' ||
     pathname.startsWith('/api/v1/notifications/') ||
     pathname.startsWith('/api/v1/telegram/') ||
     pathname.startsWith('/api/v1/feishu/') ||
     pathname.startsWith('/api/v1/overview/') ||
     pathname.startsWith('/api/v1/market/') ||
+    pathname.startsWith('/api/v1/support/') ||
     pathname === '/api/v1/health' ||
     pathname === '/api/v1/ready'
   const upstreamUrl = new URL(

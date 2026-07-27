@@ -97,7 +97,7 @@ export function PosterInvite({ inviter, code, qrUrl }: PosterProps) {
             </span>
             <span style={{ width: 40, height: 1, background: 'rgba(28,24,21,.25)' }} />
           </div>
-          <div className="m-sans" style={{ marginTop: 14, fontSize: 15, color: B.inkFaint, letterSpacing: '.16em' }}>midastrade.asia</div>
+          <div className="m-sans" style={{ marginTop: 14, fontSize: 15, color: B.inkFaint, letterSpacing: '.16em' }}>MIDAS TRADING · CLOUDFLARE</div>
         </div>
       </div>
     </div>

@@ -1,5 +1,7 @@
 import type { MetadataRoute } from 'next'
 
+import { PRODUCTION_WEB_URL } from '@/lib/site'
+
 /**
  * robots.txt(SEO 批1 · docs/seo/2026-07-seo-geo-audit.md)。
  *
@@ -16,6 +18,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: '/',
       disallow: ['/account', '/settings', '/portfolio', '/dashboard', '/admin', '/api/'],
     },
-    sitemap: 'https://midastrade.asia/sitemap.xml',
+    sitemap: `${PRODUCTION_WEB_URL}/sitemap.xml`,
   }
 }

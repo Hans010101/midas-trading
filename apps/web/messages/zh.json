@@ -119,7 +119,7 @@
     },
     "contact": {
       "contact_us": "联系我们",
-      "login_prompt": "请先登录后提交工单(或直接邮件 support@midastrade.asia)"
+      "login_prompt": "请先登录后通过站内客服通道提交工单"
     },
     "cta_bottom": {
       "button": "进入终端",
