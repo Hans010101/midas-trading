@@ -148,6 +148,67 @@ describe('independent alerts and notification settings', () => {
     const rules = (await listed.json()) as unknown[]
     expect(rules).toHaveLength(1)
   })
+
+  it('lists and marks in-app notifications without crossing user boundaries', async () => {
+    const first = await createTestSession()
+    const second = await createTestSession()
+    const firstNotificationId = crypto.randomUUID()
+    const secondNotificationId = crypto.randomUUID()
+    const timestamp = Date.now()
+    await env.DB.batch([
+      env.DB
+        .prepare(
+          `INSERT INTO in_app_notifications
+            (id, user_id, category, title, body, created_at)
+           VALUES (?, ?, 'price_alert', '价格提醒', 'NVDA 已突破阈值', ?)`,
+        )
+        .bind(firstNotificationId, first.userId, timestamp),
+      env.DB
+        .prepare(
+          `INSERT INTO in_app_notifications
+            (id, user_id, category, title, body, created_at)
+           VALUES (?, ?, 'price_alert', '其他用户提醒', '不可见', ?)`,
+        )
+        .bind(secondNotificationId, second.userId, timestamp),
+    ])
+
+    const listed = await exports.default.fetch(
+      apiRequest('/api/v1/notifications/inbox?unread_only=true', {
+        token: first.token,
+      }),
+    )
+    expect(listed.status).toBe(200)
+    await expect(listed.json()).resolves.toMatchObject({
+      unread_count: 1,
+      items: [{ id: firstNotificationId, title: '价格提醒' }],
+    })
+
+    const forbidden = await exports.default.fetch(
+      apiRequest(`/api/v1/notifications/inbox/${secondNotificationId}/read`, {
+        method: 'POST',
+        token: first.token,
+      }),
+    )
+    expect(forbidden.status).toBe(404)
+
+    const read = await exports.default.fetch(
+      apiRequest(`/api/v1/notifications/inbox/${firstNotificationId}/read`, {
+        method: 'POST',
+        token: first.token,
+      }),
+    )
+    expect(read.status).toBe(200)
+
+    const unread = await exports.default.fetch(
+      apiRequest('/api/v1/notifications/inbox?unread_only=true', {
+        token: first.token,
+      }),
+    )
+    await expect(unread.json()).resolves.toMatchObject({
+      unread_count: 0,
+      items: [],
+    })
+  })
 })
 
 describe('global market overview', () => {

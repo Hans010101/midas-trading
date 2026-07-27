@@ -30,6 +30,15 @@ type ConfigRow = Readonly<{
   quiet_hours_tz: string
 }>
 
+type InAppNotificationRow = Readonly<{
+  id: string
+  category: string
+  title: string
+  body: string
+  read_at: number | null
+  created_at: number
+}>
+
 async function ensureConfig(db: D1Database, userId: string): Promise<void> {
   const now = Date.now()
   await db
@@ -388,6 +397,93 @@ async function unbind(
   return jsonResponse({}, 204, requestId, request.method)
 }
 
+async function listInAppNotifications(
+  request: Request,
+  env: Env,
+  requestId: string,
+) {
+  const { user } = await authenticate(request, env)
+  const url = new URL(request.url)
+  const unreadOnly = url.searchParams.get('unread_only') === 'true'
+  const rows = await env.DB
+    .prepare(
+      `SELECT id, category, title, body, read_at, created_at
+       FROM in_app_notifications
+       WHERE user_id = ? ${unreadOnly ? 'AND read_at IS NULL' : ''}
+       ORDER BY created_at DESC
+       LIMIT 50`,
+    )
+    .bind(user.id)
+    .all<InAppNotificationRow>()
+  const unread = await env.DB
+    .prepare(
+      `SELECT COUNT(*) AS count
+       FROM in_app_notifications
+       WHERE user_id = ? AND read_at IS NULL`,
+    )
+    .bind(user.id)
+    .first<{ count: number }>()
+  return jsonResponse(
+    {
+      items: rows.results.map((row) => ({
+        id: row.id,
+        category: row.category,
+        title: row.title,
+        body: row.body,
+        read_at: row.read_at,
+        created_at: row.created_at,
+      })),
+      unread_count: unread?.count ?? 0,
+    },
+    200,
+    requestId,
+    request.method,
+  )
+}
+
+async function markInAppNotificationRead(
+  request: Request,
+  env: Env,
+  requestId: string,
+  notificationId: string,
+) {
+  const { user } = await authenticate(request, env)
+  const result = await env.DB
+    .prepare(
+      `UPDATE in_app_notifications
+       SET read_at = COALESCE(read_at, ?)
+       WHERE id = ? AND user_id = ?`,
+    )
+    .bind(Date.now(), notificationId, user.id)
+    .run()
+  if (result.meta.changes === 0) {
+    throw new HttpError(404, '站内通知不存在')
+  }
+  return jsonResponse({ ok: true }, 200, requestId, request.method)
+}
+
+async function markAllInAppNotificationsRead(
+  request: Request,
+  env: Env,
+  requestId: string,
+) {
+  const { user } = await authenticate(request, env)
+  const result = await env.DB
+    .prepare(
+      `UPDATE in_app_notifications
+       SET read_at = ?
+       WHERE user_id = ? AND read_at IS NULL`,
+    )
+    .bind(Date.now(), user.id)
+    .run()
+  return jsonResponse(
+    { ok: true, updated: result.meta.changes },
+    200,
+    requestId,
+    request.method,
+  )
+}
+
 export async function handleNotificationRoute(
   request: Request,
   env: Env,
@@ -398,6 +494,21 @@ export async function handleNotificationRoute(
   if (route === 'GET /api/v1/notifications/config') return getConfig(request, env, requestId)
   if (route === 'PUT /api/v1/notifications/config') return updateConfig(request, env, requestId)
   if (route === 'POST /api/v1/notifications/test') return sendTest(request, env, requestId)
+  if (route === 'GET /api/v1/notifications/inbox') {
+    return listInAppNotifications(request, env, requestId)
+  }
+  if (route === 'POST /api/v1/notifications/inbox/read-all') {
+    return markAllInAppNotificationsRead(request, env, requestId)
+  }
+  const readMatch = path.match(/^\/api\/v1\/notifications\/inbox\/([^/]+)\/read$/u)
+  if (request.method === 'POST' && readMatch?.[1]) {
+    return markInAppNotificationRead(
+      request,
+      env,
+      requestId,
+      decodeURIComponent(readMatch[1]),
+    )
+  }
   if (route === 'POST /api/v1/telegram/bind-token') {
     return createBindToken(request, env, requestId, 'telegram')
   }
