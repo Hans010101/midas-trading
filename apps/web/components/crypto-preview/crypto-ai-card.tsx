@@ -162,8 +162,10 @@ function ContractRead({ futuresSymbol }: { futuresSymbol: string }) {
 
   const lsrItems = lsr.data?.items ?? []
   const lastLsr = lsrItems.at(-1)
-  const posRatio = lastLsr?.top_position_ratio ?? null
-  const accRatio = lastLsr?.top_account_ratio ?? null
+  const rawPosRatio = lastLsr?.top_position_ratio ?? 0
+  const rawAccRatio = lastLsr?.top_account_ratio ?? 0
+  const posRatio = rawPosRatio > 0 ? rawPosRatio : null
+  const accRatio = rawAccRatio > 0 ? rawAccRatio : null
 
   const oiItems = oi.data?.items ?? []
   const oiFirst = oiItems.at(0)?.oi_usd ?? null
