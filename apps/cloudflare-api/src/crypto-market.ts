@@ -78,7 +78,7 @@ type CryptoGlobal = Readonly<{
   total_volume_24h_usd: number
   btc_dominance: number
   eth_dominance: number
-  source: 'coingecko' | 'coinpaprika'
+  source: 'coingecko' | 'coinpaprika' | 'coinlore'
 }>
 
 async function fetchCoinGeckoGlobal(): Promise<CryptoGlobal> {
@@ -170,7 +170,43 @@ async function fetchCryptoGlobal(): Promise<CryptoGlobal> {
   try {
     return await fetchCoinGeckoGlobal()
   } catch {
-    return fetchCoinPaprikaGlobal()
+    try {
+      return await fetchCoinPaprikaGlobal()
+    } catch {
+      const response = await fetch('https://api.coinlore.net/api/global/', {
+        headers: {
+          accept: 'application/json',
+          'user-agent': 'Midas-Trading-Cloudflare/1.0',
+        },
+        signal: AbortSignal.timeout(10_000),
+      })
+      if (!response.ok) {
+        throw new Error(`CoinLore global HTTP ${response.status}`)
+      }
+      const payload = (await response.json()) as Array<{
+        total_mcap?: unknown
+        total_volume?: unknown
+        btc_d?: unknown
+        eth_d?: unknown
+      }>
+      const item = payload[0]
+      const result = {
+        total_market_cap_usd: numeric(item?.total_mcap),
+        total_volume_24h_usd: numeric(item?.total_volume),
+        btc_dominance: numeric(item?.btc_d),
+        eth_dominance: numeric(item?.eth_d),
+        source: 'coinlore' as const,
+      }
+      if (
+        result.total_market_cap_usd <= 0 ||
+        result.total_volume_24h_usd <= 0 ||
+        result.btc_dominance <= 0 ||
+        result.eth_dominance <= 0
+      ) {
+        throw new Error('CoinLore global payload incomplete')
+      }
+      return result
+    }
   }
 }
 
@@ -543,6 +579,10 @@ async function getOverview(
         {
           name: 'coinpaprika',
           ok: global.source === 'coinpaprika',
+        },
+        {
+          name: 'coinlore',
+          ok: global.source === 'coinlore',
         },
         {
           name: 'alternative_me',
