@@ -1,5 +1,9 @@
 import { authenticate } from './auth'
-import { invokeAi, parseAiJson } from './ai-provider'
+import {
+  invokeAi,
+  parseAiJson,
+  type AiProviderResult,
+} from './ai-provider'
 import { fetchCryptoAiContext } from './crypto-market'
 import {
   HttpError,
@@ -283,6 +287,7 @@ async function strategyRecommend(
     instrument: params.instrument as 'spot' | 'perp',
   })
   const items = klines.items
+  if (items.length < 30) throw new HttpError(422, 'K 线数据不足')
   const last = items.at(-1) as Kline
   const previous = items.at(-21) ?? items[0] as Kline
   const trend = previous.close === 0 ? 0 : (last.close - previous.close) / previous.close
@@ -380,6 +385,59 @@ function tradingPlan(
   }
 }
 
+function technicalDecisionFallback(snapshot: Readonly<{
+  last_close: number
+  change_20_bars_pct: number
+  ma5: number
+  ma20: number
+  ma60: number
+  rsi14: number
+  volatility_20_bars_pct: number
+  recent_high: number
+  recent_low: number
+}>) {
+  let score = 0
+  const findings: string[] = []
+  if (snapshot.ma5 > snapshot.ma20) {
+    score += 25
+    findings.push('短期均线位于中期均线上方')
+  } else if (snapshot.ma5 < snapshot.ma20) {
+    score -= 25
+    findings.push('短期均线位于中期均线下方')
+  }
+  if (snapshot.ma20 > snapshot.ma60) {
+    score += 20
+    findings.push('中期趋势保持向上')
+  } else if (snapshot.ma20 < snapshot.ma60) {
+    score -= 20
+    findings.push('中期趋势保持向下')
+  }
+  score += bounded(snapshot.change_20_bars_pct * 4, -25, 25, 0)
+  if (snapshot.rsi14 >= 60) score += 15
+  else if (snapshot.rsi14 <= 40) score -= 15
+  score = Math.round(bounded(score, -100, 100, 0))
+
+  const momentum =
+    snapshot.change_20_bars_pct >= 0
+      ? `近 20 根 K 线上涨 ${snapshot.change_20_bars_pct.toFixed(2)}%`
+      : `近 20 根 K 线下跌 ${Math.abs(snapshot.change_20_bars_pct).toFixed(2)}%`
+  return {
+    score,
+    confidence: bounded(
+      0.55 + Math.abs(score) / 300 - snapshot.volatility_20_bars_pct / 100,
+      0.5,
+      0.8,
+      0.58,
+    ),
+    rationale: `${findings.join('，') || '均线结构暂未形成明确方向'}；${momentum}，RSI(14) 为 ${snapshot.rsi14.toFixed(1)}。`,
+    key_levels: [snapshot.recent_low, snapshot.recent_high],
+    plan_note:
+      Math.abs(score) < 20
+        ? '等待价格突破近期区间后再确认方向'
+        : `以近期${score > 0 ? '低点' : '高点'}作为结构失效参考`,
+  }
+}
+
 async function decisionCard(
   request: Request,
   env: Env,
@@ -433,17 +491,36 @@ async function decisionCard(
     data_source: klines.source,
     data_as_of: last.ts,
   }
-  const ai = await invokeAi(env, {
-    system:
-      '你是专业市场技术分析师。只依据给定结构化行情输出 JSON；语言简练，不添加免责声明、风险提示、营销话术或固定结尾。',
-    prompt: `${JSON.stringify(snapshot)}
+  let ai: AiProviderResult
+  let output: Record<string, unknown>
+  try {
+    ai = await invokeAi(env, {
+      system:
+        '你是专业市场技术分析师。只依据给定结构化行情输出 JSON；语言简练，不添加免责声明、风险提示、营销话术或固定结尾。',
+      prompt: `${JSON.stringify(snapshot)}
 输出严格 JSON：
 {"score":-100到100整数,"confidence":0到1,"rationale":"2到4句技术结构分析","key_levels":[支撑位,阻力位],"plan_note":"一句执行计划说明"}
 不得输出 Markdown。`,
-    maxTokens: 650,
-    temperature: 0.2,
-  })
-  const output = parseAiJson(ai.content)
+      maxTokens: 650,
+      temperature: 0.2,
+    })
+    output = parseAiJson(ai.content)
+  } catch (error) {
+    console.warn(JSON.stringify({
+      event: 'ai.decision_rules_fallback',
+      symbol,
+      market,
+      error: error instanceof Error ? error.message : String(error),
+    }))
+    ai = {
+      content: '',
+      provider: 'technical-rules',
+      model: 'technical-rules-v1',
+      fallback_used: true,
+      token_usage: 0,
+    }
+    output = technicalDecisionFallback(snapshot)
+  }
   const score = Math.round(bounded(output.score, -100, 100, 0))
   const confidence = bounded(output.confidence, 0, 1, 0.6)
   const narrative =

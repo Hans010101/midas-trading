@@ -5,7 +5,7 @@ const DEEPSEEK_MODEL = 'deepseek-chat'
 
 export type AiProviderResult = Readonly<{
   content: string
-  provider: 'cloudflare-workers-ai' | 'deepseek'
+  provider: 'cloudflare-workers-ai' | 'deepseek' | 'technical-rules'
   model: string
   fallback_used: boolean
   token_usage: number
@@ -16,15 +16,58 @@ type ChatMessage = Readonly<{
   content: string
 }>
 
+function textContent(value: unknown): string {
+  if (typeof value === 'string') return value.trim()
+  if (!Array.isArray(value)) return ''
+  return value
+    .flatMap((block) => {
+      if (typeof block === 'string') return [block]
+      if (typeof block !== 'object' || block === null) return []
+      const text = (block as { text?: unknown }).text
+      return typeof text === 'string' ? [text] : []
+    })
+    .join('')
+    .trim()
+}
+
 function contentFromWorkersAi(output: unknown): string {
   if (typeof output !== 'object' || output === null) return ''
   const result = output as {
     response?: unknown
-    choices?: Array<{ message?: { content?: unknown } }>
+    output_text?: unknown
+    choices?: Array<{
+      text?: unknown
+      message?: { content?: unknown }
+    }>
   }
-  if (typeof result.response === 'string') return result.response.trim()
-  const content = result.choices?.[0]?.message?.content
-  return typeof content === 'string' ? content.trim() : ''
+  return (
+    textContent(result.response) ||
+    textContent(result.output_text) ||
+    textContent(result.choices?.[0]?.message?.content) ||
+    textContent(result.choices?.[0]?.text)
+  )
+}
+
+function emptyOutputMetadata(output: unknown) {
+  if (typeof output !== 'object' || output === null) {
+    return { output_type: typeof output }
+  }
+  const result = output as {
+    choices?: Array<{
+      finish_reason?: unknown
+      message?: Record<string, unknown>
+    }>
+    usage?: unknown
+  }
+  return {
+    output_keys: Object.keys(output),
+    choice_count: result.choices?.length ?? 0,
+    finish_reason: result.choices?.[0]?.finish_reason ?? null,
+    message_keys: result.choices?.[0]?.message
+      ? Object.keys(result.choices[0].message)
+      : [],
+    usage: result.usage ?? null,
+  }
 }
 
 function tokenUsageFrom(output: unknown): number {
@@ -48,11 +91,21 @@ async function workersAi(
 ): Promise<AiProviderResult> {
   const output = await env.AI.run(WORKERS_AI_MODEL, {
     messages: [...messages],
-    max_tokens: maxTokens,
+    max_completion_tokens: maxTokens,
     temperature,
+    response_format: { type: 'json_object' },
+    chat_template_kwargs: { enable_thinking: false },
   })
   const content = contentFromWorkersAi(output)
-  if (!content) throw new Error('Workers AI returned empty content')
+  if (!content) {
+    console.warn(JSON.stringify({
+      event: 'ai.empty_output',
+      provider: 'cloudflare-workers-ai',
+      model: WORKERS_AI_MODEL,
+      ...emptyOutputMetadata(output),
+    }))
+    throw new Error('Workers AI returned empty content')
+  }
   return {
     content,
     provider: 'cloudflare-workers-ai',

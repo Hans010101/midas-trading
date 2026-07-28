@@ -34,13 +34,36 @@ describe('independent AI provider routing', () => {
 
     expect(run).toHaveBeenCalledWith(
       WORKERS_AI_MODEL,
-      expect.objectContaining({ max_tokens: 700 }),
+      expect.objectContaining({
+        max_completion_tokens: 700,
+        response_format: { type: 'json_object' },
+        chat_template_kwargs: { enable_thinking: false },
+      }),
     )
     expect(result).toMatchObject({
       provider: 'cloudflare-workers-ai',
       fallback_used: false,
       token_usage: 19,
     })
+  })
+
+  it('accepts OpenAI-style content blocks from Workers AI', async () => {
+    const run = vi.fn().mockResolvedValue({
+      choices: [{
+        message: {
+          content: [{ type: 'text', text: '{"score":37}' }],
+        },
+      }],
+      usage: { prompt_tokens: 12, completion_tokens: 7 },
+    })
+
+    const result = await invokeAi(aiEnv(run), {
+      system: 'system',
+      prompt: 'prompt',
+    })
+
+    expect(result.content).toBe('{"score":37}')
+    expect(result.token_usage).toBe(19)
   })
 
   it('falls back to DeepSeek only when Workers AI fails', async () => {
