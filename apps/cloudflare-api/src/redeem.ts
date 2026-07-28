@@ -1,4 +1,5 @@
 import { authenticate } from './auth'
+import { COMMERCIAL_MEMBERSHIP_ENABLED } from './features'
 import {
   HttpError,
   jsonResponse,
@@ -321,6 +322,18 @@ export async function handleRedeemRoute(
   requestId: string,
 ): Promise<Response | null> {
   const path = new URL(request.url).pathname
+  if (
+    !COMMERCIAL_MEMBERSHIP_ENABLED &&
+    (path === '/api/v1/redeem' ||
+      path === '/api/v1/admin/redeem-codes')
+  ) {
+    return jsonResponse(
+      { detail: 'Route not found' },
+      404,
+      requestId,
+      request.method,
+    )
+  }
   const route = `${request.method} ${path}`
   switch (route) {
     case 'POST /api/v1/admin/redeem-codes':

@@ -1,5 +1,6 @@
 import { base64UrlEncode, hmacSha256, randomToken, sha256Hex } from './crypto'
 import { sendVerificationEmail } from './email'
+import { COMMERCIAL_MEMBERSHIP_ENABLED } from './features'
 import { verifyGoogleIdToken } from './google'
 import {
   activateVerifiedGrowth,
@@ -278,13 +279,15 @@ async function register(
       createdAt: timestamp,
     }),
   ]
-  const inviteAttribution = attributeInviteStatement(
-    env.DB,
-    userId,
-    body.ref,
-    timestamp,
-  )
-  if (inviteAttribution) registrationStatements.push(inviteAttribution)
+  if (COMMERCIAL_MEMBERSHIP_ENABLED) {
+    const inviteAttribution = attributeInviteStatement(
+      env.DB,
+      userId,
+      body.ref,
+      timestamp,
+    )
+    if (inviteAttribution) registrationStatements.push(inviteAttribution)
+  }
 
   try {
     await env.DB.batch(registrationStatements)
@@ -450,21 +453,23 @@ async function verifyEmail(
   }).run()
 
   let growth = { trialGranted: false, inviteRewarded: false }
-  try {
-    growth = await activateVerifiedGrowth(
-      env.DB,
-      consumed.user_id,
-      timestamp,
-    )
-  } catch (error) {
-    console.error(
-      JSON.stringify({
-        event: 'growth.activation_failed',
-        requestId,
-        userId: consumed.user_id,
-        error: error instanceof Error ? error.message : String(error),
-      }),
-    )
+  if (COMMERCIAL_MEMBERSHIP_ENABLED) {
+    try {
+      growth = await activateVerifiedGrowth(
+        env.DB,
+        consumed.user_id,
+        timestamp,
+      )
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: 'growth.activation_failed',
+          requestId,
+          userId: consumed.user_id,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      )
+    }
   }
 
   return jsonResponse(
@@ -630,24 +635,26 @@ async function googleOauth(
         email_verified_at: timestamp,
       }
       isNewUser = true
-      const inviteAttribution = attributeInviteStatement(
-        env.DB,
-        userId,
-        ref,
-        timestamp,
-      )
-      if (inviteAttribution) await inviteAttribution.run()
-      try {
-        growth = await activateVerifiedGrowth(env.DB, userId, timestamp)
-      } catch (error) {
-        console.error(
-          JSON.stringify({
-            event: 'growth.activation_failed',
-            requestId,
-            userId,
-            error: error instanceof Error ? error.message : String(error),
-          }),
+      if (COMMERCIAL_MEMBERSHIP_ENABLED) {
+        const inviteAttribution = attributeInviteStatement(
+          env.DB,
+          userId,
+          ref,
+          timestamp,
         )
+        if (inviteAttribution) await inviteAttribution.run()
+        try {
+          growth = await activateVerifiedGrowth(env.DB, userId, timestamp)
+        } catch (error) {
+          console.error(
+            JSON.stringify({
+              event: 'growth.activation_failed',
+              requestId,
+              userId,
+              error: error instanceof Error ? error.message : String(error),
+            }),
+          )
+        }
       }
     }
   }

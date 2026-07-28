@@ -20,7 +20,6 @@ import NextAuth, { type DefaultSession, type User } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
 import Google from 'next-auth/providers/google'
 
-import { REWARD_COOKIE, buildRewardCookieValue } from '@/lib/reward-toast'
 import { midasTradingApiFetch } from '@/lib/server/midas-trading-api'
 
 // 仅扩展 Session / User · JWT 字段用内联 cast,避免 'next-auth/jwt' 模块增强
@@ -115,7 +114,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
   callbacks: {
-    async signIn({ account }) {
+    async signIn({ account, user }) {
       // Google OAuth 流程:拿到 Google id_token · 转发给后端换 session token
       if (account?.provider === 'google') {
         const idToken = account.id_token as string | undefined
@@ -124,16 +123,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return false
         }
         console.info('[auth.google] 拿到 id_token · POST 独立 Cloudflare API 换 session')
-        // Phase 1.5 刀B:OAuth ref 归因唯一路径 —— register 页落地写的 midas_ref
-        // cookie 在此读出(signIn callback 是 server-side route handler · cookies()
-        // 可用),进 /oauth/google body。仅 create 分支后端才兑现(刀A)。
         const { cookies } = await import('next/headers')
-        const ref = (await cookies()).get('midas_ref')?.value ?? null
         try {
           const r = await midasTradingApiFetch('/api/v1/auth/oauth/google', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id_token: idToken, ref }),
+            body: JSON.stringify({ id_token: idToken }),
           })
           if (!r.ok) {
             // 把后端返回的 detail 打出来 · 定位是验签 / DB / 网络 哪一环
@@ -161,17 +156,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           bag.midas_user_id = data.user_id
           bag.midas_email = data.email
           bag.midas_role = data.role
-          // Phase 1.5 刀B:OAuth 到账感知 —— 写一次性 cookie,落地 watcher
-          // 读后 toast + 删(仅 create 分支后端才回 true · ref cookie 顺便清)
-          const store = await cookies()
-          const rewardVal = buildRewardCookieValue(
-            data.trial_granted ?? false,
-            data.invite_rewarded ?? false,
-          )
-          if (rewardVal !== null) {
-            store.set(REWARD_COOKIE, rewardVal, { path: '/', maxAge: 300 })
-          }
-          store.delete('midas_ref')
+          // 同时写入 user，避免 OAuth provider 升级后 account 自定义字段被丢弃。
+          user.id = data.user_id
+          user.email = data.email
+          user.accessToken = data.access_token
+          user.role = data.role
+          ;(await cookies()).delete('midas_ref')
         } catch (e) {
           console.warn('[auth.google] backend call failed:', e)
           return false

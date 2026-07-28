@@ -32,7 +32,7 @@ export interface FuncPage {
 export const FUNC_PAGES: readonly FuncPage[] = [
   { label: '终端', href: '/workbench', hint: '工作台' },
   { label: '策略研究室', href: '/lab/assistant', hint: '沙盘 + 回测' },
-  { label: '会员', href: '/account/membership', hint: '权益 + 升级' },
+  { label: '个人中心', href: '/account/membership', hint: '账户信息' },
   { label: '自选', href: '/watchlist', hint: '自选汇总' },
   { label: '财经日历', href: '/calendar', hint: '宏观事件日程' },
 ]

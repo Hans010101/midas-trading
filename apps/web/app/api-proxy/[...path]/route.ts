@@ -1,6 +1,8 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare'
 import type { NextRequest } from 'next/server'
 
+import { isIndependentApiPath } from '@/lib/server/api-route-policy'
+
 const LEGACY_API_UPSTREAM =
   process.env.LEGACY_API_UPSTREAM_URL ?? 'http://localhost:8000'
 const INDEPENDENT_API_ORIGIN = 'https://midas-trading-api.internal'
@@ -15,31 +17,7 @@ async function proxy(request: NextRequest, context: RouteContext) {
   const { path } = await context.params
   const pathname = `/${path.join('/')}`
   const incomingUrl = new URL(request.url)
-  const isIndependentApi =
-    pathname.startsWith('/api/v1/auth/') ||
-    pathname.startsWith('/api/v1/user/') ||
-    pathname.startsWith('/api/v1/watchlist') ||
-    pathname.startsWith('/api/v1/academy/') ||
-    pathname.startsWith('/api/v1/quota/') ||
-    pathname.startsWith('/api/v1/invite/') ||
-    pathname === '/api/v1/redeem' ||
-    pathname === '/api/v1/admin/redeem-codes' ||
-    pathname.startsWith('/api/v1/cn/') ||
-    pathname.startsWith('/api/v1/us/') ||
-    pathname.startsWith('/api/v1/hk/') ||
-    pathname.startsWith('/api/v1/crypto/') ||
-    pathname.startsWith('/api/v1/econ/') ||
-    pathname.startsWith('/api/v1/screener/') ||
-    pathname.startsWith('/api/v1/alert-rules') ||
-    pathname === '/api/v1/bot-preset' ||
-    pathname.startsWith('/api/v1/notifications/') ||
-    pathname.startsWith('/api/v1/telegram/') ||
-    pathname.startsWith('/api/v1/feishu/') ||
-    pathname.startsWith('/api/v1/overview/') ||
-    pathname.startsWith('/api/v1/market/') ||
-    pathname.startsWith('/api/v1/support/') ||
-    pathname === '/api/v1/health' ||
-    pathname === '/api/v1/ready'
+  const isIndependentApi = isIndependentApiPath(pathname)
   const upstreamUrl = new URL(
     pathname,
     isIndependentApi ? INDEPENDENT_API_ORIGIN : LEGACY_API_UPSTREAM,

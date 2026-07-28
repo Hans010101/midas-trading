@@ -48,8 +48,8 @@ export function PlatinumSection({
           <h2 className="font-serif text-base font-bold">铂金标记</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {isPlatinum
-              ? '已开通 · 享受所有 Pro 权益 + 托管交易/智能交易(独立账户)'
-              : '未开通 · 普通用户(按订阅判会员)'}
+              ? '已开通 · 可使用托管交易与智能交易独立账户'
+              : '未开通 · 普通注册用户'}
           </p>
         </div>
         <button
@@ -83,13 +83,13 @@ export function PlatinumSection({
               {isPlatinum ? (
                 <>
                   将取消 <span className="font-mono text-foreground">{email}</span> 的铂金标记,
-                  收回所有 Pro 权益 + 托管/智能交易访问。
+                  收回托管交易与智能交易访问。
                 </>
               ) : (
                 <>
                   确认给 <span className="font-mono text-foreground">{email}</span> 开通铂金?
                   <span className="text-gold">
-                    该用户将享受所有 Pro 权益 + 托管交易/智能交易(每用户独立账户·体验同管理员)。
+                    该用户将获得托管交易与智能交易访问权限(每用户独立账户)。
                   </span>
                 </>
               )}

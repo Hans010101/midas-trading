@@ -1,33 +1,22 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { Suspense, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Suspense, useState } from 'react'
 
 import { AuthShell } from '@/components/auth/auth-shell'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { buildRefCookie, normalizeRef } from '@/lib/ref-cookie'
-
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 function RegisterForm() {
   const router = useRouter()
-  // Phase 1.5 刀B:?ref= 归因 —— normalize 后 ① 写 cookie(给 OAuth 路径用)
-  // ② 邮箱注册进 payload.ref。无效码静默(后端也兜底,双保险)。
-  const params = useSearchParams()
-  const ref = normalizeRef(params.get('ref'))
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [ageOk, setAgeOk] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [success, setSuccess] = useState<string | null>(null)
-
-  // 落地即写 cookie(30 天)· OAuth 回跳丢 ?ref= 时靠它归因
-  useEffect(() => {
-    if (ref !== null) document.cookie = buildRefCookie(ref)
-  }, [ref])
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -45,7 +34,7 @@ function RegisterForm() {
       const r = await fetch(`${API_BASE}/api/v1/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, age_confirmed: true, ref }),
+        body: JSON.stringify({ email, password, age_confirmed: true }),
       })
       if (!r.ok) {
         const body = (await r.json().catch(() => null)) as { detail?: string } | null
@@ -100,12 +89,6 @@ function RegisterForm() {
       }
     >
       <form onSubmit={onSubmit} className="space-y-4">
-        {/* 受邀注册轻提示(刀B · 增强转化 · 文案诚实:验证后到账) */}
-        {ref !== null && (
-          <p className="rounded-md border border-gold/40 bg-gold/10 px-3 py-2 text-sm text-gold">
-            受邀注册 · 验证邮箱后你和好友各得 <strong>15 天 Pro</strong>
-          </p>
-        )}
         <div className="space-y-2">
           <label htmlFor="email" className="text-sm font-medium text-foreground">
             邮箱
@@ -155,16 +138,11 @@ function RegisterForm() {
           {busy ? '提交中…' : '注册并发送验证邮件'}
         </Button>
 
-        {/* 兑换码轻提示(兑换码刀2 · 仅引导 · 不在注册流程内兑换) */}
-        <p className="text-center text-xs text-muted-foreground/60">
-          有兑换码?注册并登录后可在「个人中心」中使用
-        </p>
       </form>
     </AuthShell>
   )
 }
 
-// ★ useSearchParams 必须包 Suspense,否则 build 报错(项目已知坑 · 照 login 页范式)
 export default function RegisterPage() {
   return (
     <Suspense fallback={<AuthShell title="载入中…">{null}</AuthShell>}>

@@ -105,7 +105,7 @@ export function TopNav() {
                   {email}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {/* 用户中心直达 · 个人中心置顶(账户重组 · 路由 /account/membership 不变)*/}
+                {/* 个人中心沿用历史路由；页面已仅保留账户身份设置。 */}
                 <DropdownMenuItem asChild className="justify-end">
                   <Link href="/account/membership">个人中心</Link>
                 </DropdownMenuItem>
@@ -120,9 +120,6 @@ export function TopNav() {
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild className="justify-end">
                   <Link href="/account/profile">偏好设置</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild className="justify-end">
-                  <Link href="/account/invite">邀请有礼</Link>
                 </DropdownMenuItem>
                 {/* 铂金自助(多账户 PR-6)· is_platinum 才渲染 —— 仅 UX,安全边界在后端 PlatinumDep 403。
                     走 useMe(实时查 /me)·superadmin 刚开通即可见、免重登(不靠 JWT)。 */}

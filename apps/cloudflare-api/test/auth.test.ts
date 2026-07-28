@@ -389,7 +389,7 @@ describe('cross-market data', () => {
 })
 
 describe('academy learning state', () => {
-  it('stores progress, grades server-side, and awards each stage once', async () => {
+  it('stores progress and grades server-side without commercial rewards', async () => {
     const { token, userId } = await createTestSession()
 
     const guestProgress = await exports.default.fetch(
@@ -451,7 +451,7 @@ describe('academy learning state', () => {
       stage: 'basics',
       score: examBank.basics.length,
       passed: true,
-      membership_awarded: true,
+      membership_awarded: false,
     })
 
     const secondPass = await exports.default.fetch(
@@ -493,24 +493,18 @@ describe('academy learning state', () => {
       )
       .bind(userId, userId)
       .first<{ awards: number; subscription_expires_at: number | null }>()
-    expect(stored?.awards).toBe(1)
-    expect(stored?.subscription_expires_at).toBeGreaterThan(Date.now())
+    expect(stored?.awards).toBe(0)
+    expect(stored?.subscription_expires_at).toBeNull()
   })
 })
 
 describe('independent account growth', () => {
-  it('attributes an invite, retains rewards, and gives every account full quota', async () => {
+  it('disables invitations and gives every account full quota', async () => {
     const inviter = await createTestSession()
     const inviteResponse = await exports.default.fetch(
       apiRequest('/api/v1/invite/me', { token: inviter.token }),
     )
-    expect(inviteResponse.status).toBe(200)
-    const invite = (await inviteResponse.json()) as {
-      code: string
-      invite_url: string
-    }
-    expect(invite.code).toMatch(/^[0-9A-HJKMNP-TV-Z]{8}$/u)
-    expect(invite.invite_url).toContain(`/register?ref=${invite.code}`)
+    expect(inviteResponse.status).toBe(404)
 
     const beforeReward = await exports.default.fetch(
       apiRequest('/api/v1/quota/me', { token: inviter.token }),
@@ -537,7 +531,7 @@ describe('independent account growth', () => {
           email,
           password,
           age_confirmed: true,
-          ref: invite.code,
+          ref: 'DISABLED',
         },
       }),
     )
@@ -559,8 +553,8 @@ describe('independent account growth', () => {
     )
     expect(verifyResponse.status).toBe(200)
     await expect(verifyResponse.json()).resolves.toMatchObject({
-      trial_granted: true,
-      invite_rewarded: true,
+      trial_granted: false,
+      invite_rewarded: false,
     })
 
     const loginResponse = await exports.default.fetch(
@@ -584,11 +578,7 @@ describe('independent account growth', () => {
     const inviterStats = await exports.default.fetch(
       apiRequest('/api/v1/invite/me', { token: inviter.token }),
     )
-    await expect(inviterStats.json()).resolves.toMatchObject({
-      invited_count: 1,
-      rewarded_count: 1,
-      earned_days: 15,
-    })
+    expect(inviterStats.status).toBe(404)
     const inviterQuota = await exports.default.fetch(
       apiRequest('/api/v1/quota/me', { token: inviter.token }),
     )
@@ -599,7 +589,7 @@ describe('independent account growth', () => {
 })
 
 describe('independent redeem codes', () => {
-  it('lets an admin generate codes and allows exactly one redemption', async () => {
+  it('keeps redemption routes disabled while retaining their implementation', async () => {
     const admin = await createTestSession()
     const member = await createTestSession()
     await env.DB
@@ -614,59 +604,23 @@ describe('independent redeem codes', () => {
         body: { period: 'month', count: 2, note: 'worker test' },
       }),
     )
-    expect(generateResponse.status).toBe(200)
-    const generated = (await generateResponse.json()) as {
-      codes: string[]
-      days: number
-    }
-    expect(generated.codes).toHaveLength(2)
-    expect(generated.days).toBe(30)
-    expect(generated.codes[0]).toMatch(/^[0-9A-HJKMNP-TV-Z]{12}$/u)
+    expect(generateResponse.status).toBe(404)
 
     const listResponse = await exports.default.fetch(
       apiRequest('/api/v1/admin/redeem-codes?page=1&page_size=20', {
         token: admin.token,
       }),
     )
-    expect(listResponse.status).toBe(200)
-    await expect(listResponse.json()).resolves.toMatchObject({
-      total: 2,
-      items: expect.arrayContaining([
-        expect.objectContaining({
-          code: generated.codes[0],
-          status: 'unused',
-          note: 'worker test',
-        }),
-      ]),
-    })
+    expect(listResponse.status).toBe(404)
 
     const redeemResponse = await exports.default.fetch(
       apiRequest('/api/v1/redeem', {
         method: 'POST',
         token: member.token,
-        body: { code: ` ${generated.codes[0]?.toLowerCase()} ` },
+        body: { code: 'DISABLED-CODE' },
       }),
     )
-    expect(redeemResponse.status).toBe(200)
-    await expect(redeemResponse.json()).resolves.toMatchObject({
-      plan: 'pro',
-      days_added: 30,
-    })
-
-    const redeemAgain = await exports.default.fetch(
-      apiRequest('/api/v1/redeem', {
-        method: 'POST',
-        token: member.token,
-        body: { code: generated.codes[0] },
-      }),
-    )
-    expect(redeemAgain.status).toBe(409)
-    await expect(redeemAgain.json()).resolves.toEqual({
-      detail: {
-        error: 'already_used',
-        message: '兑换码已被使用',
-      },
-    })
+    expect(redeemResponse.status).toBe(404)
 
     const memberQuota = await exports.default.fetch(
       apiRequest('/api/v1/quota/me', { token: member.token }),

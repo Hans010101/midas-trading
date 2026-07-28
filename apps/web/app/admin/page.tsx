@@ -69,7 +69,6 @@ export default function AdminUsersPage() {
                     <th className="px-4 py-2.5 font-normal">邮箱</th>
                     <th className="px-4 py-2.5 font-normal">注册时间</th>
                     <th className="px-4 py-2.5 font-normal">验证</th>
-                    <th className="px-4 py-2.5 font-normal">方案</th>
                     <th className="px-4 py-2.5 font-normal">注册方式</th>
                     <th className="px-4 py-2.5 font-normal">最后活跃(7d)</th>
                     <th className="px-4 py-2.5 text-right font-normal">设备</th>
@@ -105,15 +104,6 @@ export default function AdminUsersPage() {
                           <span className="text-up">已验证</span>
                         ) : (
                           <span className="text-muted-foreground/60">未验证</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        {u.plan === 'free' ? (
-                          <span className="text-xs text-muted-foreground/60">free</span>
-                        ) : (
-                          <span className="rounded bg-gold/15 px-1.5 py-0.5 text-[11px] text-gold">
-                            {u.plan}
-                          </span>
                         )}
                       </td>
                       <td className="px-4 py-2.5">

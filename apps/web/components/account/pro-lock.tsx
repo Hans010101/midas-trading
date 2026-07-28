@@ -11,7 +11,7 @@
  */
 
 import { Lock } from 'lucide-react'
-import { useSession } from 'next-auth/react'
+import { signOut, useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 
 import { cn } from '@/lib/utils'
@@ -29,7 +29,13 @@ export function ProLock({
   const router = useRouter()
   const guest = !session?.accessToken
 
-  const goto = () => router.push('/login')
+  const goto = () => {
+    if (guest) {
+      router.push('/login')
+      return
+    }
+    void signOut({ callbackUrl: '/login' })
+  }
 
   if (compact) {
     // 信号条等窄区域:单行内联(图标 + 短文案 + 行动词)

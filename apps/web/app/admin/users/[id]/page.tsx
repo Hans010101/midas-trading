@@ -3,8 +3,7 @@
 /**
  * 用户详情(用户管理刀3a · 纯只读聚合)。
  *
- * 基础 / 会员(plan 金徽+到期日)/ 今日额度 / 邀请统计 / 兑换记录,分区只读展示。
- * 「管理员操作」区占位(刀3b 接调权益/封禁)。🔴 本页零写操作。
+ * 基础 / 系统容量 / 安全与自动交易权限。
  */
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -14,19 +13,10 @@ import { useParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 
 import { BanSection } from '@/components/admin/ban-section'
-import { GrantProSection } from '@/components/admin/grant-pro-section'
 import { PlatinumSection } from '@/components/admin/platinum-section'
 import { TopNav } from '@/components/layout/top-nav'
 import { AdminApiError, type AdminUserDetail, fetchAdminUserDetail } from '@/lib/api/admin'
 import { createdAtText } from '@/lib/admin-view'
-import { periodLabel } from '@/lib/redeem-view'
-
-const ACTION_LABEL: Record<string, string> = { grant_pro: '授予 Pro' }
-
-const PLAN_LABEL: Record<string, string> = { free: '免费版', pro: '进阶版 Pro' }
-const SOURCE_LABEL: Record<string, string> = {
-  trial: '试用', invite: '邀请', redeem: '兑换', paid: '付费', manual: '手动',
-}
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -108,24 +98,7 @@ export default function AdminUserDetailPage() {
               </dl>
             </Card>
 
-            <Card title="会员">
-              <dl>
-                <Row label="方案">
-                  {d.plan === 'free' ? (
-                    <span className="text-muted-foreground">免费版</span>
-                  ) : (
-                    <span className="font-bold text-gold">{PLAN_LABEL[d.plan] ?? d.plan}</span>
-                  )}
-                </Row>
-                {d.plan_expires_at && (
-                  <Row label="到期">{new Date(d.plan_expires_at).toLocaleDateString('zh-CN')}</Row>
-                )}
-                {d.plan_source && <Row label="来源">{SOURCE_LABEL[d.plan_source] ?? d.plan_source}</Row>}
-                {d.plan_status && <Row label="状态">{d.plan_status}</Row>}
-              </dl>
-            </Card>
-
-            <Card title="今日额度">
+            <Card title="系统容量">
               <dl>
                 {d.quota.map((q) => (
                   <Row key={q.feature} label={q.feature === 'diagnose' ? '沙盘诊断' : '回测'}>
@@ -134,41 +107,6 @@ export default function AdminUserDetailPage() {
                 ))}
               </dl>
             </Card>
-
-            <Card title="邀请">
-              <dl>
-                <Row label="邀请码">
-                  <span className="font-mono">{d.invite_code ?? '— 未生成'}</span>
-                </Row>
-                <Row label="已邀请">{d.invited_count} 人</Row>
-                <Row label="已兑现">{d.rewarded_count} 人</Row>
-              </dl>
-            </Card>
-
-            <Card title={`兑换记录(${d.redeemed.length})`}>
-              {d.redeemed.length === 0 ? (
-                <p className="text-xs text-muted-foreground/60">无</p>
-              ) : (
-                <ul className="space-y-1.5 text-sm">
-                  {d.redeemed.map((rc) => (
-                    <li key={rc.code} className="flex justify-between gap-4">
-                      <span className="font-mono text-xs text-foreground">{rc.code}</span>
-                      <span className="text-muted-foreground">
-                        {periodLabel(rc.period)} · {new Date(rc.redeemed_at).toLocaleDateString('zh-CN')}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Card>
-
-            {/* 管理员操作 · 调整权益(刀3b-1)· 封禁留 3b-2 */}
-            <GrantProSection
-              userId={d.id}
-              email={d.email}
-              token={token}
-              onGranted={() => void qc.invalidateQueries({ queryKey: ['admin-user-detail', id] })}
-            />
 
             {/* 封禁/解封(刀3b-2)*/}
             <BanSection
@@ -188,29 +126,6 @@ export default function AdminUserDetailPage() {
               onChanged={() => void qc.invalidateQueries({ queryKey: ['admin-user-detail', id] })}
             />
 
-            {/* 操作历史(刀3b:该用户被调权益记录)*/}
-            {d.admin_actions.length > 0 && (
-              <Card title={`操作历史(${d.admin_actions.length})`}>
-                <ul className="space-y-1.5 text-sm">
-                  {d.admin_actions.map((a, i) => (
-                    <li key={i} className="flex justify-between gap-4">
-                      <span className="text-foreground">
-                        {ACTION_LABEL[a.action] ?? a.action}
-                        {typeof a.detail.days === 'number' && (
-                          <span className="ml-1.5 text-muted-foreground">+{a.detail.days} 天</span>
-                        )}
-                        {typeof a.detail.note === 'string' && a.detail.note && (
-                          <span className="ml-1.5 text-xs text-muted-foreground/70">· {a.detail.note}</span>
-                        )}
-                      </span>
-                      <span className="shrink-0 font-mono text-xs text-muted-foreground/70">
-                        {new Date(a.created_at).toLocaleString('zh-CN')}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            )}
           </div>
         )}
       </main>

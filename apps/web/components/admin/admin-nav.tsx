@@ -1,13 +1,12 @@
 'use client'
 
-/** /admin 内部导航(兑换码刀2:用户管理 / 兑换码 两 tab · 平级)。 */
+/** /admin 内部导航。商业会员停用期间不展示兑换码入口。 */
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 const ADMIN_TABS = [
   { href: '/admin', label: '用户管理', exact: true },
-  { href: '/admin/redeem-codes', label: '兑换码', exact: false },
   { href: '/admin/visit-stats', label: '访问看板', exact: false },
   { href: '/admin/academy-stats', label: '训练营统计', exact: false },
   // 「市场周报」(AI 生成链路 /admin/reports)入口已下掉(改用「周报发送」运营上传)·

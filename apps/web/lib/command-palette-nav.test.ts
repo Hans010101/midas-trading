@@ -49,11 +49,12 @@ describe('MARKET_ORDER · ★含 hk(原 workbench dialog 漏了)', () => {
 })
 
 describe('FUNC_PAGES · 功能页(★不含训练营)', () => {
-  it('含 终端/策略研究室/会员/自选,路由正确', () => {
+  it('含 终端/策略研究室/个人中心/自选,路由正确', () => {
     const map = Object.fromEntries(FUNC_PAGES.map((p) => [p.label, p.href]))
     expect(map['终端']).toBe('/workbench')
     expect(map['策略研究室']).toBe('/lab/assistant')
-    expect(map['会员']).toBe('/account/membership')
+    expect(map['个人中心']).toBe('/account/membership')
+    expect(map['会员']).toBeUndefined()
     expect(map['自选']).toBe('/watchlist')
   })
 

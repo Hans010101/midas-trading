@@ -514,11 +514,6 @@ function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/refund" className="text-muted-foreground transition-colors hover:text-midas-red">
-                  退款政策
-                </Link>
-              </li>
-              <li>
                 <ContactUsLink className="text-muted-foreground transition-colors hover:text-midas-red" />
               </li>
             </ul>

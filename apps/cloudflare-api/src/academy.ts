@@ -5,6 +5,7 @@ import {
 } from '../../web/content/academy/manifest'
 
 import { authenticate, type AuthenticatedUser } from './auth'
+import { COMMERCIAL_MEMBERSHIP_ENABLED } from './features'
 import {
   HttpError,
   bearerToken,
@@ -250,7 +251,7 @@ async function submitExam(
   let membershipAwarded = false
   let newExpiresAt: string | null = null
 
-  if (passed) {
+  if (passed && COMMERCIAL_MEMBERSHIP_ENABLED) {
     const awardId = crypto.randomUUID()
     const statements = await env.DB.batch([
       env.DB
@@ -314,7 +315,7 @@ async function submitExam(
       .prepare(
         `INSERT INTO academy_exam_results
           (id, user_id, stage, score, total, passed, created_at)
-         VALUES (?, ?, ?, ?, ?, 0, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         crypto.randomUUID(),
@@ -322,6 +323,7 @@ async function submitExam(
         stage,
         score,
         total,
+        passed ? 1 : 0,
         timestamp,
       )
       .run()

@@ -1,4 +1,5 @@
 import { authenticate } from './auth'
+import { COMMERCIAL_MEMBERSHIP_ENABLED } from './features'
 import { getOrCreateInviteCode, INVITE_DAYS } from './growth'
 import { jsonResponse } from './http'
 
@@ -107,7 +108,14 @@ export async function handleAccountRoute(
     case 'GET /api/v1/quota/me':
       return quotaMe(request, env, requestId)
     case 'GET /api/v1/invite/me':
-      return inviteMe(request, env, requestId)
+      return COMMERCIAL_MEMBERSHIP_ENABLED
+        ? inviteMe(request, env, requestId)
+        : jsonResponse(
+            { detail: 'Route not found' },
+            404,
+            requestId,
+            request.method,
+          )
     default:
       return path.startsWith('/api/v1/quota/') ||
         path.startsWith('/api/v1/invite/')

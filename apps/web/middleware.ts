@@ -39,6 +39,16 @@ const runAuth = auth((req) => {
   const url = req.nextUrl
   const isAuthed = !!req.auth
 
+  // 商业会员暂停：历史页面代码保留，但不再提供邀请与兑换入口。
+  if (url.pathname.startsWith('/account/invite')) {
+    return NextResponse.redirect(
+      new URL('/account/membership', req.nextUrl.origin),
+    )
+  }
+  if (url.pathname.startsWith('/admin/redeem-codes')) {
+    return NextResponse.redirect(new URL('/admin', req.nextUrl.origin))
+  }
+
   const isProtected = PROTECTED.some((p) => url.pathname.startsWith(p))
   const isAuthPage = AUTH_PAGES.some((p) => url.pathname.startsWith(p))
 

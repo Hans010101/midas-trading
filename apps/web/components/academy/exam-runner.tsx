@@ -13,7 +13,6 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useMemo, useState } from 'react'
 
-import { Celebration } from '@/components/academy/celebration'
 import { TopNav } from '@/components/layout/top-nav'
 import { ACADEMY_STAGES } from '@/content/academy/manifest'
 import { useExamQuestions, useExamResults, useSubmitExam } from '@/hooks/use-academy-exam'
@@ -196,17 +195,6 @@ export function ExamRunner() {
   )
 }
 
-function fmtDate(iso: string | null): string {
-  if (!iso) return ''
-  try {
-    const d = new Date(iso)
-    const p = (n: number) => String(n).padStart(2, '0')
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-  } catch {
-    return iso.slice(0, 10)
-  }
-}
-
 function ResultView({
   result,
   onRetake,
@@ -216,51 +204,24 @@ function ResultView({
   onRetake: () => void
   stageName: string
 }) {
-  // 首次达标(membership_awarded)→ 自动弹庆祝动画(可关闭)
-  const [showCelebration, setShowCelebration] = useState(result.membership_awarded)
-  const expiryText = result.new_expires_at ? ` · 会员有效期至 ${fmtDate(result.new_expires_at)}` : ''
-
   return (
     <div>
-      {/* ★首次达标庆祝动画(纸屑 + 已加1周会员 + 新到期日)· 可关闭 */}
-      {showCelebration && result.membership_awarded && (
-        <Celebration
-          title={`🎉 恭喜完成「${stageName}」结业测验!`}
-          subtitle={`已为你增加 1 周会员${expiryText}`}
-          onClose={() => setShowCelebration(false)}
-        />
-      )}
-
-      {/* 得分横幅(三态:首次达标发会员 / 重考已通过 / 未通过)*/}
+      {/* 得分横幅 */}
       <div
         className={cn(
           'rounded-xl border p-5 text-center shadow-sm',
           result.passed
-            ? result.membership_awarded
-              ? 'border-gold/50 bg-gold/10'
-              : 'border-success/40 bg-success/5'
+            ? 'border-success/40 bg-success/5'
             : 'border-paper bg-cream',
         )}
       >
         {result.passed ? (
-          result.membership_awarded ? (
-            // 首次达标:大庆祝 + 发会员
-            <>
-              <Award className="mx-auto h-10 w-10 text-gold" />
-              <p className="mt-2 font-serif text-xl font-bold text-gold">
-                🎉 恭喜结业 · {stageName}
-              </p>
-              <p className="mt-1 text-sm font-medium text-gold">已为你增加 1 周会员{expiryText}</p>
-            </>
-          ) : (
-            // 重考已达标:平和提示(★不再发会员、不暗示加会员)
-            <>
-              <CheckCircle2 className="mx-auto h-10 w-10 text-success" />
-              <p className="mt-2 font-serif text-xl font-bold text-success">
-                ✓ 已通过本模块结业测验
-              </p>
-            </>
-          )
+          <>
+            <CheckCircle2 className="mx-auto h-10 w-10 text-success" />
+            <p className="mt-2 font-serif text-xl font-bold text-success">
+              ✓ 已通过「{stageName}」结业测验
+            </p>
+          </>
         ) : (
           <p className="font-serif text-xl font-bold text-foreground">未通过 · 可重考</p>
         )}

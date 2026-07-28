@@ -16,10 +16,11 @@ describe('QuotaHint 三态', () => {
     expect(html).not.toContain('membership')
   })
 
-  it('耗尽 → 文案 + 「了解进阶版」指官网 /#membership', () => {
+  it('耗尽 → 仅说明自动恢复，不出现商业升级入口', () => {
     const html = renderToString(<QuotaHint item={{ feature: 'diagnose', limit: 20, used: 20 }} />)
     expect(html).toContain('今日额度已用完')
-    expect(html).toContain('/#membership')
-    expect(html).toContain('了解进阶版')
+    expect(html).toContain('明日自动恢复')
+    expect(html).not.toContain('membership')
+    expect(html).not.toContain('进阶版')
   })
 })
