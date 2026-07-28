@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "midas-trading-api-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-27",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "ENVIRONMENT": "test",
+    "PROJECT_NAME": "midas-trading",
+    "API_VERSION": "v1",
+    "PUBLIC_WEB_URL": "https://web.example.test",
+    "EMAIL_FROM": "Midas Trading <noreply@example.test>",
+    "GOOGLE_CLIENT_ID": "test-google-client-id"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "midas-trading-db-test",
+      "database_id": "46969153-ff86-4cf1-b013-617d280d3536",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  }
+}

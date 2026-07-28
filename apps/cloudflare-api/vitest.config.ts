@@ -13,7 +13,10 @@ export default defineConfig({
   plugins: [
     cloudflareTest(async () => ({
       wrangler: {
-        configPath: path.join(projectDir, 'wrangler.jsonc'),
+        // The production config contains a real Workers AI binding. Tests use
+        // an explicit local config and inject their own AI stub so CI never
+        // opens a remote proxy session or consumes production allocation.
+        configPath: path.join(projectDir, 'wrangler.test.jsonc'),
       },
       miniflare: {
         bindings: {
