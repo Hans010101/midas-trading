@@ -168,3 +168,50 @@ jobs:
           check_200 "https://midas-trading-api.openclaw007.online/health" "API custom domain"
           check_200 "https://midas-trading-api.hans-pan007.workers.dev/health" "API workers.dev"
           check_200 "https://midas-trading.hans-pan007.workers.dev/" "Web workers.dev"
+
+          check_json() {
+            local url="$1"
+            local expression="$2"
+            local label="$3"
+            local attempt
+            local payload
+
+            for attempt in 1 2 3 4 5; do
+              payload="$(curl --silent --show-error --fail --location \
+                --max-time 30 "$url" || true)"
+              if jq --exit-status "$expression" >/dev/null 2>&1 <<<"$payload"; then
+                echo "✓ ${label}（第 ${attempt} 次）"
+                return 0
+              fi
+              echo "${label}: 数据验收未通过（第 ${attempt}/5 次）"
+              sleep 5
+            done
+
+            echo "✗ ${label}: 数据验收失败"
+            return 1
+          }
+
+          check_json \
+            "https://midas-trading-api.openclaw007.online/api/v1/market/kline?symbol=AGLD%2FUSDT&market=crypto&period=1h&instrument=perp&limit=3" \
+            '.items | length > 0' \
+            "AGLD 永续 K 线"
+          check_json \
+            "https://midas-trading-api.openclaw007.online/api/v1/crypto/overview" \
+            '.market_overview.total_market_cap_usd > 0' \
+            "加密全市场总览"
+          check_json \
+            "https://midas-trading-api.openclaw007.online/api/v1/cn/board" \
+            '.pool_size > 0' \
+            "A 股市场"
+          check_json \
+            "https://midas-trading-api.openclaw007.online/api/v1/us/board" \
+            '.pool_size > 0' \
+            "美股市场"
+          check_json \
+            "https://midas-trading-api.openclaw007.online/api/v1/hk/board" \
+            '.pool_size > 0' \
+            "港股市场"
+          check_json \
+            "https://midas-trading-api.openclaw007.online/api/v1/market/data-sources/health" \
+            '.status == "ok"' \
+            "独立数据源健康状态"

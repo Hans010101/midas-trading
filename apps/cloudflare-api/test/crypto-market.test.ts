@@ -88,4 +88,51 @@ describe('independent crypto market routes', () => {
       items: [],
     })
   })
+
+  it('combines global crypto, sentiment, and derivatives sources without zero placeholders', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('api.coingecko.com')) {
+          return Response.json({
+            data: {
+              total_market_cap: { usd: 2_250_000_000_000 },
+              total_volume: { usd: 67_000_000_000 },
+              market_cap_percentage: { btc: 57.2, eth: 12.8 },
+            },
+          })
+        }
+        if (url.includes('api.alternative.me')) {
+          return Response.json({
+            data: [{ value: '44', value_classification: 'Fear' }],
+          })
+        }
+        return Response.json({ result: 'success', tickers: [futureTicker] })
+      }),
+    )
+
+    const response = await handleCryptoMarketRoute(
+      new Request('https://api.example.test/api/v1/crypto/overview'),
+      'crypto-overview',
+    )
+
+    expect(response?.status).toBe(200)
+    await expect(response?.json()).resolves.toMatchObject({
+      market_overview: {
+        total_market_cap_usd: 2_250_000_000_000,
+        total_volume_24h_usd: 67_000_000_000,
+        btc_dominance: 57.2,
+        eth_dominance: 12.8,
+        fear_greed_value: 44,
+        fear_greed_classification: 'Fear',
+      },
+      unavailable_fields: [],
+      sources: [
+        { name: 'coingecko', ok: true },
+        { name: 'alternative_me', ok: true },
+        { name: 'kraken_futures', ok: true },
+      ],
+    })
+  })
 })

@@ -13,6 +13,12 @@ type Kline = Readonly<{
   amount: number | null
 }>
 
+type KlineFetchResult = Readonly<{
+  items: Kline[]
+  source: string
+  fallback_used: boolean
+}>
+
 type SymbolMeta = Readonly<{
   symbol: string
   market: string
@@ -104,16 +110,17 @@ function validOhlc(
   )
 }
 
-async function fetchYahooKlines(
+async function fetchYahooKlinesFromHost(
   symbol: string,
   market: string,
   period: string,
   limit: number,
+  host: 'query1.finance.yahoo.com' | 'query2.finance.yahoo.com',
 ): Promise<Kline[]> {
   const upstreamSymbol = yahooSymbol(symbol, market)
   const { interval, range } = yahooPeriod(period)
   const url = new URL(
-    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(upstreamSymbol)}`,
+    `https://${host}/v8/finance/chart/${encodeURIComponent(upstreamSymbol)}`,
   )
   url.searchParams.set('interval', interval)
   url.searchParams.set('range', range)
@@ -170,6 +177,51 @@ async function fetchYahooKlines(
     }]
   })
   return items.slice(-limit)
+}
+
+async function fetchYahooKlines(
+  symbol: string,
+  market: string,
+  period: string,
+  limit: number,
+): Promise<KlineFetchResult> {
+  try {
+    return {
+      items: await fetchYahooKlinesFromHost(
+        symbol,
+        market,
+        period,
+        limit,
+        'query1.finance.yahoo.com',
+      ),
+      source: 'Yahoo Finance query1',
+      fallback_used: false,
+    }
+  } catch (primaryError) {
+    try {
+      return {
+        items: await fetchYahooKlinesFromHost(
+          symbol,
+          market,
+          period,
+          limit,
+          'query2.finance.yahoo.com',
+        ),
+        source: 'Yahoo Finance query2',
+        fallback_used: true,
+      }
+    } catch (fallbackError) {
+      if (
+        primaryError instanceof HttpError &&
+        fallbackError instanceof HttpError &&
+        primaryError.status === 404 &&
+        fallbackError.status === 404
+      ) {
+        throw new HttpError(404, '标的不存在')
+      }
+      throw new HttpError(503, '股票行情主备入口均暂不可用')
+    }
+  }
 }
 
 function krakenPair(symbol: string): string {
@@ -249,6 +301,189 @@ async function fetchKrakenKlines(
   return items.slice(-limit)
 }
 
+function cryptoBase(symbol: string): string {
+  const normalized = symbol.trim().toUpperCase()
+  const match = normalized.match(/^([A-Z0-9]{2,20})(?:\/(?:USDT|USD))?$/u)
+  if (!match?.[1]) throw new HttpError(400, '数字资产标的格式无效')
+  return match[1]
+}
+
+function okxBar(period: string): string {
+  const bars: Readonly<Record<string, string>> = {
+    '1m': '1m',
+    '5m': '5m',
+    '15m': '15m',
+    '30m': '30m',
+    '1h': '1H',
+    '1d': '1Dutc',
+    '1w': '1Wutc',
+  }
+  const bar = bars[period]
+  if (!bar) throw new HttpError(400, '周期不受支持')
+  return bar
+}
+
+async function fetchOkxKlines(
+  symbol: string,
+  period: string,
+  instrument: 'spot' | 'perp',
+  limit: number,
+): Promise<Kline[]> {
+  const base = cryptoBase(symbol)
+  const instId = instrument === 'perp'
+    ? `${base}-USDT-SWAP`
+    : `${base}-USDT`
+  const url = new URL('https://www.okx.com/api/v5/market/candles')
+  url.searchParams.set('instId', instId)
+  url.searchParams.set('bar', okxBar(period))
+  url.searchParams.set('limit', String(Math.min(limit, 300)))
+  const response = await fetch(url, {
+    headers: {
+      accept: 'application/json',
+      'user-agent': 'Midas-Trading-Cloudflare/1.0',
+    },
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (!response.ok) {
+    throw new HttpError(503, `OKX 行情暂不可用（HTTP ${response.status}）`)
+  }
+  const payload = (await response.json()) as {
+    code?: string
+    msg?: string
+    data?: unknown[][]
+  }
+  if (payload.code !== '0') {
+    const notFound = payload.code === '51001' || payload.code === '51000'
+    throw new HttpError(notFound ? 404 : 503, payload.msg || 'OKX 行情返回异常')
+  }
+  const items = (payload.data ?? []).flatMap((row) => {
+    const timestamp = Number(row[0])
+    const open = Number(row[1])
+    const high = Number(row[2])
+    const low = Number(row[3])
+    const close = Number(row[4])
+    const volume = Number(row[6] ?? row[5])
+    const amount = Number(row[7])
+    if (!Number.isFinite(timestamp) || !validOhlc(open, high, low, close)) {
+      return []
+    }
+    return [{
+      ts: new Date(timestamp).toISOString(),
+      open,
+      high,
+      low,
+      close,
+      volume: Number.isFinite(volume) && volume >= 0 ? volume : 0,
+      amount: Number.isFinite(amount) && amount >= 0 ? amount : null,
+    }]
+  })
+  return items.sort((left, right) => left.ts.localeCompare(right.ts)).slice(-limit)
+}
+
+function krakenFuturesResolution(period: string): string {
+  if (!PERIODS.has(period)) throw new HttpError(400, '周期不受支持')
+  return period
+}
+
+async function fetchKrakenFuturesKlines(
+  symbol: string,
+  period: string,
+  limit: number,
+): Promise<Kline[]> {
+  const base = cryptoBase(symbol)
+  const krakenBase = base === 'BTC' ? 'XBT' : base === 'DOGE' ? 'XDG' : base
+  const url = new URL(
+    `https://futures.kraken.com/api/charts/v1/trade/PF_${krakenBase}USD/${krakenFuturesResolution(period)}`,
+  )
+  url.searchParams.set('count', String(Math.min(limit, 5_000)))
+  const response = await fetch(url, {
+    headers: { accept: 'application/json' },
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (response.status === 404) throw new HttpError(404, 'Kraken 合约不存在')
+  if (!response.ok) {
+    throw new HttpError(503, `Kraken 合约 K 线暂不可用（HTTP ${response.status}）`)
+  }
+  const payload = (await response.json()) as {
+    candles?: Array<Record<string, unknown>>
+  }
+  return (payload.candles ?? []).flatMap((row) => {
+    const timestamp = Number(row.time)
+    const open = Number(row.open)
+    const high = Number(row.high)
+    const low = Number(row.low)
+    const close = Number(row.close)
+    const volume = Number(row.volume)
+    if (!Number.isFinite(timestamp) || !validOhlc(open, high, low, close)) {
+      return []
+    }
+    return [{
+      ts: new Date(timestamp).toISOString(),
+      open,
+      high,
+      low,
+      close,
+      volume: Number.isFinite(volume) && volume >= 0 ? volume : 0,
+      amount: null,
+    }]
+  }).slice(-limit)
+}
+
+async function fetchCryptoKlines(
+  symbol: string,
+  period: string,
+  instrument: 'spot' | 'perp',
+  limit: number,
+): Promise<KlineFetchResult> {
+  const providers: ReadonlyArray<Readonly<{
+    source: string
+    fetcher: () => Promise<Kline[]>
+  }>> = instrument === 'perp'
+    ? [
+        {
+          source: 'OKX public perpetual candles',
+          fetcher: () => fetchOkxKlines(symbol, period, instrument, limit),
+        },
+        {
+          source: 'Kraken Futures public candles',
+          fetcher: () => fetchKrakenFuturesKlines(symbol, period, limit),
+        },
+      ]
+    : [
+        {
+          source: 'OKX public spot candles',
+          fetcher: () => fetchOkxKlines(symbol, period, instrument, limit),
+        },
+        {
+          source: 'Kraken public spot candles',
+          fetcher: () => fetchKrakenKlines(symbol, period, limit),
+        },
+      ]
+  const failures: unknown[] = []
+  for (const [index, provider] of providers.entries()) {
+    try {
+      const items = await provider.fetcher()
+      if (items.length > 0) {
+        return {
+          items,
+          source: provider.source,
+          fallback_used: index > 0,
+        }
+      }
+      failures.push(new HttpError(404, `${provider.source} 未返回数据`))
+    } catch (error) {
+      failures.push(error)
+    }
+  }
+  const allNotFound = failures.every(
+    (error) => error instanceof HttpError && error.status === 404,
+  )
+  throw new HttpError(
+    allNotFound ? 404 : 503,
+    allNotFound ? '未找到该数字资产交易对' : '数字资产行情主备源均暂不可用',
+  )
+}
+
 async function getKlines(
   request: Request,
   env: Env,
@@ -273,13 +508,27 @@ async function getKlines(
   if (instrument !== 'spot' && instrument !== 'perp') {
     throw new HttpError(400, 'instrument 仅支持 spot 或 perp')
   }
-  const items =
+  const result =
     market === 'crypto'
-      ? await fetchKrakenKlines(symbol, period, limit)
+      ? await fetchCryptoKlines(
+          symbol,
+          period,
+          instrument as 'spot' | 'perp',
+          limit,
+        )
       : await fetchYahooKlines(symbol, market, period, limit)
-  if (items.length === 0) throw new HttpError(404, '未找到 K 线数据')
+  if (result.items.length === 0) throw new HttpError(404, '未找到 K 线数据')
   const response = jsonResponse(
-    { symbol, market, period, items },
+    {
+      symbol,
+      market,
+      period,
+      instrument,
+      items: result.items,
+      source: result.source,
+      fallback_used: result.fallback_used,
+      data_as_of: result.items.at(-1)?.ts ?? null,
+    },
     200,
     requestId,
     request.method,
@@ -288,10 +537,106 @@ async function getKlines(
   return response
 }
 
-function searchSymbols(
+function normalizedYahooSearchSymbol(
+  symbol: string,
+  market: string,
+): string | null {
+  const normalized = symbol.trim().toUpperCase()
+  if (market === 'cn') {
+    const match = normalized.match(/^(\d{6})\.(?:SS|SZ)$/u)
+    return match?.[1] ?? null
+  }
+  if (market === 'hk') {
+    const match = normalized.match(/^(\d{1,5})\.HK$/u)
+    return match?.[1]?.padStart(5, '0') ?? null
+  }
+  if (market === 'us' && /^[A-Z][A-Z0-9.-]{0,14}$/u.test(normalized)) {
+    return normalized
+  }
+  return null
+}
+
+async function searchYahooSymbols(
+  query: string,
+  market: string,
+  limit: number,
+): Promise<SymbolMeta[]> {
+  if (market === 'crypto') return []
+  const url = new URL('https://query2.finance.yahoo.com/v1/finance/search')
+  url.searchParams.set('q', query)
+  url.searchParams.set('quotesCount', String(Math.min(limit * 3, 100)))
+  url.searchParams.set('newsCount', '0')
+  url.searchParams.set('enableFuzzyQuery', 'true')
+  const response = await fetch(url, {
+    headers: {
+      accept: 'application/json',
+      'user-agent': 'Midas-Trading-Cloudflare/1.0',
+    },
+    signal: AbortSignal.timeout(8_000),
+  })
+  if (!response.ok) throw new Error(`Yahoo search HTTP ${response.status}`)
+  const payload = (await response.json()) as {
+    quotes?: Array<{
+      symbol?: unknown
+      shortname?: unknown
+      longname?: unknown
+      quoteType?: unknown
+    }>
+  }
+  return (payload.quotes ?? []).flatMap((quote) => {
+    const symbol = normalizedYahooSearchSymbol(String(quote.symbol ?? ''), market)
+    const quoteType = String(quote.quoteType ?? '').toUpperCase()
+    if (!symbol || !['EQUITY', 'ETF', 'INDEX'].includes(quoteType)) return []
+    const name = String(quote.longname ?? quote.shortname ?? symbol).trim()
+    return [{ symbol, market, name: name || symbol, name_en: name || symbol }]
+  }).slice(0, limit)
+}
+
+async function searchOkxSymbols(
+  query: string,
+  limit: number,
+): Promise<SymbolMeta[]> {
+  const url = new URL('https://www.okx.com/api/v5/public/instruments')
+  url.searchParams.set('instType', 'SWAP')
+  const response = await fetch(url, {
+    headers: {
+      accept: 'application/json',
+      'user-agent': 'Midas-Trading-Cloudflare/1.0',
+    },
+    signal: AbortSignal.timeout(8_000),
+  })
+  if (!response.ok) throw new Error(`OKX instruments HTTP ${response.status}`)
+  const payload = (await response.json()) as {
+    code?: string
+    data?: Array<{ instId?: unknown; baseCcy?: unknown; state?: unknown }>
+  }
+  if (payload.code !== '0') throw new Error('OKX instruments payload invalid')
+  const normalizedQuery = query.toUpperCase().replace(/[^A-Z0-9]/gu, '')
+  if (!normalizedQuery) return []
+  return (payload.data ?? []).flatMap((instrument) => {
+    const instId = String(instrument.instId ?? '').toUpperCase()
+    const match = instId.match(/^([A-Z0-9]{2,20})-USDT-SWAP$/u)
+    const base = match?.[1]
+    if (
+      !base ||
+      instrument.state !== 'live' ||
+      (!base.includes(normalizedQuery) && !instId.includes(normalizedQuery))
+    ) {
+      return []
+    }
+    return [{
+      symbol: `${base}/USDT`,
+      market: 'crypto',
+      name: base,
+      name_en: base,
+    }]
+  }).slice(0, limit)
+}
+
+async function searchSymbols(
   request: Request,
   requestId: string,
-): Response {
+): Promise<Response> {
   const url = new URL(request.url)
   const query = (url.searchParams.get('q') ?? '').trim().toLowerCase()
   const market = url.searchParams.get('market')
@@ -302,13 +647,44 @@ function searchSymbols(
     throw new HttpError(400, 'limit 格式无效')
   }
   const updatedAt = new Date().toISOString()
-  const items = SYMBOLS.filter(
+  const localItems = SYMBOLS.filter(
     (item) =>
       (!market || item.market === market) &&
       [item.symbol, item.name, item.name_en ?? ''].some((value) =>
         value.toLowerCase().includes(query),
       ),
-  )
+  ).slice(0, limit)
+  let remoteItems: SymbolMeta[] = []
+  try {
+    remoteItems = market === 'crypto'
+      ? await searchOkxSymbols(query, limit)
+      : market
+        ? await searchYahooSymbols(query, market, limit)
+        : (await Promise.allSettled([
+            searchYahooSymbols(query, 'us', limit),
+            searchYahooSymbols(query, 'cn', limit),
+            searchYahooSymbols(query, 'hk', limit),
+            searchOkxSymbols(query, limit),
+          ])).flatMap((result) =>
+            result.status === 'fulfilled' ? result.value : [],
+          )
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        event: 'market.symbol_search_fallback',
+        market,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+  }
+  const seen = new Set<string>()
+  const items = [...localItems, ...remoteItems]
+    .filter((item) => {
+      const key = `${item.market}:${item.symbol}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
     .slice(0, limit)
     .map((item) => ({
       ...item,
@@ -316,7 +692,94 @@ function searchSymbols(
       is_active: true,
       updated_at: updatedAt,
     }))
-  return jsonResponse(items, 200, requestId, request.method)
+  const response = jsonResponse(items, 200, requestId, request.method)
+  response.headers.set('cache-control', 'public, max-age=60, s-maxage=3600')
+  return response
+}
+
+async function dataSourceHealth(
+  request: Request,
+  env: Env,
+  requestId: string,
+): Promise<Response> {
+  const [stockProbe, cryptoProbe, boards, overview] = await Promise.all([
+    fetchYahooKlines('AAPL', 'us', '1d', 1)
+      .then((result) => ({
+        ok: result.items.length > 0,
+        source: result.source,
+        data_as_of: result.items.at(-1)?.ts ?? null,
+      }))
+      .catch((error) => ({
+        ok: false,
+        source: 'Yahoo Finance query1/query2',
+        error: error instanceof Error ? error.message : String(error),
+      })),
+    fetchCryptoKlines('AGLD/USDT', '1h', 'perp', 1)
+      .then((result) => ({
+        ok: result.items.length > 0,
+        source: result.source,
+        data_as_of: result.items.at(-1)?.ts ?? null,
+      }))
+      .catch((error) => ({
+        ok: false,
+        source: 'OKX/Kraken Futures',
+        error: error instanceof Error ? error.message : String(error),
+      })),
+    env.DB
+      .prepare(
+        `SELECT market, quoted_at
+         FROM market_home_boards
+         WHERE market IN ('cn', 'us', 'hk')
+         ORDER BY market`,
+      )
+      .all<{ market: string; quoted_at: number }>(),
+    env.DB
+      .prepare(
+        `SELECT COUNT(*) AS count, MAX(quoted_at) AS quoted_at
+         FROM market_overview_quotes`,
+      )
+      .first<{ count: number; quoted_at: number | null }>(),
+  ])
+  const boardStatus = Object.fromEntries(
+    boards.results.map((row) => [
+      row.market,
+      {
+        ok: true,
+        data_as_of: new Date(row.quoted_at).toISOString(),
+        storage: 'midas-trading-db',
+      },
+    ]),
+  )
+  const components = {
+    crypto_kline: cryptoProbe,
+    stock_kline: stockProbe,
+    cn_board: boardStatus.cn ?? { ok: false },
+    us_board: boardStatus.us ?? { ok: false },
+    hk_board: boardStatus.hk ?? { ok: false },
+    global_overview: {
+      ok: (overview?.count ?? 0) > 0,
+      item_count: overview?.count ?? 0,
+      data_as_of: overview?.quoted_at
+        ? new Date(overview.quoted_at).toISOString()
+        : null,
+      storage: 'midas-trading-db',
+    },
+  }
+  const allHealthy = Object.values(components).every(
+    (component) => component.ok,
+  )
+  const response = jsonResponse(
+    {
+      status: allHealthy ? 'ok' : 'degraded',
+      checked_at: new Date().toISOString(),
+      components,
+    },
+    200,
+    requestId,
+    request.method,
+  )
+  response.headers.set('cache-control', 'no-store')
+  return response
 }
 
 export async function handleMarketRoute(
@@ -328,8 +791,14 @@ export async function handleMarketRoute(
   if (path === '/api/v1/market/kline' && request.method === 'GET') {
     return getKlines(request, env, requestId)
   }
+  if (
+    path === '/api/v1/market/data-sources/health' &&
+    request.method === 'GET'
+  ) {
+    return dataSourceHealth(request, env, requestId)
+  }
   if (path === '/api/v1/market/symbols' && request.method === 'GET') {
-    return searchSymbols(request, requestId)
+    return await searchSymbols(request, requestId)
   }
   return path.startsWith('/api/v1/market/')
     ? jsonResponse(

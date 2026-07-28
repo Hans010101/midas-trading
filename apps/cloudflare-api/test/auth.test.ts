@@ -256,6 +256,9 @@ describe('global market overview', () => {
 
 describe('cross-market data', () => {
   it('searches the independent symbol catalog', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      Response.json({ quotes: [] }),
+    )
     const response = await exports.default.fetch(
       apiRequest('/api/v1/market/symbols?q=腾讯&market=hk'),
     )

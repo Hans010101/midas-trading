@@ -73,6 +73,74 @@ async function fetchJson<T>(url: URL | string): Promise<T> {
   return (await response.json()) as T
 }
 
+type CryptoGlobal = Readonly<{
+  total_market_cap_usd: number
+  total_volume_24h_usd: number
+  btc_dominance: number
+  eth_dominance: number
+}>
+
+async function fetchCryptoGlobal(): Promise<CryptoGlobal> {
+  const response = await fetch('https://api.coingecko.com/api/v3/global', {
+    headers: {
+      accept: 'application/json',
+      'user-agent': 'Midas-Trading-Cloudflare/1.0',
+    },
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (!response.ok) {
+    throw new Error(`CoinGecko global HTTP ${response.status}`)
+  }
+  const payload = (await response.json()) as {
+    data?: {
+      total_market_cap?: { usd?: unknown }
+      total_volume?: { usd?: unknown }
+      market_cap_percentage?: { btc?: unknown; eth?: unknown }
+    }
+  }
+  const result = {
+    total_market_cap_usd: numeric(payload.data?.total_market_cap?.usd),
+    total_volume_24h_usd: numeric(payload.data?.total_volume?.usd),
+    btc_dominance: numeric(payload.data?.market_cap_percentage?.btc),
+    eth_dominance: numeric(payload.data?.market_cap_percentage?.eth),
+  }
+  if (
+    result.total_market_cap_usd <= 0 ||
+    result.total_volume_24h_usd <= 0 ||
+    result.btc_dominance <= 0
+  ) {
+    throw new Error('CoinGecko global payload incomplete')
+  }
+  return result
+}
+
+async function fetchFearGreed(): Promise<Readonly<{
+  value: number
+  classification: string
+}>> {
+  const response = await fetch('https://api.alternative.me/fng/?limit=1', {
+    headers: {
+      accept: 'application/json',
+      'user-agent': 'Midas-Trading-Cloudflare/1.0',
+    },
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (!response.ok) {
+    throw new Error(`Alternative.me FGI HTTP ${response.status}`)
+  }
+  const payload = (await response.json()) as {
+    data?: Array<{ value?: unknown; value_classification?: unknown }>
+  }
+  const value = numeric(payload.data?.[0]?.value, -1)
+  const classification = String(
+    payload.data?.[0]?.value_classification ?? '',
+  ).trim()
+  if (value < 0 || value > 100 || !classification) {
+    throw new Error('Alternative.me FGI payload incomplete')
+  }
+  return { value, classification }
+}
+
 function publicBase(pair: string | undefined): string | null {
   const base = pair?.split(':')[0]?.toUpperCase()
   if (!base) return null
@@ -330,7 +398,19 @@ async function getOverview(
   request: Request,
   requestId: string,
 ): Promise<Response> {
-  const items = await perpTickerItems()
+  const [tickerResult, globalResult, fearGreedResult] =
+    await Promise.allSettled([
+      futuresTickers(),
+      fetchCryptoGlobal(),
+      fetchFearGreed(),
+    ] as const)
+  const rawTickers = tickerResult.status === 'fulfilled'
+    ? tickerResult.value
+    : []
+  const items = rawTickers.flatMap((ticker) => {
+    const item = toPerpTicker(ticker)
+    return item ? [item] : []
+  })
   const byChange = [...items].sort(
     (left, right) => right.change_pct_24h - left.change_pct_24h,
   )
@@ -338,7 +418,6 @@ async function getOverview(
     (left, right) => right.quote_volume_24h - left.quote_volume_24h,
   )
   const now = new Date().toISOString()
-  const rawTickers = await futuresTickers()
   const derivativesOiUsd = rawTickers.reduce(
     (sum, ticker) =>
       ticker.symbol?.startsWith('PF_')
@@ -346,16 +425,40 @@ async function getOverview(
         : sum,
     0,
   )
-  return cachedJson(
-    {
-      market_overview: {
-        ts: now,
+  const global = globalResult.status === 'fulfilled'
+    ? globalResult.value
+    : {
         total_market_cap_usd: 0,
         total_volume_24h_usd: 0,
         btc_dominance: 0,
         eth_dominance: 0,
-        fear_greed_value: 0,
-        fear_greed_classification: 'N/A',
+      }
+  const fearGreed = fearGreedResult.status === 'fulfilled'
+    ? fearGreedResult.value
+    : { value: 0, classification: 'N/A' }
+  const unavailableFields = [
+    ...(globalResult.status === 'rejected'
+      ? [
+          'total_market_cap_usd',
+          'total_volume_24h_usd',
+          'btc_dominance',
+          'eth_dominance',
+        ]
+      : []),
+    ...(fearGreedResult.status === 'rejected'
+      ? ['fear_greed_value']
+      : []),
+    ...(tickerResult.status === 'rejected'
+      ? ['derivatives_oi_usd', 'derivatives_volume_24h_usd']
+      : []),
+  ]
+  return cachedJson(
+    {
+      market_overview: {
+        ts: now,
+        ...global,
+        fear_greed_value: fearGreed.value,
+        fear_greed_classification: fearGreed.classification,
         derivatives_oi_usd: derivativesOiUsd,
         derivatives_volume_24h_usd: items.reduce(
           (sum, item) => sum + item.quote_volume_24h,
@@ -367,14 +470,22 @@ async function getOverview(
       top_volume: byVolume.slice(0, 10),
       btc_ticker: items.find((item) => item.symbol === 'BTC/USDT') ?? null,
       eth_ticker: items.find((item) => item.symbol === 'ETH/USDT') ?? null,
-      source: 'Kraken public derivatives market data',
-      unavailable_fields: [
-        'total_market_cap_usd',
-        'total_volume_24h_usd',
-        'btc_dominance',
-        'eth_dominance',
-        'fear_greed_value',
+      source: 'CoinGecko + Alternative.me + Kraken Futures',
+      sources: [
+        {
+          name: 'coingecko',
+          ok: globalResult.status === 'fulfilled',
+        },
+        {
+          name: 'alternative_me',
+          ok: fearGreedResult.status === 'fulfilled',
+        },
+        {
+          name: 'kraken_futures',
+          ok: tickerResult.status === 'fulfilled',
+        },
       ],
+      unavailable_fields: unavailableFields,
     },
     requestId,
     request.method,
