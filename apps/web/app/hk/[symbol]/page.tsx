@@ -26,7 +26,7 @@ export async function generateMetadata({
   const { symbol } = await params
   const name = getCuratedName('hk', symbol) ?? symbol
   const title = `${name}（${symbol}）· 港股行情与技术分析`
-  const description = `港股 ${name}（${symbol}）的多周期 K 线、技术指标（均线/MACD/RSI/布林）与技术面客观结构诊断。仅供参考，不构成投资建议。`
+  const description = `港股 ${name}（${symbol}）的多周期 K 线、技术指标（均线/MACD/RSI/布林）与技术面客观结构诊断。`
   const canonical = `/hk/${symbol}`
   return {
     title,

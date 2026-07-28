@@ -20,11 +20,11 @@ import { ACADEMY_ARTICLES, ACADEMY_STAGES } from '@/content/academy/manifest'
 export const metadata: Metadata = {
   title: '交易训练营 · 118 篇免费教学',
   description:
-    '免费系统化交易教学:K线、做多做空、杠杆、技术指标、缠论、永续合约到交易体系六阶 118 篇图文文章,配 88 条名词词典。教学内容仅供学习参考,不构成投资建议。',
+    '免费系统化交易教学:K线、做多做空、杠杆、技术指标、缠论、永续合约到交易体系六阶 118 篇图文文章,配 88 条名词词典。',
   alternates: { canonical: '/academy' },
   openGraph: {
     title: '交易训练营 · 118 篇免费教学 · 点金 Midas',
-    description: '六阶系统教学 118 篇 + 88 条名词词典,从 K 线到缠论、合约。教学内容仅供学习参考。',
+    description: '六阶系统教学 118 篇 + 88 条名词词典,从 K 线到缠论、合约。',
     url: '/academy',
   },
 }

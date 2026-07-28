@@ -26,7 +26,7 @@ export async function generateMetadata({
   const { symbol } = await params
   const name = getCuratedName('cn', symbol) ?? symbol
   const title = `${name}（${symbol}）· A股行情与技术分析`
-  const description = `A股 ${name}（${symbol}）的多周期 K 线、技术指标（均线/MACD/RSI/布林）与技术面客观结构诊断。配虚拟交易沙盘，仅供参考，不构成投资建议。`
+  const description = `A股 ${name}（${symbol}）的多周期 K 线、技术指标（均线/MACD/RSI/布林）与技术面客观结构诊断。`
   const canonical = `/cn/${symbol}`
   return {
     title,

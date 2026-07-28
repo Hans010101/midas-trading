@@ -28,7 +28,7 @@ export async function generateMetadata({
   const { symbol } = await params
   const name = getCuratedName('crypto', symbol) ?? symbol
   const title = `${name}（${symbol}）· 加密货币行情与技术分析`
-  const description = `${name}（${symbol}）永续合约的多周期 K 线、技术指标（均线/MACD/RSI/布林）与资金费率、持仓量、多空比等合约数据分析。配虚拟交易沙盘，仅供参考，不构成投资建议。`
+  const description = `${name}（${symbol}）永续合约的多周期 K 线、技术指标（均线/MACD/RSI/布林）与资金费率、持仓量、多空比等合约数据分析。`
   const canonical = `/crypto/${symbol}`
   return {
     title,

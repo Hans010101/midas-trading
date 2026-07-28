@@ -141,8 +141,7 @@ function RegisterForm() {
             onChange={(e) => setAgeOk(e.target.checked)}
           />
           <span>
-            我已年满 <strong>18 周岁</strong>,知悉点金 Midas 是模拟交易终端,
-            提供的所有信息不构成投资建议。
+            我已年满 <strong>18 周岁</strong>
           </span>
         </label>
 

@@ -5,7 +5,7 @@ import type { Metadata } from 'next'
 export const metadata: Metadata = {
   title: '财经日历',
   description:
-    '宏观经济事件日程一览:FOMC 议息、非农、CPI、GDP、LPR、央行决议等官方发布时间(北京时间)。仅供参考,不构成投资建议。',
+    '宏观经济事件日程一览:FOMC 议息、非农、CPI、GDP、LPR、央行决议等官方发布时间(北京时间)。',
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {

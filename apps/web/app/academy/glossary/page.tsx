@@ -21,11 +21,11 @@ import { buildGlossaryTermSet } from '@/lib/academy/glossary-schema'
 export const metadata: Metadata = {
   title: '交易名词词典 · 88 条速查',
   description:
-    '88 个交易名词速查 · 10 大类:基础概念、订单交易、合约衍生品、技术指标、缠论、策略与风险等,每条一句话定义 + 展开说明。知识科普,不构成投资建议。',
+    '88 个交易名词速查 · 10 大类:基础概念、订单交易、合约衍生品、技术指标、缠论、策略与风险等,每条一句话定义 + 展开说明。',
   alternates: { canonical: '/academy/glossary' },
   openGraph: {
     title: '交易名词词典 · 88 条速查 · 点金 Midas',
-    description: '88 个交易名词 · 10 大类 · 一句话定义 + 展开。知识科普,不构成投资建议。',
+    description: '88 个交易名词 · 10 大类 · 一句话定义 + 展开。',
     url: '/academy/glossary',
   },
 }
@@ -45,9 +45,6 @@ export default function AcademyGlossaryPage() {
             <AcademySideNav active="glossary" />
             <div className="min-w-0 flex-1">
               <ArticleRenderer markdown={markdown} />
-              <p className="mt-8 border-t border-paper pt-4 text-xs text-muted-foreground/60">
-                教学内容,仅供学习参考,不构成投资建议。
-              </p>
             </div>
           </div>
         </div>

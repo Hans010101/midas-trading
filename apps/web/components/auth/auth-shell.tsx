@@ -48,9 +48,6 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
 
         {footer && <div className="mt-4 text-center text-sm">{footer}</div>}
 
-        <p className="mt-8 text-center text-xs text-muted-foreground/70">
-          不构成投资建议
-        </p>
       </div>
     </main>
   )

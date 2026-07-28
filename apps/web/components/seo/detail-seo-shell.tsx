@@ -47,9 +47,6 @@ export function DetailSeoShell({
           点金 Midas 提供 {label} {name} 的行情走势与结构化技术分析，帮助你客观理解价格结构。
           数据实时加载中……
         </p>
-        <p className="mt-6 text-sm text-muted-foreground/70">
-          ⚠ 本页为 K 线结构与技术数据的客观展示，仅供参考，不构成任何投资建议。所有交易均为虚拟资金模拟。
-        </p>
       </div>
     </main>
   )

@@ -1,4 +1,5 @@
 import { handleAccountRoute } from './account'
+import { handleAnalysisRoute } from './analysis'
 import { handleAcademyRoute } from './academy'
 import { handleAlertRulesRoute } from './alert-rules'
 import { handleAuthRoute } from './auth'
@@ -120,6 +121,7 @@ export default {
     try {
       const response =
         (await handleAuthRoute(request, env, requestId)) ??
+        (await handleAnalysisRoute(request, env, requestId)) ??
         (await handleBotPresetRoute(request, env, requestId)) ??
         (await handleAccountRoute(request, env, requestId)) ??
         (await handleAlertRulesRoute(request, env, requestId)) ??

@@ -21,6 +21,7 @@ import { useChan } from '@/hooks/use-chan'
 import { useFuturesInfo } from '@/hooks/use-crypto'
 import { usePerpPositions } from '@/hooks/use-perp'
 import { useQuota } from '@/hooks/use-quota'
+import { hasFullFeatureAccess } from '@/lib/features'
 import { fetchFuturesMetricsBatch } from '@/lib/api/crypto-market'
 import { cn } from '@/lib/utils'
 import type { Period } from '@midas/shared'
@@ -47,7 +48,7 @@ interface Props {
 export function StrategyChecklist({ futuresSymbol, klineSymbol, period }: Props) {
   // ★ Pro 门控:实战策略清单是 Pro 内容(其输入为公开合约指标 · 此处为前端门控 · 两道门遮罩)
   const { data: quota } = useQuota()
-  const isPro = quota?.plan === 'pro'
+  const hasAccess = hasFullFeatureAccess(quota !== undefined, quota?.plan)
   const info = useFuturesInfo(futuresSymbol)
   const metricsQ = useQuery({
     queryKey: ['crypto-strategy-metrics', futuresSymbol],
@@ -126,7 +127,7 @@ export function StrategyChecklist({ futuresSymbol, klineSymbol, period }: Props)
       <div className="mb-3 flex items-center justify-between">
         <span className="font-serif text-base font-bold">实战策略清单</span>
       </div>
-      {isPro ? (
+      {hasAccess ? (
         <>
           <ul className="space-y-2">
             {rules.map((r) => (

@@ -329,9 +329,8 @@ export default function EconCalendarPage() {
             </div>
           )}
 
-          {/* 免责(完整口径 · 红线) */}
           <p className="mt-6 text-xs leading-relaxed text-muted-foreground">
-            以上为官方公开日程的客观展示,发布时间以各官方机构最终公布为准;标注「时刻待定」「以官方为准」的条目为窗口或惯例推算。仅供参考,不构成投资建议。
+            发布时间以各官方机构最终公布为准；标注「时刻待定」「以官方为准」的条目为窗口或惯例推算。
           </p>
         </div>
       </main>

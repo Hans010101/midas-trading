@@ -47,6 +47,7 @@ import { StructureSandbox } from '@/components/landing/structure-sandbox'
 import { VirtualPractice } from '@/components/landing/virtual-practice'
 import { JsonLd } from '@/components/seo/json-ld'
 import { organizationSchema, websiteSchema } from '@/lib/seo/schema'
+import { MEMBERSHIP_GATING_ENABLED } from '@/lib/features'
 import { cn } from '@/lib/utils'
 
 export const dynamic = 'force-static'
@@ -76,12 +77,12 @@ export default function HomePage() {
       <BotRemote />
       <VirtualPractice />
       <ChanAndMore />
-      <Membership />
+      {MEMBERSHIP_GATING_ENABLED && <Membership />}
       <BottomCTA />
       <Footer />
 
       {/* 「答题赢会员」首访弹窗(客户端 · cookie 门控 · 未登录首访弹一次 · B 期刀5)*/}
-      <AcademyPromoPopup />
+      {MEMBERSHIP_GATING_ENABLED && <AcademyPromoPopup />}
     </main>
   )
 }
@@ -125,9 +126,11 @@ function TopNav() {
           <a href="#bot" className="text-muted-foreground transition-colors hover:text-foreground">
             机器人
           </a>
-          <a href="#membership" className="text-muted-foreground transition-colors hover:text-foreground">
-            会员
-          </a>
+          {MEMBERSHIP_GATING_ENABLED && (
+            <a href="#membership" className="text-muted-foreground transition-colors hover:text-foreground">
+              会员
+            </a>
+          )}
         </nav>
 
         <div className="flex items-center gap-3">
@@ -481,7 +484,9 @@ function Footer() {
               { label: '市场', href: '/global' },
               { label: 'AI 沙盘助手', href: '#sandbox' },
               { label: '策略研究室', href: '#lab' },
-              { label: '会员', href: '#membership' },
+              ...(MEMBERSHIP_GATING_ENABLED
+                ? [{ label: '会员', href: '#membership' }]
+                : []),
             ]}
           />
           {/* 法务 · 静态页已上线 + 联系我们(工单)+ 客服邮箱兜底 */}

@@ -33,7 +33,7 @@ export function InteractiveCard({
       </figcaption>
       <div className="px-3 py-4 sm:px-4">{children}</div>
       <p className="border-t border-paper px-4 py-2 text-[11px] leading-relaxed text-foreground/50">
-        {footnote ?? '示意演示 · 数据为教学示例、非真实行情 · 不构成投资建议。'}
+        {footnote ?? '示意演示 · 数据为教学示例'}
       </p>
     </figure>
   )

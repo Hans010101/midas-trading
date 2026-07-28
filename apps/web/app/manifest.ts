@@ -9,7 +9,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: '点金 Midas · AI 原生跨市场分析终端',
     short_name: '点金 Midas',
     description:
-      '覆盖加密、美股、A 股、港股四大市场的 AI 原生分析终端。分析内容仅供参考,不构成投资建议。',
+      '覆盖加密、美股、A 股、港股四大市场的 AI 原生分析终端。',
     start_url: '/',
     display: 'standalone',
     background_color: '#ffffff',

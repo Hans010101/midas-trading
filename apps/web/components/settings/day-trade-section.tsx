@@ -38,7 +38,7 @@ export function DayTradeSection() {
     <section className="mb-6 rounded-lg border border-paper bg-surface-card p-5">
       <h2 className="mb-1 font-serif text-lg font-bold text-foreground">做T信号</h2>
       <p className="mb-4 text-sm text-muted-foreground">
-        开启后,加密市场页会出现「做T信号」榜单(布林结构扫描 · 结构描述非建议 · 仅供参考,不构成投资建议)
+        开启后,加密市场页会出现「做T信号」榜单(布林结构扫描)
       </p>
 
       <div className="flex items-center justify-between gap-3 rounded-md border border-paper bg-background px-3 py-2.5">
@@ -71,7 +71,7 @@ export function DayTradeSection() {
       </div>
 
       <p className="mt-4 text-[11px] text-muted-foreground/60">
-        偏好按账号保存(跨设备同步)· 做T信号仅为布林通道结构的客观描述,不构成任何买卖建议
+        偏好按账号保存(跨设备同步)
       </p>
     </section>
   )

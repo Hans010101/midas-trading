@@ -108,18 +108,6 @@ async function updateConfig(request: Request, env: Env, requestId: string) {
     if (typeof body[field] !== 'boolean') {
       throw new HttpError(400, `${field} 必须是布尔值`)
     }
-    if (
-      (field === 'dott_digest_enabled' || field === 'dott_transition_enabled') &&
-      body[field] === true
-    ) {
-      const account = await env.DB
-        .prepare('SELECT subscription_expires_at FROM users WHERE id = ?')
-        .bind(user.id)
-        .first<{ subscription_expires_at: number | null }>()
-      if (!account?.subscription_expires_at || account.subscription_expires_at <= Date.now()) {
-        throw new HttpError(403, '做T信号推送为 Pro 专属功能')
-      }
-    }
     sets.push(`${field} = ?`)
     values.push(body[field] ? 1 : 0)
   }

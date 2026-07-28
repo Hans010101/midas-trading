@@ -22,6 +22,7 @@ import { useEffect, useState } from 'react'
 import { ProLock } from '@/components/account/pro-lock'
 import { biasTone } from '@/components/crypto/boll-scan-list'
 import { useQuota } from '@/hooks/use-quota'
+import { hasFullFeatureAccess } from '@/lib/features'
 import { useStrategyRecommend, useStrategySignals } from '@/hooks/use-strategy'
 import type { BollStructureResponse } from '@/lib/api/crypto-market'
 import { fetchBollStructure } from '@/lib/api/crypto-market'
@@ -116,12 +117,12 @@ export function StrategyPanel({
   // ★布林做T Pro 门控(纯前端 · 对齐 strategy-checklist「公开输入 + 前端门控」范式):
   //   非 Pro → 结构内容显 ProLock(标签仍在序列、仍可排序)· 不取数(不把 Pro 内容拉到非 Pro 客户端)。
   const { data: quota } = useQuota()
-  const isProMember = quota?.plan === 'pro'
+  const hasAccess = hasFullFeatureAccess(quota !== undefined, quota?.plan)
   const bollSymbol = symbol.replace('/', '') // ccxt 'BTC/USDT' → Binance 'BTCUSDT'(B-1 接口契约)
   const bollStructure = useQuery({
     queryKey: ['boll-structure', bollSymbol],
     queryFn: ({ signal }) => fetchBollStructure(bollSymbol, signal),
-    enabled: isCrypto && view === 'dott' && isProMember, // 仅 crypto + 做T 视图 + Pro 才取数
+    enabled: isCrypto && view === 'dott' && hasAccess,
     retry: 0,
     staleTime: 60_000,
   })
@@ -240,7 +241,7 @@ export function StrategyPanel({
           {/* 内容区 · 做T 视图 → 布林结构(★Pro 门控:非 Pro 显 ProLock · 同策略信号/AI卡)·
               策略视图 → 信号(Pro 门控)· crypto 未开策略信号时选中策略 → 提示开开关 */}
           {view === 'dott' ? (
-            isProMember ? (
+            hasAccess ? (
               <DottStructureView query={bollStructure} />
             ) : (
               <ProLock title="布林做T结构" />

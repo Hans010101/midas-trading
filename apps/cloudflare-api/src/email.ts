@@ -26,7 +26,7 @@ export async function sendVerificationEmail(
           <p>如果按钮无法点击，请复制下面链接到浏览器：</p>
           <p style="overflow-wrap:anywhere">${verifyUrl}</p>
           <hr style="border:0;border-top:1px solid #eee;margin:28px 0">
-          <p style="color:#666;font-size:13px">Midas Trading · 仅供参考，不构成投资建议。</p>
+          <p style="color:#666;font-size:13px">Midas Trading</p>
         </div>
       `,
     }),

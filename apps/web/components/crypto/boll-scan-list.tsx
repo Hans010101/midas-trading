@@ -66,9 +66,6 @@ export function BollScanList({
     return [...filtered].sort((a, b) => Number(b.transition) - Number(a.transition))
   }, [q.data, bias, onlyTransition])
 
-  // 免责优先用接口返回值(红线口径由后端锁死)· 兜底常量防接口异常时丢免责
-  const disclaimer = q.data?.disclaimer ?? '结构描述非建议 · 仅供参考,不构成投资建议'
-
   return (
     <div>
       {/* 筛选条:倾向 tab + 只看转换 + 快照时间 */}
@@ -211,8 +208,6 @@ export function BollScanList({
         </table>
       </div>
 
-      {/* ★底部免责(红线 · 接口返回的 disclaimer · 必须显示)*/}
-      <p className="mt-4 text-center text-xs text-muted-foreground/70">{disclaimer}</p>
     </div>
   )
 }

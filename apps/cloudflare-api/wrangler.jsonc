@@ -6,6 +6,9 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": false,
+  "ai": {
+    "binding": "AI"
+  },
   "routes": [
     {
       "pattern": "midas-trading-api.openclaw007.online",

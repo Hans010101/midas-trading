@@ -16,11 +16,11 @@ import { MarketHomePage } from '@/components/market-home/market-home-page'
 export const metadata: Metadata = {
   title: '港股行情',
   description:
-    '港股行情:恒生指数、恒生国企指数与主要成分股涨跌、成交额榜单。行情数据仅供参考,不构成投资建议。',
+    '港股行情:恒生指数、恒生国企指数与主要成分股涨跌、成交额榜单。',
   alternates: { canonical: '/hk-market' },
   openGraph: {
     title: '港股行情 · 点金 Midas',
-    description: '港股:恒生指数、国企指数、主要成分股涨跌与成交额榜。数据仅供参考。',
+    description: '港股:恒生指数、国企指数、主要成分股涨跌与成交额榜。',
     url: '/hk-market',
   },
 }

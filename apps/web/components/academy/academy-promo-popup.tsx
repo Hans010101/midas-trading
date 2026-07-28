@@ -228,7 +228,7 @@ export function AcademyPromoPopup() {
             </button>
 
             <p className="mt-3 text-center text-[11px] leading-relaxed" style={{ color: FINE_TEXT }}>
-              训练营为教学内容,仅供学习参考,不构成投资建议。
+              训练营提供系统化交易知识与互动练习。
             </p>
           </div>
         </DialogPrimitive.Content>

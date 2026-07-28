@@ -75,6 +75,7 @@ describe('planLabel', () => {
   it('free/pro 映射 · 未知透出', () => {
     expect(planLabel('free')).toBe('免费版')
     expect(planLabel('pro')).toBe('进阶版 Pro')
+    expect(planLabel('registered')).toBe('注册用户 · 全功能')
     expect(planLabel('vip')).toBe('vip')
   })
 })

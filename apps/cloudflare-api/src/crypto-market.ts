@@ -460,6 +460,39 @@ async function metricsItem(symbol: string): Promise<{
   }
 }
 
+export async function fetchCryptoAiContext(symbol: string): Promise<Readonly<{
+  symbol: string
+  mark_price: number
+  index_price: number
+  basis_pct: number
+  open_interest_usd: number
+  funding_rate: number | null
+  account_long_short_ratio: number | null
+  oi_change_pct_24h: number | null
+  as_of: string
+}>> {
+  const parsed = parsePublicSymbol(symbol)
+  const [metrics, tickers] = await Promise.all([
+    metricsItem(parsed.publicSymbol),
+    futuresTickers(),
+  ])
+  const ticker = tickers.find((item) => item.symbol === parsed.futuresSymbol)
+  if (!ticker) throw new HttpError(404, '未找到该 Kraken 永续合约')
+  const mark = finite(ticker.markPrice)
+  const index = finite(ticker.indexPrice)
+  return {
+    symbol: parsed.publicSymbol,
+    mark_price: mark,
+    index_price: index,
+    basis_pct: index > 0 ? ((mark - index) / index) * 100 : 0,
+    open_interest_usd: finite(ticker.openInterest) * mark,
+    funding_rate: metrics.funding_rate,
+    account_long_short_ratio: metrics.account_long_short_ratio,
+    oi_change_pct_24h: metrics.oi_change_pct_24h,
+    as_of: ticker.lastTime ?? new Date().toISOString(),
+  }
+}
+
 async function getTickers(
   request: Request,
   requestId: string,

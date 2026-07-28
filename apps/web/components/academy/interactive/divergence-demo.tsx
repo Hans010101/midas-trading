@@ -71,7 +71,7 @@ export function DivergenceDemo() {
       </svg>
       <div className={'mt-2 rounded px-3 py-2 text-sm ' + (kind === 'top' ? 'bg-midas-red/10 text-midas-red' : 'bg-surface-subtle text-foreground/70')}>
         {kind === 'top'
-          ? <><strong className="font-semibold">顶背驰</strong>:价格峰2(120)＞ 峰1(115)创新高,但 MACD 段2 力度 ＜ 段1 → 动能衰减。仅供参考,不预示必然反转。</>
+          ? <><strong className="font-semibold">顶背驰</strong>:价格峰2(120)＞ 峰1(115)创新高,但 MACD 段2 力度 ＜ 段1 → 动能衰减，不预示必然反转。</>
           : <><strong className="font-semibold">不背驰</strong>:价格创新高,MACD 段2 力度也增强(同步)→ 趋势动能未衰减,不构成背驰。</>}
       </div>
       <p className="mt-2 text-xs leading-relaxed text-foreground/60">

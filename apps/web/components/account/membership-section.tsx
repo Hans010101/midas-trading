@@ -51,6 +51,25 @@ export function MembershipSection() {
   const [payPeriod, setPayPeriod] = useState<Period | null>(null)
   const [showSupport, setShowSupport] = useState(false)
 
+  // Membership billing is paused. The complete purchase/redeem implementation
+  // below is intentionally retained for a possible future reactivation.
+  if (quota?.plan === 'registered') {
+    return (
+      <div className="space-y-4">
+        <h2 className="font-serif text-xl font-bold text-foreground">账户权限</h2>
+        <div className="rounded-lg border border-paper bg-surface-card p-5">
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Check className="h-4 w-4 text-up" />
+            注册用户已开放全部功能
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            AI 分析、策略工具、市场数据与通知通道均可直接使用，无需购买会员。
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   const isPro = quota?.plan === 'pro'
   const cta = isPro ? '续费' : '开通'
 

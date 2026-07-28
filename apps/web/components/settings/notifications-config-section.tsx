@@ -24,6 +24,10 @@ import {
 import { useCreateFeishuBindToken, useUnbindFeishu } from '@/hooks/use-feishu'
 import { useMe } from '@/hooks/use-me'
 import { useQuota } from '@/hooks/use-quota'
+import {
+  hasFullFeatureAccess,
+  MEMBERSHIP_GATING_ENABLED,
+} from '@/lib/features'
 import { useCreateBindToken, useUnbindTelegram } from '@/hooks/use-telegram'
 import {
   type FeishuBindTokenResult,
@@ -151,7 +155,7 @@ function DottAlertCard({
   bound: boolean
 }) {
   const { data: quota } = useQuota()
-  const isPro = quota?.plan === 'pro'
+  const hasAccess = hasFullFeatureAccess(quota !== undefined, quota?.plan)
   const router = useRouter()
   const saveMutation = useSaveNotificationConfig()
   // M2-4 拆两体系:定时全景(digest)/ 行情转换(transition)· 各自独立开关
@@ -184,7 +188,7 @@ function DottAlertCard({
 
   return (
     <DottAlertView
-      isPro={isPro}
+      isPro={hasAccess}
       bound={bound}
       digestEnabled={digest}
       transitionEnabled={transition}
@@ -222,21 +226,19 @@ export function DottAlertView({
   onToggleTransition: (next: boolean) => void
   onUpgrade: () => void
 }) {
+  const gated = MEMBERSHIP_GATING_ENABLED && !isPro
   return (
     <div className="rounded-lg border border-paper bg-cream p-5 shadow-sm">
       <h3 className="mb-1 flex items-center gap-2 font-serif text-base font-bold text-foreground">
         <span className="text-xl" aria-hidden="true">📈</span>
         做T信号推送
-        <span className="rounded border border-gold bg-gold/[0.08] px-1.5 py-0.5 font-mono text-[10px] text-gold">
-          Pro 专属
-        </span>
       </h3>
       <p className="mb-3 text-xs text-muted-foreground">
-        布林做T 信号(加密永续)推送到你绑定的 Telegram · 仅供参考,不构成投资建议
+        布林做T 信号(加密永续)推送到你绑定的 Telegram
         {isPro && !bound ? ' · ⚠ 需先绑定 Telegram(上方)才会真正收到' : ''}
       </p>
 
-      {isPro ? (
+      {!gated ? (
         <div className="space-y-2">
           <Toggle
             label="做T定时全景"

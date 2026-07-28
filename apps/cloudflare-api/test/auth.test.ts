@@ -100,6 +100,8 @@ describe('independent alerts and notification settings', () => {
         token,
         body: {
           price_alert_enabled: false,
+          dott_digest_enabled: true,
+          dott_transition_enabled: true,
           quiet_hours_enabled: true,
           quiet_hours_start: 22,
           quiet_hours_end: 8,
@@ -110,6 +112,8 @@ describe('independent alerts and notification settings', () => {
     expect(update.status).toBe(200)
     await expect(update.json()).resolves.toMatchObject({
       price_alert_enabled: false,
+      dott_digest_enabled: true,
+      dott_transition_enabled: true,
       quiet_hours_enabled: true,
       quiet_hours_start: 22,
       quiet_hours_end: 8,
@@ -494,8 +498,8 @@ describe('academy learning state', () => {
   })
 })
 
-describe('independent membership growth', () => {
-  it('attributes an invite, grants trial plus rewards, and reports quota', async () => {
+describe('independent account growth', () => {
+  it('attributes an invite, retains rewards, and gives every account full quota', async () => {
     const inviter = await createTestSession()
     const inviteResponse = await exports.default.fetch(
       apiRequest('/api/v1/invite/me', { token: inviter.token }),
@@ -512,10 +516,10 @@ describe('independent membership growth', () => {
       apiRequest('/api/v1/quota/me', { token: inviter.token }),
     )
     await expect(beforeReward.json()).resolves.toMatchObject({
-      plan: 'free',
+      plan: 'registered',
       items: [
-        { feature: 'diagnose', limit: 5, used: 0 },
-        { feature: 'backtest', limit: 3, used: 0 },
+        { feature: 'diagnose', limit: 300, used: 0 },
+        { feature: 'backtest', limit: 150, used: 0 },
       ],
     })
 
@@ -570,7 +574,7 @@ describe('independent membership growth', () => {
       apiRequest('/api/v1/quota/me', { token: login.access_token }),
     )
     await expect(inviteeQuota.json()).resolves.toMatchObject({
-      plan: 'pro',
+      plan: 'registered',
       items: [
         { feature: 'diagnose', limit: 300 },
         { feature: 'backtest', limit: 150 },
@@ -589,7 +593,7 @@ describe('independent membership growth', () => {
       apiRequest('/api/v1/quota/me', { token: inviter.token }),
     )
     await expect(inviterQuota.json()).resolves.toMatchObject({
-      plan: 'pro',
+      plan: 'registered',
     })
   })
 })
@@ -668,7 +672,7 @@ describe('independent redeem codes', () => {
       apiRequest('/api/v1/quota/me', { token: member.token }),
     )
     await expect(memberQuota.json()).resolves.toMatchObject({
-      plan: 'pro',
+      plan: 'registered',
     })
   })
 })

@@ -2,10 +2,10 @@ import { authenticate } from './auth'
 import { getOrCreateInviteCode, INVITE_DAYS } from './growth'
 import { jsonResponse } from './http'
 
-const PLAN_QUOTAS = {
-  free: { diagnose: 5, backtest: 3 },
-  pro: { diagnose: 300, backtest: 150 },
-} as const
+// Membership billing is paused. Keep the historical subscription fields and
+// payment code intact, while every authenticated account receives the former
+// full-access limits.
+const REGISTERED_QUOTAS = { diagnose: 300, backtest: 150 } as const
 
 function usageMonth(timestamp = new Date()): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -35,15 +35,6 @@ async function quotaMe(
 ): Promise<Response> {
   const { user } = await authenticate(request, env)
   const timestamp = Date.now()
-  const account = await env.DB
-    .prepare('SELECT subscription_expires_at FROM users WHERE id = ?')
-    .bind(user.id)
-    .first<{ subscription_expires_at: number | null }>()
-  const isPro =
-    account?.subscription_expires_at !== null &&
-    account?.subscription_expires_at !== undefined &&
-    account.subscription_expires_at > timestamp
-  const plan = isPro ? 'pro' : 'free'
   const usage = await env.DB
     .prepare(
       `SELECT feature, used
@@ -57,13 +48,11 @@ async function quotaMe(
   )
   return jsonResponse(
     {
-      plan,
-      plan_expires_at: isPro
-        ? new Date(account.subscription_expires_at as number).toISOString()
-        : null,
+      plan: 'registered',
+      plan_expires_at: null,
       items: (['diagnose', 'backtest'] as const).map((feature) => ({
         feature,
-        limit: PLAN_QUOTAS[plan][feature],
+        limit: REGISTERED_QUOTAS[feature],
         used: usedByFeature[feature] ?? 0,
       })),
       reset_at: quotaResetAt(new Date(timestamp)),

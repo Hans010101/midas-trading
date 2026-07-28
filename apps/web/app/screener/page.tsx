@@ -96,7 +96,7 @@ export default function ScreenerPage() {
     <div className="mx-auto max-w-4xl px-4 py-8">
       <h1 className="mb-2 font-serif text-2xl font-bold text-foreground">选股筛选器</h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        按价格 / 涨跌幅 / RSI / 均线排列，筛选重点行情池中符合条件的标的(A股 / 美股 / 港股现货 · 非全市场 · 仅供参考)。
+        按价格 / 涨跌幅 / RSI / 均线排列，筛选重点行情池中符合条件的标的(A股 / 美股 / 港股现货 · 非全市场)。
       </p>
 
       {/* 市场切换 */}

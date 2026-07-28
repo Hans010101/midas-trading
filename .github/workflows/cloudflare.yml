@@ -215,3 +215,7 @@ jobs:
             "https://midas-trading-api.openclaw007.online/api/v1/market/data-sources/health" \
             '.status == "ok"' \
             "独立数据源健康状态"
+          check_json \
+            "https://midas-trading-api.openclaw007.online/api/v1/analysis/decision-card?symbol=AGLD%2FUSDT&market=crypto&period=1h&instrument=perp&limit=60" \
+            '.locked == true and .llm_mode == "real"' \
+            "AI 决策卡注册墙与原生路由"

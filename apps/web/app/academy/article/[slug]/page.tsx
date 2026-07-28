@@ -52,7 +52,7 @@ export async function generateMetadata({
   const meta = getArticleMeta(slug)
   if (!meta) return {}
   const stage = getStage(meta.stage)
-  const description = `${meta.excerpt}(${stage?.name ?? '点金训练营'} · 教学内容,仅供学习参考,不构成投资建议。)`
+  const description = `${meta.excerpt}(${stage?.name ?? '点金训练营'})`
   const canonical = `/academy/article/${slug}`
   return {
     title: meta.title,
@@ -169,10 +169,6 @@ export default async function AcademyArticlePage({
                 )}
               </nav>
 
-              {/* 免责页脚 */}
-              <p className="mt-8 border-t border-paper pt-4 text-xs text-muted-foreground/60">
-                教学内容,仅供学习参考,不构成投资建议。
-              </p>
             </article>
           </div>
         </div>

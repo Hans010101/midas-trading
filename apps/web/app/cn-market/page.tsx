@@ -6,11 +6,11 @@ import { MarketHomePage } from '@/components/market-home/market-home-page'
 export const metadata: Metadata = {
   title: 'A 股行情',
   description:
-    'A 股沪深全市场行情:实时大盘指数、涨跌家数、成交额与行业板块热力图榜单。行情数据仅供参考,不构成投资建议。',
+    'A 股沪深全市场行情:实时大盘指数、涨跌家数、成交额与行业板块热力图榜单。',
   alternates: { canonical: '/cn-market' },
   openGraph: {
     title: 'A 股行情 · 点金 Midas',
-    description: 'A 股沪深全市场:指数、涨跌家数、成交额与行业板块榜单。数据仅供参考。',
+    description: 'A 股沪深全市场:指数、涨跌家数、成交额与行业板块榜单。',
     url: '/cn-market',
   },
 }

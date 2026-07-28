@@ -52,6 +52,7 @@ export function quotaErrorMessage(detail: QuotaExceededDetail): string {
 export const PLAN_LABEL: Record<string, string> = {
   free: '免费版',
   pro: '进阶版 Pro',
+  registered: '注册用户 · 全功能',
 }
 
 export function planLabel(plan: string): string {

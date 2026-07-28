@@ -169,10 +169,6 @@ export default function LabAssistantPage() {
           </>
         )}
 
-        {/* 定位声明(P5 口径:分析工具非虚拟下单 UI · 无 VIRTUAL 徽章 · 保留一行定位)*/}
-        <footer className="mt-10 border-t border-paper pt-4 text-xs text-faint">
-          本助手仅描述当前市场结构,非价格预测,不构成投资建议。
-        </footer>
       </main>
     </div>
   )

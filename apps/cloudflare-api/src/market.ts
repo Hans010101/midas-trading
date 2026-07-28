@@ -3,7 +3,7 @@ import { HttpError, jsonResponse } from './http'
 const MARKETS = new Set(['cn', 'us', 'hk', 'crypto'])
 const PERIODS = new Set(['1m', '5m', '15m', '30m', '1h', '1d', '1w'])
 
-type Kline = Readonly<{
+export type Kline = Readonly<{
   ts: string
   open: number
   high: number
@@ -13,7 +13,7 @@ type Kline = Readonly<{
   amount: number | null
 }>
 
-type KlineFetchResult = Readonly<{
+export type KlineFetchResult = Readonly<{
   items: Kline[]
   source: string
   fallback_used: boolean
@@ -508,15 +508,13 @@ async function getKlines(
   if (instrument !== 'spot' && instrument !== 'perp') {
     throw new HttpError(400, 'instrument 仅支持 spot 或 perp')
   }
-  const result =
-    market === 'crypto'
-      ? await fetchCryptoKlines(
-          symbol,
-          period,
-          instrument as 'spot' | 'perp',
-          limit,
-        )
-      : await fetchYahooKlines(symbol, market, period, limit)
+  const result = await fetchMarketKlines({
+    symbol,
+    market,
+    period,
+    instrument: instrument as 'spot' | 'perp',
+    limit,
+  })
   if (result.items.length === 0) throw new HttpError(404, '未找到 K 线数据')
   const response = jsonResponse(
     {
@@ -535,6 +533,45 @@ async function getKlines(
   )
   response.headers.set('cache-control', 'public, max-age=15, s-maxage=60')
   return response
+}
+
+export async function fetchMarketKlines(input: Readonly<{
+  symbol: string
+  market: string
+  period: string
+  instrument: 'spot' | 'perp'
+  limit: number
+}>): Promise<KlineFetchResult> {
+  if (
+    !input.symbol ||
+    !MARKETS.has(input.market) ||
+    !PERIODS.has(input.period)
+  ) {
+    throw new HttpError(400, 'symbol、market 或 period 格式无效')
+  }
+  if (
+    !Number.isSafeInteger(input.limit) ||
+    input.limit < 1 ||
+    input.limit > 5_000
+  ) {
+    throw new HttpError(400, 'limit 必须在 1 到 5000 之间')
+  }
+  if (input.instrument === 'perp' && input.market !== 'crypto') {
+    throw new HttpError(400, 'perp 仅支持数字资产市场')
+  }
+  return input.market === 'crypto'
+    ? fetchCryptoKlines(
+        input.symbol,
+        input.period,
+        input.instrument,
+        input.limit,
+      )
+    : fetchYahooKlines(
+        input.symbol,
+        input.market,
+        input.period,
+        input.limit,
+      )
 }
 
 function normalizedYahooSearchSymbol(

@@ -17,7 +17,7 @@ import { WatchlistOverview } from '@/components/watchlist/watchlist-overview'
 export const metadata: Metadata = {
   title: '自选汇总',
   description:
-    '跨市场自选标的汇总:加密、美股、A股、港股自选行情一屏查看。数据仅供参考,不构成投资建议。',
+    '跨市场自选标的汇总:加密、美股、A股、港股自选行情一屏查看。',
   alternates: { canonical: '/watchlist' },
 }
 

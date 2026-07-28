@@ -367,8 +367,7 @@ export async function handleScreenerRoute(
         volume_ratio:
           filters.volume_ratio_min !== null ? hit.volume_ratio : null,
       })),
-      disclaimer:
-        '以上为独立行情重点池中符合所选条件的客观列表，并非全市场扫描；仅供参考，不构成投资建议。',
+      disclaimer: '',
     },
     200,
     requestId,

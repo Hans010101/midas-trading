@@ -4,7 +4,7 @@ import type { Metadata } from 'next'
 // (告别全站同名 title · 纯透传零 UI 侵入)。canonical 不设(避免污染子路由 · 工具页非搜索着陆主力)。
 export const metadata: Metadata = {
   title: '铂金自助',
-  description: '铂金会员自助面板。内容仅供参考,不构成投资建议。',
+  description: '账户工具自助面板。',
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {
