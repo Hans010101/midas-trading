@@ -11,7 +11,7 @@ Worker 和 D1 中。
 | 加密现货 K 线 | OKX 公共现货蜡烛图 | Kraken 公共现货 OHLC | 无需 API Key；返回真实 source 和 data_as_of |
 | 加密永续 K 线 | OKX 公共 USDT Swap 蜡烛图 | Kraken Futures 公共 Trade Candles | 覆盖 AGLD 等 Kraken Spot 不支持的标的 |
 | 加密永续行情与衍生指标 | Kraken Futures tickers / analytics | 字段不可得时明确返回 unavailable_fields | 不伪造多空比、资金费率或持仓量 |
-| 加密全市场总览 | CoinGecko `/global` | 单源失败时保留其他来源 | 总市值、24h 成交额、BTC/ETH 市占率 |
+| 加密全市场总览 | CoinGecko `/global` | CoinPaprika `/global` + ETH ticker | 总市值、24h 成交额、BTC/ETH 市占率；Cloudflare 出口受限时自动切换 |
 | 恐慌贪婪指数 | Alternative.me FGI | 失败时标记不可用 | 不再使用固定 0 占位 |
 | 美股 K 线 | Yahoo Finance query1 chart | Yahoo Finance query2 chart | 支持分钟、小时、日、周周期 |
 | A 股 K 线 | Yahoo Finance 沪深映射 | Yahoo Finance query2 | Worker 侧避免引入仅适合常驻 Python 的 AKShare |

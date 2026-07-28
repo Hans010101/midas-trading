@@ -130,6 +130,58 @@ describe('independent crypto market routes', () => {
       unavailable_fields: [],
       sources: [
         { name: 'coingecko', ok: true },
+        { name: 'coinpaprika', ok: false },
+        { name: 'alternative_me', ok: true },
+        { name: 'kraken_futures', ok: true },
+      ],
+    })
+  })
+
+  it('falls back to CoinPaprika when CoinGecko is unavailable', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('api.coingecko.com')) {
+          return new Response('rate limited', { status: 429 })
+        }
+        if (url.endsWith('/v1/global')) {
+          return Response.json({
+            market_cap_usd: 2_000_000_000_000,
+            volume_24h_usd: 80_000_000_000,
+            bitcoin_dominance_percentage: 55,
+          })
+        }
+        if (url.includes('eth-ethereum')) {
+          return Response.json({
+            quotes: { USD: { market_cap: 240_000_000_000 } },
+          })
+        }
+        if (url.includes('api.alternative.me')) {
+          return Response.json({
+            data: [{ value: '50', value_classification: 'Neutral' }],
+          })
+        }
+        return Response.json({ result: 'success', tickers: [futureTicker] })
+      }),
+    )
+
+    const response = await handleCryptoMarketRoute(
+      new Request('https://api.example.test/api/v1/crypto/overview'),
+      'crypto-overview-fallback',
+    )
+
+    await expect(response?.json()).resolves.toMatchObject({
+      market_overview: {
+        total_market_cap_usd: 2_000_000_000_000,
+        total_volume_24h_usd: 80_000_000_000,
+        btc_dominance: 55,
+        eth_dominance: 12,
+      },
+      unavailable_fields: [],
+      sources: [
+        { name: 'coingecko', ok: false },
+        { name: 'coinpaprika', ok: true },
         { name: 'alternative_me', ok: true },
         { name: 'kraken_futures', ok: true },
       ],

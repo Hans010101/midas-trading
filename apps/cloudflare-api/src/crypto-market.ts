@@ -78,9 +78,10 @@ type CryptoGlobal = Readonly<{
   total_volume_24h_usd: number
   btc_dominance: number
   eth_dominance: number
+  source: 'coingecko' | 'coinpaprika'
 }>
 
-async function fetchCryptoGlobal(): Promise<CryptoGlobal> {
+async function fetchCoinGeckoGlobal(): Promise<CryptoGlobal> {
   const response = await fetch('https://api.coingecko.com/api/v3/global', {
     headers: {
       accept: 'application/json',
@@ -103,6 +104,7 @@ async function fetchCryptoGlobal(): Promise<CryptoGlobal> {
     total_volume_24h_usd: numeric(payload.data?.total_volume?.usd),
     btc_dominance: numeric(payload.data?.market_cap_percentage?.btc),
     eth_dominance: numeric(payload.data?.market_cap_percentage?.eth),
+    source: 'coingecko' as const,
   }
   if (
     result.total_market_cap_usd <= 0 ||
@@ -112,6 +114,64 @@ async function fetchCryptoGlobal(): Promise<CryptoGlobal> {
     throw new Error('CoinGecko global payload incomplete')
   }
   return result
+}
+
+async function fetchCoinPaprikaGlobal(): Promise<CryptoGlobal> {
+  const [globalResponse, ethResponse] = await Promise.all([
+    fetch('https://api.coinpaprika.com/v1/global', {
+      headers: {
+        accept: 'application/json',
+        'user-agent': 'Midas-Trading-Cloudflare/1.0',
+      },
+      signal: AbortSignal.timeout(10_000),
+    }),
+    fetch('https://api.coinpaprika.com/v1/tickers/eth-ethereum', {
+      headers: {
+        accept: 'application/json',
+        'user-agent': 'Midas-Trading-Cloudflare/1.0',
+      },
+      signal: AbortSignal.timeout(10_000),
+    }),
+  ])
+  if (!globalResponse.ok || !ethResponse.ok) {
+    throw new Error(
+      `CoinPaprika global HTTP ${globalResponse.status}/${ethResponse.status}`,
+    )
+  }
+  const globalPayload = (await globalResponse.json()) as {
+    market_cap_usd?: unknown
+    volume_24h_usd?: unknown
+    bitcoin_dominance_percentage?: unknown
+  }
+  const ethPayload = (await ethResponse.json()) as {
+    quotes?: { USD?: { market_cap?: unknown } }
+  }
+  const totalMarketCap = numeric(globalPayload.market_cap_usd)
+  const ethMarketCap = numeric(ethPayload.quotes?.USD?.market_cap)
+  const result = {
+    total_market_cap_usd: totalMarketCap,
+    total_volume_24h_usd: numeric(globalPayload.volume_24h_usd),
+    btc_dominance: numeric(globalPayload.bitcoin_dominance_percentage),
+    eth_dominance: totalMarketCap > 0 ? (ethMarketCap / totalMarketCap) * 100 : 0,
+    source: 'coinpaprika' as const,
+  }
+  if (
+    result.total_market_cap_usd <= 0 ||
+    result.total_volume_24h_usd <= 0 ||
+    result.btc_dominance <= 0 ||
+    result.eth_dominance <= 0
+  ) {
+    throw new Error('CoinPaprika global payload incomplete')
+  }
+  return result
+}
+
+async function fetchCryptoGlobal(): Promise<CryptoGlobal> {
+  try {
+    return await fetchCoinGeckoGlobal()
+  } catch {
+    return fetchCoinPaprikaGlobal()
+  }
 }
 
 async function fetchFearGreed(): Promise<Readonly<{
@@ -432,6 +492,7 @@ async function getOverview(
         total_volume_24h_usd: 0,
         btc_dominance: 0,
         eth_dominance: 0,
+        source: null,
       }
   const fearGreed = fearGreedResult.status === 'fulfilled'
     ? fearGreedResult.value
@@ -456,7 +517,10 @@ async function getOverview(
     {
       market_overview: {
         ts: now,
-        ...global,
+        total_market_cap_usd: global.total_market_cap_usd,
+        total_volume_24h_usd: global.total_volume_24h_usd,
+        btc_dominance: global.btc_dominance,
+        eth_dominance: global.eth_dominance,
         fear_greed_value: fearGreed.value,
         fear_greed_classification: fearGreed.classification,
         derivatives_oi_usd: derivativesOiUsd,
@@ -470,11 +534,15 @@ async function getOverview(
       top_volume: byVolume.slice(0, 10),
       btc_ticker: items.find((item) => item.symbol === 'BTC/USDT') ?? null,
       eth_ticker: items.find((item) => item.symbol === 'ETH/USDT') ?? null,
-      source: 'CoinGecko + Alternative.me + Kraken Futures',
+      source: `${global.source ?? 'Global source unavailable'} + Alternative.me + Kraken Futures`,
       sources: [
         {
           name: 'coingecko',
-          ok: globalResult.status === 'fulfilled',
+          ok: global.source === 'coingecko',
+        },
+        {
+          name: 'coinpaprika',
+          ok: global.source === 'coinpaprika',
         },
         {
           name: 'alternative_me',
