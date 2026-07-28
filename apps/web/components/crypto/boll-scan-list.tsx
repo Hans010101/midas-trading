@@ -5,7 +5,7 @@
  *
  * 纯展示 · 不碰交易。结构倾向用涨跌色偏好(偏多=text-up / 偏空=text-down / 中性=muted),
  * 复用 --color-up/--color-down(data-color-pref 翻转),★绝不写死红绿。
- * ★底部强制展示接口返回的 disclaimer(红线)。无快照(count=0)友好空态,不报错。
+ * 无快照(count=0)友好空态,不报错。
  */
 
 import { useMemo, useState } from 'react'

@@ -111,16 +111,22 @@ export function DimensionSection({ futuresSymbol }: DimensionSectionProps) {
       ratio: +ratio.toFixed(3),
     }
   }
-  const accData = lsrItems.map((p) => toStack(p.top_account_long, p.top_account_short, p.top_account_ratio, p.ts))
-  const posData = lsrItems.map((p) => toStack(p.top_position_long, p.top_position_short, p.top_position_ratio, p.ts))
+  const accData = lsrItems
+    .filter((p) => p.top_account_ratio > 0)
+    .map((p) => toStack(p.top_account_long, p.top_account_short, p.top_account_ratio, p.ts))
+  const posData = lsrItems
+    .filter((p) => p.top_position_ratio > 0)
+    .map((p) => toStack(p.top_position_long, p.top_position_short, p.top_position_ratio, p.ts))
   // 刀C · ④ 全市场人数比:同一 lsr 响应映射(零新请求)· 过滤 global=0 老行(未采哨兵,真值恒 >0)
   const globalData = lsrItems
     .filter((p) => p.global_account_ratio > 0)
     .map((p) => toStack(p.global_account_long, p.global_account_short, p.global_account_ratio, p.ts))
-  const takerData = lsrItems.map((p) => ({
-    t: hhmm(p.ts), full: mmddhhmm(p.ts),
-    buy: p.taker_buy_vol, sell: -p.taker_sell_vol, // sell 取负 · 对称展示
-  }))
+  const takerData = lsrItems
+    .filter((p) => p.taker_buy_vol > 0 || p.taker_sell_vol > 0)
+    .map((p) => ({
+      t: hhmm(p.ts), full: mmddhhmm(p.ts),
+      buy: p.taker_buy_vol, sell: -p.taker_sell_vol, // sell 取负 · 对称展示
+    }))
 
   const basisData = (basis.data?.items ?? []).map((p) => ({
     t: hhmm(p.ts), full: mmddhhmm(p.ts),

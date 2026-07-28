@@ -147,7 +147,7 @@ export interface BollScanItem {
 export interface BollScanResponse {
   as_of: string | null // 快照时间 · null = 暂无快照
   count: number
-  disclaimer: string // 免责口径(红线 · 页面底部展示)
+  disclaimer: string
   items: BollScanItem[]
 }
 

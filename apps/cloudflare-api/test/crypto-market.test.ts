@@ -85,7 +85,146 @@ describe('independent crypto market routes', () => {
     await expect(response?.json()).resolves.toMatchObject({
       as_of: null,
       count: 0,
+      disclaimer: '',
       items: [],
+    })
+  })
+
+  it('uses Binance public OI history before exchange fallbacks', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/futures/data/openInterestHist')) {
+        return Response.json([{
+          symbol: 'AGLDUSDT',
+          sumOpenInterest: '11559875',
+          sumOpenInterestValue: '1677915.85625',
+          timestamp: 1_785_243_600_000,
+        }])
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const response = await handleCryptoMarketRoute(
+      new Request(
+        'https://api.example.test/api/v1/crypto/futures/AGLDUSDT/open-interest?limit=96',
+      ),
+      'crypto-oi',
+    )
+
+    expect(response?.status).toBe(200)
+    await expect(response?.json()).resolves.toMatchObject({
+      symbol: 'AGLDUSDT',
+      source: 'Binance Futures open interest',
+      items: [{
+        symbol: 'AGLDUSDT',
+        oi_coin: 11_559_875,
+        oi_usd: 1_677_915.85625,
+      }],
+    })
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it('combines all Binance positioning dimensions into one response', async () => {
+    const timestamp = 1_785_243_600_000
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('topLongShortAccountRatio')) {
+          return Response.json([{
+            timestamp,
+            longAccount: '0.60',
+            shortAccount: '0.40',
+            longShortRatio: '1.50',
+          }])
+        }
+        if (url.includes('topLongShortPositionRatio')) {
+          return Response.json([{
+            timestamp,
+            longAccount: '0.54',
+            shortAccount: '0.46',
+            longShortRatio: '1.17',
+          }])
+        }
+        if (url.includes('globalLongShortAccountRatio')) {
+          return Response.json([{
+            timestamp,
+            longAccount: '0.59',
+            shortAccount: '0.41',
+            longShortRatio: '1.44',
+          }])
+        }
+        if (url.includes('takerlongshortRatio')) {
+          return Response.json([{
+            timestamp,
+            buyVol: '10035',
+            sellVol: '3386',
+            buySellRatio: '2.9637',
+          }])
+        }
+        throw new Error(`Unexpected request: ${url}`)
+      }),
+    )
+
+    const response = await handleCryptoMarketRoute(
+      new Request(
+        'https://api.example.test/api/v1/crypto/futures/AGLDUSDT/long-short-ratio?limit=96',
+      ),
+      'crypto-ratios',
+    )
+
+    await expect(response?.json()).resolves.toMatchObject({
+      symbol: 'AGLDUSDT',
+      source: 'Binance Futures positioning and taker flow',
+      unavailable_fields: [],
+      items: [{
+        top_account_ratio: 1.5,
+        top_position_ratio: 1.17,
+        global_account_ratio: 1.44,
+        taker_buy_vol: 10_035,
+        taker_sell_vol: 3_386,
+        taker_ratio: 2.9637,
+      }],
+    })
+  })
+
+  it('falls back to OKX OI history when Binance is unavailable', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('fapi.binance.com')) {
+          return new Response('restricted', { status: 451 })
+        }
+        if (url.includes('open-interest-history')) {
+          return Response.json({
+            code: '0',
+            data: [[
+              '1785243900000',
+              '5109457',
+              '5109457',
+              '739849.3736',
+            ]],
+          })
+        }
+        throw new Error(`Unexpected request: ${url}`)
+      }),
+    )
+
+    const response = await handleCryptoMarketRoute(
+      new Request(
+        'https://api.example.test/api/v1/crypto/futures/AGLDUSDT/open-interest?limit=96',
+      ),
+      'crypto-oi-okx',
+    )
+
+    await expect(response?.json()).resolves.toMatchObject({
+      source: 'OKX open interest history',
+      items: [{
+        oi_coin: 5_109_457,
+        oi_usd: 739_849.3736,
+      }],
     })
   })
 

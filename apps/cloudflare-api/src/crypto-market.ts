@@ -5,6 +5,8 @@ const FUTURES_TICKERS_URL =
 const FUTURES_ANALYTICS_URL =
   'https://futures.kraken.com/api/charts/v1/analytics'
 const SPOT_TICKER_URL = 'https://api.kraken.com/0/public/Ticker'
+const BINANCE_FUTURES_URL = 'https://fapi.binance.com'
+const OKX_PUBLIC_URL = 'https://www.okx.com/api/v5'
 const CACHE_CONTROL = 'public, max-age=15, s-maxage=60'
 // Each symbol needs three analytics requests. Keep the Worker invocation below
 // Cloudflare Free's 50 external-subrequest ceiling.
@@ -69,6 +71,23 @@ async function fetchJson<T>(url: URL | string): Promise<T> {
   })
   if (!response.ok) {
     throw new HttpError(503, `Kraken 行情暂不可用（HTTP ${response.status}）`)
+  }
+  return (await response.json()) as T
+}
+
+async function fetchPublicJson<T>(
+  url: URL | string,
+  source: string,
+): Promise<T> {
+  const response = await fetch(url, {
+    headers: {
+      accept: 'application/json',
+      'user-agent': 'Midas-Trading-Cloudflare/1.0',
+    },
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (!response.ok) {
+    throw new Error(`${source} HTTP ${response.status}`)
   }
   return (await response.json()) as T
 }
@@ -708,6 +727,70 @@ async function getOpenInterest(
   const parsed = parsePublicSymbol(symbol)
   const url = new URL(request.url)
   const limit = boundedLimit(url, 96, 500)
+  try {
+    const binanceUrl = new URL(
+      `${BINANCE_FUTURES_URL}/futures/data/openInterestHist`,
+    )
+    binanceUrl.searchParams.set('symbol', parsed.publicSymbol)
+    binanceUrl.searchParams.set('period', '5m')
+    binanceUrl.searchParams.set('limit', String(Math.min(limit, 500)))
+    const rows = await fetchPublicJson<Array<{
+      timestamp?: unknown
+      sumOpenInterest?: unknown
+      sumOpenInterestValue?: unknown
+    }>>(binanceUrl, 'Binance Futures')
+    if (!Array.isArray(rows) || rows.length === 0) {
+      throw new Error('Binance Futures returned no OI rows')
+    }
+    return cachedJson(
+      {
+        symbol: parsed.publicSymbol,
+        items: rows.map((row) => ({
+          symbol: parsed.publicSymbol,
+          ts: new Date(numeric(row.timestamp)).toISOString(),
+          oi_coin: numeric(row.sumOpenInterest),
+          oi_usd: numeric(row.sumOpenInterestValue),
+        })),
+        source: 'Binance Futures open interest',
+      },
+      requestId,
+      request.method,
+    )
+  } catch {
+    try {
+      const okxUrl = new URL(
+        `${OKX_PUBLIC_URL}/rubik/stat/contracts/open-interest-history`,
+      )
+      okxUrl.searchParams.set('instId', `${parsed.base}-USDT-SWAP`)
+      okxUrl.searchParams.set('period', '5m')
+      okxUrl.searchParams.set('limit', String(Math.min(limit, 100)))
+      const payload = await fetchPublicJson<{
+        code?: string
+        data?: unknown[][]
+      }>(okxUrl, 'OKX')
+      const rows = payload.code === '0' && Array.isArray(payload.data)
+        ? payload.data
+        : []
+      if (rows.length === 0) throw new Error('OKX returned no OI rows')
+      return cachedJson(
+        {
+          symbol: parsed.publicSymbol,
+          items: rows.slice(0, limit).reverse().map((row) => ({
+            symbol: parsed.publicSymbol,
+            ts: new Date(numeric(row[0])).toISOString(),
+            oi_coin: numeric(row[2] ?? row[1]),
+            oi_usd: numeric(row[3]),
+          })),
+          source: 'OKX open interest history',
+        },
+        requestId,
+        request.method,
+      )
+    } catch {
+      // Kraken remains the final no-key source for symbols unavailable on
+      // Binance and OKX.
+    }
+  }
   const [series, tickers] = await Promise.all([
     analytics(parsed.futuresSymbol, 'open-interest', Math.max(limit, 24)),
     futuresTickers(),
@@ -741,6 +824,144 @@ async function getLongShortRatio(
 ): Promise<Response> {
   const parsed = parsePublicSymbol(symbol)
   const limit = boundedLimit(new URL(request.url), 96, 500)
+  try {
+    const endpoint = async <T>(path: string): Promise<T> => {
+      const url = new URL(`${BINANCE_FUTURES_URL}/futures/data/${path}`)
+      url.searchParams.set('symbol', parsed.publicSymbol)
+      url.searchParams.set('period', '5m')
+      url.searchParams.set('limit', String(Math.min(limit, 500)))
+      return fetchPublicJson<T>(url, 'Binance Futures')
+    }
+    type RatioRow = {
+      timestamp?: unknown
+      longAccount?: unknown
+      shortAccount?: unknown
+      longShortRatio?: unknown
+    }
+    type TakerRow = {
+      timestamp?: unknown
+      buyVol?: unknown
+      sellVol?: unknown
+      buySellRatio?: unknown
+    }
+    const [accounts, positions, globalAccounts, takers] = await Promise.all([
+      endpoint<RatioRow[]>('topLongShortAccountRatio'),
+      endpoint<RatioRow[]>('topLongShortPositionRatio'),
+      endpoint<RatioRow[]>('globalLongShortAccountRatio'),
+      endpoint<TakerRow[]>('takerlongshortRatio'),
+    ])
+    if (
+      !Array.isArray(accounts) ||
+      !Array.isArray(positions) ||
+      !Array.isArray(globalAccounts) ||
+      !Array.isArray(takers) ||
+      accounts.length === 0
+    ) {
+      throw new Error('Binance Futures returned incomplete ratio rows')
+    }
+    const byTimestamp = <T extends { timestamp?: unknown }>(rows: T[]) =>
+      new Map(rows.map((row) => [numeric(row.timestamp), row]))
+    const positionByTs = byTimestamp(positions)
+    const globalByTs = byTimestamp(globalAccounts)
+    const takerByTs = byTimestamp(takers)
+    const items = accounts.map((account) => {
+      const timestamp = numeric(account.timestamp)
+      const position = positionByTs.get(timestamp)
+      const globalAccount = globalByTs.get(timestamp)
+      const taker = takerByTs.get(timestamp)
+      return {
+        symbol: parsed.publicSymbol,
+        ts: new Date(timestamp).toISOString(),
+        top_account_long: numeric(account.longAccount),
+        top_account_short: numeric(account.shortAccount),
+        top_account_ratio: numeric(account.longShortRatio),
+        top_position_long: numeric(position?.longAccount),
+        top_position_short: numeric(position?.shortAccount),
+        top_position_ratio: numeric(position?.longShortRatio),
+        taker_buy_vol: numeric(taker?.buyVol),
+        taker_sell_vol: numeric(taker?.sellVol),
+        taker_ratio: numeric(taker?.buySellRatio),
+        global_account_long: numeric(globalAccount?.longAccount),
+        global_account_short: numeric(globalAccount?.shortAccount),
+        global_account_ratio: numeric(globalAccount?.longShortRatio),
+      }
+    })
+    return cachedJson(
+      {
+        symbol: parsed.publicSymbol,
+        items,
+        source: 'Binance Futures positioning and taker flow',
+        unavailable_fields: [],
+      },
+      requestId,
+      request.method,
+    )
+  } catch {
+    try {
+      const ratioUrl = new URL(
+        `${OKX_PUBLIC_URL}/rubik/stat/contracts/long-short-account-ratio`,
+      )
+      ratioUrl.searchParams.set('ccy', parsed.base)
+      ratioUrl.searchParams.set('period', '5m')
+      const takerUrl = new URL(
+        `${OKX_PUBLIC_URL}/rubik/stat/taker-volume-contract`,
+      )
+      takerUrl.searchParams.set('instId', `${parsed.base}-USDT-SWAP`)
+      takerUrl.searchParams.set('period', '5m')
+      type OkxRows = { code?: string; data?: unknown[][] }
+      const [ratioPayload, takerPayload] = await Promise.all([
+        fetchPublicJson<OkxRows>(ratioUrl, 'OKX'),
+        fetchPublicJson<OkxRows>(takerUrl, 'OKX'),
+      ])
+      const ratios = ratioPayload.code === '0' && Array.isArray(ratioPayload.data)
+        ? ratioPayload.data
+        : []
+      const takers = takerPayload.code === '0' && Array.isArray(takerPayload.data)
+        ? takerPayload.data
+        : []
+      if (ratios.length === 0) throw new Error('OKX returned no ratio rows')
+      const takerByTs = new Map(
+        takers.map((row) => [numeric(row[0]), row]),
+      )
+      const items = ratios.slice(0, limit).reverse().map((row) => {
+        const timestamp = numeric(row[0])
+        const ratio = numeric(row[1])
+        const taker = takerByTs.get(timestamp)
+        const globalLong = ratio > 0 ? ratio / (1 + ratio) : 0
+        const globalShort = ratio > 0 ? 1 / (1 + ratio) : 0
+        const sellVolume = numeric(taker?.[1])
+        const buyVolume = numeric(taker?.[2])
+        return {
+          symbol: parsed.publicSymbol,
+          ts: new Date(timestamp).toISOString(),
+          top_account_long: 0,
+          top_account_short: 0,
+          top_account_ratio: 0,
+          top_position_long: 0,
+          top_position_short: 0,
+          top_position_ratio: 0,
+          taker_buy_vol: buyVolume,
+          taker_sell_vol: sellVolume,
+          taker_ratio: sellVolume > 0 ? buyVolume / sellVolume : 0,
+          global_account_long: globalLong,
+          global_account_short: globalShort,
+          global_account_ratio: ratio,
+        }
+      })
+      return cachedJson(
+        {
+          symbol: parsed.publicSymbol,
+          items,
+          source: 'OKX global positioning and taker flow',
+          unavailable_fields: ['top_account_ratio', 'top_position_ratio'],
+        },
+        requestId,
+        request.method,
+      )
+    } catch {
+      // Preserve Kraken analytics as the final no-key fallback.
+    }
+  }
   const series = await analytics(
     parsed.futuresSymbol,
     'long-short-ratio',
@@ -872,7 +1093,7 @@ export async function handleCryptoMarketRoute(
       {
         as_of: null,
         count: 0,
-        disclaimer: 'Kraken 官方公开源暂不提供本策略快照，因此不生成模拟信号。',
+        disclaimer: '',
         items: [],
       },
       requestId,
@@ -890,7 +1111,7 @@ export async function handleCryptoMarketRoute(
         layer: '布林结构',
         as_of: null,
         item: null,
-        disclaimer: 'Kraken 官方公开源暂不提供本策略快照，因此不生成模拟信号。',
+        disclaimer: '',
       },
       requestId,
       request.method,
