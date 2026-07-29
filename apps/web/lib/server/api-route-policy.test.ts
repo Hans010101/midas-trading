@@ -19,4 +19,11 @@ describe('isIndependentApiPath', () => {
     expect(isIndependentApiPath('/api/v1/auth/login')).toBe(true)
     expect(isIndependentApiPath('/api/v1/crypto/market/BTCUSDT')).toBe(true)
   })
+
+  it('keeps every administrator route on the independent Cloudflare API', () => {
+    expect(isIndependentApiPath('/api/v1/admin/overview')).toBe(true)
+    expect(isIndependentApiPath('/api/v1/admin/users')).toBe(true)
+    expect(isIndependentApiPath('/api/v1/admin/support-tickets')).toBe(true)
+    expect(isIndependentApiPath('/api/v1/admin/academy-stats')).toBe(true)
+  })
 })
