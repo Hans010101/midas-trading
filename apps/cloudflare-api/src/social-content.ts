@@ -368,10 +368,9 @@ async function ingestDefiLlamaDexTrend(env: Env, now: number): Promise<number> {
 }
 
 async function ingestOkxFlow(env: Env, now: number): Promise<number> {
-  const slot = Math.floor(now / (30 * 60_000))
-  const results = await Promise.all(OKX_FLOW_WATCH.map(async (watch) => {
-    const sourceId = `${watch.symbol}:${slot}`
-    if (await sourceEventExists(env, 'OKX Public Trades', sourceId)) return 0
+  const sourceId = `market-flow:${Math.floor(now / (2 * 60 * 60_000))}`
+  if (await sourceEventExists(env, 'OKX Public Trades', sourceId)) return 0
+  const candidates = await Promise.all(OKX_FLOW_WATCH.map(async (watch) => {
     const instrumentId = `${watch.symbol}-USDT-SWAP`
     const [instrumentResponse, tradesResponse] = await Promise.all([
       fetch(`${OKX_PUBLIC_URL}/public/instruments?instType=SWAP&instId=${instrumentId}`, {
@@ -399,7 +398,7 @@ async function ingestOkxFlow(env: Env, now: number): Promise<number> {
       }>
     }
     const contractValue = Number(instrumentPayload.data?.[0]?.ctVal ?? 0)
-    if (contractValue <= 0 || instrumentPayload.data?.[0]?.state !== 'live') return 0
+    if (contractValue <= 0 || instrumentPayload.data?.[0]?.state !== 'live') return null
     const trades = (tradesPayload.data ?? []).flatMap((trade) => {
       const price = Number(trade.px ?? 0)
       const size = Number(trade.sz ?? 0)
@@ -411,7 +410,7 @@ async function ingestOkxFlow(env: Env, now: number): Promise<number> {
         ? [{ side, tradeId, timestamp, price, notional }]
         : []
     })
-    if (trades.length === 0) return 0
+    if (trades.length === 0) return null
     const buy = trades.filter((trade) => trade.side === 'buy')
       .reduce((sum, trade) => sum + trade.notional, 0)
     const sell = trades.filter((trade) => trade.side === 'sell')
@@ -420,28 +419,39 @@ async function ingestOkxFlow(env: Env, now: number): Promise<number> {
     const largest = trades.reduce((best, trade) => trade.notional > best.notional ? trade : best)
     const imbalance = gross > 0 ? Math.abs(buy - sell) / gross : 0
     if (
-      !((gross >= watch.grossMinimum && imbalance >= 0.2) ||
-        largest.notional >= watch.singleMinimum)
-    ) return 0
+      gross < watch.grossMinimum ||
+      imbalance < 0.3 ||
+      largest.notional < watch.singleMinimum
+    ) return null
     const dominant = buy >= sell ? '主动买入' : '主动卖出'
     const coverageSeconds = Math.max(
       1,
       Math.round((Math.max(...trades.map((trade) => trade.timestamp)) -
         Math.min(...trades.map((trade) => trade.timestamp))) / 1_000),
     )
-    return insertEvent(env, {
-      source: 'OKX Public Trades',
-      sourceId,
-      contentType: 'whale',
+    const score = Math.min(
+      92,
+      58 + imbalance * 30 + Math.min(10, largest.notional / watch.singleMinimum * 3),
+    )
+    return {
       title: `OKX ${watch.symbol} 永续出现大额${dominant}成交信号`,
       summary: `最近 ${trades.length} 笔公开成交样本覆盖约 ${coverageSeconds} 秒，主动买入约 $${buy.toFixed(0)}，主动卖出约 $${sell.toFixed(0)}，最大单笔约 $${largest.notional.toFixed(0)}。这是成交样本而非链上转账，需结合价格、OI 与资金费率交叉验证。`,
       sourceUrl: `https://www.okx.com/trade-swap/${watch.symbol.toLowerCase()}-usdt-swap`,
       symbols: [watch.symbol],
-      score: Math.min(92, 58 + imbalance * 30 + Math.min(10, largest.notional / watch.singleMinimum * 3)),
+      score,
       occurredAt: Math.max(...trades.map((trade) => trade.timestamp)),
-    })
+    }
   }))
-  return results.reduce((sum, value) => sum + value, 0)
+  const strongest = candidates
+    .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null)
+    .sort((left, right) => right.score - left.score)[0]
+  if (!strongest) return 0
+  return insertEvent(env, {
+    source: 'OKX Public Trades',
+    sourceId,
+    contentType: 'whale',
+    ...strongest,
+  })
 }
 
 async function ingestTokenomist(env: Env, now: number): Promise<number> {
