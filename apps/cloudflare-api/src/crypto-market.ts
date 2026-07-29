@@ -559,6 +559,47 @@ async function metricsItem(
   }
 }
 
+async function fillMetricGapsFromGate(
+  item: Awaited<ReturnType<typeof metricsItem>>,
+): Promise<Awaited<ReturnType<typeof metricsItem>>> {
+  if (
+    item.funding_rate !== null &&
+    item.account_long_short_ratio !== null &&
+    item.oi_change_pct_24h !== null
+  ) {
+    return item
+  }
+  try {
+    const parsed = parsePublicSymbol(item.symbol)
+    // 289 five-minute samples span 24 hours (288 intervals). One Gate request
+    // can fill both positioning and OI gaps while the whole 15-symbol batch
+    // remains below Cloudflare Free's 50-subrequest ceiling.
+    const rows = (await gateContractStats(parsed.base, 289))
+      .filter((row) => numeric(row.time) > 0)
+      .sort((left, right) => numeric(left.time) - numeric(right.time))
+    const first = rows.at(0)
+    const last = rows.at(-1)
+    const ratio = numeric(last?.lsr_account) || numeric(last?.top_lsr_account)
+    const firstOi = numeric(first?.open_interest_usd)
+    const lastOi = numeric(last?.open_interest_usd)
+    return {
+      ...item,
+      account_long_short_ratio:
+        item.account_long_short_ratio ??
+        (ratio > 0 ? ratio : null),
+      oi_change_pct_24h:
+        item.oi_change_pct_24h ??
+        (
+          firstOi > 0 && lastOi > 0
+            ? ((lastOi - firstOi) / firstOi) * 100
+            : null
+        ),
+    }
+  } catch {
+    return item
+  }
+}
+
 export async function fetchCryptoAiContext(symbol: string): Promise<Readonly<{
   symbol: string
   mark_price: number
@@ -764,9 +805,10 @@ async function getMetrics(
       return metricsItem(symbol, tickerBySymbol.get(parsed.futuresSymbol))
     }),
   )
-  const items = settled.flatMap((result) =>
+  const baseItems = settled.flatMap((result) =>
     result.status === 'fulfilled' ? [result.value] : [],
   )
+  const items = await Promise.all(baseItems.map(fillMetricGapsFromGate))
   return cachedJson(
     {
       items,

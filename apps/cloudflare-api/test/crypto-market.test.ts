@@ -87,15 +87,21 @@ describe('independent crypto market routes', () => {
           return new Response('temporarily unavailable', { status: 503 })
         }
         if (url.includes('/open-interest')) {
-          return Response.json({
-            result: {
-              timestamp: [1_785_157_200, 1_785_243_600],
-              data: [
-                [0, 0, 0, 100],
-                [0, 0, 0, 125],
-              ],
+          return new Response('temporarily unavailable', { status: 503 })
+        }
+        if (url.includes('/contract_stats')) {
+          return Response.json([
+            {
+              time: 1_785_157_200,
+              lsr_account: '0.60',
+              open_interest_usd: '100',
             },
-          })
+            {
+              time: 1_785_243_600,
+              lsr_account: '0.75',
+              open_interest_usd: '125',
+            },
+          ])
         }
         throw new Error(`Unexpected request: ${url}`)
       }),
@@ -116,7 +122,7 @@ describe('independent crypto market routes', () => {
       items: [{
         symbol: 'BTCUSDT',
         funding_rate: 0.6672 / 64_447.8,
-        account_long_short_ratio: null,
+        account_long_short_ratio: 0.75,
         oi_change_pct_24h: 25,
       }],
     })
