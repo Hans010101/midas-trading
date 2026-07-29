@@ -82,7 +82,7 @@ export function AutoPilotPanel({ token }: { token: string }) {
     if (!enabled) {
       const ok = window.confirm(
         '确定开启【全自动托管】?\n\n开启后系统将自动起草并发布推文到币安广场:\n' +
-          '· 每日最多 30 条 · 仅 7:30-22:30 发\n· 门禁不通过的绝不发\n· 无需人工逐条审核\n\n' +
+          '· 常规每日 10 个时段，12 条安全上限 · 仅 7:30-22:30 发\n· 门禁不通过的绝不发\n· 无需人工逐条审核\n\n' +
           '随时可用「紧急熔断」一键停止。确定开启?',
       )
       if (!ok) return

@@ -443,7 +443,7 @@ describe('independent Cloudflare administrator controls', () => {
   })
 
   it('runs one claimed Binance Square auto slot and never duplicates it', async () => {
-    const scheduledAt = Date.parse('2026-07-29T08:05:00.000Z')
+    const scheduledAt = Date.parse('2026-07-29T07:05:00.000Z')
     await env.DB.batch([
       env.DB
         .prepare(
@@ -482,7 +482,7 @@ describe('independent Cloudflare administrator controls', () => {
       env.DB
         .prepare(
           `SELECT status, draft_id, dispatch_id FROM social_auto_runs
-           WHERE slot = '2026-07-29T16:05'`,
+           WHERE slot = '2026-07-29T15:05'`,
         )
         .first(),
     ).resolves.toMatchObject({
@@ -499,7 +499,7 @@ describe('independent Cloudflare administrator controls', () => {
   })
 
   it('opens the automatic publishing circuit after three consecutive failures', async () => {
-    const firstSlot = Date.parse('2026-07-30T08:05:00.000Z')
+    const firstSlot = Date.parse('2026-07-30T07:05:00.000Z')
     await env.DB.batch([
       env.DB
         .prepare(
@@ -527,8 +527,8 @@ describe('independent Cloudflare administrator controls', () => {
     vi.stubGlobal('fetch', upstream)
 
     await runAdminOperationsCron(env, firstSlot)
-    await runAdminOperationsCron(env, firstSlot + 15 * 60_000)
-    await runAdminOperationsCron(env, firstSlot + 30 * 60_000)
+    await runAdminOperationsCron(env, firstSlot + 90 * 60_000)
+    await runAdminOperationsCron(env, firstSlot + 180 * 60_000)
 
     expect(upstream).toHaveBeenCalledTimes(3)
     await expect(

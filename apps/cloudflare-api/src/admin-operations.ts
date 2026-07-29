@@ -1189,6 +1189,12 @@ function socialSlot(timestamp: number): string {
   return `${value('year')}-${value('month')}-${value('day')}T${value('hour')}:${value('minute')}`
 }
 
+function isAutoPublishSlot(minute: number): boolean {
+  const firstSlot = 7 * 60 + 35
+  const lastMinute = 22 * 60 + 30
+  return minute >= firstSlot && minute <= lastMinute && (minute - firstSlot) % 90 === 0
+}
+
 async function updateAutoRun(
   env: Env,
   slot: string,
@@ -1242,7 +1248,7 @@ async function autoCandidate(env: Env, timestamp: number): Promise<CreatedSocial
        ORDER BY d.created_at DESC
        LIMIT 1`,
     )
-    .bind(timestamp - 30 * 60_000, timestamp - 6 * 60 * 60_000)
+    .bind(timestamp - 4 * 60 * 60_000, timestamp - 6 * 60 * 60_000)
     .first<{
       id: number
       symbol: string
@@ -1286,7 +1292,7 @@ async function recordAutoFailure(env: Env, error: string): Promise<number> {
 
 async function runSocialAutomation(env: Env, timestamp: number): Promise<void> {
   const minute = cstMinute(timestamp)
-  if (minute < 7 * 60 + 30 || minute > 22 * 60 + 30 || minute % 15 !== 5) return
+  if (!isAutoPublishSlot(minute)) return
   const config = await env.DB
     .prepare(
       `SELECT enabled, circuit_open, binance_checked, daily_limit
