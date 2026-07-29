@@ -9,6 +9,7 @@
 
 import { useState } from 'react'
 
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { ConditionalOrderDialog } from '@/components/trading/conditional-order-dialog'
 import { OrderConfirmDialog } from '@/components/workbench/order-confirm-dialog'
 import { usePortfolio, usePositions } from '@/hooks/use-virtual'
@@ -18,6 +19,8 @@ import { cn } from '@/lib/utils'
 import type { Market } from '@midas/shared'
 
 export function SpotPositionsSection() {
+  const { locale } = useRuntimeLocale()
+  const en = locale === 'en'
   const { data: activePositions = [] } = usePositions({ includeClosed: false })
   const { data: portfolio = [] } = usePortfolio()
   const [closeDialog, setCloseDialog] = useState<{
@@ -42,7 +45,7 @@ export function SpotPositionsSection() {
   if (activePositions.length === 0) {
     return (
       <p className="mb-6 rounded-lg border border-paper bg-surface-card px-4 py-6 text-center text-sm text-muted-foreground/70">
-        暂无现货持仓
+        {en ? 'No spot positions' : '暂无现货持仓'}
       </p>
     )
   }
@@ -53,13 +56,13 @@ export function SpotPositionsSection() {
       <table className="w-full min-w-[640px] text-sm">
         <thead>
           <tr className="border-b border-paper text-xs text-muted-foreground">
-            <th className="py-2 text-left">标的</th>
-            <th className="py-2 text-left">市场</th>
-            <th className="py-2 text-right">数量</th>
-            <th className="py-2 text-right">均价</th>
-            <th className="py-2 text-right">现价</th>
-            <th className="py-2 text-right">浮盈亏</th>
-            <th className="py-2 text-right">操作</th>
+            <th className="py-2 text-left">{en ? 'Instrument' : '标的'}</th>
+            <th className="py-2 text-left">{en ? 'Market' : '市场'}</th>
+            <th className="py-2 text-right">{en ? 'Quantity' : '数量'}</th>
+            <th className="py-2 text-right">{en ? 'Avg. price' : '均价'}</th>
+            <th className="py-2 text-right">{en ? 'Last price' : '现价'}</th>
+            <th className="py-2 text-right">{en ? 'Unrealized P&L' : '浮盈亏'}</th>
+            <th className="py-2 text-right">{en ? 'Actions' : '操作'}</th>
           </tr>
         </thead>
         <tbody>
@@ -73,7 +76,17 @@ export function SpotPositionsSection() {
             return (
               <tr key={p.id} className="border-b border-paper/60">
                 <td className="py-2 font-mono">{p.symbol}</td>
-                <td className="py-2 text-xs">{MARKET_LABEL[p.market]}</td>
+                <td className="py-2 text-xs">
+                  {en
+                    ? p.market === 'cn'
+                      ? 'A-shares'
+                      : p.market === 'us'
+                        ? 'U.S. Stocks'
+                        : p.market === 'hk'
+                          ? 'HK Stocks'
+                          : 'Crypto'
+                    : MARKET_LABEL[p.market]}
+                </td>
                 <td className="py-2 text-right font-mono">{Number(p.quantity).toLocaleString()}</td>
                 <td className="py-2 text-right font-mono">
                   {formatMoney(p.avg_entry_price, currency, { decimals: 4 })}
@@ -106,7 +119,7 @@ export function SpotPositionsSection() {
                       }
                       className="min-h-10 rounded border border-gold/60 px-2 py-1 text-xs text-gold hover:bg-gold/10 lg:min-h-0"
                     >
-                      止盈止损
+                      {en ? 'TP / SL' : '止盈止损'}
                     </button>
                     <button
                       type="button"
@@ -118,7 +131,7 @@ export function SpotPositionsSection() {
                       }
                       className="min-h-10 rounded border border-midas-red px-2 py-1 text-xs text-midas-red hover:bg-midas-red-glow lg:min-h-0"
                     >
-                      平仓
+                      {en ? 'Close' : '平仓'}
                     </button>
                   </div>
                 </td>

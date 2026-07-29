@@ -8,7 +8,7 @@ import { PositionsHub } from '@/components/account/positions-hub'
  */
 export default function PositionsPage() {
   return (
-    <Suspense fallback={<p className="py-12 text-center text-muted-foreground">载入中…</p>}>
+    <Suspense fallback={<p className="py-12 text-center text-muted-foreground">…</p>}>
       <PositionsHub />
     </Suspense>
   )

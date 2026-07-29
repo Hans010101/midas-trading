@@ -6,6 +6,7 @@
  */
 
 import type { PerpAction } from '@/lib/api/perp'
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { cn } from '@/lib/utils'
 
 export const ISOLATED_TIP = '逐仓:强平价只取决于开仓价与杠杆,与保证金金额无关'
@@ -28,17 +29,24 @@ export const fmtU = (s: string | null | undefined): string =>
   num(s).toLocaleString('en-US', { maximumFractionDigits: 2 })
 
 export function IsolatedTag() {
+  const { locale } = useRuntimeLocale()
+  const en = locale === 'en'
   return (
     <span
-      title={ISOLATED_TIP}
+      title={
+        en
+          ? 'Isolated margin: liquidation price depends on entry price and leverage, not the margin amount'
+          : ISOLATED_TIP
+      }
       className="ml-1 cursor-help rounded bg-paper px-1 py-0.5 text-[9px] text-muted-foreground/80"
     >
-      逐仓
+      {en ? 'Isolated' : '逐仓'}
     </span>
   )
 }
 
 export function SideBadge({ side, leverage }: { side: 'long' | 'short'; leverage: number }) {
+  const { locale } = useRuntimeLocale()
   return (
     <span
       className={cn(
@@ -46,7 +54,10 @@ export function SideBadge({ side, leverage }: { side: 'long' | 'short'; leverage
         side === 'long' ? 'bg-up' : 'bg-down',
       )}
     >
-      {side === 'long' ? '多' : '空'} {leverage}x
+      {side === 'long'
+        ? locale === 'en' ? 'Long' : '多'
+        : locale === 'en' ? 'Short' : '空'}{' '}
+      {leverage}x
     </span>
   )
 }

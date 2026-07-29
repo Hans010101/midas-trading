@@ -172,3 +172,141 @@ export function cnSectorName(
   return CN_SECTOR_NAME_EN[originalName]
     ?? (CJK_RE.test(originalName) ? `China Sector ${fallbackIndex + 1}` : originalName)
 }
+
+const US_STOCK_NAME_EN: Record<string, string> = {
+  AAPL: 'Apple',
+  MSFT: 'Microsoft',
+  NVDA: 'NVIDIA',
+  GOOGL: 'Alphabet',
+  AMZN: 'Amazon',
+  TSLA: 'Tesla',
+  META: 'Meta Platforms',
+  AMD: 'AMD',
+  NFLX: 'Netflix',
+  JPM: 'JPMorgan Chase',
+  XOM: 'Exxon Mobil',
+  WMT: 'Walmart',
+  BABA: 'Alibaba Group',
+  PDD: 'PDD Holdings',
+}
+
+export function usStockName(
+  symbol: string,
+  originalName: string,
+  locale: 'en' | 'zh',
+): string {
+  if (locale === 'zh') return originalName
+  return US_STOCK_NAME_EN[symbol]
+    ?? (CJK_RE.test(originalName) ? `U.S. stock ${symbol}` : originalName)
+}
+
+const US_SECTOR_NAME_EN: Record<string, string> = {
+  科技: 'Technology',
+  半导体: 'Semiconductors',
+  互联网: 'Internet',
+  传媒: 'Media',
+  通信服务: 'Communication Services',
+  消费: 'Consumer',
+  可选消费: 'Consumer Discretionary',
+  必需消费: 'Consumer Staples',
+  汽车: 'Automotive',
+  金融: 'Financials',
+  医疗保健: 'Healthcare',
+  工业: 'Industrials',
+  能源: 'Energy',
+  原材料: 'Materials',
+  公用事业: 'Utilities',
+  房地产: 'Real Estate',
+  中概股: 'China ADRs',
+}
+
+export function usSectorName(
+  originalName: string,
+  locale: 'en' | 'zh',
+  fallbackIndex = 0,
+): string {
+  if (locale === 'zh') return originalName
+  return US_SECTOR_NAME_EN[originalName]
+    ?? (CJK_RE.test(originalName) ? `U.S. Sector ${fallbackIndex + 1}` : originalName)
+}
+
+const HK_STOCK_NAME_EN: Record<string, string> = {
+  '00700': 'Tencent Holdings',
+  '09988': 'Alibaba Group',
+  '03690': 'Meituan',
+  '01810': 'Xiaomi',
+  '00941': 'China Mobile',
+  '01211': 'BYD Company',
+  '00005': 'HSBC Holdings',
+  '00388': 'Hong Kong Exchanges and Clearing',
+  '00939': 'China Construction Bank',
+  '02318': 'Ping An Insurance',
+  '00883': 'CNOOC',
+  '01024': 'Kuaishou Technology',
+  '09618': 'JD.com',
+  '09888': 'Baidu',
+  '09999': 'NetEase',
+  '01299': 'AIA Group',
+  '01398': 'ICBC',
+  '02015': 'Li Auto',
+  '09868': 'XPeng',
+}
+
+const HK_STOCK_NAME_BY_ZH: Record<string, string> = {
+  腾讯控股: 'Tencent Holdings',
+  '阿里巴巴-W': 'Alibaba Group',
+  '美团-W': 'Meituan',
+  '小米集团-W': 'Xiaomi',
+  中国移动: 'China Mobile',
+  比亚迪股份: 'BYD Company',
+  汇丰控股: 'HSBC Holdings',
+  香港交易所: 'Hong Kong Exchanges and Clearing',
+  建设银行: 'China Construction Bank',
+  中国平安: 'Ping An Insurance',
+  中国海洋石油: 'CNOOC',
+  '快手-W': 'Kuaishou Technology',
+  '京东集团-SW': 'JD.com',
+  '百度集团-SW': 'Baidu',
+  '网易-S': 'NetEase',
+  友邦保险: 'AIA Group',
+  工商银行: 'ICBC',
+  '理想汽车-W': 'Li Auto',
+  '小鹏汽车-W': 'XPeng',
+}
+
+export function hkStockName(
+  symbol: string,
+  originalName: string,
+  locale: 'en' | 'zh',
+): string {
+  if (locale === 'zh') return originalName
+  return HK_STOCK_NAME_EN[symbol]
+    ?? HK_STOCK_NAME_BY_ZH[originalName]
+    ?? (CJK_RE.test(originalName) ? `HK stock${symbol ? ` ${symbol}` : ''}` : originalName)
+}
+
+const HK_SECTOR_NAME_EN: Record<string, string> = {
+  科技: 'Technology',
+  互联网: 'Internet',
+  电信: 'Telecommunications',
+  汽车: 'Automotive',
+  金融: 'Financials',
+  能源: 'Energy',
+  医疗保健: 'Healthcare',
+  消费: 'Consumer',
+  地产: 'Real Estate',
+  房地产: 'Real Estate',
+  工业: 'Industrials',
+  公用事业: 'Utilities',
+  原材料: 'Materials',
+}
+
+export function hkSectorName(
+  originalName: string,
+  locale: 'en' | 'zh',
+  fallbackIndex = 0,
+): string {
+  if (locale === 'zh') return originalName
+  return HK_SECTOR_NAME_EN[originalName]
+    ?? (CJK_RE.test(originalName) ? `HK Sector ${fallbackIndex + 1}` : originalName)
+}

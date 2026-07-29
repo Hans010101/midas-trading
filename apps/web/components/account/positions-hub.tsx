@@ -12,6 +12,7 @@
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { PerpActivePositions } from '@/components/account/perp-active-positions'
 import { PerpClosedPositions } from '@/components/account/perp-closed-positions'
 import { PerpOrders } from '@/components/account/perp-orders'
@@ -23,6 +24,8 @@ import { POSITIONS_TABS, normalizePositionsTab } from '@/lib/account-nav'
 import { cn } from '@/lib/utils'
 
 export function PositionsHub() {
+  const { locale } = useRuntimeLocale()
+  const en = locale === 'en'
   const searchParams = useSearchParams()
   const pathname = usePathname()
   const router = useRouter()
@@ -35,7 +38,9 @@ export function PositionsHub() {
 
   return (
     <div>
-      <h1 className="mb-4 font-serif text-2xl font-bold text-foreground">持仓与订单</h1>
+      <h1 className="mb-4 font-serif text-2xl font-bold text-foreground">
+        {en ? 'Positions & orders' : '持仓与订单'}
+      </h1>
 
       {/* 四 tab(framed-segment 范式 · 窄屏可横滚) */}
       <div className="mb-6 overflow-x-auto">
@@ -52,7 +57,15 @@ export function PositionsHub() {
                   : 'text-muted-foreground hover:bg-midas-red-glow/50',
               )}
             >
-              {t.label}
+              {en
+                ? t.key === 'positions'
+                  ? 'Current positions'
+                  : t.key === 'history'
+                    ? 'Position history'
+                    : t.key === 'orders'
+                      ? 'Order history'
+                      : 'Conditional orders'
+                : t.label}
             </button>
           ))}
         </div>
@@ -60,9 +73,13 @@ export function PositionsHub() {
 
       {tab === 'positions' && (
         <div>
-          <h2 className="mb-2 font-serif text-base font-bold text-foreground">现货持仓</h2>
+          <h2 className="mb-2 font-serif text-base font-bold text-foreground">
+            {en ? 'Spot positions' : '现货持仓'}
+          </h2>
           <SpotPositionsSection />
-          <h2 className="mb-2 mt-8 font-serif text-base font-bold text-foreground">合约持仓(永续)</h2>
+          <h2 className="mb-2 mt-8 font-serif text-base font-bold text-foreground">
+            {en ? 'Perpetual positions' : '合约持仓(永续)'}
+          </h2>
           <PerpActivePositions />
         </div>
       )}

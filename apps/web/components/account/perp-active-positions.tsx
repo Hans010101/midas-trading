@@ -14,6 +14,7 @@ import { useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import {
   IsolatedTag,
   SideBadge,
@@ -28,6 +29,8 @@ import { PerpApiError, type PerpPosition } from '@/lib/api/perp'
 import { cn } from '@/lib/utils'
 
 export function PerpActivePositions() {
+  const { locale } = useRuntimeLocale()
+  const en = locale === 'en'
   const { status } = useSession()
   const authed = status === 'authenticated'
   const { data: account } = useAccount('crypto') // null = 未激活
@@ -51,15 +54,26 @@ export function PerpActivePositions() {
       })
       if (o.status === 'filled') {
         const pnl =
-          o.realized_pnl != null ? ` · 已实现 ${fmtU(o.realized_pnl)} USDT` : ''
-        toast.success(`平仓 ${p.symbol} 已成交${pnl}`, {
+          o.realized_pnl != null
+            ? en
+              ? ` · Realized ${fmtU(o.realized_pnl)} USDT`
+              : ` · 已实现 ${fmtU(o.realized_pnl)} USDT`
+            : ''
+        toast.success(en ? `${p.symbol} position closed${pnl}` : `平仓 ${p.symbol} 已成交${pnl}`, {
           className: 'midas-toast-success', duration: 4000,
         })
       } else {
-        toast.error(`平仓被拒 · ${o.reject_reason ?? '未知原因'}`, { duration: 5000 })
+        toast.error(
+          en
+            ? `Close rejected · ${o.reject_reason ?? 'Unknown reason'}`
+            : `平仓被拒 · ${o.reject_reason ?? '未知原因'}`,
+          { duration: 5000 },
+        )
       }
     } catch (e) {
-      toast.error(e instanceof PerpApiError ? e.detail : '平仓失败')
+      toast.error(
+        e instanceof PerpApiError ? e.detail : en ? 'Unable to close position' : '平仓失败',
+      )
     } finally {
       setConfirm(null)
     }
@@ -68,9 +82,19 @@ export function PerpActivePositions() {
   if (account == null) {
     return (
       <div className="rounded-lg border border-dashed border-gold/50 bg-gold/5 p-4 text-sm text-muted-foreground">
-        先在「资产总览」激活「加密」USDT,再去{' '}
-        <Link href="/crypto-market" className="text-midas-red underline">加密市场</Link>{' '}
-        选币种,在详情页右栏「下单指导」开合约仓(开多 / 开空)。
+        {en ? (
+          <>
+            Activate a crypto USDT account in Portfolio overview, then open the{' '}
+            <Link href="/crypto-market" className="text-midas-red underline">crypto market</Link>{' '}
+            and use the order guide on an instrument detail page.
+          </>
+        ) : (
+          <>
+            先在「资产总览」激活「加密」USDT,再去{' '}
+            <Link href="/crypto-market" className="text-midas-red underline">加密市场</Link>{' '}
+            选币种,在详情页右栏「下单指导」开合约仓(开多 / 开空)。
+          </>
+        )}
       </div>
     )
   }
@@ -78,26 +102,28 @@ export function PerpActivePositions() {
   return (
     <div>
       <h3 className="mb-2 font-serif text-base font-bold text-foreground">
-        合约持仓 · {active.length} 笔
+        {en ? `Perpetual positions · ${active.length}` : `合约持仓 · ${active.length} 笔`}
       </h3>
       {active.length === 0 ? (
         <p className="mb-6 rounded-lg border border-paper bg-surface-card px-4 py-6 text-center text-sm text-muted-foreground/70">
-          暂无合约持仓 · 去币种详情页开多 / 开空
+          {en
+            ? 'No perpetual positions · Open an instrument detail page to trade'
+            : '暂无合约持仓 · 去币种详情页开多 / 开空'}
         </p>
       ) : (
         <div className="mb-6 overflow-x-auto">
           <table className="w-full min-w-[820px] text-sm">
             <thead>
               <tr className="border-b border-paper text-xs text-muted-foreground">
-                <th className="py-2 text-left">标的</th>
-                <th className="py-2 text-left">方向</th>
-                <th className="py-2 text-right">数量</th>
-                <th className="py-2 text-right">入场价</th>
-                <th className="py-2 text-right">标记价</th>
-                <th className="py-2 text-right">浮动盈亏 / ROE</th>
-                <th className="py-2 text-right">强平价</th>
-                <th className="py-2 text-right">累计资金费</th>
-                <th className="py-2 text-right">操作</th>
+                <th className="py-2 text-left">{en ? 'Instrument' : '标的'}</th>
+                <th className="py-2 text-left">{en ? 'Side' : '方向'}</th>
+                <th className="py-2 text-right">{en ? 'Quantity' : '数量'}</th>
+                <th className="py-2 text-right">{en ? 'Entry price' : '入场价'}</th>
+                <th className="py-2 text-right">{en ? 'Mark price' : '标记价'}</th>
+                <th className="py-2 text-right">{en ? 'Unrealized P&L / ROE' : '浮动盈亏 / ROE'}</th>
+                <th className="py-2 text-right">{en ? 'Liquidation price' : '强平价'}</th>
+                <th className="py-2 text-right">{en ? 'Funding paid' : '累计资金费'}</th>
+                <th className="py-2 text-right">{en ? 'Actions' : '操作'}</th>
               </tr>
             </thead>
             <tbody>
@@ -130,8 +156,8 @@ export function PerpActivePositions() {
                       {num(p.funding_paid) === 0
                         ? '—'
                         : num(p.funding_paid) > 0
-                          ? `付 ${fmtU(p.funding_paid)}`
-                          : `收 ${num(p.funding_paid) < 0 ? fmtU(String(-num(p.funding_paid))) : '0'}`}
+                          ? `${en ? 'Paid' : '付'} ${fmtU(p.funding_paid)}`
+                          : `${en ? 'Received' : '收'} ${num(p.funding_paid) < 0 ? fmtU(String(-num(p.funding_paid))) : '0'}`}
                     </td>
                     <td className="py-2 text-right">
                       <div className="flex items-center justify-end gap-1.5">
@@ -140,14 +166,14 @@ export function PerpActivePositions() {
                           onClick={() => setSltp(p)}
                           className="min-h-10 rounded border border-gold/60 px-2 py-1 text-xs text-gold hover:bg-gold/10 lg:min-h-0"
                         >
-                          止盈止损
+                          {en ? 'TP / SL' : '止盈止损'}
                         </button>
                         <button
                           type="button"
                           onClick={() => setConfirm(p)}
                           className="min-h-10 rounded border border-midas-red px-2 py-1 text-xs text-midas-red hover:bg-midas-red-glow lg:min-h-0"
                         >
-                          平仓
+                          {en ? 'Close' : '平仓'}
                         </button>
                       </div>
                     </td>
@@ -188,6 +214,8 @@ export function PerpActivePositions() {
 function PerpCloseConfirm({
   pos, pending, onCancel, onConfirm,
 }: { pos: PerpPosition; pending: boolean; onCancel: () => void; onConfirm: () => void }) {
+  const { locale } = useRuntimeLocale()
+  const en = locale === 'en'
   const upnl = pos.unrealized_pnl != null ? num(pos.unrealized_pnl) : null
   return (
     <div
@@ -197,23 +225,25 @@ function PerpCloseConfirm({
       onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}
     >
       <div className="w-full max-w-sm rounded-lg border border-midas-red bg-cream p-6 shadow-xl">
-        <h3 className="mb-5 text-center font-serif text-lg font-bold">确认平仓</h3>
+        <h3 className="mb-5 text-center font-serif text-lg font-bold">
+          {en ? 'Confirm close' : '确认平仓'}
+        </h3>
         <dl className="space-y-2.5 text-sm">
-          <div className="flex justify-between"><dt className="text-xs text-muted-foreground">标的</dt><dd className="font-mono">{pos.symbol}</dd></div>
-          <div className="flex items-center justify-between"><dt className="text-xs text-muted-foreground">方向</dt><dd><SideBadge side={pos.side} leverage={pos.leverage} /></dd></div>
-          <div className="flex justify-between"><dt className="text-xs text-muted-foreground">平仓量</dt><dd className="font-mono">{num(pos.quantity)}(全部)</dd></div>
+          <div className="flex justify-between"><dt className="text-xs text-muted-foreground">{en ? 'Instrument' : '标的'}</dt><dd className="font-mono">{pos.symbol}</dd></div>
+          <div className="flex items-center justify-between"><dt className="text-xs text-muted-foreground">{en ? 'Side' : '方向'}</dt><dd><SideBadge side={pos.side} leverage={pos.leverage} /></dd></div>
+          <div className="flex justify-between"><dt className="text-xs text-muted-foreground">{en ? 'Close quantity' : '平仓量'}</dt><dd className="font-mono">{num(pos.quantity)} ({en ? 'all' : '全部'})</dd></div>
           {upnl != null && (
             <div className="flex justify-between">
-              <dt className="text-xs text-muted-foreground">当前浮盈</dt>
+              <dt className="text-xs text-muted-foreground">{en ? 'Current unrealized P&L' : '当前浮盈'}</dt>
               <dd className={cn('font-mono', upnl >= 0 ? 'text-up' : 'text-down')}>{upnl >= 0 ? '+' : ''}{fmtU(pos.unrealized_pnl)} USDT</dd>
             </div>
           )}
         </dl>
         <div className="mt-4 flex justify-end gap-2">
-          <button type="button" onClick={onCancel} className="rounded-md border border-paper bg-background px-4 py-2 text-sm hover:bg-cream">取消</button>
+          <button type="button" onClick={onCancel} className="rounded-md border border-paper bg-background px-4 py-2 text-sm hover:bg-cream">{en ? 'Cancel' : '取消'}</button>
           <button type="button" onClick={onConfirm} disabled={pending}
             className={cn('rounded-md px-4 py-2 text-sm font-medium text-white', pending ? 'cursor-not-allowed bg-midas-red/40' : 'bg-midas-red hover:bg-midas-red-deep')}>
-            {pending ? '提交中…' : '确认平仓'}
+            {pending ? (en ? 'Submitting…' : '提交中…') : (en ? 'Confirm close' : '确认平仓')}
           </button>
         </div>
       </div>

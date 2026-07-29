@@ -16,8 +16,10 @@ import Link from 'next/link'
 import { toast } from 'sonner'
 
 import { useSession } from 'next-auth/react'
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { DataTable, TCell, TH, THead, TRow } from '@/components/ui/data-table'
 import { EmptyState, LoadingNote } from '@/components/ui/state'
+import { useRuntimeDocumentTitle } from '@/hooks/use-runtime-document-title'
 import { useDeleteFromWatchlist, useWatchlist } from '@/hooks/use-watchlist'
 import { useWatchlistQuotes } from '@/hooks/use-watchlist-quotes'
 import { WatchlistApiError } from '@/lib/api/watchlist'
@@ -25,7 +27,12 @@ import { currencyOf, formatMoney } from '@/lib/format-money'
 import { cn } from '@/lib/utils'
 import type { Market } from '@midas/shared'
 
-const MARKET_LABEL: Record<Market, string> = { cn: 'A 股', us: '美股', crypto: '加密', hk: '港股' }
+const MARKET_LABEL: Record<Market, { en: string; zh: string }> = {
+  cn: { en: 'A-shares', zh: 'A 股' },
+  us: { en: 'U.S. Stocks', zh: '美股' },
+  crypto: { en: 'Crypto', zh: '加密' },
+  hk: { en: 'HK Stocks', zh: '港股' },
+}
 const MARKET_BADGE: Record<Market, string> = {
   cn: 'border-midas-red/40 text-midas-red',
   us: 'border-gold/50 text-gold',
@@ -52,24 +59,35 @@ function fmtPct(n: number): string {
 }
 
 export function WatchlistOverview() {
+  const { locale } = useRuntimeLocale()
   const { status } = useSession()
   const { data: items = [], isLoading, isError } = useWatchlist()
   const quotes = useWatchlistQuotes(items)
   const del = useDeleteFromWatchlist()
+  const en = locale === 'en'
+  useRuntimeDocumentTitle({
+    locale,
+    english: 'Watchlist',
+    chinese: '自选汇总',
+  })
 
   if (status === 'unauthenticated') {
     return (
       <div className="mx-auto max-w-md rounded-lg border border-dashed border-paper bg-cream p-6 text-center">
         <Star className="mx-auto mb-2 h-6 w-6 text-gold" />
-        <p className="mb-1 text-sm font-medium text-foreground">登录后查看自选</p>
+        <p className="mb-1 text-sm font-medium text-foreground">
+          {en ? 'Sign in to view your watchlist' : '登录后查看自选'}
+        </p>
         <p className="mb-4 text-xs leading-relaxed text-muted-foreground/80">
-          登录即可跨 A股 / 美股 / 加密 收藏关注的标的,汇总到这一个界面。
+          {en
+            ? 'Save instruments across A-shares, U.S. stocks, Hong Kong stocks and crypto in one place.'
+            : '登录即可跨 A股 / 美股 / 港股 / 加密收藏关注的标的,汇总到这一个界面。'}
         </p>
         <Link
           href="/login"
           className="inline-flex items-center rounded-md border border-midas-red px-3 py-1 text-xs text-midas-red transition-colors hover:bg-midas-red-glow"
         >
-          去登录
+          {en ? 'Sign in' : '去登录'}
         </Link>
       </div>
     )
@@ -78,27 +96,48 @@ export function WatchlistOverview() {
   async function remove(id: number, symbol: string) {
     try {
       await del.mutateAsync(id)
-      toast.success(`已取消自选 ${symbol}`)
+      toast.success(en ? `${symbol} removed from watchlist` : `已取消自选 ${symbol}`)
     } catch (e) {
-      toast.error(e instanceof WatchlistApiError ? e.detail : '操作失败')
+      toast.error(
+        e instanceof WatchlistApiError
+          ? e.detail
+          : en
+            ? 'Unable to update watchlist'
+            : '操作失败',
+      )
     }
   }
 
   return (
     <section>
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-serif text-sm font-bold text-foreground">我的自选 · 跨市场</h2>
+        <h2 className="font-serif text-sm font-bold text-foreground">
+          {en ? 'My watchlist · All markets' : '我的自选 · 跨市场'}
+        </h2>
         {items.length > 0 && (
-          <span className="text-xs text-muted-foreground/70">共 {items.length} 个标的</span>
+          <span className="text-xs text-muted-foreground/70">
+            {en
+              ? `${items.length} ${items.length === 1 ? 'instrument' : 'instruments'}`
+              : `共 ${items.length} 个标的`}
+          </span>
         )}
       </div>
 
       {(isLoading || status === 'loading') && <LoadingNote className="py-10" />}
-      {isError && <EmptyState title="暂时无法读取自选" hint="后端不可达 · 稍后自动重试" />}
+      {isError && (
+        <EmptyState
+          title={en ? 'Watchlist is temporarily unavailable' : '暂时无法读取自选'}
+          hint={en ? 'The data service will retry automatically' : '后端不可达 · 稍后自动重试'}
+        />
+      )}
       {!isLoading && !isError && items.length === 0 && (
         <EmptyState
-          title="自选还是空的"
-          hint="去 A股 / 美股 / 加密 任一详情页,点「加自选」收藏关注的标的"
+          title={en ? 'Your watchlist is empty' : '自选还是空的'}
+          hint={
+            en
+              ? 'Open any market detail page and select Add to watchlist.'
+              : '去 A股 / 美股 / 港股 / 加密任一详情页,点「加自选」收藏关注的标的'
+          }
         />
       )}
 
@@ -107,11 +146,11 @@ export function WatchlistOverview() {
           <DataTable minWidth="640px">
             <THead>
               <TH align="center">#</TH>
-              <TH>市场</TH>
-              <TH>代码</TH>
-              <TH align="right">最新价</TH>
-              <TH align="right">涨跌幅</TH>
-              <TH align="center">操作</TH>
+              <TH>{en ? 'Market' : '市场'}</TH>
+              <TH>{en ? 'Symbol' : '代码'}</TH>
+              <TH align="right">{en ? 'Last price' : '最新价'}</TH>
+              <TH align="right">{en ? 'Change' : '涨跌幅'}</TH>
+              <TH align="center">{en ? 'Actions' : '操作'}</TH>
             </THead>
             <tbody>
               {items.map((it, i) => {
@@ -122,7 +161,7 @@ export function WatchlistOverview() {
                     key={it.id}
                     onClick={() => openDetail(market, it.symbol)}
                     className="cursor-pointer transition-colors hover:bg-midas-red-glow/30"
-                    title="点击查看详情"
+                    title={en ? 'Open instrument details' : '点击查看详情'}
                   >
                     <TCell align="center" mono className="text-xs text-muted-foreground/70">
                       {i + 1}
@@ -134,7 +173,7 @@ export function WatchlistOverview() {
                           MARKET_BADGE[market],
                         )}
                       >
-                        {MARKET_LABEL[market]}
+                        {MARKET_LABEL[market][locale]}
                       </span>
                     </TCell>
                     <TCell mono className="font-medium text-foreground">
@@ -163,7 +202,8 @@ export function WatchlistOverview() {
                     <TCell align="center">
                       <button
                         type="button"
-                        title="取消自选"
+                        title={en ? 'Remove from watchlist' : '取消自选'}
+                        aria-label={en ? `Remove ${it.symbol} from watchlist` : `取消自选 ${it.symbol}`}
                         onClick={(e) => {
                           e.stopPropagation()
                           void remove(it.id, it.symbol)
@@ -179,7 +219,9 @@ export function WatchlistOverview() {
             </tbody>
           </DataTable>
           <p className="mt-2 text-[11px] text-muted-foreground/60">
-            最新价为各标的最近日 K 收盘(原币种)· 30 秒刷新 · 点行进对应详情页
+            {en
+              ? 'Prices use the latest daily close in each market’s native currency · Refreshes every 30 seconds · Select a row for details'
+              : '最新价为各标的最近日 K 收盘(原币种)· 30 秒刷新 · 点行进对应详情页'}
           </p>
         </>
       )}

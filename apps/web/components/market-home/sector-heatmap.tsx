@@ -95,7 +95,9 @@ export function SectorHeatmap({ sectors, fmtAmount, max }: SectorHeatmapProps) {
                 {fmtPct(s.change_pct)}
               </div>
               <div className="mt-0.5 text-[11px] text-muted-foreground/70">
-                {locale === 'en' ? `${s.stock_count} stocks` : `${s.stock_count} 只`}
+                {locale === 'en'
+                  ? `${s.stock_count} ${s.stock_count === 1 ? 'stock' : 'stocks'}`
+                  : `${s.stock_count} 只`}
               </div>
             </div>
           )

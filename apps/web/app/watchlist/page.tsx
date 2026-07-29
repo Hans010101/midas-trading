@@ -9,16 +9,24 @@
  */
 
 import type { Metadata } from 'next'
+import { cookies } from 'next/headers'
 
 import { TopNav } from '@/components/layout/top-nav'
 import { WatchlistOverview } from '@/components/watchlist/watchlist-overview'
+import { LOCALE_COOKIE } from '@/i18n/routing'
 
 // SEO 批3:自选页独立 metadata(server 页 · 直接 export)。
-export const metadata: Metadata = {
-  title: '自选汇总',
-  description:
-    '跨市场自选标的汇总:加密、美股、A股、港股自选行情一屏查看。',
-  alternates: { canonical: '/watchlist' },
+export async function generateMetadata(): Promise<Metadata> {
+  const english = (await cookies()).get(LOCALE_COOKIE)?.value === 'en'
+  return {
+    title: {
+      absolute: english ? 'Watchlist · Midas Trading' : '自选汇总 · 点金 Midas',
+    },
+    description: english
+      ? 'Track A-shares, U.S. stocks, Hong Kong stocks and crypto instruments in one cross-market watchlist.'
+      : '跨市场自选标的汇总:加密、美股、A股、港股自选行情一屏查看。',
+    alternates: { canonical: '/watchlist' },
+  }
 }
 
 export default function WatchlistPage() {

@@ -10,11 +10,15 @@
 
 import { AlertRulesSection } from '@/components/settings/alert-rules-section'
 import { NotificationsConfigSection } from '@/components/settings/notifications-config-section'
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 
 export default function AlertsPage() {
+  const { locale } = useRuntimeLocale()
   return (
     <div>
-      <h1 className="mb-6 font-serif text-2xl font-bold text-foreground">通知与提醒</h1>
+      <h1 className="mb-6 font-serif text-2xl font-bold text-foreground">
+        {locale === 'en' ? 'Alerts & notifications' : '通知与提醒'}
+      </h1>
       <NotificationsConfigSection />
       <AlertRulesSection />
     </div>

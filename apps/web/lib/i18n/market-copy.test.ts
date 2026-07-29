@@ -6,6 +6,10 @@ import {
   cnSectorName,
   cnStockName,
   econEventTitle,
+  hkSectorName,
+  hkStockName,
+  usSectorName,
+  usStockName,
 } from '@/lib/i18n/market-copy'
 
 const CJK_RE = /[\u3400-\u9fff]/
@@ -52,5 +56,21 @@ describe('market page English copy', () => {
     expect(cnStockName('300750', '宁德时代', 'zh')).toBe('宁德时代')
     expect(cnCompanyNameFromOriginal('贵州茅台', 'zh')).toBe('贵州茅台')
     expect(cnSectorName('新能源', 'zh')).toBe('新能源')
+  })
+
+  it('translates the curated U.S. market universe without leaking CJK', () => {
+    expect(usStockName('NFLX', '奈飞', 'en')).toBe('Netflix')
+    expect(usStockName('AAPL', '苹果', 'en')).toBe('Apple')
+    expect(usSectorName('中概股', 'en')).toBe('China ADRs')
+    expect(usStockName('TEST', '测试公司', 'en')).toBe('U.S. stock TEST')
+  })
+
+  it('translates the curated Hong Kong universe without leaking CJK', () => {
+    expect(hkStockName('00700', '腾讯控股', 'en')).toBe('Tencent Holdings')
+    expect(hkStockName('00388', '香港交易所', 'en')).toBe(
+      'Hong Kong Exchanges and Clearing',
+    )
+    expect(hkSectorName('电信', 'en')).toBe('Telecommunications')
+    expect(hkStockName('09900', '测试公司', 'en')).toBe('HK stock 09900')
   })
 })
