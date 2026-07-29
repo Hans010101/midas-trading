@@ -2,8 +2,8 @@
  * 单篇文章页 · server component · 路径段 /academy/article/[slug](SEO 批2)。
  *
  * ★由 ?slug= 查询参数迁来(docs/decisions/0045 作废「零动态段」约定):
- *   generateStaticParams 118 篇全量 SSG(build 在 Actions·无内存墙)+ dynamicParams=false
- *   (未知 slug 构建期即 404 · 顺带根治旧版 200 软 404)。旧 URL 由旧 page.tsx 薄壳 308 兜底。
+ *   Cloudflare Worker 按 slug 动态渲染,118 篇 Markdown 由 OpenNext output tracing 随包携带。
+ *   未知 slug 运行时 404。旧 URL 由旧 page.tsx 薄壳 308 兜底。
  * ★generateMetadata:每篇独立 title(模板自动补「· 点金 Midas」)+ description=excerpt +
  *   canonical —— 118 篇告别全站同名。
  *
@@ -18,7 +18,6 @@ import { AcademyArticleContent } from '@/components/academy/academy-article-cont
 import { JsonLd } from '@/components/seo/json-ld'
 import { ARTICLE_DATES } from '@/lib/seo/article-dates'
 import { buildArticleSchema, buildBreadcrumbSchema } from '@/lib/seo/schema'
-import { ACADEMY_ARTICLES } from '@/content/academy/manifest'
 import { getInteractives } from '@/content/academy/interactives'
 import { getPractice, buildPracticeHref } from '@/content/academy/practice'
 import { getQuiz } from '@/content/academy/quizzes'
@@ -32,11 +31,9 @@ import {
   getStage,
 } from '@/lib/academy'
 
-// 118 篇全量 SSG · 未知 slug 构建期即 404(根治旧版 200 软 404)
-export function generateStaticParams() {
-  return ACADEMY_ARTICLES.map((a) => ({ slug: a.slug }))
-}
-export const dynamicParams = false
+// Cloudflare account has no R2 incremental cache. Render article routes in the
+// Worker so all 118 traced Markdown files remain directly addressable.
+export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({
   params,
@@ -67,7 +64,7 @@ export default async function AcademyArticlePage({
   const markdownEn = getArticleBySlug(slug, 'en')
   const meta = getArticleMeta(slug)
   const metaEn = getArticleMeta(slug, 'en')
-  // dynamicParams=false 下 slug 必在 manifest;此分支纯防御(manifest 有条目但 md 文件缺失时真 404)
+  // slug 不在 manifest / Markdown 缺失时返回真 404。
   if (!markdown || !markdownEn || !meta || !metaEn) notFound()
   const stage = getStage(meta.stage)
   const stageEn = getStage(metaEn.stage, 'en')
