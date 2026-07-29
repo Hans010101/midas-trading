@@ -44,6 +44,7 @@ export function useAiDecision(args: UseAiDecisionArgs) {
         period: args.period,
         limit: args.limit,
         instrument: args.instrument,
+        locale,
         token,
         signal,
       }),

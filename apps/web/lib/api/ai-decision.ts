@@ -105,6 +105,8 @@ export interface FetchDecisionCardArgs {
   limit?: number
   /** 'spot'(默认)· 'perp' USDT-M 永续合约 · 只 crypto 支持。不传 → 后端默认 spot。 */
   instrument?: 'spot' | 'perp'
+  /** 与 X-Lang 同步写入 URL，隔离浏览器的语言响应缓存。 */
+  locale?: string
   /** ★ Pro 门控:登录态 session token · 带上后端才识别 Pro(无 token = 未登录 = locked)。 */
   token?: string
   signal?: AbortSignal
@@ -120,6 +122,7 @@ export async function fetchDecisionCard(
     limit: String(args.limit ?? 300),
   })
   if (args.instrument) params.set('instrument', args.instrument)
+  if (args.locale) params.set('lang', args.locale)
   const r = await fetch(
     `${API_BASE}/api/v1/analysis/decision-card?${params.toString()}`,
     {

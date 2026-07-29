@@ -27,6 +27,9 @@ const STRATEGIES = new Set([
 export type AnalysisLanguage = 'zh' | 'en'
 
 export function requestLanguage(request: Request): AnalysisLanguage {
+  const queryLanguage = new URL(request.url).searchParams.get('lang')?.trim().toLowerCase()
+  if (queryLanguage === 'en' || queryLanguage?.startsWith('en-')) return 'en'
+  if (queryLanguage === 'zh' || queryLanguage?.startsWith('zh-')) return 'zh'
   const value = request.headers.get('x-lang')?.trim().toLowerCase() ?? ''
   return value === 'en' || value.startsWith('en-') ? 'en' : 'zh'
 }
@@ -625,6 +628,7 @@ Do not output Markdown.`
   const response = jsonResponse(body, 200, requestId, request.method)
   response.headers.set('cache-control', 'private, max-age=300')
   response.headers.set('content-language', en ? 'en' : 'zh-CN')
+  response.headers.set('vary', 'X-Lang, Authorization')
   return response
 }
 

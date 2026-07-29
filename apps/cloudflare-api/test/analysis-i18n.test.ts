@@ -23,6 +23,10 @@ describe('analysis language', () => {
     expect(requestLanguage(new Request('https://api.test', {
       headers: { 'X-Lang': 'en-US' },
     }))).toBe('en')
+    expect(requestLanguage(new Request('https://api.test?lang=en'))).toBe('en')
+    expect(requestLanguage(new Request('https://api.test?lang=zh', {
+      headers: { 'X-Lang': 'en-US' },
+    }))).toBe('zh')
   })
 
   it('keeps the technical fallback fully English', () => {
