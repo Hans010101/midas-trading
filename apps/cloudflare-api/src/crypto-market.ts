@@ -7,6 +7,7 @@ const FUTURES_ANALYTICS_URL =
 const SPOT_TICKER_URL = 'https://api.kraken.com/0/public/Ticker'
 const BINANCE_FUTURES_URL = 'https://fapi.binance.com'
 const OKX_PUBLIC_URL = 'https://www.okx.com/api/v5'
+const GATE_FUTURES_URL = 'https://api.gateio.ws/api/v4/futures/usdt'
 const CACHE_CONTROL = 'public, max-age=15, s-maxage=60'
 // Each symbol needs three analytics requests. Keep the Worker invocation below
 // Cloudflare Free's 50 external-subrequest ceiling.
@@ -49,6 +50,66 @@ function finite(value: unknown, fallback = 0): number {
 function numeric(value: unknown, fallback = 0): number {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+type GateContractStat = Readonly<{
+  time?: unknown
+  lsr_account?: unknown
+  lsr_taker?: unknown
+  long_taker_size?: unknown
+  short_taker_size?: unknown
+  open_interest?: unknown
+  open_interest_usd?: unknown
+  mark_price?: unknown
+  top_lsr_account?: unknown
+  top_lsr_size?: unknown
+  top_long_account?: unknown
+  top_short_account?: unknown
+  top_long_size?: unknown
+  top_short_size?: unknown
+  long_users?: unknown
+  short_users?: unknown
+}>
+
+type GateCandlestick = Readonly<{
+  t?: unknown
+  c?: unknown
+}>
+
+function gateContract(base: string): string {
+  return `${base}_USDT`
+}
+
+function normalizedSides(
+  longValue: unknown,
+  shortValue: unknown,
+  ratioValue: unknown,
+): Readonly<{ long: number; short: number; ratio: number }> {
+  const longRaw = numeric(longValue)
+  const shortRaw = numeric(shortValue)
+  const ratio = numeric(ratioValue)
+  const total = longRaw + shortRaw
+  if (total > 0) {
+    return { long: longRaw / total, short: shortRaw / total, ratio }
+  }
+  return ratio > 0
+    ? { long: ratio / (1 + ratio), short: 1 / (1 + ratio), ratio }
+    : { long: 0, short: 0, ratio: 0 }
+}
+
+async function gateContractStats(
+  base: string,
+  limit: number,
+): Promise<GateContractStat[]> {
+  const url = new URL(`${GATE_FUTURES_URL}/contract_stats`)
+  url.searchParams.set('contract', gateContract(base))
+  url.searchParams.set('interval', '5m')
+  url.searchParams.set('limit', String(Math.min(limit, 500)))
+  const rows = await fetchPublicJson<GateContractStat[]>(url, 'Gate Futures')
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new Error('Gate Futures returned no contract statistics')
+  }
+  return rows
 }
 
 function cachedJson(
@@ -728,6 +789,41 @@ async function getOpenInterest(
   const url = new URL(request.url)
   const limit = boundedLimit(url, 96, 500)
   try {
+    const rows = await gateContractStats(parsed.base, limit)
+    const items = rows.flatMap((row) => {
+      const timestamp = numeric(row.time)
+      const mark = numeric(row.mark_price)
+      const openInterestUsd = numeric(row.open_interest_usd)
+      const openInterestCoin = openInterestUsd > 0 && mark > 0
+        ? openInterestUsd / mark
+        : numeric(row.open_interest)
+      return timestamp > 0 && openInterestCoin > 0
+        ? [{
+            symbol: parsed.publicSymbol,
+            ts: new Date(timestamp * 1_000).toISOString(),
+            oi_coin: openInterestCoin,
+            oi_usd: openInterestUsd > 0
+              ? openInterestUsd
+              : openInterestCoin * mark,
+          }]
+        : []
+    })
+    if (items.length === 0) {
+      throw new Error('Gate Futures returned no valid OI rows')
+    }
+    return cachedJson(
+      {
+        symbol: parsed.publicSymbol,
+        items,
+        source: 'Gate futures contract statistics',
+      },
+      requestId,
+      request.method,
+    )
+  } catch {
+    // Binance remains the first fallback for symbols unavailable on Gate.
+  }
+  try {
     const binanceUrl = new URL(
       `${BINANCE_FUTURES_URL}/futures/data/openInterestHist`,
     )
@@ -824,6 +920,68 @@ async function getLongShortRatio(
 ): Promise<Response> {
   const parsed = parsePublicSymbol(symbol)
   const limit = boundedLimit(new URL(request.url), 96, 500)
+  try {
+    const rows = await gateContractStats(parsed.base, limit)
+    const items = rows.flatMap((row) => {
+      const timestamp = numeric(row.time)
+      const topAccount = normalizedSides(
+        row.top_long_account,
+        row.top_short_account,
+        row.top_lsr_account,
+      )
+      const topPosition = normalizedSides(
+        row.top_long_size,
+        row.top_short_size,
+        row.top_lsr_size,
+      )
+      const globalAccount = normalizedSides(
+        row.long_users,
+        row.short_users,
+        row.lsr_account,
+      )
+      const buyVolume = numeric(row.long_taker_size)
+      const sellVolume = numeric(row.short_taker_size)
+      if (
+        timestamp <= 0 ||
+        topAccount.ratio <= 0 ||
+        topPosition.ratio <= 0 ||
+        globalAccount.ratio <= 0
+      ) {
+        return []
+      }
+      return [{
+        symbol: parsed.publicSymbol,
+        ts: new Date(timestamp * 1_000).toISOString(),
+        top_account_long: topAccount.long,
+        top_account_short: topAccount.short,
+        top_account_ratio: topAccount.ratio,
+        top_position_long: topPosition.long,
+        top_position_short: topPosition.short,
+        top_position_ratio: topPosition.ratio,
+        taker_buy_vol: buyVolume,
+        taker_sell_vol: sellVolume,
+        taker_ratio: numeric(row.lsr_taker),
+        global_account_long: globalAccount.long,
+        global_account_short: globalAccount.short,
+        global_account_ratio: globalAccount.ratio,
+      }]
+    })
+    if (items.length === 0) {
+      throw new Error('Gate Futures returned no complete positioning rows')
+    }
+    return cachedJson(
+      {
+        symbol: parsed.publicSymbol,
+        items,
+        source: 'Gate futures top-trader positioning and taker flow',
+        unavailable_fields: [],
+      },
+      requestId,
+      request.method,
+    )
+  } catch {
+    // Binance remains the first fallback for symbols unavailable on Gate.
+  }
   try {
     const endpoint = async <T>(path: string): Promise<T> => {
       const url = new URL(`${BINANCE_FUTURES_URL}/futures/data/${path}`)
@@ -1041,6 +1199,56 @@ async function getBasis(
   symbol: string,
 ): Promise<Response> {
   const parsed = parsePublicSymbol(symbol)
+  const limit = boundedLimit(new URL(request.url), 288, 500)
+  try {
+    const candlesUrl = (kind: 'mark' | 'index') => {
+      const url = new URL(`${GATE_FUTURES_URL}/candlesticks`)
+      url.searchParams.set('contract', `${kind}_${gateContract(parsed.base)}`)
+      url.searchParams.set('interval', '5m')
+      url.searchParams.set('limit', String(Math.min(limit, 500)))
+      return url
+    }
+    const [markRows, indexRows] = await Promise.all([
+      fetchPublicJson<GateCandlestick[]>(
+        candlesUrl('mark'),
+        'Gate Futures mark price',
+      ),
+      fetchPublicJson<GateCandlestick[]>(
+        candlesUrl('index'),
+        'Gate Futures index price',
+      ),
+    ])
+    const indexByTimestamp = new Map(
+      indexRows.map((row) => [numeric(row.t), numeric(row.c)]),
+    )
+    const items = markRows.flatMap((row) => {
+      const timestamp = numeric(row.t)
+      const mark = numeric(row.c)
+      const index = indexByTimestamp.get(timestamp) ?? 0
+      return timestamp > 0 && mark > 0 && index > 0
+        ? [{
+            ts: new Date(timestamp * 1_000).toISOString(),
+            mark_price: mark,
+            index_price: index,
+            basis_pct: ((mark - index) / index) * 100,
+          }]
+        : []
+    })
+    if (items.length < 2) {
+      throw new Error('Gate Futures returned insufficient aligned basis rows')
+    }
+    return cachedJson(
+      {
+        symbol: parsed.publicSymbol,
+        items,
+        source: 'Gate futures mark/index candles',
+      },
+      requestId,
+      request.method,
+    )
+  } catch {
+    // Kraken provides a current mark/index snapshot as the final fallback.
+  }
   const ticker = (await futuresTickers()).find(
     (item) => item.symbol === parsed.futuresSymbol,
   )

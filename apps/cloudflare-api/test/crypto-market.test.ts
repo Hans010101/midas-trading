@@ -90,15 +90,15 @@ describe('independent crypto market routes', () => {
     })
   })
 
-  it('uses Binance public OI history before exchange fallbacks', async () => {
+  it('uses Gate contract statistics for complete OI history', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
-      if (url.includes('/futures/data/openInterestHist')) {
+      if (url.includes('/contract_stats')) {
         return Response.json([{
-          symbol: 'AGLDUSDT',
-          sumOpenInterest: '11559875',
-          sumOpenInterestValue: '1677915.85625',
-          timestamp: 1_785_243_600_000,
+          time: 1_785_243_600,
+          open_interest: '11559875',
+          open_interest_usd: '1677915.85625',
+          mark_price: '0.14515',
         }])
       }
       throw new Error(`Unexpected request: ${url}`)
@@ -115,7 +115,7 @@ describe('independent crypto market routes', () => {
     expect(response?.status).toBe(200)
     await expect(response?.json()).resolves.toMatchObject({
       symbol: 'AGLDUSDT',
-      source: 'Binance Futures open interest',
+      source: 'Gate futures contract statistics',
       items: [{
         symbol: 'AGLDUSDT',
         oi_coin: 11_559_875,
@@ -125,12 +125,70 @@ describe('independent crypto market routes', () => {
     expect(fetchMock).toHaveBeenCalledOnce()
   })
 
-  it('combines all Binance positioning dimensions into one response', async () => {
+  it('maps all Gate positioning dimensions into one complete response', async () => {
+    const timestamp = 1_785_243_600
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('/contract_stats')) {
+          return Response.json([{
+            time: timestamp,
+            top_lsr_account: '1.5',
+            top_long_account: '60',
+            top_short_account: '40',
+            top_lsr_size: '1.173913',
+            top_long_size: '54',
+            top_short_size: '46',
+            lsr_account: '1.439024',
+            long_users: '59',
+            short_users: '41',
+            long_taker_size: '10035',
+            short_taker_size: '3386',
+            lsr_taker: '2.9637',
+          }])
+        }
+        throw new Error(`Unexpected request: ${url}`)
+      }),
+    )
+
+    const response = await handleCryptoMarketRoute(
+      new Request(
+        'https://api.example.test/api/v1/crypto/futures/AGLDUSDT/long-short-ratio?limit=96',
+      ),
+      'crypto-ratios-gate',
+    )
+
+    await expect(response?.json()).resolves.toMatchObject({
+      symbol: 'AGLDUSDT',
+      source: 'Gate futures top-trader positioning and taker flow',
+      unavailable_fields: [],
+      items: [{
+        top_account_long: 0.6,
+        top_account_short: 0.4,
+        top_account_ratio: 1.5,
+        top_position_long: 0.54,
+        top_position_short: 0.46,
+        top_position_ratio: 1.173913,
+        global_account_long: 0.59,
+        global_account_short: 0.41,
+        global_account_ratio: 1.439024,
+        taker_buy_vol: 10_035,
+        taker_sell_vol: 3_386,
+        taker_ratio: 2.9637,
+      }],
+    })
+  })
+
+  it('falls back to Binance for positioning when Gate is unavailable', async () => {
     const timestamp = 1_785_243_600_000
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input)
+        if (url.includes('api.gateio.ws')) {
+          return new Response('unavailable', { status: 503 })
+        }
         if (url.includes('topLongShortAccountRatio')) {
           return Response.json([{
             timestamp,
@@ -189,11 +247,14 @@ describe('independent crypto market routes', () => {
     })
   })
 
-  it('falls back to OKX OI history when Binance is unavailable', async () => {
+  it('falls back to OKX OI history when Gate and Binance are unavailable', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input)
+        if (url.includes('api.gateio.ws')) {
+          return new Response('unavailable', { status: 503 })
+        }
         if (url.includes('fapi.binance.com')) {
           return new Response('restricted', { status: 451 })
         }
@@ -226,6 +287,50 @@ describe('independent crypto market routes', () => {
         oi_usd: 739_849.3736,
       }],
     })
+  })
+
+  it('builds a historical basis series from aligned Gate mark and index candles', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input))
+        const contract = url.searchParams.get('contract')
+        if (contract === 'mark_AGLD_USDT') {
+          return Response.json([
+            { t: 1_785_243_300, c: '0.1450' },
+            { t: 1_785_243_600, c: '0.1455' },
+          ])
+        }
+        if (contract === 'index_AGLD_USDT') {
+          return Response.json([
+            { t: 1_785_243_300, c: '0.1448' },
+            { t: 1_785_243_600, c: '0.1452' },
+          ])
+        }
+        throw new Error(`Unexpected request: ${url}`)
+      }),
+    )
+
+    const response = await handleCryptoMarketRoute(
+      new Request(
+        'https://api.example.test/api/v1/crypto/futures/AGLDUSDT/basis?limit=96',
+      ),
+      'crypto-basis-gate',
+    )
+    const body = (await response?.json()) as {
+      source: string
+      items: Array<{ mark_price: number; index_price: number; basis_pct: number }>
+    }
+
+    expect(body.source).toBe('Gate futures mark/index candles')
+    expect(body.items).toHaveLength(2)
+    expect(body.items[1]).toMatchObject({
+      mark_price: 0.1455,
+      index_price: 0.1452,
+    })
+    expect(body.items[1]?.basis_pct).toBeCloseTo(
+      ((0.1455 - 0.1452) / 0.1452) * 100,
+    )
   })
 
   it('combines global crypto, sentiment, and derivatives sources without zero placeholders', async () => {

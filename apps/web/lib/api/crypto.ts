@@ -52,6 +52,7 @@ export interface OpenInterestPoint {
 export interface OpenInterestResponse {
   symbol: string
   items: OpenInterestPoint[]
+  source?: string
 }
 
 export interface LongShortPoint {
@@ -74,6 +75,8 @@ export interface LongShortPoint {
 export interface LongShortRatioResponse {
   symbol: string
   items: LongShortPoint[]
+  source?: string
+  unavailable_fields?: string[]
 }
 
 export interface FundingRatePoint {
@@ -156,6 +159,7 @@ export interface BasisPoint {
 export interface BasisSeriesResponse {
   symbol: string
   items: BasisPoint[]
+  source?: string
 }
 
 export function fetchBasisSeries(
