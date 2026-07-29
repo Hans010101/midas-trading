@@ -16,13 +16,16 @@ import Link from 'next/link'
 import { AcademySideNav } from '@/components/academy/academy-side-nav'
 import { StageExamEntry } from '@/components/academy/stage-exam-entry'
 import { StageProgress } from '@/components/academy/stage-progress'
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { TopNav } from '@/components/layout/top-nav'
-import { ACADEMY_ARTICLES, ACADEMY_STAGES } from '@/content/academy/manifest'
+import { getAcademyArticles, getAcademyStages } from '@/content/academy/localized-catalog'
 import { useAcademyProgress } from '@/hooks/use-academy-progress'
 
 export function StageList({ slug }: { slug: string }) {
-  const stage = ACADEMY_STAGES.find((s) => s.slug === slug)
-  const articles = ACADEMY_ARTICLES.filter((a) => a.stage === slug).sort(
+  const { locale } = useRuntimeLocale()
+  const en = locale === 'en'
+  const stage = getAcademyStages(locale).find((s) => s.slug === slug)
+  const articles = getAcademyArticles(locale).filter((a) => a.stage === slug).sort(
     (a, b) => a.order - b.order,
   )
   const { completedSet } = useAcademyProgress()
@@ -36,15 +39,17 @@ export function StageList({ slug }: { slug: string }) {
             <AcademySideNav active={slug} />
             <div className="min-w-0 flex-1">
               {!stage ? (
-                <p className="py-16 text-center text-sm text-muted-foreground">阶段不存在</p>
+                <p className="py-16 text-center text-sm text-muted-foreground">
+                  {en ? 'Stage not found' : '阶段不存在'}
+                </p>
               ) : (
                 <>
                   <header className="mb-6">
                     <span className="rounded-full bg-midas-red/10 px-2.5 py-0.5 font-mono text-xs text-midas-red">
                       {stage.stageLabel}
                     </span>
-                    <h1 className="mt-2 font-serif text-2xl font-bold">{stage.name}</h1>
-                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                    <h1 className="mt-2 text-balance font-serif text-2xl font-bold">{stage.name}</h1>
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
                       {stage.desc}
                     </p>
                     {/* 本阶学习进度(登录后显示 · 分母=有小测文章数 · B 期刀1.5)*/}
@@ -62,7 +67,7 @@ export function StageList({ slug }: { slug: string }) {
                         >
                           {completedSet.has(a.slug) ? (
                             <span
-                              title="已学完"
+                              title={en ? 'Completed' : '已学完'}
                               className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success/15 text-success"
                             >
                               <CheckCircle2 className="h-4 w-4" />
@@ -73,7 +78,7 @@ export function StageList({ slug }: { slug: string }) {
                             </span>
                           )}
                           <div className="min-w-0 flex-1">
-                            <h2 className="font-serif font-bold text-foreground transition-colors group-hover:text-midas-red">
+                            <h2 className="text-balance font-serif font-bold text-foreground transition-colors group-hover:text-midas-red">
                               {a.title}
                             </h2>
                             <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">

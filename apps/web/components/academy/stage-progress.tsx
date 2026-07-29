@@ -9,6 +9,7 @@
  */
 
 import { useAcademyProgress } from '@/hooks/use-academy-progress'
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { stageQuizDone, stageQuizTotal } from '@/lib/academy-progress-calc'
 import { cn } from '@/lib/utils'
 
@@ -20,6 +21,8 @@ export function StageProgress({
   className?: string
 }) {
   const { data, isLoggedIn } = useAcademyProgress()
+  const { locale } = useRuntimeLocale()
+  const en = locale === 'en'
   if (!isLoggedIn || !data) return null // 未登录不显示进度(游客只看 manifest 计数)
 
   const total = stageQuizTotal(stageSlug)
@@ -31,9 +34,13 @@ export function StageProgress({
     <div className={cn('w-full', className)}>
       <div className="flex items-center justify-between text-[11px]">
         <span className={cn('font-medium', finished ? 'text-success' : 'text-muted-foreground')}>
-          已学 {done}/{total}
+          {en ? `Completed ${done}/${total}` : `已学 ${done}/${total}`}
         </span>
-        {finished && <span className="font-medium text-success">✓ 已学完</span>}
+        {finished && (
+          <span className="font-medium text-success">
+            {en ? '✓ Complete' : '✓ 已学完'}
+          </span>
+        )}
       </div>
       <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-paper">
         <div

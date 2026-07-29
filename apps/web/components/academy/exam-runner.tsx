@@ -13,8 +13,9 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useMemo, useState } from 'react'
 
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { TopNav } from '@/components/layout/top-nav'
-import { ACADEMY_STAGES } from '@/content/academy/manifest'
+import { getAcademyStages } from '@/content/academy/localized-catalog'
 import { useExamQuestions, useExamResults, useSubmitExam } from '@/hooks/use-academy-exam'
 import type { SubmitExamResponse } from '@/lib/api/academy-exam'
 import { shuffleOptions } from '@/lib/quiz-shuffle'
@@ -25,12 +26,14 @@ function optionLabel(i: number): string {
 }
 
 export function ExamRunner() {
+  const { locale } = useRuntimeLocale()
+  const en = locale === 'en'
   const stageSlug = useSearchParams().get('stage') ?? ''
-  const stage = ACADEMY_STAGES.find((s) => s.slug === stageSlug)
+  const stage = getAcademyStages(locale).find((s) => s.slug === stageSlug)
 
   const { isLoggedIn, passedSet } = useExamResults()
   const alreadyGraduated = passedSet.has(stageSlug)
-  const questionsQuery = useExamQuestions(stageSlug, isLoggedIn && !!stage)
+  const questionsQuery = useExamQuestions(stageSlug, isLoggedIn && !!stage, locale)
   const submit = useSubmitExam()
 
   const [picked, setPicked] = useState<Record<number, number>>({})
@@ -53,7 +56,7 @@ export function ExamRunner() {
     // 用户选的是展示下标 → order 映射回原序下标(后端按原序判分)
     const answers = shuffled.map((sq, qi) => sq.order[picked[qi]] ?? -1)
     submit.mutate(
-      { stage: stageSlug, answers },
+      { stage: stageSlug, answers, locale },
       { onSuccess: (res) => setResult(res) },
     )
   }
@@ -72,7 +75,7 @@ export function ExamRunner() {
           {/* 面包屑 */}
           <nav className="mb-6 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
             <Link href="/academy" className="transition-colors hover:text-midas-red">
-              训练营
+              {en ? 'Academy' : '训练营'}
             </Link>
             {stage && (
               <>
@@ -86,38 +89,57 @@ export function ExamRunner() {
               </>
             )}
             <ChevronRight className="h-3 w-3 text-muted-foreground/50" />
-            <span className="text-foreground/70">结业测验</span>
+            <span className="text-foreground/70">
+              {en ? 'Stage assessment' : '结业测验'}
+            </span>
           </nav>
 
           {!stage ? (
-            <Placeholder text="模块不存在" />
+            <Placeholder text={en ? 'Stage not found' : '模块不存在'} en={en} />
           ) : !isLoggedIn ? (
-            <LoginGate stageName={stage.name} />
+            <LoginGate stageName={stage.name} en={en} />
           ) : (
             <>
               <header className="mb-6">
                 <div className="flex items-center gap-2">
-                  <h1 className="font-serif text-2xl font-bold">{stage.name} · 结业测验</h1>
+                  <h1 className="text-balance font-serif text-2xl font-bold">
+                    {stage.name} · {en ? 'Stage Assessment' : '结业测验'}
+                  </h1>
                   {alreadyGraduated && (
                     <span className="inline-flex items-center gap-1 rounded-full border border-gold/50 bg-gold/10 px-2.5 py-0.5 text-xs font-medium text-gold">
                       <Award className="h-3.5 w-3.5" />
-                      已结业
+                      {en ? 'Graduated' : '已结业'}
                     </span>
                   )}
                 </div>
                 {questionsQuery.data && (
                   <p className="mt-2 text-sm text-muted-foreground">
-                    共 {questionsQuery.data.total} 题 · 答对 ≥ {questionsQuery.data.pass_line} 题达标 ·
-                    可重考
+                    {en
+                      ? `${questionsQuery.data.total} questions · Pass with ${questionsQuery.data.pass_line} or more correct answers · Retakes allowed`
+                      : `共 ${questionsQuery.data.total} 题 · 答对 ≥ ${questionsQuery.data.pass_line} 题达标 · 可重考`}
                   </p>
                 )}
               </header>
 
-              {questionsQuery.isLoading && <Placeholder text="加载题目中…" />}
-              {questionsQuery.isError && <Placeholder text="题目加载失败,请刷新重试" />}
+              {questionsQuery.isLoading && (
+                <Placeholder text={en ? 'Loading questions…' : '加载题目中…'} en={en} />
+              )}
+              {questionsQuery.isError && (
+                <Placeholder
+                  text={en ? 'Could not load the assessment. Please refresh and try again.' : '题目加载失败,请刷新重试'}
+                  en={en}
+                />
+              )}
 
               {/* 结果态 */}
-              {result && <ResultView result={result} onRetake={handleRetake} stageName={stage.name} />}
+              {result && (
+                <ResultView
+                  result={result}
+                  onRetake={handleRetake}
+                  stageName={stage.name}
+                  en={en}
+                />
+              )}
 
               {/* 答题态 */}
               {!result && questions && questions.length > 0 && (
@@ -176,13 +198,19 @@ export function ExamRunner() {
                       onClick={handleSubmit}
                       className="rounded-lg bg-midas-red px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
                     >
-                      {submit.isPending ? '判分中…' : '提交结业测验'}
+                      {submit.isPending
+                        ? (en ? 'Scoring…' : '判分中…')
+                        : (en ? 'Submit assessment' : '提交结业测验')}
                     </button>
                     {!allAnswered && (
-                      <span className="text-xs text-muted-foreground">答完全部题目后可提交</span>
+                      <span className="text-xs text-muted-foreground">
+                        {en ? 'Answer every question to submit' : '答完全部题目后可提交'}
+                      </span>
                     )}
                     {submit.isError && (
-                      <span className="text-xs text-midas-red">提交失败,请重试</span>
+                      <span className="text-xs text-midas-red">
+                        {en ? 'Submission failed. Please try again.' : '提交失败,请重试'}
+                      </span>
                     )}
                   </div>
                 </>
@@ -199,10 +227,12 @@ function ResultView({
   result,
   onRetake,
   stageName,
+  en,
 }: {
   result: SubmitExamResponse
   onRetake: () => void
   stageName: string
+  en: boolean
 }) {
   return (
     <div>
@@ -219,14 +249,18 @@ function ResultView({
           <>
             <CheckCircle2 className="mx-auto h-10 w-10 text-success" />
             <p className="mt-2 font-serif text-xl font-bold text-success">
-              ✓ 已通过「{stageName}」结业测验
+              {en ? `✓ ${stageName} assessment passed` : `✓ 已通过「${stageName}」结业测验`}
             </p>
           </>
         ) : (
-          <p className="font-serif text-xl font-bold text-foreground">未通过 · 可重考</p>
+          <p className="font-serif text-xl font-bold text-foreground">
+            {en ? 'Not passed · Retake available' : '未通过 · 可重考'}
+          </p>
         )}
         <p className="mt-2 text-sm text-muted-foreground">
-          得分 {result.score}/{result.total} · 达标线 {result.pass_line} 题
+          {en
+            ? `Score ${result.score}/${result.total} · Pass mark ${result.pass_line}`
+            : `得分 ${result.score}/${result.total} · 达标线 ${result.pass_line} 题`}
         </p>
         <button
           type="button"
@@ -234,7 +268,9 @@ function ResultView({
           className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-midas-red/40 px-4 py-2 text-sm font-medium text-midas-red transition-colors hover:bg-midas-red-glow"
         >
           <RotateCcw className="h-4 w-4" />
-          {result.passed ? '再考一次' : '重新测验'}
+          {result.passed
+            ? (en ? 'Take it again' : '再考一次')
+            : (en ? 'Retake assessment' : '重新测验')}
         </button>
       </div>
 
@@ -259,7 +295,9 @@ function ResultView({
               ) : (
                 <XCircle className="h-4 w-4" />
               )}
-              第 {r.question_index + 1} 题 · {r.is_correct ? '答对' : '答错'}
+              {en
+                ? `Question ${r.question_index + 1} · ${r.is_correct ? 'Correct' : 'Incorrect'}`
+                : `第 ${r.question_index + 1} 题 · ${r.is_correct ? '答对' : '答错'}`}
             </p>
             <p className="mt-1 text-foreground/80">{r.explanation}</p>
           </div>
@@ -269,23 +307,25 @@ function ResultView({
   )
 }
 
-function LoginGate({ stageName }: { stageName: string }) {
+function LoginGate({ stageName, en }: { stageName: string; en: boolean }) {
   return (
     <div className="rounded-xl border border-dashed border-paper bg-surface-subtle p-8 text-center">
       <p className="text-sm text-muted-foreground">
-        登录后参加「{stageName}」结业测验,成绩与结业状态将自动记录。
+        {en
+          ? `Sign in to take the ${stageName} assessment and save your result.`
+          : `登录后参加「${stageName}」结业测验,成绩与结业状态将自动记录。`}
       </p>
       <Link
         href="/login"
         className="mt-4 inline-block rounded-md border border-midas-red/40 px-4 py-2 text-sm font-medium text-midas-red transition-colors hover:bg-midas-red-glow"
       >
-        去登录
+        {en ? 'Sign in' : '去登录'}
       </Link>
     </div>
   )
 }
 
-function Placeholder({ text }: { text: string }) {
+function Placeholder({ text, en }: { text: string; en: boolean }) {
   return (
     <div className="py-16 text-center">
       <p className="text-sm text-muted-foreground">{text}</p>
@@ -294,7 +334,7 @@ function Placeholder({ text }: { text: string }) {
         className="mt-3 inline-flex items-center gap-1 text-sm text-midas-red hover:underline"
       >
         <Home className="h-4 w-4" />
-        返回训练营首页
+        {en ? 'Back to Academy' : '返回训练营首页'}
       </Link>
     </div>
   )

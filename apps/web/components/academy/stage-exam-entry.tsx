@@ -11,6 +11,7 @@ import { Award } from 'lucide-react'
 import Link from 'next/link'
 
 import { useExamResults } from '@/hooks/use-academy-exam'
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { cn } from '@/lib/utils'
 
 export function StageExamEntry({
@@ -21,6 +22,8 @@ export function StageExamEntry({
   className?: string
 }) {
   const { passedSet } = useExamResults()
+  const { locale } = useRuntimeLocale()
+  const en = locale === 'en'
   const graduated = passedSet.has(stageSlug)
 
   return (
@@ -35,7 +38,9 @@ export function StageExamEntry({
       )}
     >
       <Award className="h-3.5 w-3.5" />
-      {graduated ? '已结业 · 可重考' : '结业测验'}
+      {graduated
+        ? (en ? 'Graduated · Retake' : '已结业 · 可重考')
+        : (en ? 'Stage assessment' : '结业测验')}
     </Link>
   )
 }

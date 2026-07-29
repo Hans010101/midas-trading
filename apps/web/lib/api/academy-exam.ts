@@ -57,10 +57,11 @@ export interface ExamResultsResponse {
 
 export async function fetchExamQuestions(
   stage: string,
+  locale: 'zh' | 'en' = 'zh',
   signal?: AbortSignal,
 ): Promise<ExamQuestionsResponse> {
   const r = await fetch(
-    `${API_BASE}/api/v1/academy/exam?stage=${encodeURIComponent(stage)}`,
+    `${API_BASE}/api/v1/academy/exam?stage=${encodeURIComponent(stage)}&locale=${locale}`,
     { signal },
   )
   if (!r.ok) throw new Error(`exam questions HTTP ${r.status}`)
@@ -72,11 +73,12 @@ export async function submitExam(
   stage: string,
   answers: number[],
   token: string,
+  locale: 'zh' | 'en' = 'zh',
 ): Promise<SubmitExamResponse> {
   const r = await fetch(`${API_BASE}/api/v1/academy/exam/submit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ stage, answers }),
+    body: JSON.stringify({ stage, answers, locale }),
   })
   if (!r.ok) throw new Error(`exam submit HTTP ${r.status}`)
   return (await r.json()) as SubmitExamResponse

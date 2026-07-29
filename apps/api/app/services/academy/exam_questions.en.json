@@ -1,0 +1,674 @@
+{
+  "basics": [
+    {
+      "question": "What two prices form the \"body\" of a single candlestick?",
+      "options": [
+        "High and Low prices",
+        "Open and Close prices",
+        "Open and High prices",
+        "Close and Low prices"
+      ],
+      "answerIndex": 1,
+      "explanation": "The body is formed by the open and close prices; the high and low prices correspond to the endpoints of the wicks, not the body boundaries."
+    },
+    {
+      "question": "Under Midas' color convention, a candlestick with a \"close higher than open\" belongs to?",
+      "options": [
+        "Bearish candle, green",
+        "Bullish candle, red",
+        "Bullish candle, green",
+        "Bearish candle, red"
+      ],
+      "answerIndex": 1,
+      "explanation": "Midas follows the \"Red for Rise, Green for Fall\" convention: close higher than open is a Bullish candle and red; close lower than open is a Bearish candle and green."
+    },
+    {
+      "question": "What does a longer \"lower wick\" on a candlestick mainly reflect?",
+      "options": [
+        "Strong selling pressure above",
+        "Buying support below, price pulled back",
+        "Price will definitely rise next",
+        "Volume must expand"
+      ],
+      "answerIndex": 1,
+      "explanation": "The lower wick is the trace of price being pulled back after dropping; it reflects buying support below; \"definitely rise\" is a wrong certainty."
+    },
+    {
+      "question": "Which statement about wick length is correct?",
+      "options": [
+        "The longer the wick, the more intense the battle between long and short",
+        "The longer the wick, the more stable the price",
+        "A long wick means a reversal is guaranteed",
+        "Wick length has no meaning"
+      ],
+      "answerIndex": 0,
+      "explanation": "A longer wick represents more intense fighting and confusion in direction at that time; it is a signal of the battle, not a guarantee of reversal."
+    },
+    {
+      "question": "When can \"Shorting\" be profitable?",
+      "options": [
+        "When price rises",
+        "When price falls",
+        "When price is stagnant",
+        "Profitable in any situation"
+      ],
+      "answerIndex": 1,
+      "explanation": "Shorting is selling first and buying later; profit occurs only when price falls, loss when it rises; there is no situation where it is profitable in all directions."
+    },
+    {
+      "question": "Why can contracts facilitate shorting, while spot trading is mainly for Long?",
+      "options": [
+        "Because spot is riskier so shorting is banned",
+        "Contracts support dual-direction (open Short), spot generally requires holding assets first",
+        "Because shorting is illegal",
+        "Because spot cannot make money"
+      ],
+      "answerIndex": 1,
+      "explanation": "Contracts are designed to support opening Shorts and dual-direction operations; spot generally requires holding/borrowing assets first, so it is mainly for Long."
+    },
+    {
+      "question": "What is the most accurate meaning of \"Leverage\"?",
+      "options": [
+        "Using small margin to operate a large position",
+        "Borrowing for free to earn profit",
+        "A tool that guarantees profit",
+        "A tool that improves win rate"
+      ],
+      "answerIndex": 0,
+      "explanation": "Leverage uses small margin to leverage a large position; it does not improve win rate or guarantee profit, only amplifies results."
+    },
+    {
+      "question": "Which statement about leverage's impact on profit/loss is correct?",
+      "options": [
+        "Amplifies profit only, not loss",
+        "Amplifies profit and loss equally",
+        "Amplifies loss only, not profit",
+        "Has no impact on profit/loss"
+      ],
+      "answerIndex": 1,
+      "explanation": "Leverage is a double-edged sword—it amplifies gains while equally amplifying losses, which is its essence to be wary of."
+    },
+    {
+      "question": "What consequence does higher leverage bring?",
+      "options": [
+        "Safer, more resistant to volatility",
+        "Worse resistance to volatility, easier to Liquidate",
+        "Guarantees profit",
+        "Completely unrelated to Liquidation"
+      ],
+      "answerIndex": 1,
+      "explanation": "Higher leverage means smaller opposite fluctuations can wipe out margin and trigger forced Liquidation."
+    },
+    {
+      "question": "What does a \"Support Level\" refer to?",
+      "options": [
+        "Area of selling pressure above the price",
+        "Area of buying pressure below the price, price tends to stop falling here",
+        "A price that will never be broken",
+        "A price set by the exchange"
+      ],
+      "answerIndex": 1,
+      "explanation": "Support is an area below price where buying pressure gathers and price tends to stop falling and rebound; it is not an absolute iron law."
+    }
+  ],
+  "technical": [
+    {
+      "question": "What does the \"5-Day Moving Average (MA5)\" represent?",
+      "options": [
+        "The average of closing prices over the last 5 periods, connected into a line",
+        "The highest price of the last 5 days",
+        "A prediction of prices for the next 5 days",
+        "The sum of trading volume over 5 periods"
+      ],
+      "answerIndex": 0,
+      "explanation": "Moving averages are the average of closing prices over the last N periods, calculated and connected into a line; they reflect past trends, not future predictions."
+    },
+    {
+      "question": "Which statement about the direction of moving averages is correct?",
+      "options": [
+        "Moving averages can predict future prices",
+        "Moving averages reflect past trends: upward for bullish, downward for bearish",
+        "Short-term moving averages are always more useful than long-term ones",
+        "The direction of moving averages is unrelated to trends"
+      ],
+      "answerIndex": 1,
+      "explanation": "The direction of moving averages reflects trends (upward bullish, downward bearish, flat consolidation), but they reflect past trends, not future predictions; periods are not inherently better or worse."
+    },
+    {
+      "question": "What does the \"Golden Cross\" of moving averages refer to?",
+      "options": [
+        "The long-term moving average crosses above the short-term moving average",
+        "The short-term moving average crosses above the long-term moving average",
+        "The price crosses above the moving average",
+        "Both moving averages move upward simultaneously"
+      ],
+      "answerIndex": 1,
+      "explanation": "Golden Cross = Short-term MA crosses above Long-term MA (bullish reference); do not reverse the direction; \"Long crossing Short\" actually corresponds to a Death Cross."
+    },
+    {
+      "question": "What does the \"Death Cross\" of moving averages refer to?",
+      "options": [
+        "The short-term moving average crosses below the long-term moving average",
+        "The short-term moving average crosses above the long-term moving average",
+        "The price hits a new high",
+        "Trading volume increases significantly"
+      ],
+      "answerIndex": 0,
+      "explanation": "Death Cross = Short-term MA crosses below Long-term MA (bearish reference), opposite to the Golden Cross."
+    },
+    {
+      "question": "Which statement about the nature of Golden Cross and Death Cross is correct?",
+      "options": [
+        "They are leading and precise buy/sell signals",
+        "They are lagging signals; by the time they appear, the price has often moved, and there are many false signals in consolidation",
+        "A Golden Cross means you should buy immediately",
+        "They are always accurate"
+      ],
+      "answerIndex": 1,
+      "explanation": "Golden Cross and Death Cross are lagging signals, with especially many false signals in consolidation; they are references, not predictions or trading orders, and cannot be traded solely based on them."
+    },
+    {
+      "question": "What is the correct order of a \"Bullish Arrangement\" from top to bottom?",
+      "options": [
+        "Price > Short-term MA > Medium-term MA > Long-term MA",
+        "Long-term MA > Medium-term MA > Short-term MA > Price",
+        "Several moving averages are intertwined",
+        "Price is at the very bottom"
+      ],
+      "answerIndex": 0,
+      "explanation": "A bullish arrangement from top to bottom is Price > Short > Medium > Long (Short is on top, Price is at the top), representing a strong uptrend structure; the reverse is a bearish arrangement."
+    },
+    {
+      "question": "What market structure does a \"Bearish Arrangement\" represent?",
+      "options": [
+        "Strong uptrend structure",
+        "Weak downtrend structure (Long > Medium > Short > Price, Price at the bottom)",
+        "It is definitely about to bottom out and rebound",
+        "It is unrelated to trend strength"
+      ],
+      "answerIndex": 1,
+      "explanation": "A bearish arrangement from top to bottom is Long > Medium > Short > Price, Price at the bottom, representing a weak downtrend structure; arrangement conversion is lagging and serves only as a reference."
+    },
+    {
+      "question": "What is the MACD \"Red/Green Bar\" equal to?",
+      "options": [
+        "DIF − DEA",
+        "Fast MA − Slow MA",
+        "Closing Price − Opening Price",
+        "DEA − DIF"
+      ],
+      "answerIndex": 0,
+      "explanation": "Red/Green Bar = DIF − DEA: DIF above is positive (Red, above zero axis), below is negative (Green, below zero axis); where the two lines intersect, the bar is zero."
+    },
+    {
+      "question": "How is the DEA (Slow Line) in MACD derived?",
+      "options": [
+        "The moving average of closing prices",
+        "The moving average of DIF, smoother and lagging behind DIF",
+        "The moving average of trading volume",
+        "Highest price minus lowest price"
+      ],
+      "answerIndex": 1,
+      "explanation": "DEA is the moving average of DIF (commonly 9), smoother than DIF and lagging behind it; while DIF = Fast MA − Slow MA."
+    },
+    {
+      "question": "What does a \"MACD Golden Cross\" refer to?",
+      "options": [
+        "Short-term MA crosses above long-term MA",
+        "DIF crosses above DEA",
+        "Price crosses above the zero line",
+        "Red bars lengthen"
+      ],
+      "answerIndex": 1,
+      "explanation": "MACD Golden Cross = DIF crosses above DEA (bars turn from green to red); the protagonists are the DIF and DEA lines, not moving averages—\"Short-term MA crosses above long-term MA\" is a moving average golden cross."
+    }
+  ],
+  "chan": [
+    {
+      "question": "Chan Theory decomposes price action using geometric structures. What is the order of structure from small to large?",
+      "options": [
+        "Central Hub → Segment → Stroke → Fractal",
+        "Fractal → Stroke → Segment → Central Hub",
+        "Stroke → Fractal → Central Hub → Segment",
+        "MA → MACD → Central Hub → Trend"
+      ],
+      "answerIndex": 1,
+      "explanation": "Chan Theory structure from small to large: Fractal → Stroke → Segment → Central Hub, and possesses the characteristic of recursive levels."
+    },
+    {
+      "question": "Regarding Chan Theory, which of the following perceptions is rational and correct?",
+      "options": [
+        "It is a divine tool that can predict future tops and bottoms",
+        "It is a tool that analyzes price action using strict geometric structures; it has a learning curve, is not deified, and does not guarantee steady profits",
+        "Mastering Chan Theory guarantees steady profits",
+        "It is more accurate than all analysis methods"
+      ],
+      "answerIndex": 1,
+      "explanation": "Chan Theory is an analysis tool, not a divine tool for prediction; the system is vast and has a threshold, and it does not promise steady profits."
+    },
+    {
+      "question": "Before learning Chan Theory, what is the most important mindset to establish?",
+      "options": [
+        "Treat it as a holy grail that can predict tops and bottoms",
+        "Treat it as an analysis tool, focus on understanding structure rather than memorizing formulas, and always combine it with risk management",
+        "Use it to find 'sure-to-rise' signals and then go all-in",
+        "Believe that the more esoteric it is, the more accurate it is"
+      ],
+      "answerIndex": 1,
+      "explanation": "Chan Theory is an analysis tool, not a holy grail; you must understand structure and combine it with risk management, rather than memorizing formulas to find sure-to-rise signals."
+    },
+    {
+      "question": "Which of the following tendencies belongs to the 'going crazy' (obsession) to watch out for when learning Chan Theory?",
+      "options": [
+        "Understanding the logic behind the structure",
+        "Deifying and esotericizing Chan Theory, and 'using it to predict and then going all-in'",
+        "Learning step-by-step in order",
+        "Always combining it with risk management"
+      ],
+      "answerIndex": 1,
+      "explanation": "Be wary of tendencies to deify/esotericize/faith-based Chan Theory, as well as the tendency to 'use it to predict and go all-in'."
+    },
+    {
+      "question": "The first step in Chan Theory is to handle the 'Inclusion Relationship' of K-lines. What is the purpose?",
+      "options": [
+        "To make the price go up",
+        "To eliminate structural ambiguity and make tops and bottoms clear, facilitating the identification of Fractals and drawing Strokes",
+        "To predict price direction",
+        "To increase trading volume"
+      ],
+      "answerIndex": 1,
+      "explanation": "Handling the inclusion relationship is to eliminate structural ambiguity and make tops and bottoms clear; it is the prerequisite basic skill for identifying Fractals and drawing Strokes."
+    },
+    {
+      "question": "What is the rule for handling K-line inclusion relationships?",
+      "options": [
+        "Always take the higher one",
+        "For upward movement, take the 'higher-high' and 'higher-low'; for downward movement, take the 'lower-low' and 'lower-high'; the direction is determined by the direction of the previous K-line",
+        "Always take the average of the two",
+        "Directly delete one of them"
+      ],
+      "answerIndex": 1,
+      "explanation": "For upward movement, take the 'higher-high' and 'higher-low'; for downward movement, take the 'lower-low' and 'lower-high'; the direction is determined by the previous K-line."
+    },
+    {
+      "question": "Which of the following descriptions fits a 'Top Fractal'?",
+      "options": [
+        "The high point and low point of the middle K-line are the highest (overall highest)",
+        "The middle K-line is overall the lowest",
+        "The three K-lines are equally high",
+        "The first K-line is the highest"
+      ],
+      "answerIndex": 0,
+      "explanation": "Top Fractal = the middle K-line is overall the highest (both high and low points are highest); the Bottom Fractal is the opposite, being the middle K-line overall the lowest."
+    },
+    {
+      "question": "How many K-lines constitute a Fractal?",
+      "options": [
+        "Two",
+        "Three (adjacent K-lines after handling inclusion relationships)",
+        "Five",
+        "One"
+      ],
+      "answerIndex": 1,
+      "explanation": "A Fractal is composed of three adjacent K-lines after handling inclusion relationships, marking a local reversal."
+    },
+    {
+      "question": "Regarding the significance of Fractals, which of the following perceptions is correct?",
+      "options": [
+        "The appearance of a Fractal represents a major trend reversal",
+        "Fractals only mark local reversals and are endpoints for drawing Strokes; they do not represent a major trend reversal and cannot be used for prediction",
+        "When a Top Fractal appears, you should sell",
+        "Fractals can predict subsequent rises and falls"
+      ],
+      "answerIndex": 1,
+      "explanation": "Fractals only mark local reversals and are endpoints for drawing Strokes; they do not represent a major trend reversal, cannot predict, and are not trading signals."
+    },
+    {
+      "question": "What does a Stroke represent in Chan Theory?",
+      "options": [
+        "A single K-line",
+        "Connecting an adjacent Top Fractal and Bottom Fractal",
+        "A Moving Average",
+        "The boundary of a Central Hub"
+      ],
+      "answerIndex": 1,
+      "explanation": "Stroke = connecting an adjacent Top Fractal and Bottom Fractal; it is the most basic unit of price action."
+    }
+  ],
+  "contract": [
+    {
+      "question": "A trader wants to hold a crypto contract position long-term without rolling over at expiration. Which tool best fits this need?",
+      "options": [
+        "Traditional Delivery Futures",
+        "Perpetual",
+        "Options",
+        "Spot DCA"
+      ],
+      "answerIndex": 1,
+      "explanation": "Perpetual contracts have no expiration date, allow long-term holding, and require no rolling over; traditional delivery futures have expiration dates and require rolling over, making them unsuitable for the 'no rolling over' requirement."
+    },
+    {
+      "question": "What is the core difference between Perpetual and traditional futures?",
+      "options": [
+        "Perpetual has no leverage",
+        "Perpetual cannot Short",
+        "Perpetual has no expiration date and is pegged to spot via funding rates",
+        "Perpetual has no risk"
+      ],
+      "answerIndex": 2,
+      "explanation": "Perpetuals have no expiration date and are pegged to spot via funding rates; traditional futures have expiration dates and converge to spot upon expiration. Perpetuals also have leverage, allow for both directions, and carry risk."
+    },
+    {
+      "question": "A perpetual contract currently shows a 'Positive Funding Rate'. What does this mean for this settlement cycle?",
+      "options": [
+        "Short pays Long",
+        "Long pays Short",
+        "Exchange pays all holders",
+        "Everyone pays Exchange"
+      ],
+      "answerIndex": 1,
+      "explanation": "Positive funding rate = Long pays Short; Negative funding rate = Short pays Long (direction must never be reversed)."
+    },
+    {
+      "question": "Regarding the nature of funding rates, which statement is correct?",
+      "options": [
+        "It is the transaction fee charged by the exchange",
+        "It is a periodic payment between Longs and Shorts to peg the Perpetual price to spot",
+        "It is the loan interest paid to the bank",
+        "It is the platform's profit source"
+      ],
+      "answerIndex": 1,
+      "explanation": "Funding is a transfer between Longs and Shorts, not a fee paid to the platform; it settles periodically to keep the Perpetual price close to spot."
+    },
+    {
+      "question": "Regarding the function of funding rates, which perception is correct?",
+      "options": [
+        "High rates definitely mean the price will rise",
+        "It serves as sentiment reference but does not predict price, and the paid funding is a holding cost",
+        "Funding can precisely predict the direction of price movement",
+        "Funding paid during long-term holding is not considered a cost"
+      ],
+      "answerIndex": 1,
+      "explanation": "Funding rates serve as sentiment reference but do not predict price; the continuous funding paid during long-term holding is a tangible holding cost."
+    },
+    {
+      "question": "Which description fits the 'Isolated' margin mode?",
+      "options": [
+        "Using the entire account balance to backstop the position",
+        "Each position uses independent margin; liquidation only risks losing that position's margin",
+        "Never subject to forced liquidation",
+        "Risk is definitely higher than Cross"
+      ],
+      "answerIndex": 1,
+      "explanation": "Isolated risk isolation means liquidation risks only the margin of that specific position, not other funds; using the full balance to backstop is Cross."
+    },
+    {
+      "question": "Regarding the choice between Cross and Isolated, which perception is correct?",
+      "options": [
+        "Choosing Isolated means no liquidation risk",
+        "Both modes have liquidation risk; choosing one only changes risk distribution, it does not eliminate risk",
+        "Cross mode guarantees profit",
+        "Choosing the right mode guarantees profit"
+      ],
+      "answerIndex": 1,
+      "explanation": "Both modes carry liquidation risk, only the distribution of risk differs; both require leverage and position size control."
+    },
+    {
+      "question": "A trader opened a 'Long' order. Where is its liquidation price located?",
+      "options": [
+        "Above the entry price",
+        "Below the entry price",
+        "At the entry price",
+        "No liquidation price"
+      ],
+      "answerIndex": 1,
+      "explanation": "The liquidation price for a Long is below the entry price, and for a Short it is above (direction must never be reversed)."
+    },
+    {
+      "question": "All else equal, the higher the leverage, how does the liquidation price change?",
+      "options": [
+        "Further from entry price, safer",
+        "Closer to entry price, easier to be triggered",
+        "Unrelated to leverage level",
+        "Completely disappears"
+      ],
+      "answerIndex": 1,
+      "explanation": "Leverage is the most critical factor affecting liquidation price: the higher the leverage, the closer the liquidation price is to the entry price, leaving less room for error."
+    },
+    {
+      "question": "Why does actual liquidation often happen earlier than the 'theoretical liquidation price' calculated by the formula?",
+      "options": [
+        "The exchange deliberately liquidates early to scam users",
+        "Because of the maintenance margin rate, plus fees, funding, and slippage, liquidation is triggered before 'losing everything'",
+        "Because the price is calculated incorrectly",
+        "It does not actually happen earlier"
+      ],
+      "answerIndex": 1,
+      "explanation": "The maintenance margin rate requires margin not to fall below a certain level; combined with various fees, actual liquidation often occurs before the theoretical price of 'zero margin'."
+    }
+  ],
+  "strategy": [
+    {
+      "question": "In which market conditions are moving average strategies most easily invalidated (repeatedly fail)?",
+      "options": [
+        "Uptrend markets",
+        "Ranging markets (frequent golden/death crosses, many false signals)",
+        "Works the same in any market",
+        "It predicts and almost never fails"
+      ],
+      "answerIndex": 1,
+      "explanation": "Moving average strategies apply to trends and fail in ranging markets (frequent golden/death crosses and many false signals); they also have lag and do not guarantee profit."
+    },
+    {
+      "question": "What does the 'MACD Golden Cross' refer to?",
+      "options": [
+        "Short-term MA crosses above long-term MA",
+        "DIF crosses above DEA (histogram turns from green to red)",
+        "Price crosses above the zero line",
+        "Red histogram gets longer"
+      ],
+      "answerIndex": 1,
+      "explanation": "MACD Golden Cross = DIF crosses above DEA; the protagonists are the DIF/DEA lines, not MAs; 'Short-term MA crosses above long-term MA' is the MA Golden Cross."
+    },
+    {
+      "question": "What are the profit and loss characteristics of trend-following strategies?",
+      "options": [
+        "High win rate, small profits on every trade",
+        "Win rate is often low; profits are concentrated in a few major trends, requiring you to endure many small stop-losses in between",
+        "Never incur losses",
+        "Win rate is close to 100%"
+      ],
+      "answerIndex": 1,
+      "explanation": "Trend-following strategies win by high risk-reward ratios and low win rates, requiring you to endure consecutive small stop-losses; the difficulty lies in execution and mindset, not analysis."
+    },
+    {
+      "question": "What is the biggest enemy (core risk) of breakout strategies?",
+      "options": [
+        "Funding rate",
+        "False breakouts (price retracts after breaking out, frequent in ranging markets)",
+        "Low volatility",
+        "It has almost no risk"
+      ],
+      "answerIndex": 1,
+      "explanation": "False breakouts are the biggest risk for breakout strategies; they can be filtered with volume/holding close, and stop-losses set on the other side of the breakout level, but cannot be 100% eliminated."
+    },
+    {
+      "question": "How are the upper and lower bands of Bollinger Bands calculated?",
+      "options": [
+        "Middle Band ± K times Standard Deviation (K is commonly 2, symmetric), Middle Band is the Moving Average",
+        "Middle Band ± fixed number of points",
+        "It is simply the highest and lowest prices over a period",
+        "Middle Band ± K times Volume"
+      ],
+      "answerIndex": 0,
+      "explanation": "Upper and lower bands = Middle Band ± K times Standard Deviation (K is commonly 2, symmetric), Middle Band is the Moving Average; Standard Deviation reflects volatility, so the channel 'breathes'."
+    },
+    {
+      "question": "In what environment does the Bollinger Band 'mean reversion' usage fail?",
+      "options": [
+        "It fails in ranging markets",
+        "It fails in strong trends (price runs along the upper or lower band without returning; touching the band is not a reversal signal)",
+        "It is effective in any environment",
+        "It only fails when the bands contract"
+      ],
+      "answerIndex": 1,
+      "explanation": "In strong trends, price runs along the bands without returning to the middle band; 'shorting at the upper band / longing at the lower band' will be invalidated at that time; touching the band is a positional reference, not a reversal signal."
+    },
+    {
+      "question": "RSI enters the overbought zone (often referenced as >70). What is the correct understanding?",
+      "options": [
+        "The price will drop immediately and should be sold",
+        "It is only a reference that the buying power is dominant, not equal to an immediate drop (it can flatten in strong trends and stay in the extreme zone for a long time)",
+        "It definitely marks a top reversal",
+        "Must Short immediately"
+      ],
+      "answerIndex": 1,
+      "explanation": "Overbought is a reference zone, not a reversal signal; in strong trends, RSI can flatten and stay at extreme values for a long time. 'Shorting when overbought' will repeatedly lead to losses."
+    },
+    {
+      "question": "When is the RSI strategy applicable and when does it fail?",
+      "options": [
+        "Applicable to trends, fails in ranging markets",
+        "Applicable to ranging markets, fails in trends (it flattens in trends)",
+        "Applicable to any market condition",
+        "Only applicable for predicting tops and bottoms"
+      ],
+      "answerIndex": 1,
+      "explanation": "RSI overbought and oversold have reference meaning in ranging markets but flatten and fail in trending markets; it is a reference, not a buy/sell instruction."
+    },
+    {
+      "question": "What is the most fatal scenario for a mean reversion strategy?",
+      "options": [
+        "Ranging market",
+        "Trending market (catching a falling knife against the trend, price continues to deviate unilaterally without returning)",
+        "When volume expands",
+        "It has no fatal scenario"
+      ],
+      "answerIndex": 1,
+      "explanation": "Mean reversion bets on 'returning.' Encountering a unilateral trend means catching a falling knife against the trend and may be crushed all the way; it fears the start of a trend the most and must be paired with strict stop-loss."
+    },
+    {
+      "question": "What is the fatal weakness of grid trading?",
+      "options": [
+        "Ranging market",
+        "Unilateral market (in a unilateral decline, it gets deeper into the drawdown; in a unilateral rise, it misses out, making profit and loss extremely asymmetric; adding leverage to grid trading may lead to direct liquidation)",
+        "It has no weakness and is a 'lie flat and earn' tool",
+        "Transaction fees"
+      ],
+      "answerIndex": 1,
+      "explanation": "Grid trading fears unilateral markets and has asymmetric profit and loss (small wins, big losses); adding leverage to grid trading may lead to direct liquidation upon encountering a unilateral move. It is definitely not a 'lie flat and earn' tool."
+    }
+  ],
+  "system": [
+    {
+      "question": "Which description best fits a 'Trading System'?",
+      "options": [
+        "A magical indicator that guarantees steady profits",
+        "A complete, repeatable set of trading rules (including analysis, entry/exit, risk control, position sizing, psychology, and review)",
+        "The more complex and indicators, the better",
+        "A single buy/sell signal"
+      ],
+      "answerIndex": 1,
+      "explanation": "A trading system is a complete, repeatable set of rules covering six modules that form a closed loop; it pursues stability and control, not a guaranteed profit formula."
+    },
+    {
+      "question": "What is the core significance of 'Plan first, trade later'?",
+      "options": [
+        "To make trading more frequent",
+        "Use pre-trade rationality to counter emotions during holding",
+        "Guaranteeing profit on every trade",
+        "Used to predict prices"
+      ],
+      "answerIndex": 1,
+      "explanation": "The trading plan moves decision-making to a 'calm time,' using pre-trade rationality to counter emotions during holding."
+    },
+    {
+      "question": "Regarding the separation of 'Planning and Execution', what is the correct approach?",
+      "options": [
+        "Modify the plan arbitrarily based on feelings while holding",
+        "In the execution phase, follow the plan strictly and do not change it temporarily (especially do not move stops arbitrarily)",
+        "Simply do not write a plan and trade directly",
+        "Move the stop loss back every time you incur a loss"
+      ],
+      "answerIndex": 1,
+      "explanation": "In the execution phase, follow the plan strictly and do not change your mind temporarily, especially do not move stops arbitrarily while holding."
+    },
+    {
+      "question": "What is the calculation for Risk-Reward Ratio (Profit-Loss Ratio)?",
+      "options": [
+        "Win Rate ÷ Loss",
+        "Potential Profit ÷ Potential Loss",
+        "Profit × Win Rate",
+        "Volume Ratio"
+      ],
+      "answerIndex": 1,
+      "explanation": "Profit-Loss Ratio = Potential Profit ÷ Potential Loss, determined by entry, stop loss, and take profit."
+    },
+    {
+      "question": "Regarding 'Win Rate' and 'Profit-Loss Ratio', which statement is correct?",
+      "options": [
+        "Higher win rate always means more profit",
+        "Relying solely on win rate leads to misjudgment: 40% win rate + 1:2 ratio may profit, while 70% win rate but poor ratio may also lose",
+        "Profit-Loss Ratio is irrelevant",
+        "Only 100% win rate leads to profit"
+      ],
+      "answerIndex": 1,
+      "explanation": "Relying solely on win rate leads to misjudgment; it must be viewed in conjunction with the profit-loss ratio. Low win rate + high ratio can still be profitable overall."
+    },
+    {
+      "question": "When the profit-loss ratio is 1:2, what is the approximate 'Break-even Win Rate'?",
+      "options": [
+        "Approximately 50%",
+        "Approximately 33%",
+        "Approximately 25%",
+        "Approximately 70%"
+      ],
+      "answerIndex": 1,
+      "explanation": "The higher the profit-loss ratio, the lower the required break-even win rate: 1:1 is approx 50%, 1:2 is approx 33%, 1:3 is approx 25%."
+    },
+    {
+      "question": "What primarily determines how long you can 'survive in the market'?",
+      "options": [
+        "Luck of individual trades",
+        "Position sizing",
+        "The higher the leverage, the better",
+        "How accurate your predictions are"
+      ],
+      "answerIndex": 1,
+      "explanation": "Individual trade outcomes depend on the market, but long-term survival depends mainly on position sizing."
+    },
+    {
+      "question": "In the 'Fixed Percentage Risk Method (e.g., 1%)', what does the '1%' refer to?",
+      "options": [
+        "Position size is 1% of total capital",
+        "Maximum loss of total capital at stop loss",
+        "Trading only 1% of the time per day",
+        "Leverage is 1%"
+      ],
+      "answerIndex": 1,
+      "explanation": "'1%' refers to the 'maximum loss percentage at stop loss', not the position percentage."
+    },
+    {
+      "question": "How should position size be determined?",
+      "options": [
+        "Based on gut feeling",
+        "Position = Risk Amount ÷ Stop Loss Distance (Stop loss wider = smaller position)",
+        "The bigger, the better",
+        "Equal to the entire account balance"
+      ],
+      "answerIndex": 1,
+      "explanation": "Use stop loss to reverse-calculate position size to ensure constant single-trade risk; the wider the stop loss, the smaller the position, and vice versa."
+    },
+    {
+      "question": "What is the most reliable way to combat emotions (fear, greed, etc.) in trading?",
+      "options": [
+        "Relying on willpower in the moment",
+        "Relying on pre-set rules + disciplined execution + trading logs",
+        "Trying to completely eliminate all emotions",
+        "Reacting randomly based on current feelings"
+      ],
+      "answerIndex": 1,
+      "explanation": "Emotions are part of human nature and cannot be eliminated but can be managed. Rely on pre-set rules + discipline + logs to prevent emotions from making decisions for you, rather than relying on momentary willpower."
+    }
+  ]
+}

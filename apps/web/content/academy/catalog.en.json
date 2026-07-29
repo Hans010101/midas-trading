@@ -1,0 +1,986 @@
+{
+  "stages": [
+    {
+      "slug": "basics",
+      "name": "Basics",
+      "stageLabel": "Stage 1",
+      "desc": "Trading from scratch: Candlesticks, Long/Short, Leverage, Support/Resistance, Major Markets, and Paper Trading."
+    },
+    {
+      "slug": "technical",
+      "name": "Technical Analysis",
+      "stageLabel": "Stage 2",
+      "desc": "Classic technical indicators: MA, Golden cross, Death cross, MACD, Bollinger Bands, and RSI."
+    },
+    {
+      "slug": "chan",
+      "name": "Chan Theory",
+      "stageLabel": "Stage 3",
+      "desc": "Chan Theory structural analysis: Inclusion, Fractal, Stroke, Segment, Central Hub, and the three types of buy/sell points."
+    },
+    {
+      "slug": "contract",
+      "name": "Contracts & Derivatives",
+      "stageLabel": "Stage 4",
+      "desc": "Understand perpetual contracts, funding rates, margin modes, liquidation mechanics, and derivatives data such as OI, long/short ratios, and basis."
+    },
+    {
+      "slug": "strategy",
+      "name": "Strategy",
+      "stageLabel": "Stage 5",
+      "desc": "Turn strategy ideas into executable rules. Study trend following, breakouts, mean reversion, grids, arbitrage, and the conditions in which each approach fails."
+    },
+    {
+      "slug": "system",
+      "name": "Trading System & Practice",
+      "stageLabel": "Stage 6",
+      "desc": "Integrate price action, indicators, Chan Theory, derivatives, and strategy into a complete process for planning, position sizing, execution, discipline, and review."
+    }
+  ],
+  "articles": [
+    {
+      "slug": "A2",
+      "stage": "basics",
+      "order": 1,
+      "title": "Candlesticks: What They Are and How to Read Them",
+      "file": "A2.md",
+      "excerpt": "Candlesticks (also known as candle charts) are the most common form of price chart in the market. They look like a candle—a thick \"body\" in the middle, with a thin \"wick\" extending up and down..."
+    },
+    {
+      "slug": "A3",
+      "stage": "basics",
+      "order": 2,
+      "title": "What Candlestick Wicks Tell You",
+      "file": "A3.md",
+      "excerpt": "In the last article, we learned about the \"body\" and \"wicks\" of a candlestick. The body tells the result from open to close, while the wick records the price's attempt to surge and fail to hold..."
+    },
+    {
+      "slug": "A4",
+      "stage": "basics",
+      "order": 3,
+      "title": "Long and Short: Making Money in Both Directions",
+      "file": "A4.md",
+      "excerpt": "Many beginners' first impression of trading is: \"Buy, then wait for it to rise, and sell to make money when it does.\" This is correct, but it is only half the story."
+    },
+    {
+      "slug": "A5",
+      "stage": "basics",
+      "order": 4,
+      "title": "What is Leverage: The Double-Edged Sword of Amplified PnL",
+      "file": "A5.md",
+      "excerpt": "The word \"leverage\" comes from physics—a lever uses a small force to lift heavy objects. In trading, leverage means using a smaller principal to operate a position larger than..."
+    },
+    {
+      "slug": "A6",
+      "stage": "basics",
+      "order": 5,
+      "title": "What are Support and Resistance Levels",
+      "file": "A6.md",
+      "excerpt": "Price does not wander aimlessly on the chart. It often gets \"stuck\" at certain levels—when it falls near a price, it stops dropping like hitting a floor; when it rises near a price..."
+    },
+    {
+      "slug": "A7",
+      "stage": "basics",
+      "order": 6,
+      "title": "What is Trend: The Trader's Best Friend",
+      "file": "A7.md",
+      "excerpt": "If you stare at a series of candlesticks for a long time, you will find that although the price goes up and down, it often presents an overall \"sense of direction\"—either the center of gravity shifts upward, or it sinks downward..."
+    },
+    {
+      "slug": "A8",
+      "stage": "basics",
+      "order": 7,
+      "title": "Market Order vs. Limit Order: How to Place Orders",
+      "file": "A8.md",
+      "excerpt": "When you decide to buy or sell, you must tell the market your intent through \"placing an order.\" But there is not only one way to place an order—the two most basic and common are market orders and limit orders."
+    },
+    {
+      "slug": "A9",
+      "stage": "basics",
+      "order": 8,
+      "title": "Stop Loss and Take Profit: Discipline to Protect Capital",
+      "file": "A9.md",
+      "excerpt": "Many beginners focus all their energy on \"when to buy\" but rarely seriously consider \"when to sell, especially what to do if you are wrong.\" But mature traders understand: exit planning, usually..."
+    },
+    {
+      "slug": "A10",
+      "stage": "basics",
+      "order": 9,
+      "title": "Differences Between Crypto, US Stocks, A-Shares, and HK Stocks",
+      "file": "A10.md",
+      "excerpt": "Cryptocurrency, US stocks, A-shares, and HK stocks are the four most commonly encountered markets for many people, and are exactly the four markets covered by Midas. They all follow the basic logic that \"price is determined by supply and demand\"..."
+    },
+    {
+      "slug": "A11",
+      "stage": "basics",
+      "order": 10,
+      "title": "Spot vs. Futures: Why Midas Crypto Focuses on Futures",
+      "file": "A11.md",
+      "excerpt": "In the crypto market, there are mainly two ways to \"participate in a coin's trend\": buying spot or trading futures. Both seem linked to price fluctuations, but the underlying mechanisms, risks, and what can be done..."
+    },
+    {
+      "slug": "A12",
+      "stage": "basics",
+      "order": 11,
+      "title": "Paper Trading: Practice Without Real Capital",
+      "file": "A12.md",
+      "excerpt": "People learning to drive almost always practice first in driving school grounds or simulators; no one gets on the highway on their first day. Trading is the same—virtual trading is the \"simulator\" in the trading world."
+    },
+    {
+      "slug": "B1",
+      "stage": "technical",
+      "order": 1,
+      "title": "Moving Average (MA): The Most Basic Trend Indicator",
+      "file": "B1.md",
+      "excerpt": "Looking at candlesticks one by one, the price goes up and down, making it hard to see the direction at a glance. Is there a way to \"smooth out\" these messy fluctuations so the trend is clearer? Moving Average (MA, Mo..."
+    },
+    {
+      "slug": "B2",
+      "stage": "technical",
+      "order": 2,
+      "title": "Golden Cross and Death Cross of Moving Averages",
+      "file": "B2.md",
+      "excerpt": "In the previous section, we learned that Moving Averages (MA) with different timeframes have distinct personalities: short-term MAs are sensitive, while long-term MAs are stable. When we place a short-term MA and a long-term MA together, they will sometimes..."
+    },
+    {
+      "slug": "B3",
+      "stage": "technical",
+      "order": 3,
+      "title": "Multi-MA Systems: Bullish and Bearish Alignment",
+      "file": "B3.md",
+      "excerpt": "Previously, we used one or two MAs. In practice, many traders simultaneously attach short-term, medium-term, and long-term MAs—this is the \"Multi-MA System\"."
+    },
+    {
+      "slug": "B4",
+      "stage": "technical",
+      "order": 4,
+      "title": "MACD Indicator: Principles and Composition",
+      "file": "B4.md",
+      "excerpt": "Moving Averages can show the trend direction, but they have a limitation: they mainly tell you \"up or down\" and are not very good at reflecting \"how strong the momentum is\" or whether the trend is accelerating or exhausting. MA..."
+    },
+    {
+      "slug": "B5",
+      "stage": "technical",
+      "order": 5,
+      "title": "MACD Golden Cross, Death Cross, and Histogram",
+      "file": "B5.md",
+      "excerpt": "In the previous section, we deconstructed the MACD composition: the DIF line (fast line), the DEA line (slow line), and the red/green histogram (histogram = DIF - DEA). In this section..."
+    },
+    {
+      "slug": "B6",
+      "stage": "technical",
+      "order": 6,
+      "title": "MACD Divergence: Signal of Trend Exhaustion",
+      "file": "B6.md",
+      "excerpt": "Under normal circumstances, when the price hits a new high, the indicator reflecting momentum also hits a new high—both move in the same direction, and the trend is \"healthy\". But sometimes a fascinating situation occurs..."
+    },
+    {
+      "slug": "B7",
+      "stage": "technical",
+      "order": 7,
+      "title": "Bollinger Bands (BOLL): A Channel of Volatility",
+      "file": "B7.md",
+      "excerpt": "The Moving Averages we learned about previously are single lines. Bollinger Bands (BOLL) go a step further—based on the Moving Average, they draw a band around the price..."
+    },
+    {
+      "slug": "B8",
+      "stage": "technical",
+      "order": 8,
+      "title": "Bollinger Band Expansion and Contraction",
+      "file": "B8.md",
+      "excerpt": "In the previous section, we learned that the upper and lower bands of Bollinger Bands are drawn as \"Middle Band ± Standard Deviation\". Since standard deviation reflects volatility, the width of the channel directly corresponds to the size of market volatility..."
+    },
+    {
+      "slug": "B9",
+      "stage": "technical",
+      "order": 9,
+      "title": "RSI Indicator: Overbought and Oversold",
+      "file": "B9.md",
+      "excerpt": "The MACD and Bollinger Bands learned previously are both based on the Moving Average of price and volatility. RSI (Relative Strength Index..."
+    },
+    {
+      "slug": "B10",
+      "stage": "technical",
+      "order": 10,
+      "title": "KDJ Indicator: Three Lines of the Stochastic Oscillator",
+      "file": "B10.md",
+      "excerpt": "KDJ is also known as the Stochastic Oscillator. It is used to measure the current closing price within a recent price range..."
+    },
+    {
+      "slug": "C1",
+      "stage": "chan",
+      "order": 1,
+      "title": "What is Chan Theory: A Complete Market Analysis System",
+      "file": "C1.md",
+      "excerpt": "By now, you have learned about technical indicators like Moving Averages, MACD, Bollinger Bands, and RSI. Most of them work by \"overlaying a calculated value on top of the price\" to assist judgment. However, Chan..."
+    },
+    {
+      "slug": "C2",
+      "stage": "chan",
+      "order": 2,
+      "title": "Before Chan Theory: Build the Right Mindset",
+      "file": "C2.md",
+      "excerpt": "Before truly entering concepts like Fractals, Strokes, and Central Hubs, there is a \"theoretical\" but extremely important piece of content that must be covered first—the mindset for learning Chan Theory."
+    },
+    {
+      "slug": "C3",
+      "stage": "chan",
+      "order": 3,
+      "title": "K-Line Inclusion: The First Step of Chan Theory",
+      "file": "C3.md",
+      "excerpt": "Chan Theory aims to identify Fractals and draw Strokes on K-lines, but raw K-lines are often messy—some K-lines are completely \"enveloped\" by adjacent K-lines, making the structure look blurry and unclear..."
+    },
+    {
+      "slug": "C4",
+      "stage": "chan",
+      "order": 4,
+      "title": "Fractals: Top and Bottom Fractals",
+      "file": "C4.md",
+      "excerpt": "After processing the inclusion relationships of the candlesticks, the sequence becomes clean. Next, Chan Theory identifies local highs and lows on this clean sequence—this is the Fractal."
+    },
+    {
+      "slug": "C5",
+      "stage": "chan",
+      "order": 5,
+      "title": "Strokes: The Basic Unit Connecting Fractals",
+      "file": "C5.md",
+      "excerpt": "In the previous lesson, we learned to identify top and bottom Fractals on a candlestick sequence. These Fractals are isolated \"local turning points.\" The Stroke connects adjacent top and bottom Fractals..."
+    },
+    {
+      "slug": "C6",
+      "stage": "chan",
+      "order": 6,
+      "title": "Segments: A Higher-Level Unit of Trend",
+      "file": "C6.md",
+      "excerpt": "In the previous lesson, we learned to draw Strokes. However, Strokes have a problem: they are too fragmented. A slight market fluctuation can form a Stroke, making the trend look fragmented and unstable when viewed in isolation."
+    },
+    {
+      "slug": "C7",
+      "stage": "chan",
+      "order": 7,
+      "title": "Central Hub: The Core Concept of Chan Theory",
+      "file": "C7.md",
+      "excerpt": "If Fractals, Strokes, and Segments are the \"skeleton\" of Chan Theory, then the Central Hub is its \"heart\"—the most core and difficult concept in the entire system. The buy and sell points discussed later..."
+    },
+    {
+      "slug": "C8",
+      "stage": "chan",
+      "order": 8,
+      "title": "The Three Types of Buy and Sell Points in Chan Theory",
+      "file": "C8.md",
+      "excerpt": "Before discussing \"buy and sell points,\" there is a sentence that must be clarified first, and it runs through the entire text:"
+    },
+    {
+      "slug": "C9",
+      "stage": "chan",
+      "order": 9,
+      "title": "How to Use Chan Theory and Avoid Being Misled",
+      "file": "C9.md",
+      "excerpt": "By now, you have recognized the core concepts of the Chan Theory topic—inclusion relationships, Fractals, Strokes, Segments, Central Hubs, and buy and sell points. However, learning the concepts is different from using them correctly..."
+    },
+    {
+      "slug": "C1-1",
+      "stage": "chan",
+      "order": 10,
+      "title": "Segment Division and Two Types of Break",
+      "file": "C1-1.md",
+      "excerpt": "In the introductory stage, we said: a Segment must consist of at least three consecutive Strokes and have overlap. But in real combat, what truly torments traders is not \"what is a Segment,\" but—has this segment finished, and where does it end?"
+    },
+    {
+      "slug": "C1-2",
+      "stage": "chan",
+      "order": 11,
+      "title": "Expansion and Extension of the Central Hub",
+      "file": "C1-2.md",
+      "excerpt": "In the introduction, the Central Hub was defined as \"the interval formed by the overlap of at least three sub-level trends.\" However, after a Central Hub forms, the trend often does not obediently end but continues to struggle—the most commonly confused concepts are Extension and Expansion (and the close relative, Expansion)."
+    },
+    {
+      "slug": "C1-3",
+      "stage": "chan",
+      "order": 12,
+      "title": "Upgrading the Central Hub Level",
+      "file": "C1-3.md",
+      "excerpt": "The previous lesson discussed the Extension, Expansion, and Expansion of the Central Hub, repeatedly mentioning the word \"Upgrading.\" This lesson explains \"Upgrading\" in depth—how does a low-level Central Hub gradually become a high-level Central Hub? What determines the level upgrade?"
+    },
+    {
+      "slug": "C1-4",
+      "stage": "chan",
+      "order": 13,
+      "title": "Identifying Trend Types",
+      "file": "C1-4.md",
+      "excerpt": "\"Is this an uptrend or consolidation?\" is almost the starting point of all analysis. Ordinary technical analysis relies on \"looking like it,\" while Chan Theory provides a standard that can be precisely determined by the number of Central Hubs—strictly distinguishing between Trend and Consolidation."
+    },
+    {
+      "slug": "C1-5",
+      "stage": "chan",
+      "order": 14,
+      "title": "Identifying the Three Buy/Sell Point Types—and Common Mistakes",
+      "file": "C1-5.md",
+      "excerpt": "In the introduction, we memorized the \"definitions\" of the three types of buy and sell points. But knowing them by heart is useless in real combat; the real difficulty is: how to recognize them on a chart that hasn't finished moving? And what is most easily mistaken for them?"
+    },
+    {
+      "slug": "C1-6",
+      "stage": "chan",
+      "order": 15,
+      "title": "Understanding Buy/Sell Point Timeframes",
+      "file": "C1-6.md",
+      "excerpt": "Many people learn to find the three types of buy and sell points but still fail to trade well. A high-frequency reason is: they get the \"level\" of the buy and sell points wrong. The same \"First Type Buy Point\" on a daily chart has a completely different weight than on a 5-minute chart."
+    },
+    {
+      "slug": "C1-7",
+      "stage": "chan",
+      "order": 16,
+      "title": "How to Identify Divergence More Precisely",
+      "file": "C1-7.md",
+      "excerpt": "Divergence is the 'engine' of Chan Theory buy/sell points (especially 1 Buy / 1 Sell)—without divergence, there is no trend reversal, but it is also the easiest to misjudge. Explains how to use MACD yellow/white lines + red/green histogram areas to judge divergence."
+    },
+    {
+      "slug": "C1-8",
+      "stage": "chan",
+      "order": 17,
+      "title": "Combining Type 2 and Type 3 Buy/Sell Points",
+      "file": "C1-8.md",
+      "excerpt": "Previously, we covered the three types of buy/sell points (C1-5) and their levels (C1-6). In practice, they rarely appear alone; more commonly, they connect and confirm each other. Focuses on how to view Type 2 and Type 3 points together."
+    },
+    {
+      "slug": "C1-9",
+      "stage": "chan",
+      "order": 18,
+      "title": "Timeframes, Recursion, and Multi-Timeframe Analysis",
+      "file": "C1-9.md",
+      "excerpt": "'Level' is the soul of Chan Theory and the most easily misunderstood concept—many people treat it directly as '1-minute, 5-minute, daily,' leading to confusion. Clarifies what a level is, how it is recursively defined, and how to analyze large and small levels together."
+    },
+    {
+      "slug": "C1-10",
+      "stage": "chan",
+      "order": 19,
+      "title": "Level Resonance",
+      "file": "C1-10.md",
+      "excerpt": "The previous article discussed joint analysis of large and small levels. This article covers a more advanced and tempting concept: Level Resonance—what it means when multiple levels 'collide' in the same direction, how to use it, and where it is most prone to failure."
+    },
+    {
+      "slug": "C1-11",
+      "stage": "chan",
+      "order": 20,
+      "title": "The Most Common Chan Theory Misreads",
+      "file": "C1-11.md",
+      "excerpt": "You understand the entry concepts and have learned the structural progression of the first batch of C1. But when you actually draw on the chart—why do my Strokes look different from others? Many 'a thousand people, a thousand Chan' disagreements stem from fundamental misjudgments."
+    },
+    {
+      "slug": "C1-12",
+      "stage": "chan",
+      "order": 21,
+      "title": "Combining Chan Theory with Traditional Technical Analysis",
+      "file": "C1-12.md",
+      "excerpt": "People learning Chan Theory often fall into two extremes: either 'Chan Theory is supreme and looks down on MA and MACD,' or 'Chan Theory is too esoteric, so I go back to old methods.' Objectively discuss: are Chan Theory and traditional technical analysis mutually exclusive or can they be combined?"
+    },
+    {
+      "slug": "C1-13",
+      "stage": "chan",
+      "order": 22,
+      "title": "Common Misunderstandings of Chan Theory Terminology",
+      "file": "C1-13.md",
+      "excerpt": "Chan Theory is difficult partly because 'concepts are misread.' Many people use the terminology but have a skewed understanding—they think they understand it, but fundamentally misunderstand it, leading to more confusion. Clarifies several core terms that are most often misunderstood."
+    },
+    {
+      "slug": "C1-14",
+      "stage": "chan",
+      "order": 23,
+      "title": "A Complete Chan Theory Walkthrough: Uptrend",
+      "file": "C1-14.md",
+      "excerpt": "Having learned a bunch of concepts, this article puts them together in practice—using a sample upward trend, deducing from the bottom layer of candlesticks all the way to Strokes, Central Hubs, and buy/sell points to complete the full Chan Theory analysis process."
+    },
+    {
+      "slug": "C1-15",
+      "stage": "chan",
+      "order": 24,
+      "title": "A Complete Chan Theory Walkthrough: Downtrend",
+      "file": "C1-15.md",
+      "excerpt": "The previous article deduced an upward trend. This article deduces a downward trend—the process is exactly the same, just the direction is opposite and buy points are replaced with sell points. Compare with C1-14 to firmly grasp Chan Theory's 'up/down symmetric' structural logic."
+    },
+    {
+      "slug": "C1-16",
+      "stage": "chan",
+      "order": 25,
+      "title": "A Complete Chan Theory Walkthrough: Consolidation",
+      "file": "C1-16.md",
+      "excerpt": "The previous two articles deduced upward and downward trends. However, the market is in consolidation most of the time in reality. This article deduces a consolidation trend, focusing on the essential differences in how Chan Theory handles consolidation versus trends."
+    },
+    {
+      "slug": "C1-17",
+      "stage": "chan",
+      "order": 26,
+      "title": "Multiple Central Hubs Within a Trend",
+      "file": "C1-17.md",
+      "excerpt": "The same trend looks different at the 5-minute level versus the 30-minute level—this is the 'multiplicity of trend / Central Hub' in Chan Theory. Where does it come from, is it a bug, and how should we deal with it?"
+    },
+    {
+      "slug": "C1-18",
+      "stage": "chan",
+      "order": 27,
+      "title": "Three Evolutions After Divergence",
+      "file": "C1-18.md",
+      "excerpt": "'Diverged, does it mean reversal?' This is the most frequently asked and easily mishandled question in Chan Theory. The answer is clear: not necessarily. Explains the three possible evolutions after divergence to break the obsession that 'Divergence = Reversal'."
+    },
+    {
+      "slug": "C1-19",
+      "stage": "chan",
+      "order": 28,
+      "title": "What to Do When Trade Signals Fail",
+      "file": "C1-19.md",
+      "excerpt": "Trade signals will fail—this is a fact you must accept when learning Chan Theory. Continuing to make new lows after a 1 Buy, or falling back into the Central Hub after a 3 Buy, is very common. Many treat this as a 'guaranteed payoff' and hold on stubbornly when it fails—this lesson covers how to identify invalid signals and how to respond."
+    },
+    {
+      "slug": "C1-20",
+      "stage": "chan",
+      "order": 29,
+      "title": "Thinking in Probabilities with Chan Theory",
+      "file": "C1-20.md",
+      "excerpt": "By this stage, you must establish the most important cognitive shift—Chan Theory gives you 'structure and probability,' not 'certainty and prediction.' This lesson explains how to view Chan Theory through a probability lens; it is the 'settling the mind' chapter for the entire C1 advanced section."
+    },
+    {
+      "slug": "F1",
+      "stage": "system",
+      "order": 1,
+      "title": "What is a Trading System: From Scattered Knowledge to a Complete System",
+      "file": "F1.md",
+      "excerpt": "Integrating scattered tools like K-lines, indicators, Chan Theory, and contracts into a set of complete, repeatable trading rules."
+    },
+    {
+      "slug": "F2",
+      "stage": "system",
+      "order": 2,
+      "title": "Trading Plan: What to Clarify Before Every Trade",
+      "file": "F2.md",
+      "excerpt": "Plan before you trade—establish the reason for entry, stop loss, targets, and position size before entering; use pre-trade rationality to counter the emotions of holding."
+    },
+    {
+      "slug": "F3",
+      "stage": "system",
+      "order": 3,
+      "title": "Risk-Reward Ratio: Why You Can't Just Look at Win Rate",
+      "file": "F3.md",
+      "excerpt": "It is the combination of the risk-reward ratio and win rate that determines whether a method makes or loses money in the long run; a high win rate can still result in losses."
+    },
+    {
+      "slug": "F4",
+      "stage": "system",
+      "order": 4,
+      "title": "Position Management: Deciding How Long You Can Survive in the Market",
+      "file": "F4.md",
+      "excerpt": "The fixed percentage risk method and 'Position = Risk Amount ÷ Stop Loss Distance' keep single-trade losses constant and controllable."
+    },
+    {
+      "slug": "F5",
+      "stage": "system",
+      "order": 5,
+      "title": "Trading Psychology: Knowing Your Emotional Enemies",
+      "file": "F5.md",
+      "excerpt": "The four major emotional traps—fear, greed, hope, and regret—and how they lead to wrong decisions."
+    },
+    {
+      "slug": "F6",
+      "stage": "system",
+      "order": 6,
+      "title": "Discipline and Execution: The Gap Between Knowing and Doing",
+      "file": "F6.md",
+      "excerpt": "Why you understand the principles but cannot execute them, and how to truly implement them through rules and discipline."
+    },
+    {
+      "slug": "F7",
+      "stage": "system",
+      "order": 7,
+      "title": "Review: Learning from Every Trade",
+      "file": "F7.md",
+      "excerpt": "Focus on the correctness of the process rather than the single profit or loss—the most dangerous scenario is 'doing it wrong but making money,' while the most important to stick to is 'doing it right but losing money'."
+    },
+    {
+      "slug": "F8",
+      "stage": "system",
+      "order": 8,
+      "title": "Trend Trading System: A Complete Framework for Trading with the Trend",
+      "file": "F8.md",
+      "excerpt": "Identify the trend, enter on pullbacks, exit on breakdowns, and let profits run; trend markets are good, while ranging markets are prone to repeated stop losses."
+    },
+    {
+      "slug": "F9",
+      "stage": "system",
+      "order": 9,
+      "title": "Range Trading System: Buy Low, Sell High",
+      "file": "F9.md",
+      "excerpt": "A framework for high-sell low-buy within a range, as well as the two major risks of false breakouts and being trapped when a trend starts, and the importance of strict stop losses."
+    },
+    {
+      "slug": "F10",
+      "stage": "system",
+      "order": 10,
+      "title": "Building a Trading System That Suits You",
+      "file": "F10.md",
+      "excerpt": "There is no 'best' system, only one that suits you: go from imitation to originality, and verify and iterate through backtesting and virtual trading."
+    },
+    {
+      "slug": "F11",
+      "stage": "system",
+      "order": 11,
+      "title": "Trading Strategy Overview: Build Your Playbook",
+      "file": "F11.md",
+      "excerpt": "Trading Strategy = The implementation of 'Analysis Methods + Entry/Exit Rules' within a system; Categorized by Trend/Ranging, Trend-Following/Counter-trend, Left-side/Right-side, there is no 'best', only what fits."
+    },
+    {
+      "slug": "F12",
+      "stage": "system",
+      "order": 12,
+      "title": "Trend Following Strategy: Let Profits Run",
+      "file": "F12.md",
+      "excerpt": "Only trade with the trend without predicting tops and bottoms; Moving stop-loss lets profits run; Win rates are often low, and profits are concentrated in a few major trends (includes historical warnings of the Turtle Rule)."
+    },
+    {
+      "slug": "F13",
+      "stage": "system",
+      "order": 13,
+      "title": "Breakout Trading Strategy: Enter on Key Levels",
+      "file": "F13.md",
+      "excerpt": "Enter with the trend when key levels break; The biggest enemy is false breakouts; Use Volume/Close/Re-test to improve confirmation, but cannot be 100% excluded."
+    },
+    {
+      "slug": "F14",
+      "stage": "system",
+      "order": 14,
+      "title": "Mean Reversion Strategy: Price Returns to Normal",
+      "file": "F14.md",
+      "excerpt": "Price tends to revert after deviating excessively from the mean; The fatal premise is that it must be a true ranging market; Counter-trend in a trend will be crushed all the way."
+    },
+    {
+      "slug": "F15",
+      "stage": "system",
+      "order": 15,
+      "title": "Grid Trading: The Double-Edged Sword of Range Arbitrage",
+      "file": "F15.md",
+      "excerpt": "Layered buy high and sell low within a range, absolutely not 'lying flat to earn'; In a one-way trend, you get deeper in the hole or miss out; Adding leverage can lead to liquidation (includes strong warning of Martingale)."
+    },
+    {
+      "slug": "F16",
+      "stage": "system",
+      "order": 16,
+      "title": "Left-Side Trading vs. Right-Side Trading",
+      "file": "F16.md",
+      "excerpt": "Left-side (Fighting the turn/Bottom fishing) vs. Right-side (Following after confirmation); No method can precisely catch the bottom or top; Right-side is safer for beginners."
+    },
+    {
+      "slug": "F17",
+      "stage": "system",
+      "order": 17,
+      "title": "No Holy Grail: Matching Strategy with Market Environment",
+      "file": "F17.md",
+      "excerpt": "There is no strategy that works all the time; The core capability is identifying market conditions, using the right strategy, and surviving with a complete system."
+    },
+    {
+      "slug": "F18",
+      "stage": "system",
+      "order": 18,
+      "title": "Backtesting Your Strategy with the Strategy Research Lab",
+      "file": "F18.md",
+      "excerpt": "Turn ideas into quantifiable rules, use the Strategy Research Lab for backtesting + virtual verification; Backtesting effective ≠ Future effective (Overfitting/Survivorship Bias)."
+    },
+    {
+      "slug": "F19",
+      "stage": "system",
+      "order": 19,
+      "title": "Moving Strategies to Futures: What Leverage Changes First",
+      "file": "F19.md",
+      "excerpt": "Futures are not 'advanced spot' but tools with completely different risk structures; Leverage brings four essential changes: Two-way profit/loss amplification, Liquidation, Funding Rates, and Long/Short Duality."
+    },
+    {
+      "slug": "F20",
+      "stage": "system",
+      "order": 20,
+      "title": "Trends and Breakouts in Futures: The Opportunity and Cost of Leveraging with the Trend",
+      "file": "F20.md",
+      "excerpt": "Long Three-Price Relationship: Entry Price > Stop Loss Price > Liquidation Price; The higher the leverage, the closer the liquidation price and the smaller the margin for error, making it easy to be stopped out or liquidated during normal pullbacks."
+    },
+    {
+      "slug": "F21",
+      "stage": "system",
+      "order": 21,
+      "title": "Funding Rate Arbitrage: Principles, Direction, and Why 'Arbitrage' ≠ Risk-Free",
+      "file": "F21.md",
+      "excerpt": "Spot + Futures hedging only eats the rate (Delta Neutral); But arbitrage is absolutely not risk-free—Five major risks: Basis/Liquidation/Reverse Rate/Cost/Liquidity."
+    },
+    {
+      "slug": "F22",
+      "stage": "system",
+      "order": 22,
+      "title": "Hedging with Contracts: Protecting Existing Positions",
+      "file": "F22.md",
+      "excerpt": "Use Futures Short positions to insure Spot (Hedging); Hedging reduces directional risk but does not eliminate all risks, with costs such as Funding Rates/Opportunity Cost/Contract Leg Liquidation."
+    },
+    {
+      "slug": "F23",
+      "stage": "system",
+      "order": 23,
+      "title": "Contract Position Sizing: The 1% Risk Rule Under Leverage",
+      "file": "F23.md",
+      "excerpt": "Notional Exposure (= Margin × Leverage) ≠ Margin Used; P&L calculated on exposure; 1% risk method for contracts requires stop-loss before liquidation price, otherwise it fails."
+    },
+    {
+      "slug": "F24",
+      "stage": "system",
+      "order": 24,
+      "title": "Common Mistakes and Traps in Contract Trading",
+      "file": "F24.md",
+      "excerpt": "Five common mistakes: Full position high leverage / Holding positions without stop-loss / Ignoring funding fees / Frequent opening and closing / Treating contracts like a casino — contracts amplify the 'cost of mistakes'."
+    },
+    {
+      "slug": "F25",
+      "stage": "system",
+      "order": 25,
+      "title": "How to Study Trade Cases Without Copying Them",
+      "file": "F25.md",
+      "excerpt": "Cases teach methods, not answers; Analyze objective structure / feasible response / process right or wrong from a 'then' perspective; reviewing the past does not guide the present or predict the future."
+    },
+    {
+      "slug": "F26",
+      "stage": "system",
+      "order": 26,
+      "title": "Complete Review of a Trend Trade (Method Demonstration)",
+      "file": "F26.md",
+      "excerpt": "Demonstration of a complete trend trade (Identification → Pullback Entry → Trailing Stop → Reversal Exit → Review); This is a process demonstration, not a guaranteed successful script."
+    },
+    {
+      "slug": "F27",
+      "stage": "system",
+      "order": 27,
+      "title": "Review of a Failed Trade: What to Learn from Losses",
+      "file": "F27.md",
+      "excerpt": "Review of a failed trade (Fighting the trend + Holding position); Distinguish judgment error vs. execution error; Focus on the matter, not the result; Failure only teaches lessons, does not shame."
+    },
+    {
+      "slug": "F28",
+      "stage": "system",
+      "order": 28,
+      "title": "Running the System: Six Modules Working Together",
+      "file": "F28.md",
+      "excerpt": "A decent trade is the result of six modules working together (missing one causes collapse, depends on the weakest link); Align with what suits you + test and iterate; The system is not a guaranteed profit, respect comes first."
+    },
+    {
+      "slug": "F29",
+      "stage": "system",
+      "order": 29,
+      "title": "What Midas Can Help You Practice: The Value of a Virtual Environment",
+      "file": "F29.md",
+      "excerpt": "Trading is a practical skill requiring a practice field where you can 'make mistakes without paying a real price'; Midas helps practice analysis / execution / mindset / review, but virtual ≠ real, good practice ≠ guaranteed profit, it is a tool, not a guaranteed profit system."
+    },
+    {
+      "slug": "F30",
+      "stage": "system",
+      "order": 30,
+      "title": "Reading Market Structure with Candlesticks, Indicators, and Chan Theory",
+      "file": "F30.md",
+      "excerpt": "Layered reading of structure (Big direction → Key levels → Momentum → Chan Theory details); Multi-tool overlay for cross-verification, but verification only improves accuracy, not eliminating misjudgment; Tools are references, not buy/sell orders."
+    },
+    {
+      "slug": "F31",
+      "stage": "system",
+      "order": 31,
+      "title": "Practicing Execution and Discipline with Virtual Trading",
+      "file": "F31.md",
+      "excerpt": "Discipline is formed through muscle memory via repeated practice; Use virtual trading to practice the execution chain, making mistakes like holding positions or random stop-profits at zero cost in virtual to correct them; However, virtual lacks real capital pressure, virtual performance does not represent real results."
+    },
+    {
+      "slug": "F32",
+      "stage": "system",
+      "order": 32,
+      "title": "How to Use the AI Decision Card: Treat as Reference, Not Instruction",
+      "file": "F32.md",
+      "excerpt": "The AI Decision Card is a reference perspective that makes mistakes, not stock picks or buy/sell orders; Form your own judgment first, then compare with AI; Understanding principles + independent judgment is more important than copying; Must include disclaimer, cannot be relied upon alone."
+    },
+    {
+      "slug": "F33",
+      "stage": "system",
+      "order": 33,
+      "title": "Backtest and Refine Rules in the Strategy Lab",
+      "file": "F33.md",
+      "excerpt": "Idea → Rule formulation → Backtesting → Read indicators (focus on max drawdown / profit-loss ratio) → Iterate; ★ Backtesting being effective ≠ future effectiveness; Beware of overfitting / survivorship bias; Backtesting is for eliminating bad strategies, not proving profitability."
+    },
+    {
+      "slug": "F34",
+      "stage": "system",
+      "order": 34,
+      "title": "From Simulation to Your Own Method: A Practice Path",
+      "file": "F34.md",
+      "excerpt": "Observation → Small-scale virtual trial → Review → Adjustment → Form a stable executable strategy; The goal is 'suitable for you + able to execute stably' rather than the strongest strategy (no Holy Grail); What is formed is a method, not a guaranteed profit formula."
+    },
+    {
+      "slug": "F35",
+      "stage": "system",
+      "order": 35,
+      "title": "Run the Complete Trading Process in Midas",
+      "file": "F35.md",
+      "excerpt": "Connect the seven-stage complete process (Analysis → Plan → Virtual Entry → Risk Position → Virtual Exit → Review → Backtest) into a 'Learn → Use' closed loop; conducted entirely virtually without constituting advice, helping you master the process without guaranteeing results."
+    },
+    {
+      "slug": "F36",
+      "stage": "system",
+      "order": 36,
+      "title": "Review: What You Learned from Beginner to System",
+      "file": "F36.md",
+      "excerpt": "Review of the five-stage learning path (A Beginner → B Technical → C Chan Theory → E Contract → F System Practice); the first four stages are for recognition, the fifth for organization and application; ★ Completing the study ≠ Making money, what truly determines the long term is execution/discipline/risk control/review/awe."
+    },
+    {
+      "slug": "F37",
+      "stage": "system",
+      "order": 37,
+      "title": "Growth Mindset: Losses, Progress, and Respect for the Market",
+      "file": "F37.md",
+      "excerpt": "View losses correctly (acceptable loss if process is right vs. loss must be changed if process is wrong); progress relies on iterative review (slow is fast); always maintain awe for the market; ★ Oppose get-rich-quick schemes, pursue long-term steady survival."
+    },
+    {
+      "slug": "F38",
+      "stage": "system",
+      "order": 38,
+      "title": "Long-Term Thinking: Treat Trading as an Ongoing Practice",
+      "file": "F38.md",
+      "excerpt": "Trading is a long-term continuous cultivation; relies on four pillars: surviving by the system, disciplined execution, improving through review, and risk control for survival; Long-termism vs. Short-term Gambling — living long is the greatest advantage (Full Training Revenue Tail)."
+    },
+    {
+      "slug": "E1",
+      "stage": "contract",
+      "order": 1,
+      "title": "What is a Perpetual Contract: A Contract Without an Expiration Date",
+      "file": "E1.md",
+      "excerpt": "Perpetual = A contract without an expiration date that can be held long-term, the mainstream choice in crypto; anchored to spot via funding rates; leverage magnifies profits and losses bidirectionally with liquidation risk, making it a high-risk tool."
+    },
+    {
+      "slug": "E2",
+      "stage": "contract",
+      "order": 2,
+      "title": "Funding Rate: The Anchor of Perpetual Contracts",
+      "file": "E2.md",
+      "excerpt": "Funding rate is the periodic fee paid between longs and shorts (positive rate longs pay shorts / negative rate shorts pay longs), anchoring the perpetual price to spot; serves as sentiment reference, not prediction, and is a holding cost."
+    },
+    {
+      "slug": "E3",
+      "stage": "contract",
+      "order": 3,
+      "title": "Margin Mode: Cross and Isolated",
+      "file": "E3.md",
+      "excerpt": "Cross (account balance covers all) vs. Isolated (independent margin per position); choosing one only changes risk distribution, it does not eliminate liquidation risk, both require careful coordination with leverage and position sizing."
+    },
+    {
+      "slug": "E4",
+      "stage": "contract",
+      "order": 4,
+      "title": "How Liquidation Price is Calculated: Forced Liquidation Mechanism",
+      "file": "E4.md",
+      "excerpt": "Liquidation price = The price at which the position is forcibly closed upon price moving in the opposite direction; Longs are below entry price, Shorts are above; the higher the leverage, the closer the liquidation price; maintenance margin rate often causes actual liquidation to happen earlier than theoretical."
+    },
+    {
+      "slug": "E5",
+      "stage": "contract",
+      "order": 5,
+      "title": "Open Interest (OI): Tracking Participation in Derivatives",
+      "file": "E5.md",
+      "excerpt": "Open Interest OI = Total volume of unsettled contracts (stock); Increase in OI = New capital entering, Decrease in OI = Capital exiting; combined with price for reference interpretation, with exceptions, not prediction."
+    },
+    {
+      "slug": "E6",
+      "stage": "contract",
+      "order": 6,
+      "title": "Long/Short Ratio: Reference for Market Sentiment",
+      "file": "E6.md",
+      "excerpt": "Long/Short ratio = The ratio of Long power to Short power, with different metrics such as whales/accounts; Not 'more longs mean price must rise', it is sentiment reference, not a signal, and not prediction."
+    },
+    {
+      "slug": "E7",
+      "stage": "contract",
+      "order": 7,
+      "title": "Basis and Spread: The Price Relationship Between Perpetual and Spot",
+      "file": "E7.md",
+      "excerpt": "Basis = Perpetual price − Spot price (positive basis contango / negative basis backwardation); Highly correlated with funding rate direction, serves as reference data, not price prediction."
+    },
+    {
+      "slug": "E8",
+      "stage": "contract",
+      "order": 8,
+      "title": "Contract Risk: Why Contracts Are a Double-Edged Sword",
+      "file": "E8.md",
+      "excerpt": "Contracts are high-risk tools; risks stack (leverage magnifies bidirectionally / liquidation can wipe out principal / funding cost / high volatility), and amplify emotional behavioral risks; risk management is the lifeline."
+    },
+    {
+      "slug": "E9",
+      "stage": "contract",
+      "order": 9,
+      "title": "Preventing Liquidation in Contract Trading",
+      "file": "E9.md",
+      "excerpt": "Liquidity Prevention: Control leverage (start with low leverage) + Stop loss (set before liquidation price) + Position control + Sufficient margin + Manage emotions; No method guarantees no liquidation; Reducing risk ≠ Eliminating risk."
+    },
+    {
+      "slug": "E10",
+      "stage": "contract",
+      "order": 10,
+      "title": "Midas Contract Analysis: Understanding the Contract Market in a Virtual Environment",
+      "file": "E10.md",
+      "excerpt": "Midas is a full-process virtual analysis terminal, primarily for Perpetuals, providing Candlestick indicators/Chan Theory/Contract dimensions (OI/Long-Short Ratio/Funding Rate)/AI Decision Cards; AI is for reference only, does not constitute investment advice, and does not predict."
+    },
+    {
+      "slug": "C2-1",
+      "stage": "contract",
+      "order": 11,
+      "title": "Using Leverage Appropriately vs. Excessively",
+      "file": "C2-1.md",
+      "excerpt": "Veteran traders often say, 'Many people don't lose because of direction, but because of leverage.' This article uses a fictional case to show how two people with identical views can end up with vastly different outcomes when trading the same market move with different leverage."
+    },
+    {
+      "slug": "C2-2",
+      "stage": "contract",
+      "order": 12,
+      "title": "Stop Loss Execution vs. Holding a Losing Position",
+      "file": "C2-2.md",
+      "excerpt": "Group E mentioned, 'Stop loss must be set before the liquidation price.' This article uses illustrative cases to walk through two paths side-by-side: 'Setting a stop loss and following discipline' vs. 'Not stopping loss and holding until liquidation'—the outcome can be vastly different even when the direction is wrong."
+    },
+    {
+      "slug": "C2-3",
+      "stage": "contract",
+      "order": 13,
+      "title": "How Funding Rates Erode Long-term Positions",
+      "file": "C2-3.md",
+      "excerpt": "Many contract traders only focus on price fluctuations but forget that Perpetual contracts have a continuous cost—Funding Rate. Using illustrative cases, see how a 'long-term holding' position is slowly 'eaten away' by funding rates."
+    },
+    {
+      "slug": "C2-4",
+      "stage": "contract",
+      "order": 14,
+      "title": "How Liquidation Happens Step by Step",
+      "file": "C2-4.md",
+      "excerpt": "Everyone has heard of 'liquidation,' but many people's understanding stops at 'losing everything.' Using illustrative cases, this article dissects the entire process of a liquidation from opening to forced closing step-by-step—it is not sudden, but a gradual approach, often occurring earlier than the theoretical price."
+    },
+    {
+      "slug": "C2-5",
+      "stage": "contract",
+      "order": 15,
+      "title": "Trading Contracts in Choppy Markets",
+      "file": "C2-5.md",
+      "excerpt": "The market is choppy most of the time. Yet many use 'chasing highs and selling lows, chasing breakouts' trend strategies for choppy markets, resulting in repeated 'slaps in the face.' Using illustrative cases, see how losses from using the wrong strategy for the environment accumulate."
+    },
+    {
+      "slug": "C2-6",
+      "stage": "contract",
+      "order": 16,
+      "title": "Trading Contracts in Trending Markets",
+      "file": "C2-6.md",
+      "excerpt": "The previous articles were mostly negative examples. This one looks at a relatively smooth trend trading case—how going with the trend, low leverage, trailing stop loss, and partial profit-taking work together. However, smooth ≠ inevitable; it demonstrates 'how to do it,' not 'doing it guarantees profit.'"
+    },
+    {
+      "slug": "C2-7",
+      "stage": "contract",
+      "order": 17,
+      "title": "Using Both Long and Short Positions",
+      "file": "C2-7.md",
+      "excerpt": "A major feature of contracts compared to spot is the ability to trade both directions—Long when going up, Short when going down. Using illustrative cases, see how 'Short first, then Long' operations work, and discuss hedging strategies. However, being 'more flexible' is not 'guaranteed profit.'"
+    },
+    {
+      "slug": "C2-8",
+      "stage": "contract",
+      "order": 18,
+      "title": "Adding and Reducing Positions",
+      "file": "C2-8.md",
+      "excerpt": "When making money, people face temptation: 'It's rising so well, should I add to my Long position to earn more?' Using two illustrative cases for comparison—adding to floating profit recklessly vs. reasonably reducing positions to lock in profits—to see how position management when making money often determines whether you take the profit away or give it back."
+    },
+    {
+      "slug": "C2-9",
+      "stage": "contract",
+      "order": 19,
+      "title": "The Cost of Emotional Trading",
+      "file": "C2-9.md",
+      "excerpt": "The biggest enemy in trading is often not the market, but one's own emotions. In contracts, leverage amplifies the cost of emotional trading exponentially. Using illustrative cases, see how trader L is dragged into a 'vicious cycle' by emotions and the account shrinks rapidly."
+    },
+    {
+      "slug": "C2-10",
+      "stage": "contract",
+      "order": 20,
+      "title": "A Complete Contract Trading Plan",
+      "file": "C2-10.md",
+      "excerpt": "The first nine articles had negative examples and positive demonstrations. The final article strings all correct practices into a complete process—watching trader M go through a contract trade from planning, opening, managing, closing to reviewing in a proper manner. C2 Case Library concludes."
+    },
+    {
+      "slug": "C3-1",
+      "stage": "strategy",
+      "order": 1,
+      "title": "Moving Average Strategy",
+      "file": "C3-1.md",
+      "excerpt": "Moving Average strategy is the oldest and most well-known trend strategy, essentially the first lesson for every trader. Explain the principles, applicability/ineffectiveness, usage, pros, cons, and risks—focusing not on whether you can make money, but on its logic and applicable boundaries."
+    },
+    {
+      "slug": "C3-2",
+      "stage": "strategy",
+      "order": 2,
+      "title": "MACD Strategy",
+      "file": "C3-2.md",
+      "excerpt": "MACD is one of the most popular momentum indicators, with many strategies revolving around it. Clarify the principles, usage, and boundaries of MACD strategy, and firmly nail down the definition that is most often misunderstood."
+    },
+    {
+      "slug": "C3-3",
+      "stage": "strategy",
+      "order": 3,
+      "title": "Trend Following Strategy",
+      "file": "C3-3.md",
+      "excerpt": "Moving Averages and MACD are 'tools,' while trend following is a complete strategic philosophy—many successful trading frameworks are built on trend following. Clarify its logic, implementation, and boundaries."
+    },
+    {
+      "slug": "C3-4",
+      "stage": "strategy",
+      "order": 4,
+      "title": "Breakout Strategy",
+      "file": "C3-4.md",
+      "excerpt": "Chasing a breakout is an instinct for many, but the biggest pitfall of breakout strategy—fake breakouts—has fooled countless people. Clarify the principles, implementation, and how to deal with the unavoidable risk of fake breakouts."
+    },
+    {
+      "slug": "C3-5",
+      "stage": "strategy",
+      "order": 5,
+      "title": "Bollinger Bands Strategy",
+      "file": "C3-5.md",
+      "excerpt": "Bollinger Bands is a 'one-chart, two-uses' indicator—suitable for mean reversion in ranging markets and breakouts during trend changes. Clarify its definition, two uses, and applicable boundaries."
+    },
+    {
+      "slug": "C3-6",
+      "stage": "strategy",
+      "order": 6,
+      "title": "RSI Strategy",
+      "file": "C3-6.md",
+      "excerpt": "RSI is the most common 'overbought/oversold' indicator, but many have suffered losses using it because they don't know RSI 'fails' in trending markets. Clarify the usage and that fatal boundary of RSI strategy."
+    },
+    {
+      "slug": "C3-7",
+      "stage": "strategy",
+      "order": 7,
+      "title": "Mean Reversion Strategy",
+      "file": "C3-7.md",
+      "excerpt": "The naive intuition of mean reversion strategy is 'what goes up must come down, what goes down must come up.' It is useful in ranging markets but can be a disaster in trending markets. Clarify its logic and that life-or-death boundary."
+    },
+    {
+      "slug": "C3-8",
+      "stage": "strategy",
+      "order": 8,
+      "title": "Grid Trading Strategy",
+      "file": "C3-8.md",
+      "excerpt": "Grid trading is popular for its 'automatic high sell low buy' and 'looks like passive income,' but it has a fatal weakness—it fears one-way trends. Clarify the logic, parameters, and risks of grid trading, and dispel the 'passive income' illusion."
+    },
+    {
+      "slug": "C3-9",
+      "stage": "strategy",
+      "order": 9,
+      "title": "Martingale Strategy (Risk Warning)",
+      "file": "C3-9.md",
+      "excerpt": "Martingale is the most dangerous among all 'strategies,' yet it often disguises itself as 'guaranteed profit.' The focus is not on teaching you how to use it, but explaining why it is a 'bomb that will eventually explode.' Please read the risk warning carefully."
+    },
+    {
+      "slug": "C3-10",
+      "stage": "strategy",
+      "order": 10,
+      "title": "Arbitrage Strategy",
+      "file": "C3-10.md",
+      "excerpt": "Arbitrage sounds beautiful and implies 'risk-free profit.' However, true arbitrage is neither risk-free nor low-barrier. Clarify the principles, barriers, and risks of arbitrage, and correct the misconception of 'risk-free arbitrage.' C3 Strategy Library concludes."
+    }
+  ]
+}

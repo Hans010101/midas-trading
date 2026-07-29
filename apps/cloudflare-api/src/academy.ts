@@ -1,4 +1,5 @@
 import examBankJson from '../../api/app/services/academy/exam_questions.json'
+import examBankEnJson from '../../api/app/services/academy/exam_questions.en.json'
 import {
   ACADEMY_ARTICLES,
   ACADEMY_STAGES,
@@ -28,6 +29,7 @@ type ExamQuestion = Readonly<{
 type ExamBank = Readonly<Record<string, ExamQuestion[]>>
 
 const EXAM_BANK = examBankJson as ExamBank
+const EXAM_BANK_EN = examBankEnJson as ExamBank
 const ARTICLE_STAGE = new Map(
   ACADEMY_ARTICLES.map((article) => [article.slug, article.stage]),
 )
@@ -59,12 +61,12 @@ function validArticleSlug(value: unknown): {
   return { slug, stage }
 }
 
-function validStage(value: string): {
+function validStage(value: string, locale: 'zh' | 'en' = 'zh'): {
   stage: string
   questions: ExamQuestion[]
 } {
   const stage = value.trim()
-  const questions = EXAM_BANK[stage]
+  const questions = (locale === 'en' ? EXAM_BANK_EN : EXAM_BANK)[stage]
   if (!questions) throw new HttpError(400, `未知结业测验模块：${stage}`)
   return { stage, questions }
 }
@@ -184,10 +186,11 @@ function examQuestions(
   requestId: string,
 ): Response {
   const stageParam = new URL(request.url).searchParams.get('stage')
+  const locale = new URL(request.url).searchParams.get('locale') === 'en' ? 'en' : 'zh'
   if (!stageParam || stageParam.length > 16) {
     throw new HttpError(422, 'stage 格式无效')
   }
-  const { stage, questions } = validStage(stageParam)
+  const { stage, questions } = validStage(stageParam, locale)
   const total = questions.length
   return jsonResponse(
     {
@@ -227,8 +230,10 @@ async function submitExam(
 ): Promise<Response> {
   const { user } = await authenticate(request, env)
   const body = await readJsonObject(request)
+  const locale = body.locale === 'en' ? 'en' : 'zh'
   const { stage, questions } = validStage(
     requireString(body, 'stage', { min: 1, max: 16 }),
+    locale,
   )
   const answers = parseAnswers(body.answers)
   let score = 0

@@ -4,6 +4,8 @@ import { useLocale } from 'next-intl'
 import { useEffect, useMemo, useRef } from 'react'
 
 import type { Locale } from '@/i18n/routing'
+import academyInteractiveEn from '@/content/academy/interactive-ui.en.json'
+import academyInteractiveZh from '@/content/academy/interactive-ui.zh.json'
 import {
   buildTranslationCatalog,
   translateCatalogText,
@@ -25,7 +27,10 @@ type AttributeState = {
   lastApplied: string
 }
 
-const catalog = buildTranslationCatalog(zhMessages, enMessages)
+const catalog = buildTranslationCatalog(
+  { ...zhMessages, academyInteractive: academyInteractiveZh },
+  { ...enMessages, academyInteractive: academyInteractiveEn },
+)
 
 function shouldSkip(node: Node): boolean {
   const parent = node instanceof Element ? node : node.parentElement

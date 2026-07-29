@@ -17,6 +17,7 @@ import { CheckCircle2, ListChecks, XCircle } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import type { QuizQuestion } from '@/content/academy/quizzes'
 import { useAcademyProgress, useMarkComplete } from '@/hooks/use-academy-progress'
 import { shouldAutoMark } from '@/lib/academy-progress-calc'
@@ -33,6 +34,8 @@ export function ArticleQuiz({ questions, slug }: { questions: QuizQuestion[]; sl
   const [shuffled] = useState(() => questions.map((q) => shuffleQuestion(q)))
   // 每题选中的(洗牌后)选项下标;未答的题不在 map 中
   const [picked, setPicked] = useState<Record<number, number>>({})
+  const { locale } = useRuntimeLocale()
+  const en = locale === 'en'
 
   const { completedSet, isLoggedIn } = useAcademyProgress()
   const mark = useMarkComplete()
@@ -57,13 +60,18 @@ export function ArticleQuiz({ questions, slug }: { questions: QuizQuestion[]; sl
   const showLoginHint = !isLoggedIn && allAnswered
 
   return (
-    <section className="mt-12 border-t border-paper pt-8" aria-label="随堂小测">
+    <section
+      className="mt-12 border-t border-paper pt-8"
+      aria-label={en ? 'Lesson quiz' : '随堂小测'}
+    >
       <h2 className="mb-1 flex items-center gap-2 font-serif text-xl font-bold text-foreground">
         <ListChecks className="h-5 w-5 text-midas-red" />
-        随堂小测
+        {en ? 'Check your understanding' : '随堂小测'}
       </h2>
       <p className="mb-5 text-sm text-muted-foreground">
-        共 {questions.length} 题 · 点选项即时查看对错与解析,可重答;答完本篇自动记录学习进度。
+        {en
+          ? `${questions.length} questions · Select an answer for instant feedback. Complete all questions to record your progress.`
+          : `共 ${questions.length} 题 · 点选项即时查看对错与解析,可重答;答完本篇自动记录学习进度。`}
       </p>
 
       <div className="space-y-5">
@@ -141,8 +149,10 @@ export function ArticleQuiz({ questions, slug }: { questions: QuizQuestion[]; sl
                     )}
                   >
                     {isRight
-                      ? '✓ 回答正确'
-                      : `✗ 回答错误 · 正确答案 ${optionLabel(sq.answerIndex)}`}
+                      ? (en ? '✓ Correct' : '✓ 回答正确')
+                      : (en
+                          ? `✗ Not quite · Correct answer: ${optionLabel(sq.answerIndex)}`
+                          : `✗ 回答错误 · 正确答案 ${optionLabel(sq.answerIndex)}`)}
                   </p>
                   <p>{q.explanation}</p>
                 </div>
@@ -156,17 +166,19 @@ export function ArticleQuiz({ questions, slug }: { questions: QuizQuestion[]; sl
       {showCompleted && (
         <div className="mt-6 flex items-center gap-2 rounded-lg border border-success bg-success/10 px-4 py-3 text-sm font-medium text-success">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
-          已学完本篇 · 学习进度已记录
+          {en ? 'Lesson complete · Progress saved' : '已学完本篇 · 学习进度已记录'}
         </div>
       )}
       {showLoginHint && (
         <div className="mt-6 flex items-center justify-between gap-3 rounded-lg border border-dashed border-paper bg-surface-subtle px-4 py-3">
-          <span className="text-sm text-muted-foreground">登录后自动记录学习进度</span>
+          <span className="text-sm text-muted-foreground">
+            {en ? 'Sign in to save your learning progress' : '登录后自动记录学习进度'}
+          </span>
           <Link
             href="/login"
             className="shrink-0 rounded-md border border-midas-red/40 px-3 py-1.5 text-sm font-medium text-midas-red transition-colors hover:bg-midas-red-glow"
           >
-            去登录
+            {en ? 'Sign in' : '去登录'}
           </Link>
         </div>
       )}

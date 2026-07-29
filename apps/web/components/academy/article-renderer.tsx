@@ -152,17 +152,21 @@ const components: Components = {
 export function ArticleRenderer({
   markdown,
   glossaryAliases,
+  locale = 'zh',
 }: {
   markdown: string
   glossaryAliases?: AliasEntry[]
+  locale?: 'zh' | 'en'
 }) {
   const rehypePlugins: PluggableList =
     glossaryAliases && glossaryAliases.length > 0
       ? [[rehypeGlossaryLinks, { sortedAliases: glossaryAliases, exclude: DEFAULT_EXCLUDE_TERMS }]]
       : []
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={components}>
-      {markdown}
-    </ReactMarkdown>
+    <div className={locale === 'en' ? 'text-[15px] [&_p]:leading-7 [&_li]:leading-7' : undefined}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={components}>
+        {markdown}
+      </ReactMarkdown>
+    </div>
   )
 }

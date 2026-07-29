@@ -9,8 +9,7 @@
 
 import type { Metadata } from 'next'
 
-import { AcademySideNav } from '@/components/academy/academy-side-nav'
-import { ArticleRenderer } from '@/components/academy/article-renderer'
+import { AcademyGlossaryContent } from '@/components/academy/academy-glossary-content'
 import { HashScroller } from '@/components/academy/hash-scroller'
 import { TopNav } from '@/components/layout/top-nav'
 import { JsonLd } from '@/components/seo/json-ld'
@@ -32,6 +31,7 @@ export const metadata: Metadata = {
 
 export default function AcademyGlossaryPage() {
   const markdown = getGlossary()
+  const markdownEn = getGlossary('en')
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
@@ -41,12 +41,7 @@ export default function AcademyGlossaryPage() {
       <HashScroller />
       <main className="flex-1">
         <div className="mx-auto max-w-5xl px-6 py-6">
-          <div className="lg:flex lg:gap-8">
-            <AcademySideNav active="glossary" />
-            <div className="min-w-0 flex-1">
-              <ArticleRenderer markdown={markdown} />
-            </div>
-          </div>
+          <AcademyGlossaryContent markdownZh={markdown} markdownEn={markdownEn} />
         </div>
       </main>
     </div>

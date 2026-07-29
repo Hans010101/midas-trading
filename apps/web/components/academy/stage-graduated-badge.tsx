@@ -10,15 +10,17 @@
 import { Award } from 'lucide-react'
 
 import { useExamResults } from '@/hooks/use-academy-exam'
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 
 export function StageGraduatedBadge({ stageSlug }: { stageSlug: string }) {
   const { passedSet } = useExamResults()
+  const { locale } = useRuntimeLocale()
   if (!passedSet.has(stageSlug)) return null
 
   return (
     <span className="inline-flex items-center gap-1 rounded-full border border-gold/50 bg-gold/10 px-2 py-0.5 text-[11px] font-medium text-gold">
       <Award className="h-3 w-3" />
-      已结业
+      {locale === 'en' ? 'Graduated' : '已结业'}
     </span>
   )
 }

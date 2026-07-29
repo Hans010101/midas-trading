@@ -2,6 +2,7 @@ import { env, exports } from 'cloudflare:workers'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import examBank from '../../api/app/services/academy/exam_questions.json'
+import examBankEn from '../../api/app/services/academy/exam_questions.en.json'
 import { sha256Hex } from '../src/crypto'
 import { hashPassword, verifyPassword } from '../src/password'
 
@@ -437,6 +438,18 @@ describe('academy learning state', () => {
     expect(publicQuestions.total).toBe(examBank.basics.length)
     expect(publicQuestions.questions[0]).not.toHaveProperty('answerIndex')
     expect(publicQuestions.questions[0]).not.toHaveProperty('correct_answer')
+
+    const englishQuestions = await exports.default.fetch(
+      apiRequest('/api/v1/academy/exam?stage=basics&locale=en'),
+    )
+    expect(englishQuestions.status).toBe(200)
+    const englishPublic = (await englishQuestions.json()) as {
+      questions: Array<{ stem: string }>
+      total: number
+    }
+    expect(englishPublic.total).toBe(examBankEn.basics.length)
+    expect(englishPublic.questions[0]?.stem).toBe(examBankEn.basics[0]?.question)
+    expect(englishPublic.questions[0]?.stem).not.toMatch(/[\u3400-\u9fff]/u)
 
     const answers = examBank.basics.map((question) => question.answerIndex)
     const firstPass = await exports.default.fetch(

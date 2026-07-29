@@ -45,10 +45,10 @@ export function useExamResults() {
   return { ...query, passedSet, isLoggedIn }
 }
 
-export function useExamQuestions(stage: string, enabled: boolean) {
+export function useExamQuestions(stage: string, enabled: boolean, locale: 'zh' | 'en' = 'zh') {
   return useQuery<ExamQuestionsResponse>({
-    queryKey: ['academy-exam-questions', stage],
-    queryFn: ({ signal }) => fetchExamQuestions(stage, signal),
+    queryKey: ['academy-exam-questions', stage, locale],
+    queryFn: ({ signal }) => fetchExamQuestions(stage, locale, signal),
     enabled,
     retry: 0,
     staleTime: 60_000,
@@ -61,9 +61,17 @@ export function useSubmitExam() {
   const qc = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ stage, answers }: { stage: string; answers: number[] }) => {
+    mutationFn: ({
+      stage,
+      answers,
+      locale = 'zh',
+    }: {
+      stage: string
+      answers: number[]
+      locale?: 'zh' | 'en'
+    }) => {
       if (!token) throw new Error('未登录')
-      return submitExam(stage, answers, token)
+      return submitExam(stage, answers, token, locale)
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: RESULTS_KEY })

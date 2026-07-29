@@ -12,16 +12,9 @@
  */
 
 import type { Metadata } from 'next'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import { AcademySideNav } from '@/components/academy/academy-side-nav'
-import { ArticleQuiz } from '@/components/academy/article-quiz'
-import { ArticleRenderer } from '@/components/academy/article-renderer'
-import { ArticleInteractives } from '@/components/academy/interactive/article-interactives'
-import { PracticeCTA } from '@/components/academy/practice-cta'
-import { TopNav } from '@/components/layout/top-nav'
+import { AcademyArticleContent } from '@/components/academy/academy-article-content'
 import { JsonLd } from '@/components/seo/json-ld'
 import { ARTICLE_DATES } from '@/lib/seo/article-dates'
 import { buildArticleSchema, buildBreadcrumbSchema } from '@/lib/seo/schema'
@@ -29,6 +22,8 @@ import { ACADEMY_ARTICLES } from '@/content/academy/manifest'
 import { getInteractives } from '@/content/academy/interactives'
 import { getPractice, buildPracticeHref } from '@/content/academy/practice'
 import { getQuiz } from '@/content/academy/quizzes'
+import englishQuizzes from '@/content/academy/quizzes.en.json'
+import type { QuizQuestion } from '@/content/academy/quizzes'
 import {
   getAdjacentArticles,
   getArticleBySlug,
@@ -69,12 +64,19 @@ export default async function AcademyArticlePage({
 }) {
   const { slug } = await params
   const markdown = getArticleBySlug(slug)
+  const markdownEn = getArticleBySlug(slug, 'en')
   const meta = getArticleMeta(slug)
+  const metaEn = getArticleMeta(slug, 'en')
   // dynamicParams=false 下 slug 必在 manifest;此分支纯防御(manifest 有条目但 md 文件缺失时真 404)
-  if (!markdown || !meta) notFound()
+  if (!markdown || !markdownEn || !meta || !metaEn) notFound()
   const stage = getStage(meta.stage)
+  const stageEn = getStage(metaEn.stage, 'en')
   const { prev, next } = getAdjacentArticles(slug)
+  const adjacentEn = getAdjacentArticles(slug, 'en')
   const quiz = getQuiz(slug)
+  const quizEn = (
+    englishQuizzes as Record<string, QuizQuestion[]>
+  )[slug] ?? []
   const practice = getPractice(slug)
   const interactives = getInteractives(slug)
   const glossaryAliases = getGlossaryAliases()
@@ -82,7 +84,7 @@ export default async function AcademyArticlePage({
   const stageName = stage?.name ?? '点金训练营'
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
+    <>
       {/* SEO 批3:Article + 面包屑 JSON-LD(喂富摘要 + AI 引擎引用)*/}
       <JsonLd
         data={[
@@ -94,85 +96,15 @@ export default async function AcademyArticlePage({
           buildBreadcrumbSchema({ stageName, stageSlug: meta.stage, title: meta.title, slug }),
         ]}
       />
-      <TopNav />
-      <main className="flex-1">
-        <div className="mx-auto max-w-5xl px-6 py-6">
-          <div className="lg:flex lg:gap-8">
-            <AcademySideNav active={meta.stage} />
-            <article className="min-w-0 flex-1">
-              {/* 面包屑 */}
-              <nav className="mb-6 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                <Link href="/academy" className="transition-colors hover:text-midas-red">
-                  训练营
-                </Link>
-                {stage && (
-                  <>
-                    <ChevronRight className="h-3 w-3 text-muted-foreground/50" />
-                    <Link
-                      href={`/academy/stage/${stage.slug}`}
-                      className="transition-colors hover:text-midas-red"
-                    >
-                      {stage.name}
-                    </Link>
-                  </>
-                )}
-                <ChevronRight className="h-3 w-3 text-muted-foreground/50" />
-                <span className="text-foreground/70">{meta.title}</span>
-              </nav>
-
-              {/* 正文(markdown 首行即 # 标题 → ArticleRenderer 的 h1)*/}
-              <ArticleRenderer markdown={markdown} glossaryAliases={glossaryAliases} />
-
-              {/* D 系列交互演示(无配置 → 不渲染)· 正文后、小测前 */}
-              {interactives && <ArticleInteractives keys={interactives} />}
-
-              {/* 随堂小测(无题 → 组件返回 null)· 刀1.5:选项洗牌 + 答完自动标记学完。
-                  ★ key=slug:文章切换(soft nav)时强制重挂 → 重新洗牌 + 清空作答 */}
-              <ArticleQuiz key={slug} questions={quiz} slug={slug} />
-
-              {/* 去实战练入口(无配置 → 不渲染)*/}
-              {practice && <PracticeCTA entry={practice} href={buildPracticeHref(practice)} />}
-
-              {/* 上一篇 / 下一篇(同阶内按 order)*/}
-              <nav className="mt-10 flex items-stretch justify-between gap-3 border-t border-paper pt-6">
-                {prev ? (
-                  <Link
-                    href={`/academy/article/${prev.slug}`}
-                    className="group flex max-w-[48%] flex-col rounded-lg border border-paper p-3 transition-colors hover:border-midas-red/40"
-                  >
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <ChevronLeft className="h-3 w-3" />
-                      上一篇
-                    </span>
-                    <span className="mt-1 line-clamp-1 text-sm font-medium text-foreground transition-colors group-hover:text-midas-red">
-                      {prev.title}
-                    </span>
-                  </Link>
-                ) : (
-                  <span />
-                )}
-                {next ? (
-                  <Link
-                    href={`/academy/article/${next.slug}`}
-                    className="group flex max-w-[48%] flex-col items-end rounded-lg border border-paper p-3 text-right transition-colors hover:border-midas-red/40"
-                  >
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                      下一篇
-                      <ChevronRight className="h-3 w-3" />
-                    </span>
-                    <span className="mt-1 line-clamp-1 text-sm font-medium text-foreground transition-colors group-hover:text-midas-red">
-                      {next.title}
-                    </span>
-                  </Link>
-                ) : (
-                  <span />
-                )}
-              </nav>
-
-            </article>
-          </div>
-        </div>
-      </main>
-    </div>
+      <AcademyArticleContent
+        slug={slug}
+        zh={{ markdown, meta, stage, adjacent: { prev, next }, quiz }}
+        en={{ markdown: markdownEn, meta: metaEn, stage: stageEn, adjacent: adjacentEn, quiz: quizEn }}
+        practice={practice}
+        practiceHref={practice ? buildPracticeHref(practice) : null}
+        interactives={interactives}
+        glossaryAliases={glossaryAliases}
+      />
+    </>
   )
 }

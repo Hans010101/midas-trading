@@ -10,30 +10,41 @@
  * 纯展示、无 hooks → server / client 父组件均可用(文章/词典页是 server,列表页是 client)。
  */
 
+'use client'
+
 import Link from 'next/link'
 
-import { ACADEMY_STAGES } from '@/content/academy/manifest'
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
+import { getAcademyStages } from '@/content/academy/localized-catalog'
 import { cn } from '@/lib/utils'
 
 const GLOSSARY_KEY = 'glossary'
 
-function navItems() {
+function navItems(locale: 'zh' | 'en') {
   return [
-    ...ACADEMY_STAGES.map((s) => ({
+    ...getAcademyStages(locale).map((s) => ({
       key: s.slug,
       href: `/academy/stage/${s.slug}`,
       label: `${s.stageLabel} ${s.name}`,
     })),
-    { key: GLOSSARY_KEY, href: '/academy/glossary', label: '名词词典' },
+    {
+      key: GLOSSARY_KEY,
+      href: '/academy/glossary',
+      label: locale === 'en' ? 'Trading Glossary' : '名词词典',
+    },
   ]
 }
 
 export function AcademySideNav({ active }: { active: string }) {
-  const items = navItems()
+  const { locale } = useRuntimeLocale()
+  const items = navItems(locale)
   return (
     <>
       {/* lg+ 左侧栏 */}
-      <nav className="hidden w-48 shrink-0 lg:block" aria-label="训练营导航">
+      <nav
+        className="hidden w-48 shrink-0 lg:block"
+        aria-label={locale === 'en' ? 'Academy navigation' : '训练营导航'}
+      >
         <ul className="space-y-1">
           {items.map((item) => (
             <li key={item.key}>

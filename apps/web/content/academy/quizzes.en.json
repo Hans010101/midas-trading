@@ -1,0 +1,2613 @@
+{
+  "A2": [
+    {
+      "stem": "What two prices form the \"body\" of a single candlestick?",
+      "options": [
+        "High and Low prices",
+        "Open and Close prices",
+        "Open and High prices",
+        "Close and Low prices"
+      ],
+      "answerIndex": 1,
+      "explanation": "The body is formed by the open and close prices; the high and low prices correspond to the endpoints of the wicks, not the body boundaries."
+    },
+    {
+      "stem": "Under Midas' color convention, a candlestick with a \"close higher than open\" belongs to?",
+      "options": [
+        "Bearish candle, green",
+        "Bullish candle, red",
+        "Bullish candle, green",
+        "Bearish candle, red"
+      ],
+      "answerIndex": 1,
+      "explanation": "Midas follows the \"Red for Rise, Green for Fall\" convention: close higher than open is a Bullish candle and red; close lower than open is a Bearish candle and green."
+    }
+  ],
+  "A3": [
+    {
+      "stem": "What does a longer \"lower wick\" on a candlestick mainly reflect?",
+      "options": [
+        "Strong selling pressure above",
+        "Buying support below, price pulled back",
+        "Price will definitely rise next",
+        "Volume must expand"
+      ],
+      "answerIndex": 1,
+      "explanation": "The lower wick is the trace of price being pulled back after dropping; it reflects buying support below; \"definitely rise\" is a wrong certainty."
+    },
+    {
+      "stem": "Which statement about wick length is correct?",
+      "options": [
+        "The longer the wick, the more intense the battle between long and short",
+        "The longer the wick, the more stable the price",
+        "A long wick means a reversal is guaranteed",
+        "Wick length has no meaning"
+      ],
+      "answerIndex": 0,
+      "explanation": "A longer wick represents more intense fighting and confusion in direction at that time; it is a signal of the battle, not a guarantee of reversal."
+    }
+  ],
+  "A4": [
+    {
+      "stem": "When can \"Shorting\" be profitable?",
+      "options": [
+        "When price rises",
+        "When price falls",
+        "When price is stagnant",
+        "Profitable in any situation"
+      ],
+      "answerIndex": 1,
+      "explanation": "Shorting is selling first and buying later; profit occurs only when price falls, loss when it rises; there is no situation where it is profitable in all directions."
+    },
+    {
+      "stem": "Why can contracts facilitate shorting, while spot trading is mainly for Long?",
+      "options": [
+        "Because spot is riskier so shorting is banned",
+        "Contracts support dual-direction (open Short), spot generally requires holding assets first",
+        "Because shorting is illegal",
+        "Because spot cannot make money"
+      ],
+      "answerIndex": 1,
+      "explanation": "Contracts are designed to support opening Shorts and dual-direction operations; spot generally requires holding/borrowing assets first, so it is mainly for Long."
+    }
+  ],
+  "A5": [
+    {
+      "stem": "What is the most accurate meaning of \"Leverage\"?",
+      "options": [
+        "Using small margin to operate a large position",
+        "Borrowing for free to earn profit",
+        "A tool that guarantees profit",
+        "A tool that improves win rate"
+      ],
+      "answerIndex": 0,
+      "explanation": "Leverage uses small margin to leverage a large position; it does not improve win rate or guarantee profit, only amplifies results."
+    },
+    {
+      "stem": "Which statement about leverage's impact on profit/loss is correct?",
+      "options": [
+        "Amplifies profit only, not loss",
+        "Amplifies profit and loss equally",
+        "Amplifies loss only, not profit",
+        "Has no impact on profit/loss"
+      ],
+      "answerIndex": 1,
+      "explanation": "Leverage is a double-edged sword—it amplifies gains while equally amplifying losses, which is its essence to be wary of."
+    },
+    {
+      "stem": "What consequence does higher leverage bring?",
+      "options": [
+        "Safer, more resistant to volatility",
+        "Worse resistance to volatility, easier to Liquidate",
+        "Guarantees profit",
+        "Completely unrelated to Liquidation"
+      ],
+      "answerIndex": 1,
+      "explanation": "Higher leverage means smaller opposite fluctuations can wipe out margin and trigger forced Liquidation."
+    }
+  ],
+  "A6": [
+    {
+      "stem": "What does a \"Support Level\" refer to?",
+      "options": [
+        "Area of selling pressure above the price",
+        "Area of buying pressure below the price, price tends to stop falling here",
+        "A price that will never be broken",
+        "A price set by the exchange"
+      ],
+      "answerIndex": 1,
+      "explanation": "Support is an area below price where buying pressure gathers and price tends to stop falling and rebound; it is not an absolute iron law."
+    },
+    {
+      "stem": "After a resistance level is \"broken upward\" by price, what usually happens?",
+      "options": [
+        "Disappears completely and becomes meaningless",
+        "Role reverses and often becomes a Support level",
+        "Becomes a stronger resistance level",
+        "Causes price to definitely rise"
+      ],
+      "answerIndex": 1,
+      "explanation": "Support and resistance transform with the direction of the breakout: a resistance broken upward often becomes support; \"definitely rise\" is a wrong certainty."
+    },
+    {
+      "stem": "What is the correct understanding of Support and Resistance?",
+      "options": [
+        "They are iron laws that must take effect",
+        "They are probabilistic reference areas, price may rebound or break through",
+        "They can precisely predict future price",
+        "Buy or sell immediately when price arrives"
+      ],
+      "answerIndex": 1,
+      "explanation": "Support and resistance are probabilistic reference areas that can fail; use them combined with other information; they do not predict price, nor are they trading orders."
+    }
+  ],
+  "A7": [
+    {
+      "stem": "What are the typical characteristics of an \"uptrend\" in K-line structure?",
+      "options": [
+        "Higher highs and higher lows",
+        "Lower highs and lower lows",
+        "Highs and lows remain roughly flat",
+        "Price remains stagnant for a long time"
+      ],
+      "answerIndex": 0,
+      "explanation": "An uptrend is characterized by higher highs and higher lows (like climbing stairs); lower highs and lower lows indicate a downtrend."
+    },
+    {
+      "stem": "Which of the following situations belongs to \"consolidation (sideways)\"?",
+      "options": [
+        "Highs and lows remain roughly flat, price moves back and forth within a range with unclear direction",
+        "Higher highs and higher lows",
+        "Lower highs and lower lows",
+        "Price moves in a single direction and rises rapidly"
+      ],
+      "answerIndex": 0,
+      "explanation": "Consolidation is characterized by roughly flat highs and lows, price moving back and forth within a range with unclear direction, distinguishing it from single-direction uptrends or downtrends."
+    }
+  ],
+  "A8": [
+    {
+      "stem": "What is the core characteristic of a \"Market Order\"?",
+      "options": [
+        "Executed immediately at the current market price, but price is not fully controllable (slippage may occur)",
+        "Executed only when the specified price is reached, may not execute",
+        "Guaranteed execution at the best price",
+        "Slippage will never occur"
+      ],
+      "answerIndex": 0,
+      "explanation": "Market orders prioritize \"timeliness\"—execution is immediate, but the execution price is not fully controllable and slippage may occur."
+    },
+    {
+      "stem": "What is the core characteristic of a \"Limit Order\"?",
+      "options": [
+        "Executed immediately at the market price",
+        "Placed at a specified price, executed only when the price is reached, may not execute",
+        "Guaranteed to execute regardless of the situation",
+        "Executes faster than a market order"
+      ],
+      "answerIndex": 1,
+      "explanation": "Limit orders prioritize \"price\"—placed at a specified price, executed only when the price is reached, price is controllable but execution is not guaranteed."
+    }
+  ],
+  "A9": [
+    {
+      "stem": "When going Long, where should the stop-loss price typically be set?",
+      "options": [
+        "Above the entry price",
+        "Below the entry price",
+        "Exactly the same as the entry price",
+        "Anywhere is fine"
+      ],
+      "answerIndex": 1,
+      "explanation": "For Long positions, the stop-loss is set below the entry price—when the price drops to this level, the position is closed to control the single loss and prevent it from expanding."
+    },
+    {
+      "stem": "Which of the following statements about stop-loss is correct?",
+      "options": [
+        "Stop-loss guarantees final profit",
+        "Stop-loss prevents small losses from becoming large losses; it is risk control (but does not guarantee profit)",
+        "Stop-loss will cause you to miss all profits",
+        "As long as a stop-loss is set, losses will never occur"
+      ],
+      "answerIndex": 1,
+      "explanation": "The core of a stop-loss is \"preventing small losses from becoming large losses\"; it is a form of risk control rather than a guarantee of profit, and the actual exit price may deviate under extreme market conditions."
+    }
+  ],
+  "A10": [
+    {
+      "stem": "What is a significant characteristic of the A-share market compared to the cryptocurrency market?",
+      "options": [
+        "A-shares implement T+1 and have price limits",
+        "A-shares trade 7×24 hours",
+        "A-shares have no price limits",
+        "A-shares are primarily short-selling"
+      ],
+      "answerIndex": 0,
+      "explanation": "A-shares implement T+1 and have price limits (e.g., ±10% on the main board), have high barriers for short selling, and are primarily long-selling; 7×24 trading and no price limits are characteristics of the crypto market."
+    },
+    {
+      "stem": "What are the typical characteristics of the cryptocurrency market?",
+      "options": [
+        "Trading opens for about 6.5 hours a day",
+        "7×24 hour trading, high volatility, no price limits",
+        "Fixed price limits are set",
+        "Short selling is completely impossible"
+      ],
+      "answerIndex": 1,
+      "explanation": "The crypto market operates 7×24 hours, has high volatility, and has no price limits; contracts are bidirectional and T+0. The rules differ significantly between markets; actual rules should be based on the latest official information."
+    }
+  ],
+  "A11": [
+    {
+      "stem": "One of the core differences between Spot and Futures (Perpetual) is?",
+      "options": [
+        "Spot has leverage, Futures does not",
+        "Futures have leverage, are bidirectional, and carry liquidation risk; Spot has no leverage or liquidation risk by default",
+        "They are exactly the same",
+        "Spot risk is higher than Futures"
+      ],
+      "answerIndex": 1,
+      "explanation": "Futures have leverage, are bidirectional, and carry funding rates and liquidation risks, making the risk significantly higher; Spot involves buying and holding assets with no leverage or liquidation risk by default."
+    },
+    {
+      "stem": "What does the \"Funding Rate\" in Perpetual Futures refer to?",
+      "options": [
+        "The trading fee charged by the exchange",
+        "A mechanism unique to Perpetual Futures, periodically settled between longs and shorts",
+        "Bank deposit interest",
+        "Spot custody fee"
+      ],
+      "answerIndex": 1,
+      "explanation": "The funding rate is a mechanism unique to Perpetual Futures, periodically settled between longs and shorts (not a fee paid to the platform), often used to gauge market sentiment."
+    },
+    {
+      "stem": "Midas Crypto focuses on \"Futures Analysis\" but adheres to the principle of?",
+      "options": [
+        "Promising that users will definitely make money using futures",
+        "Fully virtual, AI analysis is for reference only and does not constitute investment advice",
+        "Providing real orders to help users make money",
+        "Guaranteeing prediction accuracy"
+      ],
+      "answerIndex": 1,
+      "explanation": "Midas is fully virtual; all analysis and AI are for reference only and do not constitute investment advice—no promise of profit is made, and price predictions are not provided."
+    }
+  ],
+  "A12": [
+    {
+      "stem": "What does \"Virtual Trading\" refer to?",
+      "options": [
+        "Experience trading with simulated funds, with no real profit or loss involved",
+        "Practice with small amounts of real money",
+        "A strategy that guarantees steady profits",
+        "Only view market data without placing orders"
+      ],
+      "answerIndex": 0,
+      "explanation": "Virtual trading uses simulated funds to experience the full trading process without real profit or loss; its value lies in trial and error with zero real risk."
+    },
+    {
+      "stem": "Which of the following statements is correct regarding the \"proper use\" of virtual trading?",
+      "options": [
+        "Since no real money is lost, you can click randomly",
+        "Follow a serious \"Learn → Practice → Review\" loop and treat virtual trading like a real account",
+        "Treat it only as a game for entertainment",
+        "Virtual practice guarantees you can make money in the real market"
+      ],
+      "answerIndex": 1,
+      "explanation": "The proper use is a serious \"Learn → Practice → Review\" loop and treating virtual trading like a real account; however, doing well in virtual trading does not guarantee profitability in the real market."
+    }
+  ],
+  "B1": [
+    {
+      "stem": "What does the \"5-Day Moving Average (MA5)\" represent?",
+      "options": [
+        "The average of closing prices over the last 5 periods, connected into a line",
+        "The highest price of the last 5 days",
+        "A prediction of prices for the next 5 days",
+        "The sum of trading volume over 5 periods"
+      ],
+      "answerIndex": 0,
+      "explanation": "Moving averages are the average of closing prices over the last N periods, calculated and connected into a line; they reflect past trends, not future predictions."
+    },
+    {
+      "stem": "Which statement about the direction of moving averages is correct?",
+      "options": [
+        "Moving averages can predict future prices",
+        "Moving averages reflect past trends: upward for bullish, downward for bearish",
+        "Short-term moving averages are always more useful than long-term ones",
+        "The direction of moving averages is unrelated to trends"
+      ],
+      "answerIndex": 1,
+      "explanation": "The direction of moving averages reflects trends (upward bullish, downward bearish, flat consolidation), but they reflect past trends, not future predictions; periods are not inherently better or worse."
+    }
+  ],
+  "B2": [
+    {
+      "stem": "What does the \"Golden Cross\" of moving averages refer to?",
+      "options": [
+        "The long-term moving average crosses above the short-term moving average",
+        "The short-term moving average crosses above the long-term moving average",
+        "The price crosses above the moving average",
+        "Both moving averages move upward simultaneously"
+      ],
+      "answerIndex": 1,
+      "explanation": "Golden Cross = Short-term MA crosses above Long-term MA (bullish reference); do not reverse the direction; \"Long crossing Short\" actually corresponds to a Death Cross."
+    },
+    {
+      "stem": "What does the \"Death Cross\" of moving averages refer to?",
+      "options": [
+        "The short-term moving average crosses below the long-term moving average",
+        "The short-term moving average crosses above the long-term moving average",
+        "The price hits a new high",
+        "Trading volume increases significantly"
+      ],
+      "answerIndex": 0,
+      "explanation": "Death Cross = Short-term MA crosses below Long-term MA (bearish reference), opposite to the Golden Cross."
+    },
+    {
+      "stem": "Which statement about the nature of Golden Cross and Death Cross is correct?",
+      "options": [
+        "They are leading and precise buy/sell signals",
+        "They are lagging signals; by the time they appear, the price has often moved, and there are many false signals in consolidation",
+        "A Golden Cross means you should buy immediately",
+        "They are always accurate"
+      ],
+      "answerIndex": 1,
+      "explanation": "Golden Cross and Death Cross are lagging signals, with especially many false signals in consolidation; they are references, not predictions or trading orders, and cannot be traded solely based on them."
+    }
+  ],
+  "B3": [
+    {
+      "stem": "What is the correct order of a \"Bullish Arrangement\" from top to bottom?",
+      "options": [
+        "Price > Short-term MA > Medium-term MA > Long-term MA",
+        "Long-term MA > Medium-term MA > Short-term MA > Price",
+        "Several moving averages are intertwined",
+        "Price is at the very bottom"
+      ],
+      "answerIndex": 0,
+      "explanation": "A bullish arrangement from top to bottom is Price > Short > Medium > Long (Short is on top, Price is at the top), representing a strong uptrend structure; the reverse is a bearish arrangement."
+    },
+    {
+      "stem": "What market structure does a \"Bearish Arrangement\" represent?",
+      "options": [
+        "Strong uptrend structure",
+        "Weak downtrend structure (Long > Medium > Short > Price, Price at the bottom)",
+        "It is definitely about to bottom out and rebound",
+        "It is unrelated to trend strength"
+      ],
+      "answerIndex": 1,
+      "explanation": "A bearish arrangement from top to bottom is Long > Medium > Short > Price, Price at the bottom, representing a weak downtrend structure; arrangement conversion is lagging and serves only as a reference."
+    }
+  ],
+  "B4": [
+    {
+      "stem": "What is the MACD \"Red/Green Bar\" equal to?",
+      "options": [
+        "DIF − DEA",
+        "Fast MA − Slow MA",
+        "Closing Price − Opening Price",
+        "DEA − DIF"
+      ],
+      "answerIndex": 0,
+      "explanation": "Red/Green Bar = DIF − DEA: DIF above is positive (Red, above zero axis), below is negative (Green, below zero axis); where the two lines intersect, the bar is zero."
+    },
+    {
+      "stem": "How is the DEA (Slow Line) in MACD derived?",
+      "options": [
+        "The moving average of closing prices",
+        "The moving average of DIF, smoother and lagging behind DIF",
+        "The moving average of trading volume",
+        "Highest price minus lowest price"
+      ],
+      "answerIndex": 1,
+      "explanation": "DEA is the moving average of DIF (commonly 9), smoother than DIF and lagging behind it; while DIF = Fast MA − Slow MA."
+    }
+  ],
+  "B5": [
+    {
+      "stem": "What does a \"MACD Golden Cross\" refer to?",
+      "options": [
+        "Short-term MA crosses above long-term MA",
+        "DIF crosses above DEA",
+        "Price crosses above the zero line",
+        "Red bars lengthen"
+      ],
+      "answerIndex": 1,
+      "explanation": "MACD Golden Cross = DIF crosses above DEA (bars turn from green to red); the protagonists are the DIF and DEA lines, not moving averages—\"Short-term MA crosses above long-term MA\" is a moving average golden cross."
+    },
+    {
+      "stem": "What does a \"MACD Death Cross\" refer to?",
+      "options": [
+        "DIF crosses below DEA",
+        "DEA crosses below DIF",
+        "Short-term MA crosses below long-term MA",
+        "Green bars shorten"
+      ],
+      "answerIndex": 0,
+      "explanation": "MACD Death Cross = DIF crosses below DEA (bars turn from red to green); it is a bearish reference; it is a crossover between DIF/DEA, not a moving average crossover."
+    },
+    {
+      "stem": "What does the shortening of MACD red and green bars usually indicate?",
+      "options": [
+        "Momentum strengthens",
+        "Momentum weakens",
+        "Price must reverse",
+        "Trend must end"
+      ],
+      "answerIndex": 1,
+      "explanation": "Bars lengthening = momentum strengthens; bars shortening = momentum weakens. The shortening of red bars often indicates the exhaustion of upward momentum, but does not equal a price reversal."
+    }
+  ],
+  "B6": [
+    {
+      "stem": "What is the \"Top Divergence\" of MACD?",
+      "options": [
+        "Price makes a new high, but the MACD high actually drops",
+        "Price makes a new high, and the MACD high also rises synchronously",
+        "Price makes a new low, but the MACD high drops",
+        "Price and MACD fall in the same direction"
+      ],
+      "answerIndex": 0,
+      "explanation": "Top Divergence = Price highs rise (make new highs) but MACD highs drop (opposite direction), indicating exhaustion of upward momentum; the directional relationship must not be reversed."
+    },
+    {
+      "stem": "What is the correct understanding of MACD divergence?",
+      "options": [
+        "It is an exact timing tool that reverses immediately upon appearance",
+        "It indicates \"possible reversal,\" but can be flat, persist, or fail; it does not predict timing or magnitude",
+        "It is always accurate",
+        "It is a clear buy or sell order"
+      ],
+      "answerIndex": 1,
+      "explanation": "Divergence indicates momentum exhaustion and \"possible reversal,\" but it is not an exact timing tool—it can be flat, persist, or fail; it must be combined with context and risk management."
+    }
+  ],
+  "B7": [
+    {
+      "stem": "How are the \"Upper and Lower Bands\" of Bollinger Bands calculated?",
+      "options": [
+        "Middle Band ± K times Standard Deviation (commonly K=2)",
+        "Middle Band ± Fixed Points",
+        "Highest price and lowest price over a period",
+        "Middle Band ± K times Volume"
+      ],
+      "answerIndex": 0,
+      "explanation": "Upper and Lower Bands = Middle Band ± K times Standard Deviation (commonly K=2), symmetrically distributed on either side of the Middle Band; Standard Deviation reflects volatility, so the channel \"breathes.\""
+    },
+    {
+      "stem": "What is the \"Middle Band\" of Bollinger Bands?",
+      "options": [
+        "A Moving Average (commonly 20-period)",
+        "Highest price over a period",
+        "Previous day's closing price",
+        "Standard Deviation itself"
+      ],
+      "answerIndex": 0,
+      "explanation": "The Middle Band is a Moving Average (commonly 20-period), with the Upper and Lower Bands adding and subtracting the Standard Deviation on either side."
+    },
+    {
+      "stem": "What is the correct understanding when price touches the Bollinger Band \"Upper Band\"?",
+      "options": [
+        "Price must reverse and fall",
+        "This is a positional reference, not a reversal signal (price can run along the band in strong trends)",
+        "Must sell immediately",
+        "The channel must immediately close"
+      ],
+      "answerIndex": 1,
+      "explanation": "Touching the Upper or Lower Band is only a positional reference, not a reversal signal. In strong trends, price can run along the band, and it does not constitute a buy or sell order."
+    }
+  ],
+  "B8": [
+    {
+      "stem": "What does a \"Bollinger Band Squeeze\" mean?",
+      "options": [
+        "Volatility increases",
+        "Volatility converges (Upper and Lower bands narrow, Standard Deviation decreases)",
+        "Price must fall",
+        "Trend must reverse"
+      ],
+      "answerIndex": 1,
+      "explanation": "Squeeze = Upper and Lower bands narrow, Standard Deviation decreases, volatility converges; a long squeeze is often seen as \"brewing for a breakout.\""
+    },
+    {
+      "stem": "What usually happens after a long period of \"Bollinger Band Squeeze\"?",
+      "options": [
+        "Must break out upwards",
+        "Must break out downwards",
+        "Often welcomes a directional breakout, but the direction cannot be predicted",
+        "Price will never move"
+      ],
+      "answerIndex": 2,
+      "explanation": "A squeeze indicates a \"volatility state\" rather than direction. It is often followed by a directional breakout, but the direction is unpredictable and does not equal a guaranteed rise or fall."
+    }
+  ],
+  "B9": [
+    {
+      "stem": "What is the value range and midline of the RSI indicator?",
+      "options": [
+        "0–100, 50 as the midline",
+        "-100 to 100, 0 as the midline",
+        "0–10, 5 as the midline",
+        "No fixed range"
+      ],
+      "answerIndex": 0,
+      "explanation": "RSI takes values 0–100, with 50 as the midline; above 50 favors the uptrend, below 50 favors the downtrend."
+    },
+    {
+      "stem": "What does it mean when RSI enters the \"Overbought Zone\" (often referenced as >70)?",
+      "options": [
+        "Price will fall immediately, should sell",
+        "It is a reference for strength dominance, but does not mean falling immediately (can be flat in strong trends)",
+        "Price must peak",
+        "Must reverse immediately"
+      ],
+      "answerIndex": 1,
+      "explanation": "Overbought is a \"reference zone\"; Overbought ≠ falling immediately. In strong trends, RSI can be flat and stay at extreme values for a long time. It is not a reversal signal or a sell order."
+    },
+    {
+      "stem": "What threshold is commonly used as a reference for the RSI \"Oversold Zone\"?",
+      "options": [
+        "<30",
+        "<70",
+        "<50",
+        "<10"
+      ],
+      "answerIndex": 0,
+      "explanation": "Overbought is often referenced as >70, and Oversold is often referenced as <30 (thresholds are not unique); similarly, Oversold ≠ rising immediately."
+    }
+  ],
+  "C1": [
+    {
+      "stem": "Chan Theory decomposes price action using geometric structures. What is the order of structure from small to large?",
+      "options": [
+        "Central Hub → Segment → Stroke → Fractal",
+        "Fractal → Stroke → Segment → Central Hub",
+        "Stroke → Fractal → Central Hub → Segment",
+        "MA → MACD → Central Hub → Trend"
+      ],
+      "answerIndex": 1,
+      "explanation": "Chan Theory structure from small to large: Fractal → Stroke → Segment → Central Hub, and possesses the characteristic of recursive levels."
+    },
+    {
+      "stem": "Regarding Chan Theory, which of the following perceptions is rational and correct?",
+      "options": [
+        "It is a divine tool that can predict future tops and bottoms",
+        "It is a tool that analyzes price action using strict geometric structures; it has a learning curve, is not deified, and does not guarantee steady profits",
+        "Mastering Chan Theory guarantees steady profits",
+        "It is more accurate than all analysis methods"
+      ],
+      "answerIndex": 1,
+      "explanation": "Chan Theory is an analysis tool, not a divine tool for prediction; the system is vast and has a threshold, and it does not promise steady profits."
+    }
+  ],
+  "C2": [
+    {
+      "stem": "Before learning Chan Theory, what is the most important mindset to establish?",
+      "options": [
+        "Treat it as a holy grail that can predict tops and bottoms",
+        "Treat it as an analysis tool, focus on understanding structure rather than memorizing formulas, and always combine it with risk management",
+        "Use it to find 'sure-to-rise' signals and then go all-in",
+        "Believe that the more esoteric it is, the more accurate it is"
+      ],
+      "answerIndex": 1,
+      "explanation": "Chan Theory is an analysis tool, not a holy grail; you must understand structure and combine it with risk management, rather than memorizing formulas to find sure-to-rise signals."
+    },
+    {
+      "stem": "Which of the following tendencies belongs to the 'going crazy' (obsession) to watch out for when learning Chan Theory?",
+      "options": [
+        "Understanding the logic behind the structure",
+        "Deifying and esotericizing Chan Theory, and 'using it to predict and then going all-in'",
+        "Learning step-by-step in order",
+        "Always combining it with risk management"
+      ],
+      "answerIndex": 1,
+      "explanation": "Be wary of tendencies to deify/esotericize/faith-based Chan Theory, as well as the tendency to 'use it to predict and go all-in'."
+    }
+  ],
+  "C3": [
+    {
+      "stem": "The first step in Chan Theory is to handle the 'Inclusion Relationship' of K-lines. What is the purpose?",
+      "options": [
+        "To make the price go up",
+        "To eliminate structural ambiguity and make tops and bottoms clear, facilitating the identification of Fractals and drawing Strokes",
+        "To predict price direction",
+        "To increase trading volume"
+      ],
+      "answerIndex": 1,
+      "explanation": "Handling the inclusion relationship is to eliminate structural ambiguity and make tops and bottoms clear; it is the prerequisite basic skill for identifying Fractals and drawing Strokes."
+    },
+    {
+      "stem": "What is the rule for handling K-line inclusion relationships?",
+      "options": [
+        "Always take the higher one",
+        "For upward movement, take the 'higher-high' and 'higher-low'; for downward movement, take the 'lower-low' and 'lower-high'; the direction is determined by the direction of the previous K-line",
+        "Always take the average of the two",
+        "Directly delete one of them"
+      ],
+      "answerIndex": 1,
+      "explanation": "For upward movement, take the 'higher-high' and 'higher-low'; for downward movement, take the 'lower-low' and 'lower-high'; the direction is determined by the previous K-line."
+    }
+  ],
+  "C4": [
+    {
+      "stem": "Which of the following descriptions fits a 'Top Fractal'?",
+      "options": [
+        "The high point and low point of the middle K-line are the highest (overall highest)",
+        "The middle K-line is overall the lowest",
+        "The three K-lines are equally high",
+        "The first K-line is the highest"
+      ],
+      "answerIndex": 0,
+      "explanation": "Top Fractal = the middle K-line is overall the highest (both high and low points are highest); the Bottom Fractal is the opposite, being the middle K-line overall the lowest."
+    },
+    {
+      "stem": "How many K-lines constitute a Fractal?",
+      "options": [
+        "Two",
+        "Three (adjacent K-lines after handling inclusion relationships)",
+        "Five",
+        "One"
+      ],
+      "answerIndex": 1,
+      "explanation": "A Fractal is composed of three adjacent K-lines after handling inclusion relationships, marking a local reversal."
+    },
+    {
+      "stem": "Regarding the significance of Fractals, which of the following perceptions is correct?",
+      "options": [
+        "The appearance of a Fractal represents a major trend reversal",
+        "Fractals only mark local reversals and are endpoints for drawing Strokes; they do not represent a major trend reversal and cannot be used for prediction",
+        "When a Top Fractal appears, you should sell",
+        "Fractals can predict subsequent rises and falls"
+      ],
+      "answerIndex": 1,
+      "explanation": "Fractals only mark local reversals and are endpoints for drawing Strokes; they do not represent a major trend reversal, cannot predict, and are not trading signals."
+    }
+  ],
+  "C5": [
+    {
+      "stem": "What does a Stroke represent in Chan Theory?",
+      "options": [
+        "A single K-line",
+        "Connecting an adjacent Top Fractal and Bottom Fractal",
+        "A Moving Average",
+        "The boundary of a Central Hub"
+      ],
+      "answerIndex": 1,
+      "explanation": "Stroke = connecting an adjacent Top Fractal and Bottom Fractal; it is the most basic unit of price action."
+    },
+    {
+      "stem": "Regarding the direction of a Stroke, which of the following statements is correct?",
+      "options": [
+        "Multiple consecutive Strokes can be in the same direction",
+        "Stroke directions alternate up and down (Up Stroke = Bottom Fractal → Top Fractal, Down Stroke = Top Fractal → Bottom Fractal); consecutive same-direction Strokes do not occur",
+        "Strokes are always upward",
+        "Stroke direction is random"
+      ],
+      "answerIndex": 1,
+      "explanation": "Stroke directions alternate up and down: Up Stroke = Bottom Fractal → Top Fractal, Down Stroke = Top Fractal → Bottom Fractal; consecutive same-direction Strokes do not occur."
+    }
+  ],
+  "E6": [
+    {
+      "stem": "What aspect of the market does the Long/Short Ratio reflect?",
+      "options": [
+        "Price fluctuation magnitude",
+        "Ratio of Long to Short positions (Holding bias/Mood)",
+        "Volume size",
+        "Funding rate level"
+      ],
+      "answerIndex": 1,
+      "explanation": "Long/Short Ratio = Ratio of Long to Short positions, reflecting participants' holding bias and sentiment distribution."
+    },
+    {
+      "stem": "Which of the following understandings about the Long/Short Ratio is correct?",
+      "options": [
+        "If Longs are many, price will definitely rise",
+        "It has different metrics, is a sentiment reference, does not predict, and is not a signal",
+        "It can precisely predict price direction",
+        "The rule 'If Longs are many, look for a short' is reliable"
+      ],
+      "answerIndex": 1,
+      "explanation": "Long/Short ratios use different samples, such as top traders or account counts. They describe positioning sentiment; neither “more longs means price must rise” nor a fixed contrarian rule is reliable."
+    }
+  ],
+  "E7": [
+    {
+      "stem": "Which is the calculation method for Basis?",
+      "options": [
+        "Spot Price - Perpetual Price",
+        "Perpetual Price - Spot Price",
+        "Highest Price - Lowest Price",
+        "Bid Price - Ask Price"
+      ],
+      "answerIndex": 1,
+      "explanation": "Basis = Perpetual Price - Spot Price; Positive Basis = Premium (expensive), Negative Basis = Discount (cheap)."
+    },
+    {
+      "stem": "Which of the following statements about the relationship between Basis and Funding Rate is correct?",
+      "options": [
+        "They have no relation",
+        "Premium is often accompanied by positive funding, Discount by negative funding; the funding rate is the 'hand' pulling the Perpetual price back to Spot",
+        "Premium is always accompanied by negative funding",
+        "Basis can precisely predict price"
+      ],
+      "answerIndex": 1,
+      "explanation": "Basis is highly correlated with the direction of funding (Premium -> Positive Funding); the funding rate anchors the Perpetual price to Spot. Basis is a reference, not a prediction."
+    }
+  ],
+  "E8": [
+    {
+      "stem": "What is the most appropriate understanding of calling a contract a 'double-edged sword'?",
+      "options": [
+        "Leverage only amplifies profit",
+        "Leverage amplifies both ways—amplifying gains while equally amplifying losses, and risk of Liquidation",
+        "Contracts are actually risk-free",
+        "Contracts have no risk"
+      ],
+      "answerIndex": 1,
+      "explanation": "Leverage amplifies gains and losses both ways, with the risk of Liquidation (principal may go to zero), which is the meaning of 'double-edged sword'."
+    },
+    {
+      "stem": "Besides amplifying gains and losses, what else does a contract amplify?",
+      "options": [
+        "Only amplifies principal, does not affect others",
+        "It also amplifies emotional and behavioral risks (impulse, overtrading, gambling nature), often hurting more than a single loss",
+        "It will amplify your win rate",
+        "Nothing is amplified additionally"
+      ],
+      "answerIndex": 1,
+      "explanation": "Contracts also amplify emotional and behavioral risks, often hurting more than a single loss, so beginners must be extra cautious."
+    }
+  ],
+  "E9": [
+    {
+      "stem": "Among the many principles for preventing Liquidation, which is placed first?",
+      "options": [
+        "Increase leverage to seek higher returns",
+        "Control leverage, start with low leverage (larger margin for error)",
+        "Operate with full position as much as possible",
+        "Do not set stop loss at all"
+      ],
+      "answerIndex": 1,
+      "explanation": "Controlling leverage (starting with low leverage) is the priority; it directly determines the size of the margin for error."
+    },
+    {
+      "stem": "Where should the stop loss price be set to prevent Liquidation?",
+      "options": [
+        "On the earlier (less extreme) side than the Liquidation price, to exit actively",
+        "Exactly equal to the Liquidation price",
+        "On the more extreme side than the Liquidation price",
+        "Stop loss is not needed at all"
+      ],
+      "answerIndex": 0,
+      "explanation": "Stop loss should be set on the earlier side than the Liquidation price for an active exit, rather than waiting for the market to force-close you."
+    },
+    {
+      "stem": "What is the correct understanding of these Liquidation prevention principles?",
+      "options": [
+        "Following them guarantees no Liquidation",
+        "They reduce risk but do not eliminate risk; no method guarantees 'no Liquidation'",
+        "With a stop loss, you definitely profit",
+        "Sufficient margin allows you to predict the market"
+      ],
+      "answerIndex": 1,
+      "explanation": "These are cumulative habits to reduce risk, not a promise that 'following them is safe'; reducing risk ≠ eliminating risk."
+    }
+  ],
+  "E10": [
+    {
+      "stem": "Midas's contract analysis is 'fully virtual'; its greatest value lies in?",
+      "options": [
+        "Using a virtual account to earn real money",
+        "Understanding and practicing high-risk contracts (including making mistakes and Liquidation) with zero real risk",
+        "Guaranteeing you will profit after learning",
+        "Helping you predict price"
+      ],
+      "answerIndex": 1,
+      "explanation": "Fully virtual = building risk awareness and practicing contracts with zero real risk; it does not promise profit and does not predict price."
+    },
+    {
+      "stem": "What is the correct attitude towards Midas's AI contract analysis?",
+      "options": [
+        "Treat it as precise buy/sell instructions to follow",
+        "For reference only, does not constitute investment advice, does not predict price",
+        "It guarantees accuracy",
+        "It promises profit"
+      ],
+      "answerIndex": 1,
+      "explanation": "AI analysis is for reference only, does not constitute investment advice, and does not predict price; no analysis dimension guarantees accuracy or promises profit."
+    }
+  ],
+  "E1": [
+    {
+      "stem": "A trader wants to hold a crypto contract position long-term without rolling over at expiration. Which tool best fits this need?",
+      "options": [
+        "Traditional Delivery Futures",
+        "Perpetual",
+        "Options",
+        "Spot DCA"
+      ],
+      "answerIndex": 1,
+      "explanation": "Perpetual contracts have no expiration date, allow long-term holding, and require no rolling over; traditional delivery futures have expiration dates and require rolling over, making them unsuitable for the 'no rolling over' requirement."
+    },
+    {
+      "stem": "What is the core difference between Perpetual and traditional futures?",
+      "options": [
+        "Perpetual has no leverage",
+        "Perpetual cannot Short",
+        "Perpetual has no expiration date and is pegged to spot via funding rates",
+        "Perpetual has no risk"
+      ],
+      "answerIndex": 2,
+      "explanation": "Perpetuals have no expiration date and are pegged to spot via funding rates; traditional futures have expiration dates and converge to spot upon expiration. Perpetuals also have leverage, allow for both directions, and carry risk."
+    }
+  ],
+  "E2": [
+    {
+      "stem": "A perpetual contract currently shows a 'Positive Funding Rate'. What does this mean for this settlement cycle?",
+      "options": [
+        "Short pays Long",
+        "Long pays Short",
+        "Exchange pays all holders",
+        "Everyone pays Exchange"
+      ],
+      "answerIndex": 1,
+      "explanation": "Positive funding rate = Long pays Short; Negative funding rate = Short pays Long (direction must never be reversed)."
+    },
+    {
+      "stem": "Regarding the nature of funding rates, which statement is correct?",
+      "options": [
+        "It is the transaction fee charged by the exchange",
+        "It is a periodic payment between Longs and Shorts to peg the Perpetual price to spot",
+        "It is the loan interest paid to the bank",
+        "It is the platform's profit source"
+      ],
+      "answerIndex": 1,
+      "explanation": "Funding is a transfer between Longs and Shorts, not a fee paid to the platform; it settles periodically to keep the Perpetual price close to spot."
+    },
+    {
+      "stem": "Regarding the function of funding rates, which perception is correct?",
+      "options": [
+        "High rates definitely mean the price will rise",
+        "It serves as sentiment reference but does not predict price, and the paid funding is a holding cost",
+        "Funding can precisely predict the direction of price movement",
+        "Funding paid during long-term holding is not considered a cost"
+      ],
+      "answerIndex": 1,
+      "explanation": "Funding rates serve as sentiment reference but do not predict price; the continuous funding paid during long-term holding is a tangible holding cost."
+    }
+  ],
+  "E3": [
+    {
+      "stem": "Which description fits the 'Isolated' margin mode?",
+      "options": [
+        "Using the entire account balance to backstop the position",
+        "Each position uses independent margin; liquidation only risks losing that position's margin",
+        "Never subject to forced liquidation",
+        "Risk is definitely higher than Cross"
+      ],
+      "answerIndex": 1,
+      "explanation": "Isolated risk isolation means liquidation risks only the margin of that specific position, not other funds; using the full balance to backstop is Cross."
+    },
+    {
+      "stem": "Regarding the choice between Cross and Isolated, which perception is correct?",
+      "options": [
+        "Choosing Isolated means no liquidation risk",
+        "Both modes have liquidation risk; choosing one only changes risk distribution, it does not eliminate risk",
+        "Cross mode guarantees profit",
+        "Choosing the right mode guarantees profit"
+      ],
+      "answerIndex": 1,
+      "explanation": "Both modes carry liquidation risk, only the distribution of risk differs; both require leverage and position size control."
+    }
+  ],
+  "E4": [
+    {
+      "stem": "A trader opened a 'Long' order. Where is its liquidation price located?",
+      "options": [
+        "Above the entry price",
+        "Below the entry price",
+        "At the entry price",
+        "No liquidation price"
+      ],
+      "answerIndex": 1,
+      "explanation": "The liquidation price for a Long is below the entry price, and for a Short it is above (direction must never be reversed)."
+    },
+    {
+      "stem": "All else equal, the higher the leverage, how does the liquidation price change?",
+      "options": [
+        "Further from entry price, safer",
+        "Closer to entry price, easier to be triggered",
+        "Unrelated to leverage level",
+        "Completely disappears"
+      ],
+      "answerIndex": 1,
+      "explanation": "Leverage is the most critical factor affecting liquidation price: the higher the leverage, the closer the liquidation price is to the entry price, leaving less room for error."
+    },
+    {
+      "stem": "Why does actual liquidation often happen earlier than the 'theoretical liquidation price' calculated by the formula?",
+      "options": [
+        "The exchange deliberately liquidates early to scam users",
+        "Because of the maintenance margin rate, plus fees, funding, and slippage, liquidation is triggered before 'losing everything'",
+        "Because the price is calculated incorrectly",
+        "It does not actually happen earlier"
+      ],
+      "answerIndex": 1,
+      "explanation": "The maintenance margin rate requires margin not to fall below a certain level; combined with various fees, actual liquidation often occurs before the theoretical price of 'zero margin'."
+    }
+  ],
+  "E5": [
+    {
+      "stem": "What does Open Interest (OI) reflect?",
+      "options": [
+        "Total transaction volume for the day",
+        "Total volume of outstanding contracts in the market (stock)",
+        "Price levels",
+        "Ratio of Longs to Shorts"
+      ],
+      "answerIndex": 1,
+      "explanation": "OI = Total outstanding contracts, it is a 'stock', distinct from trading volume which is a 'flow'."
+    },
+    {
+      "stem": "When OI increases significantly, what does it usually mean? Which statement is correct?",
+      "options": [
+        "Position increase, new capital entering (but OI is a reference, not a prediction, not a signal)",
+        "Price will definitely rise",
+        "Capital is leaving in large amounts",
+        "The market has definitely peaked"
+      ],
+      "answerIndex": 0,
+      "explanation": "OI increase = Position increase (new capital entering); however, it is only a reference dimension and does not predict price or serve as an operational signal."
+    }
+  ],
+  "C6": [
+    {
+      "stem": "What is the core requirement for a Segment to be established?",
+      "options": [
+        "At least three consecutive Strokes, and the Strokes must overlap",
+        "Any two Strokes are sufficient",
+        "A single very long candle",
+        "Gather five Fractals"
+      ],
+      "answerIndex": 0,
+      "explanation": "A Segment requires at least three consecutive Strokes, and the Strokes must overlap (e.g., the price overlap area between the first and third upward Strokes)."
+    },
+    {
+      "stem": "What is the relationship between the levels of a Segment and a Stroke?",
+      "options": [
+        "The Stroke is one level higher than the Segment",
+        "The Segment is one level higher than the Stroke (Strokes constitute Segments, reflecting recursive levels)",
+        "They are the same level",
+        "They are unrelated"
+      ],
+      "answerIndex": 1,
+      "explanation": "The Segment is one level higher than the Stroke and is smoother and more stable; Strokes constitute Segments, reflecting the recursive levels of Chan Theory."
+    }
+  ],
+  "C7": [
+    {
+      "stem": "What does the 'Central Hub' (Zhongshu) in Chan Theory refer to?",
+      "options": [
+        "A single candle",
+        "The overlapping interval of three consecutive lower-level trends",
+        "The range from the highest price to the lowest price",
+        "A Moving Average"
+      ],
+      "answerIndex": 1,
+      "explanation": "A Central Hub is the overlapping interval of three consecutive lower-level trends; the three trends must have a common overlap, otherwise, it is not a Central Hub."
+    },
+    {
+      "stem": "Regarding the upper and lower boundaries of a Central Hub, which value is correct?",
+      "options": [
+        "Upper boundary = the highest of the three high points, Lower boundary = the lowest of the three low points",
+        "Upper boundary = the lowest of the three high points, Lower boundary = the highest of the three low points",
+        "Upper boundary = the overall highest price, Lower boundary = the overall lowest price",
+        "Upper and lower boundaries can be chosen arbitrarily"
+      ],
+      "answerIndex": 1,
+      "explanation": "The upper boundary of a Central Hub is the minimum of the three high points, and the lower boundary is the maximum of the three low points (i.e., the boundaries of the common overlapping area of the three trends). They must not be reversed."
+    },
+    {
+      "stem": "What market state does the essence of a Central Hub reflect?",
+      "options": [
+        "A clear unilateral trend",
+        "A volatile area of long/short balance (often corresponding to consolidation)",
+        "A position of inevitable reversal",
+        "A clear buy signal"
+      ],
+      "answerIndex": 1,
+      "explanation": "A Central Hub is a volatile area of long/short balance, often corresponding to consolidation; it has levels, forms, extends, and generates new ones."
+    }
+  ],
+  "C8": [
+    {
+      "stem": "Regarding the 'Three Types of Buy/Sell Points' in Chan Theory, what is the most important and most essential cognition?",
+      "options": [
+        "Buy when a buy point appears and sell when a sell point appears",
+        "It is a term describing structural positions, not trading instructions; it does not predict, guarantee, or constitute investment advice",
+        "Buy/Sell points will definitely materialize",
+        "Buy/Sell points can precisely predict tops and bottoms"
+      ],
+      "answerIndex": 1,
+      "explanation": "Buy/Sell points are terms describing structural positions, not trading instructions; they can fail and depend on subjective judgment, so they must be combined with risk management."
+    },
+    {
+      "stem": "What structural position does the First Type of Buy Point describe?",
+      "options": [
+        "Any position during an uptrend",
+        "The turning low point at the end of a downtrend, where the last downward segment diverges from the previous segment (momentum exhaustion)",
+        "The position of breaking a new high",
+        "Any low point"
+      ],
+      "answerIndex": 1,
+      "explanation": "The First Type of Buy Point is the turning low point at the end of a downtrend after a Divergence (momentum exhaustion)."
+    },
+    {
+      "stem": "What structural position does the Third Type of Buy Point describe?",
+      "options": [
+        "The price pulls back after breaking upward through the Central Hub, without falling back into the Central Hub (not breaking the upper boundary)",
+        "The position where the price breaks through the Central Hub",
+        "The position where the price moves back and forth inside the Central Hub",
+        "The position where the price creates a new low"
+      ],
+      "answerIndex": 0,
+      "explanation": "The Third Type of Buy Point is the pullback after breaking upward through the Central Hub, where the pullback does not fall back into the Central Hub (not breaking the upper boundary)."
+    }
+  ],
+  "C9": [
+    {
+      "stem": "Regarding the limitations of Chan Theory, which statement is correct?",
+      "options": [
+        "Chan Theory can precisely predict and has no limitations",
+        "It has ambiguity (classification is subjective), lag (based on past trends), and requires combination with other analysis",
+        "Chan Theory can independently determine all operations",
+        "Chan Theory has no lag at all"
+      ],
+      "answerIndex": 1,
+      "explanation": "Chan Theory has ambiguity and lag and requires combination with other analysis; it is a 'mirror to see structure,' not a 'crystal ball to foresee the future.'"
+    },
+    {
+      "stem": "What is the reasonable use of Chan Theory?",
+      "options": [
+        "Mechanically applying Buy/Sell points and pursuing absolute precision",
+        "Structurally understanding trends, assisting in judging current positions, and placing them in a complete system combined with risk management",
+        "Treating it as a prediction artifact and trading heavily",
+        "Believing that the more mysterious it is, the better"
+      ],
+      "answerIndex": 1,
+      "explanation": "Reasonable use = structurally understanding trends, assisting in judgment, and combining with risk management; beware of mechanical application, excessive pursuit of precision, and mythologizing the theory."
+    }
+  ],
+  "F2": [
+    {
+      "stem": "What is the core significance of 'Plan first, trade later'?",
+      "options": [
+        "To make trading more frequent",
+        "Use pre-trade rationality to counter emotions during holding",
+        "Guaranteeing profit on every trade",
+        "Used to predict prices"
+      ],
+      "answerIndex": 1,
+      "explanation": "The trading plan moves decision-making to a 'calm time,' using pre-trade rationality to counter emotions during holding."
+    },
+    {
+      "stem": "Regarding the separation of 'Planning and Execution', what is the correct approach?",
+      "options": [
+        "Modify the plan arbitrarily based on feelings while holding",
+        "In the execution phase, follow the plan strictly and do not change it temporarily (especially do not move stops arbitrarily)",
+        "Simply do not write a plan and trade directly",
+        "Move the stop loss back every time you incur a loss"
+      ],
+      "answerIndex": 1,
+      "explanation": "In the execution phase, follow the plan strictly and do not change your mind temporarily, especially do not move stops arbitrarily while holding."
+    }
+  ],
+  "F3": [
+    {
+      "stem": "What is the calculation for Risk-Reward Ratio (Profit-Loss Ratio)?",
+      "options": [
+        "Win Rate ÷ Loss",
+        "Potential Profit ÷ Potential Loss",
+        "Profit × Win Rate",
+        "Volume Ratio"
+      ],
+      "answerIndex": 1,
+      "explanation": "Profit-Loss Ratio = Potential Profit ÷ Potential Loss, determined by entry, stop loss, and take profit."
+    },
+    {
+      "stem": "Regarding 'Win Rate' and 'Profit-Loss Ratio', which statement is correct?",
+      "options": [
+        "Higher win rate always means more profit",
+        "Relying solely on win rate leads to misjudgment: 40% win rate + 1:2 ratio may profit, while 70% win rate but poor ratio may also lose",
+        "Profit-Loss Ratio is irrelevant",
+        "Only 100% win rate leads to profit"
+      ],
+      "answerIndex": 1,
+      "explanation": "Relying solely on win rate leads to misjudgment; it must be viewed in conjunction with the profit-loss ratio. Low win rate + high ratio can still be profitable overall."
+    },
+    {
+      "stem": "When the profit-loss ratio is 1:2, what is the approximate 'Break-even Win Rate'?",
+      "options": [
+        "Approximately 50%",
+        "Approximately 33%",
+        "Approximately 25%",
+        "Approximately 70%"
+      ],
+      "answerIndex": 1,
+      "explanation": "The higher the profit-loss ratio, the lower the required break-even win rate: 1:1 is approx 50%, 1:2 is approx 33%, 1:3 is approx 25%."
+    }
+  ],
+  "F4": [
+    {
+      "stem": "What primarily determines how long you can 'survive in the market'?",
+      "options": [
+        "Luck of individual trades",
+        "Position sizing",
+        "The higher the leverage, the better",
+        "How accurate your predictions are"
+      ],
+      "answerIndex": 1,
+      "explanation": "Individual trade outcomes depend on the market, but long-term survival depends mainly on position sizing."
+    },
+    {
+      "stem": "In the 'Fixed Percentage Risk Method (e.g., 1%)', what does the '1%' refer to?",
+      "options": [
+        "Position size is 1% of total capital",
+        "Maximum loss of total capital at stop loss",
+        "Trading only 1% of the time per day",
+        "Leverage is 1%"
+      ],
+      "answerIndex": 1,
+      "explanation": "'1%' refers to the 'maximum loss percentage at stop loss', not the position percentage."
+    },
+    {
+      "stem": "How should position size be determined?",
+      "options": [
+        "Based on gut feeling",
+        "Position = Risk Amount ÷ Stop Loss Distance (Stop loss wider = smaller position)",
+        "The bigger, the better",
+        "Equal to the entire account balance"
+      ],
+      "answerIndex": 1,
+      "explanation": "Use stop loss to reverse-calculate position size to ensure constant single-trade risk; the wider the stop loss, the smaller the position, and vice versa."
+    }
+  ],
+  "F6": [
+    {
+      "stem": "What is the essence of trading 'Discipline'?",
+      "options": [
+        "Trade as frequently as possible",
+        "Execute according to pre-set rules, do not change your mind based on emotions at the last minute",
+        "Operate entirely on intuition",
+        "Always stay fully positioned"
+      ],
+      "answerIndex": 1,
+      "explanation": "Discipline = executing according to established rules; doing what you must do and stopping when you must stop, not being swayed by on-the-spot emotions."
+    },
+    {
+      "stem": "When the market has no opportunities that fit your system, what is the correct action?",
+      "options": [
+        "Must always maintain a position",
+        "Not trading is also a correct operation (frequently looking for trades is overtrading and a breach of discipline)",
+        "Pick any target and make a trade",
+        "The more frequently you trade, the better"
+      ],
+      "answerIndex": 1,
+      "explanation": "Overtrading is a typical breach of discipline; not trading when there are no opportunities is itself a correct operation."
+    }
+  ],
+  "F8": [
+    {
+      "stem": "What is the core philosophy of a Trend Trading System?",
+      "options": [
+        "Fishing for bottoms and tops, predicting turning points",
+        "Trade in the direction of the confirmed trend, do not guess the top or bottom",
+        "Buy as it falls, average down costs",
+        "Only trade back and forth within a range"
+      ],
+      "answerIndex": 1,
+      "explanation": "Trend trading = trading in the direction of the confirmed trend, not guessing tops and bottoms; only Long on upswings, only Short or avoid on downswings."
+    },
+    {
+      "stem": "In which market conditions is a Trend Trading System most prone to repeated stop losses?",
+      "options": [
+        "Trend market",
+        "Ranging market",
+        "Any market is the same",
+        "It will never stop loss"
+      ],
+      "answerIndex": 1,
+      "explanation": "Trend trading is prone to repeated stop losses in ranging markets; it has applicable market conditions, does not guarantee profit, and requires risk management."
+    }
+  ],
+  "F9": [
+    {
+      "stem": "What is the core approach of a Range Trading System?",
+      "options": [
+        "Chase breakouts",
+        "Sell high and buy low within the range (buy near support, sell near resistance)",
+        "Hold single-directionly without moving",
+        "Add positions as it rises"
+      ],
+      "answerIndex": 1,
+      "explanation": "Range trading = selling high and buying low within the range, provided the market is indeed ranging."
+    },
+    {
+      "stem": "What risk does a Range Trading System need to be most vigilant about?",
+      "options": [
+        "Almost no risk",
+        "Fake breakouts and 'getting trapped at trend start' (breakout direction is unpredictable), thus relying heavily on strict stop loss",
+        "Guaranteed profit",
+        "Funding rate"
+      ],
+      "answerIndex": 1,
+      "explanation": "The two major risks are fake breakouts and getting trapped at trend start; the breakout direction is unpredictable, so range trading relies heavily on strict stop loss."
+    }
+  ],
+  "F12": [
+    {
+      "stem": "What is the P&L characteristic of trend following strategies (also the hardest part)?",
+      "options": [
+        "High win rate, small profits on every trade",
+        "Win rate is often low, profits concentrated in a few major trends, requiring endurance of many small stop-losses",
+        "Never lose money",
+        "Win rate close to 100%"
+      ],
+      "answerIndex": 1,
+      "explanation": "Trend following has a low win rate, relies on a few major trends for profit, and requires enduring many small stop-losses; the difficulty lies in execution and mindset."
+    },
+    {
+      "stem": "What is the correct understanding of the 'Turtle Trading Rules'?",
+      "options": [
+        "Copying them now guarantees profit",
+        "It is a classic case of rule-based trend following, but the market has changed and past rules do not guarantee current effectiveness; it is for understanding the philosophy only",
+        "It is a holy grail for steady profits",
+        "It can predict tops and bottoms"
+      ],
+      "answerIndex": 1,
+      "explanation": "The Turtle Rules are for understanding the philosophy of rule-based trend following and cannot be copied blindly; past effectiveness does not imply future effectiveness."
+    },
+    {
+      "stem": "What is the common practice of trend following?",
+      "options": [
+        "Predict tops and bottoms, enter against the trend",
+        "Enter on breakouts or pullbacks in the trend direction, follow with a trailing stop, let profits run",
+        "Double down after a loss",
+        "Hold full position and refuse to stop loss"
+      ],
+      "answerIndex": 1,
+      "explanation": "Trend following = enter in trend direction + trailing stop + let profits run; do not predict tops and bottoms."
+    }
+  ],
+  "F13": [
+    {
+      "stem": "What is the essence of breakout trading?",
+      "options": [
+        "Enter in the trend direction when price breaks a key level (belongs to trend-following/right-side approach)",
+        "Buy the dip against the trend at a low level",
+        "Buy high and sell low within a range",
+        "Double down after a loss"
+      ],
+      "answerIndex": 0,
+      "explanation": "Breakout trading = enter in the trend direction when price breaks a key level; its essence is a trend-following/right-side approach."
+    },
+    {
+      "stem": "What is the biggest enemy of breakout strategies?",
+      "options": [
+        "Funding rate",
+        "False breakouts (brief breakout then retracts)",
+        "Trend markets",
+        "Low volatility"
+      ],
+      "answerIndex": 1,
+      "explanation": "False breakouts are the biggest enemy; confirmation can be improved with volume, closing price stability, and pullback tests, but no method can 100% eliminate them."
+    },
+    {
+      "stem": "After entering a breakout, where should the stop loss typically be placed?",
+      "options": [
+        "On the other side of the key level (where the breakout is invalidated)",
+        "As far away as possible",
+        "No stop loss at all",
+        "At the profit target"
+      ],
+      "answerIndex": 0,
+      "explanation": "Place the stop loss on the other side of the key level; if the price retracts (breakout invalidated), execute a strict stop loss."
+    }
+  ],
+  "F14": [
+    {
+      "stem": "What is the relationship between mean reversion strategies and trend following strategies?",
+      "options": [
+        "They are exactly the same",
+        "They are opposite worldviews (betting on reversion vs. betting on continuation), suitable for ranging/trend markets respectively",
+        "Both bet on trend continuation",
+        "They have no relationship"
+      ],
+      "answerIndex": 1,
+      "explanation": "Mean reversion bets on 'returning to the mean', while trend following bets on 'trend continuation'; they are opposite worldviews suitable for different market conditions."
+    },
+    {
+      "stem": "Mean reversion strategies have a 'fatal premise'; what is it?",
+      "options": [
+        "Must use leverage",
+        "The market must indeed be ranging; otherwise, if it is a trend, mean reversion against the trend will be crushed",
+        "Must trade with full position",
+        "Price will definitely return"
+      ],
+      "answerIndex": 1,
+      "explanation": "The fatal premise is that the market is indeed ranging; if a trend starts, you will be trapped, and the price may continue to deviate without guaranteeing a return (oversold can become more oversold)."
+    },
+    {
+      "stem": "What are the common tools used to measure 'how much price deviates from the mean'?",
+      "options": [
+        "Volume",
+        "MA deviation, Bollinger Bands (deviation from upper/lower bands), RSI overbought/oversold",
+        "Open Interest (OI)",
+        "Long/Short ratio"
+      ],
+      "answerIndex": 1,
+      "explanation": "Common tools include MA deviation, Bollinger Bands, and RSI to measure deviation; enter against the trend when deviating, take profit when returning to the mean, and strictly stop loss if deviation continues."
+    }
+  ],
+  "F15": [
+    {
+      "stem": "What is the principle of grid trading?",
+      "options": [
+        "Hold single-sidedly without moving",
+        "Layered orders within a range, mechanical buy high and sell low",
+        "Chase breakouts continuously",
+        "Predict tops and bottoms"
+      ],
+      "answerIndex": 1,
+      "explanation": "Grid = layered orders within a range, mechanical buy high and sell low, earning small profits from oscillations."
+    },
+    {
+      "stem": "What is the fatal weakness of grid trading?",
+      "options": [
+        "Ranging markets",
+        "Single-sided markets (single-sided down traps you deeper, single-sided up leaves you empty-handed; profit/loss asymmetry)",
+        "It has no weakness",
+        "Transaction fees"
+      ],
+      "answerIndex": 1,
+      "explanation": "The fatal weakness is single-sided markets, resulting in asymmetrical profit/loss (small wins, big losses); adding leverage to grid trading can lead to direct liquidation during single-sided moves, it is definitely not a 'lie flat and earn' strategy."
+    },
+    {
+      "stem": "What is the correct understanding of 'Martingale' (doubling down after a loss)?",
+      "options": [
+        "It is a method that never loses",
+        "It is more dangerous than grid trading: theoretically requires infinite capital, long-term almost inevitably encounters catastrophic drawdowns/liquidation, strongly not recommended",
+        "It has no risk",
+        "It is especially suitable for beginners"
+      ],
+      "answerIndex": 1,
+      "explanation": "Martingale requires infinite capital and almost inevitably leads to liquidation/bankruptcy in the long run; it is absolutely not a viable strategy and strongly not recommended."
+    }
+  ],
+  "F16": [
+    {
+      "stem": "Regarding the distinction between left-side and right-side trading, which of the following is correct?",
+      "options": [
+        "Left side = enter after confirmation, Right side = layout in advance",
+        "Left side = layout before confirmation (against the trend), Right side = enter after confirmation (in the trend)",
+        "They are the same thing",
+        "Both are against-the-trend trading"
+      ],
+      "answerIndex": 1,
+      "explanation": "Left side = layout before confirmation (against the trend, bottom fishing/top picking), Right side = enter after confirmation (following the trend)."
+    },
+    {
+      "stem": "What is the correct understanding of 'bottom fishing'?",
+      "options": [
+        "With the right method, you can precisely catch the bottom",
+        "Left-side bottom fishing is extremely risky during a decline; no method can precisely catch the bottom or top (tops and bottoms are only known after the fact)",
+        "Bottom fishing is steady profit",
+        "Can precisely predict turning points"
+      ],
+      "answerIndex": 1,
+      "explanation": "Left-side bottom fishing is extremely risky, cannot precisely catch bottoms or tops, and does not predict turning points; stop loss must be used regardless of left or right side."
+    }
+  ],
+  "F17": [
+    {
+      "stem": "What is the core meaning of \"No Holy Grail\"?",
+      "options": [
+        "There exists a strongest strategy that profits in all market conditions",
+        "No strategy exists that can profit consistently in all markets and at all times",
+        "Finding the Holy Grail guarantees easy profits",
+        "Chan Theory is that Holy Grail"
+      ],
+      "answerIndex": 1,
+      "explanation": "No Holy Grail: Every strategy has applicable boundaries, and effectiveness decays over time."
+    },
+    {
+      "stem": "Since there is no Holy Grail, what is the true core competency of trading?",
+      "options": [
+        "Continuously searching for the strongest single strategy",
+        "Identifying market environment + using the right strategy in the right environment + using a complete system to compensate for the limitations of a single strategy (and accepting that identification can also be wrong)",
+        "Increasing leverage",
+        "Frequently switching strategies"
+      ],
+      "answerIndex": 1,
+      "explanation": "The core competency is identifying the environment, matching the strategy to the environment, using a system to compensate for limitations, and accepting that 'identifying the environment can also be wrong'."
+    }
+  ],
+  "F21": [
+    {
+      "stem": "What is the basic idea of funding rate arbitrage?",
+      "options": [
+        "Longing with heavy single-side position to earn funding rates",
+        "Holding opposite-direction, equal-scale spot + contract positions to hedge directional risk and only earn funding rates",
+        "Chasing breakouts all the way",
+        "Doubling position size after a loss"
+      ],
+      "answerIndex": 1,
+      "explanation": "Funding rate arbitrage = Spot + Contract hedge (delta neutral), hedging directional risk to earn only funding rates."
+    },
+    {
+      "stem": "What is the correct understanding of the risks of funding rate arbitrage?",
+      "options": [
+        "It is true risk-free arbitrage",
+        "It swaps directional risk for a basket of risks: basis fluctuation, liquidation (fatal if contract leg is liquidated), reverse funding rates, costs, liquidity, etc.",
+        "It has absolutely no risk",
+        "It has huge returns and is risk-free"
+      ],
+      "answerIndex": 1,
+      "explanation": "Arbitrage is never risk-free; among the five major risks, liquidation of the contract leg is the most fatal; returns are thin while risks are real."
+    },
+    {
+      "stem": "In a 'positive funding rate' market, how should one position to earn funding rates?",
+      "options": [
+        "Hold contract Long to pay fees",
+        "Hold contract Short to earn fees, hedge direction with spot Long",
+        "Only do spot",
+        "Only do contract Long"
+      ],
+      "answerIndex": 1,
+      "explanation": "Positive funding rate = Long pays Short, therefore hold contract Short to earn fees and hedge direction with spot Long (practical implementation is more complex)."
+    }
+  ],
+  "F22": [
+    {
+      "stem": "To protect existing spot Longs while fearing a short-term drop, what is the basic hedging structure?",
+      "options": [
+        "Buy more spot",
+        "Spot Long + Contract Short (Short floating profit offsets Spot floating loss during a drop)",
+        "Spot Long + Contract Long",
+        "Directly close position"
+      ],
+      "answerIndex": 1,
+      "explanation": "Spot Long + Contract Short: During a drop, the Short floating profit offsets the Spot floating loss (protection); during a rise, profits are also hedged away (cost), essentially locking volatility."
+    },
+    {
+      "stem": "What is the correct understanding of hedging/insurance?",
+      "options": [
+        "Hedging eliminates all risk and has no cost",
+        "Hedging reduces directional risk but does not eliminate all risk, and has a cost (opportunity cost, funding rates, contract leg liquidation means insurance fails)",
+        "Hedging is a guaranteed profit",
+        "Hedging has no cost"
+      ],
+      "answerIndex": 1,
+      "explanation": "Hedging reduces directional risk but does not eliminate all risks; there is opportunity cost, funding rates, and if the contract leg is liquidated, the 'insurance' fails."
+    }
+  ],
+  "F23": [
+    {
+      "stem": "In contracts, how is profit and loss calculated?",
+      "options": [
+        "Calculated based on margin usage",
+        "Calculated based on Notional Exposure (= Margin × Leverage)",
+        "Calculated based on account total",
+        "Calculated based on trading fees"
+      ],
+      "answerIndex": 1,
+      "explanation": "P&L is calculated based on Notional Exposure, not Margin; 'Only invest 1000, max loss 1000' is a fatal misconception."
+    },
+    {
+      "stem": "How to correctly apply the 1% Risk Rule to contracts?",
+      "options": [
+        "Maximize leverage first",
+        "Max loss per trade is 1% → Notional Exposure = Risk Amount ÷ Stop Loss Distance; Leverage only determines margin usage, not single-trade loss",
+        "Leverage directly determines single-trade loss",
+        "The larger the position, the better"
+      ],
+      "answerIndex": 1,
+      "explanation": "First determine 1% risk, then reverse-calculate Notional Exposure; Leverage only determines margin usage, not single-trade loss, so you cannot maximize leverage first."
+    },
+    {
+      "stem": "What should be the relationship between leverage and stop loss to prevent liquidation?",
+      "options": [
+        "The higher the leverage, the better",
+        "Use sufficiently low leverage to ensure the liquidation price is far from the stop loss price (ensuring the stop loss always triggers before liquidation)",
+        "Stop loss can be set after the liquidation price",
+        "Ignore leverage completely"
+      ],
+      "answerIndex": 1,
+      "explanation": "Excessive leverage leads to 'liquidation before stop loss', invalidating the 1% Risk Rule; use low leverage to ensure the liquidation price is far from the stop loss price."
+    }
+  ],
+  "F24": [
+    {
+      "stem": "What is the common core of these five errors: full position high leverage, holding positions without stop loss, ignoring funding rates, overtrading, treating contracts like a casino?",
+      "options": [
+        "In contracts, these are all amplified by leverage into fatal wounds (contracts amplify the 'cost of mistakes')",
+        "They are all trivial issues",
+        "They are actually profitable",
+        "They are unrelated to leverage"
+      ],
+      "answerIndex": 0,
+      "explanation": "These errors may be minor issues in spot, but in contracts they are amplified by leverage into fatal wounds—contracts amplify the 'cost of mistakes'."
+    },
+    {
+      "stem": "What is the most recommended way to avoid these contract practical errors?",
+      "options": [
+        "Go straight to high leverage live trading to practice",
+        "First make these mistakes zero-cost in a virtual environment + discipline execution + respect for risk",
+        "Simply do not set a stop loss",
+        "The more frequent the trading, the better"
+      ],
+      "answerIndex": 1,
+      "explanation": "It is recommended to first make mistakes zero-cost in a virtual environment + discipline execution + respect for risk; corresponding discipline: low leverage, strict stop loss, position control, restraint from overtrading."
+    }
+  ],
+  "C1-6": [
+    {
+      "stem": "Regarding the 'level' of buy and sell points, which of the following is correct?",
+      "options": [
+        "Buy and sell points have no distinction in level",
+        "The level of a buy or sell point is determined by the level of the Divergence that produced it; larger-level buy and sell points have stronger momentum than smaller-level ones",
+        "Smaller-level buy and sell points are definitely stronger",
+        "The level of a buy or sell point equals the daily time cycle"
+      ],
+      "answerIndex": 1,
+      "explanation": "Buy and sell point level = the level of the Divergence that produced it; the larger the level, the stronger the momentum and the larger the corresponding amplitude. Using smaller-level buy and sell points for large positions is a level mismatch."
+    }
+  ],
+  "C1-7": [
+    {
+      "stem": "When using MACD to judge 'Divergence', what is the main focus?",
+      "options": [
+        "Red and green bar area expanding",
+        "Yellow and white lines (DIF/DEA) pullback + red and green bar area shrinking",
+        "Appearance of Golden cross",
+        "Price hitting a new high counts as Divergence"
+      ],
+      "answerIndex": 1,
+      "explanation": "Divergence is the exhaustion of momentum, judged by the yellow and white lines pullback + red and green bar area shrinking; bar area expansion is precisely an increase in momentum."
+    },
+    {
+      "stem": "Regarding 'Divergence', which of the following understandings is correct?",
+      "options": [
+        "Divergence will immediately reverse and top out with a guaranteed fall",
+        "Divergence is a reference for exhaustion of momentum in the same direction, not equal to an immediate reversal, and can stagnate",
+        "Divergence can precisely predict the timing of reversal",
+        "Divergence will definitely create a major move"
+      ],
+      "answerIndex": 1,
+      "explanation": "Divergence is only a reference for momentum exhaustion and does not equal an immediate reversal; it can stagnate in strong trends; further structural confirmation is required."
+    }
+  ],
+  "C1-8": [
+    {
+      "stem": "When looking at the Second Buy Point and Third Buy Point together, what is the difference in their 'personality'?",
+      "options": [
+        "2 Buy is on the left (early, cheap, low confirmation), 3 Buy is on the right (late, expensive, high confirmation)",
+        "2 Buy is on the right, 3 Buy is on the left",
+        "They are completely the same",
+        "2 Buy is definitely safer and more profitable than 3 Buy"
+      ],
+      "answerIndex": 0,
+      "explanation": "2 Buy is on the left (near the bottom, early, cheap but low confirmation, high risk), 3 Buy is on the right (after breaking the Central Hub, late, expensive but high confirmation), corresponding to the trade-off between left and right."
+    }
+  ],
+  "C1-9": [
+    {
+      "stem": "Regarding the relationship between 'level' and 'time cycle (1m/5m/Daily)', which is correct?",
+      "options": [
+        "Level is the time cycle, 5-minute level = 5-minute chart",
+        "Level is the size derived from the recursive structure of the trend, while the time cycle is the viewing scale of the chart; they can be related but cannot be equated",
+        "They have no relationship",
+        "The larger the level, the shorter the time cycle"
+      ],
+      "answerIndex": 1,
+      "explanation": "Level is the size derived from the recursive structure of the trend, while the cycle is just the viewing scale of the chart; multiple level structures can be nested within the same cycle chart; they can be approximated but are not equal."
+    },
+    {
+      "stem": "What is the core approach of 'multi-level joint analysis'?",
+      "options": [
+        "Large level determines direction and sets the range, small level finds the precise entry",
+        "Small level determines direction, large level finds the entry",
+        "Looking at just one level is enough",
+        "The more levels, the more accurate; just look at them all"
+      ],
+      "answerIndex": 0,
+      "explanation": "Joint analysis = large level determines direction, small level finds the entry (large level as primary, small level as auxiliary); each performs its own function."
+    }
+  ],
+  "C1-10": [
+    {
+      "stem": "Regarding 'level resonance' (multi-level same direction), which of the following understandings is correct?",
+      "options": [
+        "Resonance = guaranteed profit, inevitable reversal or launch",
+        "Multi-level same direction means the combined force is stronger, making the opportunity relatively higher, but it is not a guarantee (they could be wrong together)",
+        "When resonance appears, one should go all in",
+        "Resonance can precisely predict the amplitude"
+      ],
+      "answerIndex": 1,
+      "explanation": "Resonance is the superposition of multi-level forces, a reference with relatively higher probability, but still a probability, not a guarantee; multi-levels can also be wrong together."
+    }
+  ],
+  "C1-1": [
+    {
+      "stem": "When segmenting segments and determining if they have ended, what constitutes the 'Feature Sequence'?",
+      "options": [
+        "Strokes in the same direction as the segment",
+        "Strokes in the opposite direction to the segment (downward strokes for upward segments)",
+        "Several Moving Averages",
+        "Every single candlestick within the segment"
+      ],
+      "answerIndex": 1,
+      "explanation": "The Feature Sequence consists of strokes in the opposite direction to the segment (downward strokes for upward segments), used to capture the counter-force; taking strokes in the same direction is a common error."
+    },
+    {
+      "stem": "How is the 'Second Type of Destruction' (a gap between the 1st and 2nd elements of the Feature Sequence Fractal) determined?",
+      "options": [
+        "Confirm the end of the segment immediately when the first Fractal forms",
+        "Need a reverse Feature Sequence Fractal to appear again starting from the extreme point to confirm",
+        "Confirm as long as the price creates a new high",
+        "No confirmation is needed at all"
+      ],
+      "answerIndex": 1,
+      "explanation": "A gap constitutes the Second Type of Destruction, which requires a reverse Feature Sequence Fractal to confirm; immediate confirmation upon the first Fractal forming applies to the 'No Gap' First Type of Destruction."
+    }
+  ],
+  "C1-2": [
+    {
+      "stem": "In practice, distinguishing between the 'Extension' and 'Expansion' of a Central Hub, what is the first thing to look at?",
+      "options": [
+        "The magnitude of price fluctuation",
+        "Whether a Third Type Buy/Sell point appears (No = Extension; Appears then returns to Hub = Expansion)",
+        "The duration of the movement",
+        "The size of the trading volume"
+      ],
+      "answerIndex": 1,
+      "explanation": "Distinguish first by the presence of a Third Type Buy/Sell point: absence indicates Extension (repeatedly circling the Hub); presence followed by a return to the original Hub range indicates Expansion."
+    }
+  ],
+  "C1-3": [
+    {
+      "stem": "In the scenario of 'Extension', after how many segments of repeated movement does the Central Hub upgrade to a higher level?",
+      "options": [
+        "The 3rd segment",
+        "The 5th segment",
+        "The 7th segment",
+        "The 9th segment"
+      ],
+      "answerIndex": 3,
+      "explanation": "The Central Hub upgrades only after extending to 9 segments; 5 segments and 7 segments are still merely extensions and have not yet upgraded."
+    }
+  ],
+  "C1-4": [
+    {
+      "stem": "In Chan Theory, which of the following situations belongs to 'Consolidation'?",
+      "options": [
+        "The trend contains only one Central Hub of that level",
+        "The trend contains two or more sequentially same-direction Central Hubs",
+        "The trend contains no Central Hub at all",
+        "The price is completely static"
+      ],
+      "answerIndex": 0,
+      "explanation": "Consolidation = contains only 1 Central Hub of that level; ≥2 sequentially same-direction Central Hubs constitute a Trend."
+    },
+    {
+      "stem": "In Chan Theory, what is the essence of an 'Upward Trend'?",
+      "options": [
+        "The price creates a new high once arbitrarily",
+        "As long as the Moving Average is upward",
+        "Two or more sequentially rising Central Hubs (succession of Hubs)",
+        "A consolidation containing only one Central Hub"
+      ],
+      "answerIndex": 2,
+      "explanation": "Upward Trend = ≥2 sequentially rising Central Hubs, a 'succession of Hubs'; a single Central Hub is merely Consolidation; creating a new high once does not equal a Trend."
+    }
+  ],
+  "C1-5": [
+    {
+      "stem": "In practice, what is the First Type Buy point most often misjudged as?",
+      "options": [
+        "Treating a pullback in a downtrend as the 1st Buy (no true Divergence, resulting in catching a falling knife)",
+        "Treating a breakout of the Central Hub as the 1st Buy",
+        "Treating a new high as the 1st Buy",
+        "Treating a sideways move as the 1st Buy"
+      ],
+      "answerIndex": 0,
+      "explanation": "The 1st Buy requires a Trend Divergence as a prerequisite; treating a pullback in a downtrend as the 1st Buy (without true Divergence) to catch the bottom is the most common and fatal misjudgment."
+    },
+    {
+      "stem": "What is the structural condition for the Third Type Buy point?",
+      "options": [
+        "Price breaks through the Central Hub and pulls back, without pulling back into the Hub (not breaking the Hub's upper edge ZG)",
+        "The pullback falls back into the Hub range",
+        "Price moves back and forth inside the Central Hub",
+        "Price creates a new low"
+      ],
+      "answerIndex": 0,
+      "explanation": "3rd Buy = Break through Hub and pull back without re-entering Hub (not breaking Hub's upper edge ZG); if the pullback falls back into the Hub, the 3rd Buy does not hold."
+    }
+  ],
+  "C1-11": [
+    {
+      "stem": "Which of the following is the most common and fatal low-level flaw regarding 'Central Hub' in Chan Theory?",
+      "options": [
+        "Taking the upper boundary as the minimum of the three highs and the lower boundary as the maximum of the three lows",
+        "Taking the upper boundary as the maximum of the three highs and the lower boundary as the minimum of the three lows (reversed)",
+        "Constructing the Central Hub with the overlapping area of three sub-level trends",
+        "Understanding the Central Hub as a consolidation area of long and short balance"
+      ],
+      "answerIndex": 1,
+      "explanation": "The correct values are Upper Boundary ZG = minimum of three highs, Lower Boundary ZD = maximum of three lows; taking it as 'high maximum, low minimum' is the fatal flaw of reversal."
+    }
+  ],
+  "C1-12": [
+    {
+      "stem": "Regarding the relationship between Chan Theory and traditional technical analysis (MA, MACD), which statement is correct?",
+      "options": [
+        "Chan Theory is supreme and should completely replace traditional indicators",
+        "They are mutually exclusive and cannot be used simultaneously",
+        "They are not mutually exclusive and can be used together (e.g., MACD is itself a tool for Chan Theory to identify Divergence), each has its strengths",
+        "Stacking Chan Theory + MA + MACD + RSI will definitely be accurate"
+      ],
+      "answerIndex": 2,
+      "explanation": "Chan Theory excels in structure, while traditional indicators excel in intuitive momentum; they can be used together (MACD is itself a tool for Chan Theory to identify Divergence); however, multiple tools only improve the chance of catching moves, not eliminating misjudgments."
+    }
+  ],
+  "C1-13": [
+    {
+      "stem": "How should the 'completion' of a trend type in Chan Theory be understood?",
+      "options": [
+        "Completion means an immediate turn and violent reversal",
+        "It is the end of a structural paragraph, which must be followed by a counter-trend or consolidation, not necessarily an immediate violent reversal",
+        "Completion definitely means a big rise or a big drop",
+        "Completion is a buy or sell order"
+      ],
+      "answerIndex": 1,
+      "explanation": "The 'completion' of a trend is the end of a structural paragraph, which must be followed by a counter-trend or consolidation; trend completion is often accompanied by Divergence, but does not equal an immediate and violent reversal."
+    },
+    {
+      "stem": "Regarding 'Thousand People, Thousand Chan', which cognition is correct?",
+      "options": [
+        "Chan Theory has no standards, drawing it any way is correct",
+        "Disagreements mainly appear in boundary cases and have limited impact; whereas basic skills (values, Stroke conditions) have standards and cannot be drawn arbitrarily",
+        "Thousand People, Thousand Chan shows Chan Theory is useless",
+        "Disagreement means predictions can be made arbitrarily"
+      ],
+      "answerIndex": 1,
+      "explanation": "Thousand People, Thousand Chan mainly occurs in complex boundary areas and has limited impact on operations; basic skills like Stroke conditions and Central Hub values have clear standards and cannot be drawn arbitrarily."
+    }
+  ],
+  "C1-14": [
+    {
+      "stem": "What is the correct process for using Chan Theory to fully deduce a market move, from bottom to top?",
+      "options": [
+        "First find buy/sell points, then go back to draw Strokes and Central Hubs",
+        "First look at MA direction, then decide buy/sell points",
+        "K-line inclusion processing → Fractal → Stroke → Segment → Central Hub → Determine trend type → Mark buy/sell points",
+        "Judge the trend directly by feeling"
+      ],
+      "answerIndex": 2,
+      "explanation": "Chan Theory is a bottom-up structural analysis: first do K-line inclusion, then Fractal → Stroke → Segment → Central Hub → Determine trend type → Mark buy/sell points; skipping steps leads to errors at every level."
+    }
+  ],
+  "C1-15": [
+    {
+      "stem": "When deducing a downward market move, what is the structural condition for the Third Type Sell point (mirror of 3 Buy)?",
+      "options": [
+        "Price breaks below the Central Hub and rebounds, but the rebound does not re-enter the Central Hub (does not break the Central Hub's lower boundary ZD)",
+        "The rebound rises back into the Central Hub range",
+        "The rebound does not break the Central Hub's upper boundary ZG",
+        "Price creates a new high"
+      ],
+      "answerIndex": 0,
+      "explanation": "3 Sell = breaking below the Central Hub and rebounding without re-entering the Central Hub (not breaking the Central Hub's lower boundary ZD), mirroring the 3 Buy 'not breaking the upper boundary ZG'."
+    }
+  ],
+  "C1-16": [
+    {
+      "stem": "How does Chan Theory handle Consolidation vs. Trend?",
+      "options": [
+        "Follow the trend in both",
+        "Follow the trend for trends, use range handling for consolidation (don't force a trend direction inside the range)",
+        "Consolidation should also chase breakouts",
+        "The handling methods are completely the same"
+      ],
+      "answerIndex": 1,
+      "explanation": "Follow the trend for trends and let profits run; for consolidation, use range handling and don't use trend-following logic to force a trend direction, otherwise you will be whipped back and forth by the range."
+    },
+    {
+      "stem": "The same price action has different interpretations at different levels (ambiguity). What does this indicate?",
+      "options": [
+        "This is a Chan Theory bug, showing it is unreliable",
+        "This comes from recursive levels (multi-scale nesting of market structure), it is a feature not a bug, and handling relies on defining the operation level first",
+        "It shows someone divided the price action incorrectly",
+        "It shows Chan Theory allows arbitrary prediction"
+      ],
+      "answerIndex": 1,
+      "explanation": "Ambiguity comes from recursive levels and is a feature of multi-scale nesting of market structure; interpretations at different levels are valid within their own levels, the key is to unify them on your own operation level."
+    },
+    {
+      "stem": "What are the three possible evolutions after a Divergence?",
+      "options": [
+        "Only reversal",
+        "Reversal, Consolidation, Continuation (Stagnation)",
+        "Must reverse, cannot continue",
+        "Only reversal and continuation"
+      ],
+      "answerIndex": 1,
+      "explanation": "There are three evolutions after a Divergence: reversal, turning into consolidation, or continuing in the original direction after stagnation; this proves that Divergence does not equal reversal."
+    },
+    {
+      "stem": "What is the practical implication of 'three evolutions after Divergence'?",
+      "options": [
+        "Divergence is a reversal guarantee, go against the trend with heavy positions",
+        "Divergence is not a reversal guarantee, wait for further structural confirmation and pair with a stop loss (to guard against 'continuation')",
+        "After Divergence, it must consolidate",
+        "When Divergence appears, go all-in in the opposite direction"
+      ],
+      "answerIndex": 1,
+      "explanation": "Since there are three evolutions and you don't know which one beforehand, you cannot treat Divergence as a reversal guarantee to trade against the trend with heavy positions; you must wait for confirmation and pair it with a stop loss."
+    },
+    {
+      "stem": "What is the sign that the 'Third Type Buy Point' fails?",
+      "options": [
+        "The pullback does not break the Central Hub's upper boundary ZG (structure is valid)",
+        "The pullback falls back into the Central Hub interval (breaks the Central Hub's upper boundary ZG)",
+        "The price creates a new high",
+        "Volume expands"
+      ],
+      "answerIndex": 1,
+      "explanation": "The condition for a 3 Buy is that the pullback does not return to the Central Hub; once the pullback falls back into the Central Hub (breaks ZG), it indicates the breakout was not stable and the 3 Buy is invalid."
+    },
+    {
+      "stem": "What is the correct response when a trading point fails?",
+      "options": [
+        "Add to the position and hold it out",
+        "Immediately reverse and trade back aggressively",
+        "Stop loss / Admit mistake first (don't hold on stubbornly), then review, no retaliatory trading",
+        "Pretend not to see it and continue holding"
+      ],
+      "answerIndex": 2,
+      "explanation": "Trading points can fail; when they fail, stopping loss and admitting the mistake comes first (don't hold on stubbornly), then review to distinguish between a judgment error and an execution error, and absolutely do not engage in retaliatory trading."
+    },
+    {
+      "stem": "Chan Theory's 'Probability Thinking' tells us that Chan Theory provides what?",
+      "options": [
+        "An accurate answer for every trade",
+        "Structure and probability, not certainty and prediction",
+        "Precise prediction of tops and bottoms",
+        "A guarantee of steady profits"
+      ],
+      "answerIndex": 1,
+      "explanation": "Chan Theory provides structure and relative probability, not certainty; the failure of buy/sell points, the three evolutions of Divergence, and the ambiguity of price action all confirm this."
+    },
+    {
+      "stem": "What is the fundamental difference between 'Probability Thinking' and 'Gambler Thinking'?",
+      "options": [
+        "Probability thinking bets on this one being a hit, doubling down if lost",
+        "Probability thinking accepts single-trial uncertainty, controls risk, and relies on long-term probability and compound interest; Gambler thinking bets on certainty, doubling down if lost",
+        "They are actually the same",
+        "Gambler thinking is more robust"
+      ],
+      "answerIndex": 1,
+      "explanation": "Probability thinking acknowledges and manages uncertainty, relying on long-term probabilistic advantage; Gambler thinking denies uncertainty, bets on this one, and doubles down if lost, eventually going bust."
+    }
+  ],
+  "C2-6": [
+    {
+      "stem": "In a trend, how should you trade contracts? Which combination is correct?",
+      "options": [
+        "Full position, high leverage, aiming for the highest point, guaranteed profit",
+        "Trend following + low leverage (holdable) + trailing stop + partial take profit; not selling at the highest point is normal, and profit is not guaranteed",
+        "Fighting the trend to catch the bottom, no stop loss",
+        "Heavy position, all-in"
+      ],
+      "answerIndex": 1,
+      "explanation": "The 'Trend Four-Piece Set' is trend following + low leverage (holdable) + trailing stop + partial take profit; a trailing stop inevitably gives up the top section, not selling at the highest point is normal, and the method does not guarantee profit."
+    }
+  ],
+  "C2-7": [
+    {
+      "stem": "Regarding the 'Long and Short' nature of contracts, what is the correct understanding?",
+      "options": [
+        "Long and Short = eating from both ends, guaranteed profit",
+        "Long and Short provides flexibility, not guaranteed profit; you can be wrong in either direction and must stop loss independently; for Short, liquidation price is above entry price",
+        "Shorting has no risk",
+        "If you made money in the previous trade, blindly reverse and go heavy"
+      ],
+      "answerIndex": 1,
+      "explanation": "Long and Short provides flexibility, not eating from both ends; independent judgment and stop loss for each direction; for Short, liquidation price is above entry price, risk is symmetric."
+    }
+  ],
+  "C2-8": [
+    {
+      "stem": "When adding to positions while in profit (and conveniently adding leverage), what is the biggest risk?",
+      "options": [
+        "Adding to profit is a sure win",
+        "Exposure rolls larger and average cost rises; a normal pullback can give back all floating profit or lead to liquidation; floating profit is not capital for unlimited adding",
+        "The more you add, the safer",
+        "Adding to positions improves win rate"
+      ],
+      "answerIndex": 1,
+      "explanation": "Floating profit is unrealized paper numbers; adding recklessly at higher levels (and adding leverage) increases exposure and brings you closer to liquidation, which is the most severe backlash during a pullback."
+    }
+  ],
+  "C2-9": [
+    {
+      "stem": "Why is emotional trading (revenge heavy position, FOMO chasing highs) particularly terrifying in contracts?",
+      "options": [
+        "Emotional trading helps you recover losses",
+        "Leverage amplifies the cost of emotional operations; losses snowball and the account shrinks rapidly",
+        "Revenge heavy position is an effective strategy",
+        "FOMO chasing highs usually makes money"
+      ],
+      "answerIndex": 1,
+      "explanation": "In contracts, leverage amplifies not just profit and loss, but the consequences of emotional operations; stop and review after losses, set a daily maximum loss cap, and rely on rules and discipline to counter emotions."
+    }
+  ],
+  "C2-10": [
+    {
+      "stem": "In a complete contract trading plan, how is 'leverage' determined?",
+      "options": [
+        "Set leverage to max, open as large as possible",
+        "First determine max 1% loss per trade, reverse-calculate nominal exposure based on stop loss, then choose a sufficiently low leverage (ensuring liquidation price is far from stop loss)",
+        "The higher the leverage, the better",
+        "Randomly choose a multiplier"
+      ],
+      "answerIndex": 1,
+      "explanation": "Risk first: determine 1% risk, reverse-calculate exposure based on stop loss, then back-calculate leverage; leverage is a calculated result that only determines margin usage, not single-trade loss."
+    }
+  ],
+  "C3-1": [
+    {
+      "stem": "In which market conditions are moving average strategies most easily invalidated (repeatedly fail)?",
+      "options": [
+        "Uptrend markets",
+        "Ranging markets (frequent golden/death crosses, many false signals)",
+        "Works the same in any market",
+        "It predicts and almost never fails"
+      ],
+      "answerIndex": 1,
+      "explanation": "Moving average strategies apply to trends and fail in ranging markets (frequent golden/death crosses and many false signals); they also have lag and do not guarantee profit."
+    }
+  ],
+  "C3-2": [
+    {
+      "stem": "What does the 'MACD Golden Cross' refer to?",
+      "options": [
+        "Short-term MA crosses above long-term MA",
+        "DIF crosses above DEA (histogram turns from green to red)",
+        "Price crosses above the zero line",
+        "Red histogram gets longer"
+      ],
+      "answerIndex": 1,
+      "explanation": "MACD Golden Cross = DIF crosses above DEA; the protagonists are the DIF/DEA lines, not MAs; 'Short-term MA crosses above long-term MA' is the MA Golden Cross."
+    }
+  ],
+  "C3-3": [
+    {
+      "stem": "What are the profit and loss characteristics of trend-following strategies?",
+      "options": [
+        "High win rate, small profits on every trade",
+        "Win rate is often low; profits are concentrated in a few major trends, requiring you to endure many small stop-losses in between",
+        "Never incur losses",
+        "Win rate is close to 100%"
+      ],
+      "answerIndex": 1,
+      "explanation": "Trend-following strategies win by high risk-reward ratios and low win rates, requiring you to endure consecutive small stop-losses; the difficulty lies in execution and mindset, not analysis."
+    }
+  ],
+  "C3-4": [
+    {
+      "stem": "What is the biggest enemy (core risk) of breakout strategies?",
+      "options": [
+        "Funding rate",
+        "False breakouts (price retracts after breaking out, frequent in ranging markets)",
+        "Low volatility",
+        "It has almost no risk"
+      ],
+      "answerIndex": 1,
+      "explanation": "False breakouts are the biggest risk for breakout strategies; they can be filtered with volume/holding close, and stop-losses set on the other side of the breakout level, but cannot be 100% eliminated."
+    }
+  ],
+  "C3-5": [
+    {
+      "stem": "How are the upper and lower bands of Bollinger Bands calculated?",
+      "options": [
+        "Middle Band ± K times Standard Deviation (K is commonly 2, symmetric), Middle Band is the Moving Average",
+        "Middle Band ± fixed number of points",
+        "It is simply the highest and lowest prices over a period",
+        "Middle Band ± K times Volume"
+      ],
+      "answerIndex": 0,
+      "explanation": "Upper and lower bands = Middle Band ± K times Standard Deviation (K is commonly 2, symmetric), Middle Band is the Moving Average; Standard Deviation reflects volatility, so the channel 'breathes'."
+    },
+    {
+      "stem": "In what environment does the Bollinger Band 'mean reversion' usage fail?",
+      "options": [
+        "It fails in ranging markets",
+        "It fails in strong trends (price runs along the upper or lower band without returning; touching the band is not a reversal signal)",
+        "It is effective in any environment",
+        "It only fails when the bands contract"
+      ],
+      "answerIndex": 1,
+      "explanation": "In strong trends, price runs along the bands without returning to the middle band; 'shorting at the upper band / longing at the lower band' will be invalidated at that time; touching the band is a positional reference, not a reversal signal."
+    }
+  ],
+  "C2-1": [
+    {
+      "stem": "For the same market move and the same correct direction, why can a low-leverage position be held, while a high-leverage position gets liquidated?",
+      "options": [
+        "High leverage makes judgment more accurate",
+        "High leverage liquidation price is close to entry price; a normal pullback in a trend touches liquidation and gets eliminated early",
+        "Low leverage actually means the direction was wrong",
+        "It is purely a difference in luck"
+      ],
+      "answerIndex": 1,
+      "explanation": "Leverage does not change the correctness of direction, only whether you can hold: high leverage liquidation price is close to entry price, a normal pullback is enough to liquidate and exit."
+    },
+    {
+      "stem": "What is the essence of leverage best illustrated by this case?",
+      "options": [
+        "Leverage only amplifies profit, not loss",
+        "Leverage amplifies both ways—amplifying profit while equally amplifying loss, and compressing the margin of error, potentially leading to liquidation",
+        "Leverage can improve win rate",
+        "The higher the leverage, the safer"
+      ],
+      "answerIndex": 1,
+      "explanation": "Leverage is a double-edged sword: amplifying profit inevitably amplifies loss equally, and compresses the margin of error to a small space, potentially leading to liquidation."
+    }
+  ],
+  "C2-2": [
+    {
+      "stem": "When both misjudge the direction, the gap between C setting a stop loss and exiting by discipline, and D holding the order until liquidation, mainly comes from?",
+      "options": [
+        "C's judgment was actually more accurate",
+        "Discipline: C exits with a small loss actively, while D leaves the decision to the market and loses passively; also, stop loss must be set before the liquidation price",
+        "Good or bad luck",
+        "C used higher leverage"
+      ],
+      "answerIndex": 1,
+      "explanation": "Both misjudged, the gap is discipline: a stop loss (set before liquidation) lets you exit with a small loss actively, while holding the order means passively holding until liquidation and losing everything."
+    },
+    {
+      "stem": "When Long, where should the stop loss price be set?",
+      "options": [
+        "Before the liquidation price (the less extreme side), to exit with a small loss actively",
+        "Exactly equal to the liquidation price",
+        "At a more extreme side than the liquidation price",
+        "Simply not set a stop loss"
+      ],
+      "answerIndex": 0,
+      "explanation": "Stop loss must be set before the liquidation price: exiting with a small loss actively is always better than passively holding until liquidation and losing everything."
+    }
+  ],
+  "C2-3": [
+    {
+      "stem": "In a market with positive funding rates, if you Long a contract for the long term even if the price stays still, what happens?",
+      "options": [
+        "Nothing will be lost if it doesn't move",
+        "It will be continuously eroded by funding fees (Long pays Short, calculated on nominal exposure); it is a holding cost",
+        "Funding fees are platform transaction fees and have nothing to do with profit or loss",
+        "When funding rates are positive, Longs continuously receive fees"
+      ],
+      "answerIndex": 1,
+      "explanation": "Positive funding rate = Long pays Short; Longing for the long term pays fees every period (calculated on exposure); even if price doesn't move, it is continuously eroded; this is a holding cost, not a platform transaction fee."
+    }
+  ],
+  "C2-4": [
+    {
+      "stem": "Regarding how liquidation occurs, the correct understanding is?",
+      "options": [
+        "Liquidation is a sudden drop from the sky, impossible to prevent",
+        "Liquidation is approached step by step; every step in the middle is actually an opportunity to exit with a stop loss",
+        "Liquidation has nothing to do with leverage and stop loss",
+        "As long as you don't watch the chart, you won't be liquidated"
+      ],
+      "answerIndex": 1,
+      "explanation": "Liquidation is when margin is eaten away step by step; every step in the middle is a stop loss opportunity; the root cause is excessive leverage + no stop loss."
+    },
+    {
+      "stem": "Why is actual forced liquidation often triggered earlier than the 'theoretical liquidation price' calculated by the formula?",
+      "options": [
+        "The exchange deliberately traps people in advance",
+        "Because there is a maintenance margin rate: liquidation triggers when remaining margin touches the maintenance line, combined with transaction fees, funding fees, and slippage",
+        "Because the price is calculated wrong",
+        "It does not actually happen earlier"
+      ],
+      "answerIndex": 1,
+      "explanation": "The maintenance margin rate triggers liquidation before 'going broke', and combined with various fees, actual liquidation is often earlier than the theoretical liquidation price."
+    }
+  ],
+  "C2-5": [
+    {
+      "stem": "When using the 'chasing breakouts' strategy for contracts in a ranging market, what usually happens?",
+      "options": [
+        "Best effect, easiest to make money",
+        "Repeatedly stopped out by fake breakouts + wear and tear from fees/funding, account shrinks unknowingly",
+        "The more frequently you trade, the more money you make",
+        "Absolutely no risk"
+      ],
+      "answerIndex": 1,
+      "explanation": "Chasing breakouts is a trend strategy; using it in a ranging market gets harvested by repeated fake breakouts, plus cost wear and tear; ranging should be handled by range strategies or held in cash, move less."
+    }
+  ],
+  "C3-6": [
+    {
+      "stem": "RSI enters the overbought zone (often referenced as >70). What is the correct understanding?",
+      "options": [
+        "The price will drop immediately and should be sold",
+        "It is only a reference that the buying power is dominant, not equal to an immediate drop (it can flatten in strong trends and stay in the extreme zone for a long time)",
+        "It definitely marks a top reversal",
+        "Must Short immediately"
+      ],
+      "answerIndex": 1,
+      "explanation": "Overbought is a reference zone, not a reversal signal; in strong trends, RSI can flatten and stay at extreme values for a long time. 'Shorting when overbought' will repeatedly lead to losses."
+    },
+    {
+      "stem": "When is the RSI strategy applicable and when does it fail?",
+      "options": [
+        "Applicable to trends, fails in ranging markets",
+        "Applicable to ranging markets, fails in trends (it flattens in trends)",
+        "Applicable to any market condition",
+        "Only applicable for predicting tops and bottoms"
+      ],
+      "answerIndex": 1,
+      "explanation": "RSI overbought and oversold have reference meaning in ranging markets but flatten and fail in trending markets; it is a reference, not a buy/sell instruction."
+    }
+  ],
+  "C3-7": [
+    {
+      "stem": "What is the most fatal scenario for a mean reversion strategy?",
+      "options": [
+        "Ranging market",
+        "Trending market (catching a falling knife against the trend, price continues to deviate unilaterally without returning)",
+        "When volume expands",
+        "It has no fatal scenario"
+      ],
+      "answerIndex": 1,
+      "explanation": "Mean reversion bets on 'returning.' Encountering a unilateral trend means catching a falling knife against the trend and may be crushed all the way; it fears the start of a trend the most and must be paired with strict stop-loss."
+    }
+  ],
+  "C3-8": [
+    {
+      "stem": "What is the fatal weakness of grid trading?",
+      "options": [
+        "Ranging market",
+        "Unilateral market (in a unilateral decline, it gets deeper into the drawdown; in a unilateral rise, it misses out, making profit and loss extremely asymmetric; adding leverage to grid trading may lead to direct liquidation)",
+        "It has no weakness and is a 'lie flat and earn' tool",
+        "Transaction fees"
+      ],
+      "answerIndex": 1,
+      "explanation": "Grid trading fears unilateral markets and has asymmetric profit and loss (small wins, big losses); adding leverage to grid trading may lead to direct liquidation upon encountering a unilateral move. It is definitely not a 'lie flat and earn' tool."
+    }
+  ],
+  "C3-9": [
+    {
+      "stem": "Why is the Martingale strategy (doubling position after a loss) extremely dangerous?",
+      "options": [
+        "It is actually risk-free and profitable",
+        "Theoretically it requires infinite capital; encountering a long enough unilateral market causes position index inflation leading to liquidation or principal zero",
+        "It is particularly suitable for beginners to practice",
+        "It can guarantee a certain break-even"
+      ],
+      "answerIndex": 1,
+      "explanation": "Martingale requires infinite capital. With limited real capital, a single long enough unilateral market causes position index inflation leading to liquidation or zero principal. In the long run, it almost inevitably leads to disaster; strongly not recommended."
+    },
+    {
+      "stem": "The fact that 'Martingale looks like a high win rate and mostly makes small profits' indicates what?",
+      "options": [
+        "It shows it is truly risk-free and can be used with confidence",
+        "This is its biggest deception—using high-frequency small profits to cover low-frequency destruction; strongly not recommended",
+        "It shows it has no risk",
+        "It shows it is suitable for heavy positions"
+      ],
+      "answerIndex": 1,
+      "explanation": "High-frequency small profits are the deception of Martingale; they cover the destructive outcome of 'going to zero after consecutive reversals.' This is a risk warning and must not be misled by 'high win rate'."
+    }
+  ],
+  "C3-10": [
+    {
+      "stem": "Regarding arbitrage (such as funding rate arbitrage), which of the following perceptions is correct?",
+      "options": [
+        "It is true risk-free arbitrage",
+        "It is not risk-free—it swaps directional risk for a basket of risks: basis fluctuation, contract leg liquidation (most fatal), reverse funding rates, costs, liquidity, etc.",
+        "It has no risk and is profitable",
+        "Its returns are high and risk-free"
+      ],
+      "answerIndex": 1,
+      "explanation": "Arbitrage is by no means risk-free; it only swaps directional risk for a basket of other risks (the most fatal is the liquidation of a contract leg). Returns are thin while risks are real, and the barrier to entry is high."
+    },
+    {
+      "stem": "In a 'positive funding rate' market, how should one layout to collect funding rates?",
+      "options": [
+        "Hold contract Long to pay fees",
+        "Hold contract Short to receive fees, hedge direction with Spot Long",
+        "Only buy Spot",
+        "Only hold contract Long"
+      ],
+      "answerIndex": 1,
+      "explanation": "Positive funding rate = Long pays Short. Therefore, hold contract Short to receive fees and hedge the directional risk with Spot Long (practical implementation is more complex)."
+    }
+  ],
+  "F18": [
+    {
+      "stem": "What is the correct mindset regarding using backtesting to verify a strategy?",
+      "options": [
+        "Good backtest performance guarantees future profits",
+        "Backtest valid ≠ Future valid (watch out for overfitting and survivorship bias), and pay attention to drawdowns and risk-reward ratio; do not look only at cumulative returns",
+        "Backtesting can predict future price movements",
+        "High win rate equals making money"
+      ],
+      "answerIndex": 1,
+      "explanation": "Backtest valid does not mean future valid; watch out for overfitting and survivorship bias. Indicators must be viewed comprehensively (especially drawdowns and risk-reward ratio). Backtest or virtual results do not represent real results."
+    }
+  ],
+  "F19": [
+    {
+      "stem": "What is the most critical mindset when moving a strategy to 'Futures'?",
+      "options": [
+        "Futures are 'higher-level spot' with higher and safer returns",
+        "Futures are a tool with a completely different risk structure: leverage compresses tolerance, amplifies costs, and introduces liquidation, funding fees, and long/short",
+        "Win rate increases after moving to Futures",
+        "Futures are more suitable for beginners to trade with large positions"
+      ],
+      "answerIndex": 1,
+      "explanation": "Futures are not higher-level spot: leverage only amplifies results, not win rate; a normal pullback can trigger stop loss or liquidation. It introduces liquidation, funding costs, and long/short, making the risk far higher than spot."
+    }
+  ],
+  "F20": [
+    {
+      "stem": "What is the correct 'three-price relationship' for Longing in a Futures trend/breakout?",
+      "options": [
+        "Liquidation Price > Stop Loss Price > Entry Price",
+        "Entry Price > Stop Loss Price > Liquidation Price (Stop loss must be set before the liquidation price)",
+        "Stop loss price can be set after the liquidation price",
+        "High leverage helps hold trends better"
+      ],
+      "answerIndex": 1,
+      "explanation": "Long three-price relationship: Entry Price > Stop Loss Price > Liquidation Price; stop loss must be before liquidation. The higher the leverage, the closer the liquidation price, so a normal pullback can sweep your stop loss or liquidate you, making it harder to hold the trend."
+    }
+  ],
+  "F25": [
+    {
+      "stem": "What is the correct approach to analyzing trading 'cases'?",
+      "options": [
+        "Stare at known results and memorize 'winning operations' to copy",
+        "Learn the decision-making process at that time (cases have the deception of a god's perspective and markets do not repeat); deconstruct the structure, respond reasonably, and judge the correctness of the process",
+        "Find the standard answer for the market movement",
+        "Treat cases as templates for the next operation"
+      ],
+      "answerIndex": 1,
+      "explanation": "Cases have known results and the deception of a god's perspective; markets do not repeat. You must learn the process from the 'then' perspective (structure, reasonable response, process correctness), rather than copying the answer."
+    }
+  ],
+  "F26": [
+    {
+      "stem": "In a successful trend trade review case, what should you remember most?",
+      "options": [
+        "Doing exactly what it did guarantees profit",
+        "It is a demonstration of the process/method, not a script for guaranteed success; not selling at the absolute top is normal; review focuses on whether the process followed the rules",
+        "You must sell at the highest point to be considered successful",
+        "Trend trading has a very high win rate"
+      ],
+      "answerIndex": 1,
+      "explanation": "It demonstrates the process (identify → enter → trailing stop → exit → review), not a script for guaranteed success. Trailing stops inevitably give up the top section; focus on whether the process follows the rules rather than the single profit or loss."
+    }
+  ],
+  "F1": [
+    {
+      "stem": "Which description best fits a 'Trading System'?",
+      "options": [
+        "A magical indicator that guarantees steady profits",
+        "A complete, repeatable set of trading rules (including analysis, entry/exit, risk control, position sizing, psychology, and review)",
+        "The more complex and indicators, the better",
+        "A single buy/sell signal"
+      ],
+      "answerIndex": 1,
+      "explanation": "A trading system is a complete, repeatable set of rules covering six modules that form a closed loop; it pursues stability and control, not a guaranteed profit formula."
+    }
+  ],
+  "F5": [
+    {
+      "stem": "What is the most reliable way to combat emotions (fear, greed, etc.) in trading?",
+      "options": [
+        "Relying on willpower in the moment",
+        "Relying on pre-set rules + disciplined execution + trading logs",
+        "Trying to completely eliminate all emotions",
+        "Reacting randomly based on current feelings"
+      ],
+      "answerIndex": 1,
+      "explanation": "Emotions are part of human nature and cannot be eliminated but can be managed. Rely on pre-set rules + discipline + logs to prevent emotions from making decisions for you, rather than relying on momentary willpower."
+    }
+  ],
+  "F7": [
+    {
+      "stem": "Reviewing focuses on 'the act, not the result.' Which scenario is actually the most dangerous?",
+      "options": [
+        "Doing it right but losing money this time",
+        "Doing it wrong but making money (relying on luck, reinforcing bad habits)",
+        "Doing it right and making money",
+        "Doing it wrong and losing money"
+      ],
+      "answerIndex": 1,
+      "explanation": "Doing it wrong but making money is the most dangerous because it relies on luck and reinforces bad habits. Doing it right but losing money is a probability fluctuation and is acceptable; you should continue to persist."
+    }
+  ],
+  "F10": [
+    {
+      "stem": "What is the correct understanding of a 'trading system that suits you'?",
+      "options": [
+        "There is a strongest system that fits everyone",
+        "There is no 'best,' only what suits you (matching personality, time, capital, risk tolerance); it is only useful if you can execute it stably and for the long term",
+        "Simply copy a master's system",
+        "The more complex the system, the better"
+      ],
+      "answerIndex": 1,
+      "explanation": "There is no best system, only one that suits you. It must match your personality, time, capital, and risk tolerance; it only has meaning if you can execute it stably and for the long term."
+    }
+  ],
+  "F11": [
+    {
+      "stem": "Regarding various trading strategies, which understanding is correct?",
+      "options": [
+        "There is a strongest strategy that is effective all day long",
+        "Strategies have no absolute superiority or inferiority, only whether they fit you and the current market; there is no 'Holy Grail' of steady profits",
+        "Trend strategies are always better than range strategies",
+        "The more strategies you have, the steadier the profits"
+      ],
+      "answerIndex": 1,
+      "explanation": "Knowing multiple strategies is to have options in different market conditions. Strategies have no absolute superiority or inferiority, only whether they fit; there is no Holy Grail that works all day long."
+    }
+  ],
+  "F27": [
+    {
+      "stem": "A trade buys against the trend, refuses to stop out, and ends in a large loss. What went wrong?",
+      "options": [
+        "It was only bad luck",
+        "Both the thesis and execution were wrong: buying against the trend requires a better method, while ignoring the stop requires better discipline",
+        "Double the position next time",
+        "One failed trade means trading should be abandoned"
+      ],
+      "answerIndex": 1,
+      "explanation": "The trade combined a flawed thesis with poor execution. Separate analytical mistakes from discipline failures so each can be corrected in the review."
+    }
+  ],
+  "F28": [
+    {
+      "stem": "A complete trading system coordinates six modules. Which statement best describes their relationship?",
+      "options": [
+        "Accurate analysis is all that matters",
+        "Analysis, entries and exits, risk, position sizing, psychology, and review are interdependent; the system is limited by its weakest module",
+        "One good indicator solves everything",
+        "Trade review is optional"
+      ],
+      "answerIndex": 1,
+      "explanation": "The six modules reinforce one another. Good analysis without risk control can still fail, sound rules without discipline are ineffective, and skipping review repeats mistakes."
+    }
+  ],
+  "F37": [
+    {
+      "stem": "Which attitude best reflects a growth mindset toward markets?",
+      "options": [
+        "Be fully confident and go all in",
+        "Respect uncertainty, assume you may be wrong, manage risk, and prioritize staying in the game",
+        "Pursue fast wealth",
+        "Keep searching for a secret technique"
+      ],
+      "answerIndex": 1,
+      "explanation": "A growth mindset respects market uncertainty, treats risk management as permanent, and improves through review and iteration rather than shortcuts."
+    }
+  ],
+  "F38": [
+    {
+      "stem": "What does it mean to treat trading as a long-term practice?",
+      "options": [
+        "Take one large gamble to get rich",
+        "Treat it as a long-run probability game built on process, discipline, review, and risk control; longevity is the advantage",
+        "High-frequency short-term trading guarantees wealth",
+        "A few lucky calls are enough"
+      ],
+      "answerIndex": 1,
+      "explanation": "Trading is a long-run probability game and a skill built over time. Process, discipline, review, and risk control create staying power."
+    }
+  ],
+  "F30": [
+    {
+      "stem": "When reading market structure with candlesticks, indicators, and Chan Theory, what is the right top-down sequence?",
+      "options": [
+        "Market regime (trend/range) → key levels (support, resistance, Central Hub) → momentum (MACD/RSI) → structural detail (Fractals/Strokes)",
+        "Start with Fractals and Strokes, then look at the broader direction",
+        "Use only one indicator",
+        "The order does not matter"
+      ],
+      "answerIndex": 0,
+      "explanation": "Read structure from broad to specific: regime, key levels, momentum, then fine structure. Starting with details or a single indicator can hide the larger context."
+    },
+    {
+      "stem": "What is the correct view of combining candlesticks, indicators, and Chan Theory for confirmation?",
+      "options": [
+        "More tools make the analysis 100% accurate",
+        "Confirmation turns the setup into a guaranteed signal",
+        "Multiple tools can increase confidence but cannot eliminate false readings; no combination is 100% accurate",
+        "More tools always predict tops and bottoms better"
+      ],
+      "answerIndex": 2,
+      "explanation": "Cross-confirmation can improve confidence, but it cannot remove uncertainty or turn analysis into a guaranteed trading signal."
+    },
+    {
+      "stem": "What are candlesticks, indicators, and Chan Theory at their core?",
+      "options": [
+        "A signal system that issues direct trading instructions",
+        "Analytical tools for describing structure, not instructions or precise predictions",
+        "Tools that predict exact tops and bottoms",
+        "Systems that become more accurate as they become more complex"
+      ],
+      "answerIndex": 1,
+      "explanation": "These tools help describe and interpret market structure. They do not issue instructions or predict exact outcomes; the user applies their own rules and judgment."
+    }
+  ],
+  "F35": [
+    {
+      "stem": "In Midas, what is the essence of 'running through the complete trading process'?",
+      "options": [
+        "A set of operation templates that guarantee steady profits if followed",
+        "A 'Learn → Apply' closed loop (Analysis → Plan → Entry → Risk/Position → Hold/Exit → Review → Backtesting), fully virtual and not constituting investment advice",
+        "A system that can predict market trends",
+        "A method that guarantees profits if followed"
+      ],
+      "answerIndex": 1,
+      "explanation": "The complete process is a 'Learn → Apply' closed loop (seven steps, unity of knowledge and action); Midas helps you master the process and build your skills, but does not guarantee results for you, and is fully virtual and not constituting investment advice."
+    }
+  ],
+  "F32": [
+    {
+      "stem": "What is the essence of Midas's \"AI Decision Card\"?",
+      "options": [
+        "Standard answer, guaranteed stock picks",
+        "An analytical perspective/reference prone to error, not a buy/sell order",
+        "Precise buy/sell orders",
+        "A sure-win signal"
+      ],
+      "answerIndex": 1,
+      "explanation": "The AI Decision Card is an analytical perspective/reference prone to error and limitations; it is not a standard answer, a stock pick, nor a buy/sell order."
+    },
+    {
+      "stem": "Why should you never blindly follow the AI Decision Card?",
+      "options": [
+        "AI is always correct; following is easiest and best",
+        "Following guarantees profit",
+        "AI makes mistakes and has limitations; it does not predict or guarantee. Blind following means learning nothing + unable to control risk + helpless if AI is wrong",
+        "AI can completely replace your own judgment"
+      ],
+      "answerIndex": 2,
+      "explanation": "AI makes mistakes and does not guarantee; blind following means you learn nothing and cannot control risk. If AI is wrong, you are helpless, so you must never rely on or copy it alone."
+    },
+    {
+      "stem": "What is the \"correct posture\" for using the AI Decision Card?",
+      "options": [
+        "Form your own judgment first, then compare with AI (consistency boosts confidence, inconsistency prompts deep inquiry), and integrate it into a complete system",
+        "Directly copy AI's conclusion to place an order",
+        "Only look at AI, do not think for yourself",
+        "Do the opposite of what AI says"
+      ],
+      "answerIndex": 0,
+      "explanation": "The correct posture is to treat AI as \"one more analytical dimension/check point\": form your own judgment first, compare, and integrate it into rules/risk control/discipline/review. You cannot rely on it alone; it comes with disclaimers and is for reference only."
+    }
+  ],
+  "F33": [
+    {
+      "stem": "Using the Strategy Research Lab to backtest and refine rules, what is the core \"correct usage\" of backtesting?",
+      "options": [
+        "To prove this strategy will definitely make money in the future",
+        "To weed out bad strategies and understand strategy characteristics—backtesting effective ≠ future effective",
+        "Backtesting profit equals live trading profit",
+        "To predict future market trends"
+      ],
+      "answerIndex": 1,
+      "explanation": "Backtesting is a tool to \"weed out bad strategies and understand characteristics,\" not to \"prove future profit.\" Backtesting effective does not mean future effective, nor can it predict market trends."
+    },
+    {
+      "stem": "When backtesting, which of the following is a trap you must be wary of?",
+      "options": [
+        "The prettier the backtest curve, the more credible and the more capital to allocate",
+        "Overfitting (over-optimized parameters, prettier curves are more suspicious), survivorship bias, history does not repeat simply",
+        "The fewer the backtest samples, the more accurate",
+        "Backtesting has no traps"
+      ],
+      "answerIndex": 1,
+      "explanation": "Be wary of overfitting (the prettier, the more suspicious), survivorship bias, and the fact that history does not repeat simply. Backtesting must be followed by virtual live trading verification of execution."
+    },
+    {
+      "stem": "When reading backtest metrics, what is the correct approach?",
+      "options": [
+        "Only pick the one with the highest cumulative return",
+        "Only look at win rate; high win rate means choose it",
+        "Look comprehensively, especially maximum drawdown and risk-reward ratio (high win rate ≠ profit)",
+        "Choose whichever number is larger"
+      ],
+      "answerIndex": 2,
+      "explanation": "Read metrics comprehensively, especially maximum drawdown and risk-reward ratio. Do not just focus on cumulative return or win rate alone—high win rate does not equal profit."
+    }
+  ],
+  "F29": [
+    {
+      "stem": "In Midas (fully virtual), what can it mainly help you practice?",
+      "options": [
+        "Earn real money using a virtual account",
+        "Analysis, execution and discipline, mindset, review and iteration",
+        "Guarantee you will profit once you learn",
+        "Predict price trends"
+      ],
+      "answerIndex": 1,
+      "explanation": "Midas helps you practice analysis, execution and discipline, mindset, and review. Its core value is to pay the tuition and make the mistakes at zero cost within the virtual environment."
+    },
+    {
+      "stem": "Regarding \"what virtual environments cannot replace,\" which of the following cognitions is honest and correct?",
+      "options": [
+        "Virtual and real trading are exactly the same",
+        "Virtual ≠ Real (emotional intensity and real-world complexity differ); practicing well does not mean you can profit in the real market",
+        "Practicing well in virtual guarantees profit in real",
+        "Virtual environments eliminate all risks"
+      ],
+      "answerIndex": 1,
+      "explanation": "Honest boundaries: Virtual and real differ in emotional intensity and real-world complexity. Practicing well ≠ real profit. It is a low-cost practice tool, not a sure-win system."
+    }
+  ],
+  "F31": [
+    {
+      "stem": "Regarding trading \"discipline / execution,\" which of the following statements is correct?",
+      "options": [
+        "Just knowing the principles is enough to do it",
+        "Accumulate through repeated practice to form muscle memory and by actually executing; virtual trading provides a low-cost practice venue",
+        "It can be formed by making a resolution once",
+        "Mainly depends on talent"
+      ],
+      "answerIndex": 1,
+      "explanation": "Discipline does not depend on determination or \"knowing\" the principles; it depends on repeated practice to form muscle memory. Execution can only be accumulated by actually executing; virtual trading provides a zero-cost practice venue."
+    },
+    {
+      "stem": "Regarding \"virtual trading performance,\" what is the correct cognition?",
+      "options": [
+        "Virtual performance equals real profitability",
+        "Virtual lacks real capital pressure; being calm in virtual does not mean being calm in real; virtual performance does not represent real results",
+        "If you make money in virtual, you will definitely make money in real",
+        "The psychological pressure of virtual and real is the same"
+      ],
+      "answerIndex": 1,
+      "explanation": "Virtual lacks real capital pressure; being calm in virtual does not mean being calm in real. Virtual performance does not represent real results; switch to real with caution."
+    }
+  ],
+  "F34": [
+    {
+      "stem": "In Midas, moving from simulation to \"forming your own method,\" what is the true goal?",
+      "options": [
+        "Find the strongest, all-purpose strategy (Holy Grail)",
+        "Form a method that is \"suitable for you + can be executed stably\" (no Holy Grail, stable execution > theoretically beautiful)",
+        "Copy a sure-win formula and use it directly",
+        "Find a strategy that is effective all day long"
+      ],
+      "answerIndex": 1,
+      "explanation": "The goal is to find a method suitable for you that can be executed stably (matching personality/time/funds/risk tolerance), not to find the strongest strategy—there is no Holy Grail; stable execution beats theoretical beauty."
+    },
+    {
+      "stem": "After forming your own method, what is the correct attitude?",
+      "options": [
+        "Finding a method equals guaranteed profit",
+        "The method is not a sure-win formula; it requires continuous iteration, and maintain awe for the real market (practicing well in virtual does not mean real profit)",
+        "Once the method is set, it remains unchanged",
+        "The method guarantees profit"
+      ],
+      "answerIndex": 1,
+      "explanation": "You form a method, not a sure-win formula. It must iterate continuously with you and the market, and you must maintain awe for the real market. Virtual performance does not represent real results."
+    }
+  ]
+}
