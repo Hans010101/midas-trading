@@ -8,25 +8,39 @@
  */
 
 import type { Metadata } from 'next'
+import { cookies } from 'next/headers'
 
 import { AcademyGlossaryContent } from '@/components/academy/academy-glossary-content'
 import { HashScroller } from '@/components/academy/hash-scroller'
 import { TopNav } from '@/components/layout/top-nav'
+import { LOCALE_COOKIE } from '@/i18n/routing'
 import { JsonLd } from '@/components/seo/json-ld'
 import { getGlossary } from '@/lib/academy'
 import { buildGlossaryTermSet } from '@/lib/academy/glossary-schema'
 
 // SEO 批3:词典独立 metadata + DefinedTermSet JSON-LD(88 词条喂 AI 引擎抽取)。
-export const metadata: Metadata = {
-  title: '交易名词词典 · 88 条速查',
-  description:
-    '88 个交易名词速查 · 10 大类:基础概念、订单交易、合约衍生品、技术指标、缠论、策略与风险等,每条一句话定义 + 展开说明。',
-  alternates: { canonical: '/academy/glossary' },
-  openGraph: {
-    title: '交易名词词典 · 88 条速查 · 点金 Midas',
-    description: '88 个交易名词 · 10 大类 · 一句话定义 + 展开。',
-    url: '/academy/glossary',
-  },
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = (await cookies()).get(LOCALE_COOKIE)?.value === 'en' ? 'en' : 'zh'
+  const english = locale === 'en'
+  const title = english
+    ? 'Trading Glossary · 88 Essential Terms'
+    : '交易名词词典 · 88 条速查'
+  const description = english
+    ? 'A practical reference to 88 essential trading terms across market basics, order execution, derivatives, technical analysis, Chan Theory, strategy and risk.'
+    : '88 个交易名词速查 · 10 大类:基础概念、订单交易、合约衍生品、技术指标、缠论、策略与风险等,每条一句话定义 + 展开说明。'
+
+  return {
+    title,
+    description,
+    alternates: { canonical: '/academy/glossary' },
+    openGraph: {
+      title: english ? `${title} · Midas Trading` : `${title} · 点金 Midas`,
+      description: english
+        ? '88 essential trading terms, organized into 10 categories with concise definitions and expanded explanations.'
+        : '88 个交易名词 · 10 大类 · 一句话定义 + 展开。',
+      url: '/academy/glossary',
+    },
+  }
 }
 
 export default function AcademyGlossaryPage() {
