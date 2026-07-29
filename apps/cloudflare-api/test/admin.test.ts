@@ -2,7 +2,7 @@ import { env, exports } from 'cloudflare:workers'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { sha256Hex } from '../src/crypto'
-import { runAdminOperationsCron } from '../src/admin-operations'
+import { isAutoPublishSlot, runAdminOperationsCron } from '../src/admin-operations'
 
 function request(
   path: string,
@@ -73,6 +73,14 @@ afterEach(() => {
 })
 
 describe('independent Cloudflare administrator controls', () => {
+  it('limits Binance Square publishing opportunities to 08:00-22:00 CST every 20 minutes', () => {
+    expect(isAutoPublishSlot(7 * 60 + 40)).toBe(false)
+    expect(isAutoPublishSlot(8 * 60)).toBe(true)
+    expect(isAutoPublishSlot(8 * 60 + 20)).toBe(true)
+    expect(isAutoPublishSlot(8 * 60 + 5)).toBe(false)
+    expect(isAutoPublishSlot(22 * 60)).toBe(true)
+    expect(isAutoPublishSlot(22 * 60 + 20)).toBe(false)
+  })
   it('locks the owner mailbox as an administrator at the database boundary', async () => {
     const row = await env.DB
       .prepare('SELECT role, banned_at FROM users WHERE id = ?')
@@ -443,7 +451,7 @@ describe('independent Cloudflare administrator controls', () => {
   })
 
   it('runs one claimed Binance Square auto slot and never duplicates it', async () => {
-    const scheduledAt = Date.parse('2026-07-29T07:05:00.000Z')
+    const scheduledAt = Date.parse('2026-07-29T07:00:00.000Z')
     await env.DB.batch([
       env.DB
         .prepare(
@@ -482,7 +490,7 @@ describe('independent Cloudflare administrator controls', () => {
       env.DB
         .prepare(
           `SELECT status, draft_id, dispatch_id FROM social_auto_runs
-           WHERE slot = '2026-07-29T15:05'`,
+          WHERE slot = '2026-07-29T15:00'`,
         )
         .first(),
     ).resolves.toMatchObject({
@@ -499,7 +507,7 @@ describe('independent Cloudflare administrator controls', () => {
   })
 
   it('opens the automatic publishing circuit after three consecutive failures', async () => {
-    const firstSlot = Date.parse('2026-07-30T07:05:00.000Z')
+    const firstSlot = Date.parse('2026-07-30T07:00:00.000Z')
     await env.DB.batch([
       env.DB
         .prepare(
@@ -527,8 +535,8 @@ describe('independent Cloudflare administrator controls', () => {
     vi.stubGlobal('fetch', upstream)
 
     await runAdminOperationsCron(env, firstSlot)
-    await runAdminOperationsCron(env, firstSlot + 90 * 60_000)
-    await runAdminOperationsCron(env, firstSlot + 180 * 60_000)
+    await runAdminOperationsCron(env, firstSlot + 20 * 60_000)
+    await runAdminOperationsCron(env, firstSlot + 40 * 60_000)
 
     expect(upstream).toHaveBeenCalledTimes(3)
     await expect(

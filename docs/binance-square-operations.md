@@ -14,7 +14,7 @@ The automatic scheduler uses a five-post cycle:
 - 40% verified industry news: official or licensed feeds, rewritten with source attribution and follow-up checkpoints.
 - 20% event intelligence: whale transfers and token unlocks when an authorized source is configured; otherwise the slot falls back to news or market analysis.
 
-The 30-post setting remains a safety ceiling rather than a target. Operations should initially aim for 8-12 high-quality posts per day and increase only after retention, negative-feedback, and duplication metrics are healthy.
+The scheduler runs every 20 minutes from 08:00 through 22:00 China Standard Time. Those 43 possible windows absorb retries and skipped drafts, while a database-enforced ceiling permits at most 40 successful automatic posts per day. If the verified event queue is empty or stale, the slot immediately falls back to the Midas Trading volatility scan instead of publishing filler news.
 
 ## Source policy
 
@@ -30,7 +30,7 @@ No article body is copied. The system stores only the facts needed for scoring a
 
 ## Ranking and safety
 
-Events are scored on freshness and market impact. Security incidents, regulation, rates, ETF developments, liquidations, listings, unlocks, and whale activity receive higher weights. Source ID uniqueness, event status, the existing six-hour symbol cooldown, and the platform dispatch ledger prevent duplicates.
+Events are scored on freshness and market impact. Security incidents, regulation, rates, ETF developments, liquidations, listings, unlocks, and whale activity receive higher weights. Source ID uniqueness, event status, a two-hour same-symbol cooldown, and the platform dispatch ledger prevent duplicates while supporting the higher operating cadence.
 
 The AI prompt cannot add facts, promises, or deterministic price calls. The existing compliance gate remains the final block. Tags are appended by deterministic code, not by the model: the related assets come first, then the daily major-asset pool (`BTC`, `ETH`, `SOL`, `BNB`) fills the post to 2-4 unique cashtags.
 

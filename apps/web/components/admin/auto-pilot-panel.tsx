@@ -82,7 +82,7 @@ export function AutoPilotPanel({ token }: { token: string }) {
     if (!enabled) {
       const ok = window.confirm(
         '确定开启【全自动托管】?\n\n开启后系统将自动起草并发布推文到币安广场:\n' +
-          '· 常规每日 10 个时段，12 条安全上限 · 仅 7:30-22:30 发\n· 门禁不通过的绝不发\n· 无需人工逐条审核\n\n' +
+          '· 每 20 分钟一个发布机会，每日最多 40 条 · 仅 8:00-22:00 发\n· 新闻不足时自动回退热门波动币种分析\n· 门禁不通过的绝不发\n· 无需人工逐条审核\n\n' +
           '随时可用「紧急熔断」一键停止。确定开启?',
       )
       if (!ok) return
@@ -141,7 +141,7 @@ export function AutoPilotPanel({ token }: { token: string }) {
             />
             <StatChip
               label="发布时段"
-              value={st ? (st.in_window ? '在窗(7:30-22:30)' : '不在窗') : '—'}
+              value={st ? (st.in_window ? '在窗(8:00-22:00)' : '不在窗') : '—'}
               tone={st?.in_window ? 'text-foreground' : 'text-muted-foreground'}
             />
           </div>

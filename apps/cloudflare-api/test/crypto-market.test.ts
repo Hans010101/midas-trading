@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { handleCryptoMarketRoute } from '../src/crypto-market'
+import { fetchCryptoMarketScan, handleCryptoMarketRoute } from '../src/crypto-market'
 
 const futureTicker = {
   symbol: 'PF_XBTUSD',
@@ -23,6 +23,35 @@ afterEach(() => {
 })
 
 describe('independent crypto market routes', () => {
+  it('keeps the social volatility scan liquid and crypto-native', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({
+        result: 'success',
+        tickers: [
+          futureTicker,
+          {
+            ...futureTicker,
+            symbol: 'PF_WTIOILUSD',
+            pair: 'WTIOIL:USD',
+            change24h: 12,
+          },
+          {
+            ...futureTicker,
+            symbol: 'PF_OPENUSD',
+            pair: 'OPEN:USD',
+            volumeQuote: 50_000,
+            change24h: 20,
+          },
+        ],
+      })),
+    )
+
+    await expect(fetchCryptoMarketScan()).resolves.toEqual([
+      expect.objectContaining({ symbol: 'BTC/USDT' }),
+    ])
+  })
+
   it('maps Kraken perpetual tickers to the existing public contract', async () => {
     vi.stubGlobal(
       'fetch',

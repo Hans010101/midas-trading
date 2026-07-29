@@ -13,6 +13,22 @@ const CACHE_CONTROL = 'public, max-age=15, s-maxage=60'
 // ticker snapshot. Keep the Worker invocation below Cloudflare Free's 50
 // external-subrequest ceiling, including the shared ticker request.
 const MAX_METRICS_SYMBOLS = 15
+const SOCIAL_SCAN_MIN_QUOTE_VOLUME_USD = 100_000
+const SOCIAL_SCAN_EXCLUDED_BASES = new Set([
+  'WTIOIL',
+  'XAG',
+  'AAPLX',
+  'GOOGLX',
+  'GLDX',
+  'SPYX',
+  'TSLAX',
+  'MSTRX',
+  'QQQX',
+  'NVDAX',
+  'SPCXX',
+  'CRCLX',
+  'HOODX',
+])
 
 type KrakenFutureTicker = Readonly<{
   symbol?: string
@@ -42,6 +58,16 @@ type Ticker24h = Readonly<{
   volume_24h: number
   quote_volume_24h: number
   count_24h: number
+}>
+
+export type CryptoMarketScanItem = Readonly<{
+  symbol: string
+  last_price: number
+  change_pct_24h: number
+  high_24h: number
+  low_24h: number
+  quote_volume_24h: number
+  ts: string
 }>
 
 function finite(value: unknown, fallback = 0): number {
@@ -386,6 +412,40 @@ async function perpTickerItems(): Promise<Ticker24h[]> {
     const item = toPerpTicker(ticker)
     return item ? [item] : []
   })
+}
+
+/**
+ * Shared Midas Trading volatility scan for automated editorial content.
+ * Keep this on the same normalized Kraken feed as the public crypto board so
+ * posts and the product UI cannot silently disagree about market values.
+ */
+export async function fetchCryptoMarketScan(
+  limit = 40,
+): Promise<CryptoMarketScanItem[]> {
+  const safeLimit = Math.min(100, Math.max(1, Math.trunc(limit)))
+  return (await perpTickerItems())
+    .filter((item) => {
+      const base = item.symbol.split('/')[0] ?? ''
+      return item.last_price > 0 &&
+        Number.isFinite(item.change_pct_24h) &&
+        Math.abs(item.change_pct_24h) <= 100 &&
+        item.quote_volume_24h >= SOCIAL_SCAN_MIN_QUOTE_VOLUME_USD &&
+        !SOCIAL_SCAN_EXCLUDED_BASES.has(base)
+    })
+    .sort((left, right) => {
+      const movement = Math.abs(right.change_pct_24h) - Math.abs(left.change_pct_24h)
+      return movement || right.quote_volume_24h - left.quote_volume_24h
+    })
+    .slice(0, safeLimit)
+    .map((item) => ({
+      symbol: item.symbol,
+      last_price: item.last_price,
+      change_pct_24h: item.change_pct_24h,
+      high_24h: item.high_24h,
+      low_24h: item.low_24h,
+      quote_volume_24h: item.quote_volume_24h,
+      ts: item.ts,
+    }))
 }
 
 const SPOT_PAIRS = Object.freeze([

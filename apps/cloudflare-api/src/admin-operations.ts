@@ -9,6 +9,7 @@ import {
   binanceSquareEnabled,
   publishToBinanceSquare,
 } from './binance-square'
+import { fetchCryptoMarketScan } from './crypto-market'
 import { HttpError, jsonResponse, readJsonObject } from './http'
 import {
   contentTags,
@@ -697,27 +698,74 @@ async function createSocialDrafts(
       }
     }
   }
-  const quotes = await env.DB
+  const recentlyPublished = await env.DB
     .prepare(
-      `SELECT symbol, name, last_point, change_pct
-       FROM market_overview_quotes
-       WHERE category = 'crypto'
-       ORDER BY ABS(change_pct) DESC
-       LIMIT 3`,
+      `SELECT DISTINCT d.symbol
+       FROM social_drafts d
+       JOIN social_dispatches sd ON sd.draft_id = d.id
+       WHERE sd.platform = 'binance_square' AND sd.status = 'success'
+         AND sd.updated_at >= ?`,
     )
-    .all<{
-      symbol: string
-      name: string
-      last_point: number
-      change_pct: number
-    }>()
-  if (quotes.results.length === 0) throw new HttpError(409, '暂无可用市场数据')
+    .bind(Date.now() - 2 * 60 * 60_000)
+    .all<{ symbol: string }>()
+  const recentSymbols = new Set(recentlyPublished.results.map((item) => item.symbol))
+  let quotes: Array<{
+    symbol: string
+    name: string
+    last_point: number
+    change_pct: number
+    high_24h?: number
+    low_24h?: number
+    quote_volume_24h?: number
+    quoted_at?: string
+  }> = []
+  try {
+    const scan = await fetchCryptoMarketScan(60)
+    quotes = scan
+      .filter((item) => !recentSymbols.has(item.symbol))
+      .slice(0, 12)
+      .map((item) => ({
+        symbol: item.symbol,
+        name: item.symbol.split('/')[0] ?? item.symbol,
+        last_point: item.last_price,
+        change_pct: item.change_pct_24h,
+        high_24h: item.high_24h,
+        low_24h: item.low_24h,
+        quote_volume_24h: item.quote_volume_24h,
+        quoted_at: item.ts,
+      }))
+  } catch (error) {
+    console.error(JSON.stringify({
+      event: 'social.market_scan_failed',
+      error: error instanceof Error ? error.message : String(error),
+    }))
+  }
+  if (quotes.length === 0) {
+    const fallback = await env.DB
+      .prepare(
+        `SELECT symbol, name, last_point, change_pct
+         FROM market_overview_quotes
+         WHERE category = 'crypto'
+         ORDER BY ABS(change_pct) DESC
+         LIMIT 12`,
+      )
+      .all<{
+        symbol: string
+        name: string
+        last_point: number
+        change_pct: number
+      }>()
+    quotes = fallback.results.filter((item) => !recentSymbols.has(item.symbol))
+    if (quotes.length === 0) quotes = fallback.results
+  }
+  if (quotes.length === 0) throw new HttpError(409, '暂无可用市场数据')
   const draftCount = autoDrafted ? 1 : 2
   const ai = await invokeAi(env, {
     system:
       '你是专业市场内容编辑。只输出 JSON，不承诺收益，不给确定性涨跌结论，数据必须原样引用。',
-    prompt: `根据以下实时行情生成 ${draftCount} 条${style === 'x_short' ? '不超过 110 个汉字的 X 短推' : '币安广场中文市场观察'}。
-行情：${JSON.stringify(quotes.results)}
+    prompt: `根据以下 Midas Trading 实时波动扫描生成 ${draftCount} 条${style === 'x_short' ? '不超过 110 个汉字的 X 短推' : '币安广场中文市场观察'}。
+优先选择绝对涨跌幅、成交活跃度更值得关注的标的；价格、涨跌幅、24H 高低点和成交额只能引用输入数据。避免与普通行情播报雷同，要说明市场正在关注什么以及后续验证点。
+行情：${JSON.stringify(quotes)}
 输出 {"drafts":[{"symbol":"BTC/USDT","bias":"偏多|偏空|中性","text":"..."}]}。不要自行添加 # 或 $ 标签。`,
     maxTokens: 700,
     temperature: 0.35,
@@ -726,13 +774,26 @@ async function createSocialDrafts(
   const drafts = Array.isArray(parsed.drafts) ? parsed.drafts.slice(0, draftCount) : []
   const created: CreatedSocialDraft[] = []
   const timestamp = Date.now()
-  for (const value of drafts) {
+  const allowedSymbols = new Set(quotes.map((item) => item.symbol))
+  const validDrafts = drafts.filter((value) => {
+    if (typeof value !== 'object' || value === null) return false
+    const symbol = (value as Record<string, unknown>).symbol
+    return typeof symbol === 'string' && allowedSymbols.has(symbol)
+  })
+  const values = validDrafts.length > 0
+    ? validDrafts
+    : quotes.slice(0, draftCount).map((quote) => ({
+        symbol: quote.symbol,
+        bias: quote.change_pct > 0 ? '偏多' : quote.change_pct < 0 ? '偏空' : '中性',
+        text: `${quote.name}（${quote.symbol}）24 小时涨跌幅 ${quote.change_pct >= 0 ? '+' : ''}${quote.change_pct.toFixed(2)}%，最新价 ${quote.last_point}。当前波动进入市场前列，后续重点观察成交量能否延续，以及价格是否确认突破或重新回到日内区间。`,
+      }))
+  for (const value of values) {
     if (typeof value !== 'object' || value === null) continue
     const item = value as Record<string, unknown>
     const symbol = typeof item.symbol === 'string' ? item.symbol.slice(0, 32) : ''
     const bias = typeof item.bias === 'string' ? item.bias.slice(0, 16) : '中性'
     let text = typeof item.text === 'string' ? item.text.trim() : ''
-    if (!symbol || !text) continue
+    if (!symbol || !text || !allowedSymbols.has(symbol)) continue
     if (style === 'x_short') text = [...text].slice(0, 110).join('')
     if (style === 'default') {
       const baseSymbol = symbol.split('/')[0]?.toUpperCase() ?? 'BTC'
@@ -871,7 +932,7 @@ async function autoStatus(
       daily_remaining: Math.max(0, config.daily_limit - dailyUsed),
       failure_count: config.failure_count,
       last_error: config.last_error,
-      in_window: minute >= 7 * 60 + 30 && minute <= 22 * 60 + 30,
+      in_window: minute >= 8 * 60 && minute <= 22 * 60,
       platforms: [
         {
           platform: 'binance_square',
@@ -1189,10 +1250,10 @@ function socialSlot(timestamp: number): string {
   return `${value('year')}-${value('month')}-${value('day')}T${value('hour')}:${value('minute')}`
 }
 
-function isAutoPublishSlot(minute: number): boolean {
-  const firstSlot = 7 * 60 + 35
-  const lastMinute = 22 * 60 + 30
-  return minute >= firstSlot && minute <= lastMinute && (minute - firstSlot) % 90 === 0
+export function isAutoPublishSlot(minute: number): boolean {
+  const firstSlot = 8 * 60
+  const lastMinute = 22 * 60
+  return minute >= firstSlot && minute <= lastMinute && (minute - firstSlot) % 20 === 0
 }
 
 async function updateAutoRun(
@@ -1248,7 +1309,7 @@ async function autoCandidate(env: Env, timestamp: number): Promise<CreatedSocial
        ORDER BY d.created_at DESC
        LIMIT 1`,
     )
-    .bind(timestamp - 4 * 60 * 60_000, timestamp - 6 * 60 * 60_000)
+    .bind(timestamp - 4 * 60 * 60_000, timestamp - 2 * 60 * 60_000)
     .first<{
       id: number
       symbol: string
