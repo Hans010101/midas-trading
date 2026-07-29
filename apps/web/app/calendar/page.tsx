@@ -12,8 +12,11 @@
 
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { TopNav } from '@/components/layout/top-nav'
+import { useRuntimeDocumentTitle } from '@/hooks/use-runtime-document-title'
 import { fetchEconCalendar, type EconEvent } from '@/lib/api/econ-calendar'
+import { econEventTitle } from '@/lib/i18n/market-copy'
 import { cn } from '@/lib/utils'
 
 // ── 地区(筛选维度):按 event_type 归属;「加密」单独用 markets 含 crypto 判 ──────
@@ -22,13 +25,13 @@ import { cn } from '@/lib/utils'
 const REGIONS = ['all', 'cn', 'us', 'eu', 'jpkr', 'crypto'] as const
 type Region = (typeof REGIONS)[number]
 
-const REGION_LABEL: Record<Region, string> = {
-  all: '全部',
-  cn: '中国',
-  us: '美国',
-  eu: '欧洲',
-  jpkr: '日韩',
-  crypto: '加密相关',
+const REGION_LABEL: Record<Region, { zh: string; en: string }> = {
+  all: { zh: '全部', en: 'All' },
+  cn: { zh: '中国', en: 'China' },
+  us: { zh: '美国', en: 'United States' },
+  eu: { zh: '欧洲', en: 'Europe' },
+  jpkr: { zh: '日韩', en: 'Japan & Korea' },
+  crypto: { zh: '加密相关', en: 'Crypto-sensitive' },
 }
 
 // event_type → 筛选桶(用于筛选匹配 · 合并桶把多国映到同一个 key)
@@ -69,49 +72,52 @@ const REGION_OF_TYPE: Record<string, Exclude<Region, 'all' | 'crypto'>> = {
 }
 
 // event_type → 事件行右侧国别标注(只有合并桶内的类型需要覆盖 · 其余落桶标签)
-const COUNTRY_LABEL_OF_TYPE: Record<string, string> = {
-  boj: '日本',
-  bok: '韩国',
-  kr_cpi: '韩国',
-  kr_employment: '韩国',
-  kr_ind_activity: '韩国',
-  jp_cpi: '日本',
-  jp_unemp: '日本',
-  jp_tankan: '日本',
+const COUNTRY_LABEL_OF_TYPE: Record<string, { zh: string; en: string }> = {
+  boj: { zh: '日本', en: 'Japan' },
+  bok: { zh: '韩国', en: 'South Korea' },
+  kr_cpi: { zh: '韩国', en: 'South Korea' },
+  kr_employment: { zh: '韩国', en: 'South Korea' },
+  kr_ind_activity: { zh: '韩国', en: 'South Korea' },
+  jp_cpi: { zh: '日本', en: 'Japan' },
+  jp_unemp: { zh: '日本', en: 'Japan' },
+  jp_tankan: { zh: '日本', en: 'Japan' },
   // 欧洲桶内单条标各自国别(同 jpkr 桶范式)· ECB 保持「欧元区」不覆盖(落桶标签「欧洲」)
-  gb_cpi: '英国',
-  gb_gdp: '英国',
-  gb_unemp: '英国',
-  gb_boe: '英国',
-  de_cpi: '德国',
-  de_gdp: '德国',
-  de_unemp: '德国',
-  fr_cpi: '法国',
-  fr_gdp: '法国',
-  fr_unemp: '法国',
-  it_cpi: '意大利',
-  it_gdp: '意大利',
-  it_unemp: '意大利',
+  gb_cpi: { zh: '英国', en: 'United Kingdom' },
+  gb_gdp: { zh: '英国', en: 'United Kingdom' },
+  gb_unemp: { zh: '英国', en: 'United Kingdom' },
+  gb_boe: { zh: '英国', en: 'United Kingdom' },
+  de_cpi: { zh: '德国', en: 'Germany' },
+  de_gdp: { zh: '德国', en: 'Germany' },
+  de_unemp: { zh: '德国', en: 'Germany' },
+  fr_cpi: { zh: '法国', en: 'France' },
+  fr_gdp: { zh: '法国', en: 'France' },
+  fr_unemp: { zh: '法国', en: 'France' },
+  it_cpi: { zh: '意大利', en: 'Italy' },
+  it_gdp: { zh: '意大利', en: 'Italy' },
+  it_unemp: { zh: '意大利', en: 'Italy' },
 }
 
 // 来源标注(客观出处 · 与库 source 字段一一对应)
-const SOURCE_LABEL: Record<string, string> = {
-  fed_json: '美联储官网',
-  bea_json: '美国经济分析局',
-  kostat: '韩国国家数据处',
-  jp_estat: '日本总务省统计局',
-  boj_xlsx: '日本银行',
-  dsbb: 'IMF 数据标准公报',
-  rule: '官方惯例规则',
-  seed: '官方年表·策展',
+const SOURCE_LABEL: Record<string, { zh: string; en: string }> = {
+  fed_json: { zh: '美联储官网', en: 'Federal Reserve' },
+  bea_json: { zh: '美国经济分析局', en: 'U.S. BEA' },
+  kostat: { zh: '韩国国家数据处', en: 'Statistics Korea' },
+  jp_estat: { zh: '日本总务省统计局', en: 'Statistics Bureau of Japan' },
+  boj_xlsx: { zh: '日本银行', en: 'Bank of Japan' },
+  dsbb: { zh: 'IMF 数据标准公报', en: 'IMF DSBB' },
+  rule: { zh: '官方惯例规则', en: 'Official schedule convention' },
+  seed: { zh: '官方年表·策展', en: 'Official calendar · curated' },
 }
 
 // ── 北京时间格式化(显式 Asia/Shanghai,不随访客本地时区漂移)─────────────────
 const CST_TZ = 'Asia/Shanghai'
 
-function cstParts(iso: string): { day: string; hm: string; weekday: string } {
+function cstParts(
+  iso: string,
+  locale: 'en' | 'zh',
+): { day: string; hm: string; weekday: string } {
   const d = new Date(iso)
-  const fmt = new Intl.DateTimeFormat('zh-CN', {
+  const fmt = new Intl.DateTimeFormat(locale === 'en' ? 'en-US' : 'zh-CN', {
     timeZone: CST_TZ,
     month: '2-digit',
     day: '2-digit',
@@ -157,11 +163,11 @@ function regionOf(ev: EconEvent): Exclude<Region, 'all' | 'crypto'> | null {
 }
 
 // 事件行右侧国别标注:合并桶(日韩)内单条仍标各自国别;其余落桶标签
-function countryLabelOf(ev: EconEvent): string | null {
+function countryLabelOf(ev: EconEvent, locale: 'en' | 'zh'): string | null {
   const specific = COUNTRY_LABEL_OF_TYPE[ev.event_type]
-  if (specific) return specific
+  if (specific) return specific[locale]
   const bucket = regionOf(ev)
-  return bucket ? REGION_LABEL[bucket] : null
+  return bucket ? REGION_LABEL[bucket][locale] : null
 }
 
 function matchesRegion(ev: EconEvent, region: Region): boolean {
@@ -173,6 +179,12 @@ function matchesRegion(ev: EconEvent, region: Region): boolean {
 // ── 页面 ────────────────────────────────────────────────────────────────
 
 export default function EconCalendarPage() {
+  const { locale } = useRuntimeLocale()
+  useRuntimeDocumentTitle({
+    locale,
+    english: 'Economic Calendar',
+    chinese: '财经日历',
+  })
   const [region, setRegion] = useState<Region>('all')
 
   const calendarQ = useQuery({
@@ -193,9 +205,9 @@ export default function EconCalendarPage() {
       .filter((ev) => matchesRegion(ev, region) && cstDayNumber(new Date(ev.scheduled_at)) >= today)
       .sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at))
     const buckets: { key: string; label: string; items: EconEvent[] }[] = [
-      { key: 'today', label: '今天', items: [] },
-      { key: 'week', label: '本周', items: [] },
-      { key: 'later', label: '未来', items: [] },
+      { key: 'today', label: locale === 'en' ? 'Today' : '今天', items: [] },
+      { key: 'week', label: locale === 'en' ? 'This week' : '本周', items: [] },
+      { key: 'later', label: locale === 'en' ? 'Later' : '未来', items: [] },
     ]
     for (const ev of events) {
       const d = cstDayNumber(new Date(ev.scheduled_at))
@@ -204,14 +216,14 @@ export default function EconCalendarPage() {
       else buckets[2].items.push(ev)
     }
     return buckets.filter((b) => b.items.length > 0)
-  }, [calendarQ.data, region])
+  }, [calendarQ.data, locale, region])
 
   const updatedText = useMemo(() => {
     const iso = calendarQ.data?.updated_at
     if (!iso) return null
-    const p = cstParts(iso)
+    const p = cstParts(iso, locale)
     return `${p.day} ${p.hm}`
-  }, [calendarQ.data])
+  }, [calendarQ.data, locale])
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
@@ -234,16 +246,20 @@ export default function EconCalendarPage() {
                       : 'text-muted-foreground hover:text-midas-red',
                   )}
                 >
-                  {REGION_LABEL[r]}
+                  {REGION_LABEL[r][locale]}
                 </button>
               ))}
             </div>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>{updatedText ? `数据更新:${updatedText}` : '数据更新中'}</span>
+              <span>
+                {updatedText
+                  ? `${locale === 'en' ? 'Updated' : '数据更新'}: ${updatedText}`
+                  : locale === 'en' ? 'Updating data…' : '数据更新中'}
+              </span>
               {calendarQ.data?.any_stale ? (
                 <span className="rounded-full bg-surface-subtle px-2 py-0.5 text-[11px]">
-                  部分数据更新中
+                  {locale === 'en' ? 'Some sources are refreshing' : '部分数据更新中'}
                 </span>
               ) : null}
             </div>
@@ -251,21 +267,27 @@ export default function EconCalendarPage() {
 
           {/* 说明句(红线文案的一部分 · 一字不改,仅从页顶挪到筛选行下方) */}
           <p className="mb-5 text-xs text-muted-foreground">
-            官方宏观事件日程 · 时间均为北京时间 · 重大事件公布前后市场波动可能放大,供参考
+            {locale === 'en'
+              ? 'Official macroeconomic calendar · Times shown in China Standard Time (UTC+8) · Volatility may increase around major releases'
+              : '官方宏观事件日程 · 时间均为北京时间 · 重大事件公布前后市场波动可能放大,供参考'}
           </p>
 
           {/* 三态:加载 / 错误 / 内容(空态友好) */}
           {calendarQ.isPending ? (
             <div className="rounded-xl border border-paper bg-cream p-8 text-center text-sm text-muted-foreground">
-              日程加载中…
+              {locale === 'en' ? 'Loading calendar…' : '日程加载中…'}
             </div>
           ) : calendarQ.isError ? (
             <div className="rounded-xl border border-paper bg-cream p-8 text-center text-sm text-muted-foreground">
-              日历加载失败,请稍后刷新重试
+              {locale === 'en'
+                ? 'The calendar is temporarily unavailable. Refresh and try again shortly.'
+                : '日历加载失败,请稍后刷新重试'}
             </div>
           ) : groups.length === 0 ? (
             <div className="rounded-xl border border-paper bg-cream p-8 text-center text-sm text-muted-foreground">
-              该地区近期暂无日程,试试切换地区
+              {locale === 'en'
+                ? 'No upcoming events for this region. Try another filter.'
+                : '该地区近期暂无日程,试试切换地区'}
             </div>
           ) : (
             <div className="space-y-6">
@@ -278,8 +300,8 @@ export default function EconCalendarPage() {
                   )}
                   <div className="overflow-hidden rounded-xl border border-paper bg-cream">
                     {g.items.map((ev, i) => {
-                      const t = cstParts(ev.scheduled_at)
-                      const country = countryLabelOf(ev)
+                      const t = cstParts(ev.scheduled_at, locale)
+                      const country = countryLabelOf(ev, locale)
                       return (
                         <div
                           key={ev.event_key}
@@ -289,7 +311,7 @@ export default function EconCalendarPage() {
                           )}
                         >
                           <span className="w-28 shrink-0 font-mono text-sm tabular-nums text-muted-foreground">
-                            {t.day} {ev.time_confirmed ? t.hm : '时刻待定'}
+                            {t.day} {ev.time_confirmed ? t.hm : locale === 'en' ? 'TBD' : '时刻待定'}
                           </span>
                           <span className="w-10 shrink-0 text-xs text-muted-foreground">
                             {t.weekday}
@@ -299,13 +321,17 @@ export default function EconCalendarPage() {
                               'w-12 shrink-0 text-sm tracking-widest',
                               IMPORTANCE_CLASS[ev.importance] ?? 'text-muted-foreground',
                             )}
-                            aria-label={`重要度 ${ev.importance} 星`}
+                            aria-label={
+                              locale === 'en'
+                                ? `Importance: ${ev.importance} stars`
+                                : `重要度 ${ev.importance} 星`
+                            }
                           >
                             {'★'.repeat(Math.max(1, Math.min(3, ev.importance)))}
                           </span>
                           {/* min-w:窄屏时整体换行到下一行,而不是被挤成竖排逐字断行 */}
                           <span className="min-w-[14rem] flex-1 text-sm font-medium">
-                            {ev.title}
+                            {econEventTitle(ev, locale)}
                           </span>
                           {country ? (
                             <span className="rounded-full bg-surface-subtle px-2 py-0.5 text-[11px] text-muted-foreground">
@@ -314,11 +340,11 @@ export default function EconCalendarPage() {
                           ) : null}
                           {ev.markets.includes('crypto') ? (
                             <span className="rounded-full bg-surface-subtle px-2 py-0.5 text-[11px] text-muted-foreground">
-                              加密相关
+                              {locale === 'en' ? 'Crypto-sensitive' : '加密相关'}
                             </span>
                           ) : null}
                           <span className="text-[11px] text-muted-foreground/70">
-                            {SOURCE_LABEL[ev.source] ?? ev.source}
+                            {SOURCE_LABEL[ev.source]?.[locale] ?? ev.source}
                           </span>
                         </div>
                       )
@@ -330,7 +356,9 @@ export default function EconCalendarPage() {
           )}
 
           <p className="mt-6 text-xs leading-relaxed text-muted-foreground">
-            发布时间以各官方机构最终公布为准；标注「时刻待定」「以官方为准」的条目为窗口或惯例推算。
+            {locale === 'en'
+              ? 'Release times are subject to confirmation by the issuing institution. Items marked “TBD” are schedule windows or convention-based estimates.'
+              : '发布时间以各官方机构最终公布为准；标注「时刻待定」「以官方为准」的条目为窗口或惯例推算。'}
           </p>
         </div>
       </main>

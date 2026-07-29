@@ -45,6 +45,21 @@ export const FACTOR_LABEL: Record<string, string> = {
   depth: '盘口深度',
 }
 
+export const FACTOR_LABEL_EN: Record<string, string> = {
+  account_long_short: 'Top-trader accounts',
+  position_long_short: 'Top-trader positions',
+  taker_flow: 'Taker buy/sell flow',
+  open_interest: 'Open interest (OI)',
+  funding_rate: 'Funding rate',
+  basis: 'Basis',
+  sentiment: 'Market sentiment',
+  funding_predicted: 'Predicted funding',
+  funding_zscore: 'Funding z-score',
+  oi_volume_ratio: 'OI / volume',
+  global_long_short: 'Global account ratio',
+  depth: 'Order-book depth',
+}
+
 // 阈值(实现定稿):比值偏离均衡 · OI 24h 变化 · FGI 贪婪/恐慌档
 const RATIO_SKEW = 0.15 // |ratio − 1| 超此值视为明显偏离
 const OI_CHANGE_PCT = 3 // |change_pct_24h| 超此值视为明显增/减仓
@@ -101,7 +116,11 @@ export function layoutGraphNode(i: number, n: number): GraphNodePos {
   }
 }
 
-export function deriveGraphEdges(snapshot: StructureSnapshot): GraphEdge[] {
+export function deriveGraphEdges(
+  snapshot: StructureSnapshot,
+  locale: 'en' | 'zh' = 'zh',
+): GraphEdge[] {
+  const copy = (zh: string, en: string) => locale === 'en' ? en : zh
   const a = snapshot.account_long_short?.value?.latest ?? null
   const p = snapshot.position_long_short?.value?.latest ?? null
   const t = snapshot.taker_flow?.value?.latest ?? null
@@ -118,12 +137,18 @@ export function deriveGraphEdges(snapshot: StructureSnapshot): GraphEdge[] {
     if (a > 1 && f < 0) {
       edges.push({
         from: 'account_long_short', to: 'funding_rate', type: 'divergence',
-        reason: '结构偏多但资金费率为负(空头付费),结构与费率背离',
+        reason: copy(
+          '结构偏多但资金费率为负(空头付费),结构与费率背离',
+          'Positioning leans long while funding is negative, creating a structure/funding divergence',
+        ),
       })
     } else if (a < 1 && f > 0) {
       edges.push({
         from: 'account_long_short', to: 'funding_rate', type: 'divergence',
-        reason: '结构偏空但资金费率为正(多头付费),结构与费率背离',
+        reason: copy(
+          '结构偏空但资金费率为正(多头付费),结构与费率背离',
+          'Positioning leans short while funding is positive, creating a structure/funding divergence',
+        ),
       })
     }
   }
@@ -133,14 +158,19 @@ export function deriveGraphEdges(snapshot: StructureSnapshot): GraphEdge[] {
     if ((a - 1) * (p - 1) < 0) {
       edges.push({
         from: 'account_long_short', to: 'position_long_short', type: 'divergence',
-        reason: '大户人数方向与持仓方向劈叉(人数与仓位背离)',
+        reason: copy(
+          '大户人数方向与持仓方向劈叉(人数与仓位背离)',
+          'Top-trader account direction diverges from position direction',
+        ),
       })
     } else if (Math.abs(a - 1) > RATIO_SKEW && Math.abs(p - 1) > RATIO_SKEW) {
       const bull = a > 1
       edges.push({
         from: 'account_long_short', to: 'position_long_short', type: 'resonance',
         direction: bull ? 'bull' : 'bear',
-        reason: `人数与持仓同向且明显偏${bull ? '多' : '空'},拥挤共振`,
+        reason: locale === 'en'
+          ? `Accounts and positions align with a clear ${bull ? 'long' : 'short'} skew`
+          : `人数与持仓同向且明显偏${bull ? '多' : '空'},拥挤共振`,
       })
     }
   }
@@ -150,17 +180,26 @@ export function deriveGraphEdges(snapshot: StructureSnapshot): GraphEdge[] {
     if (oiChg > OI_CHANGE_PCT && t < 1) {
       edges.push({
         from: 'open_interest', to: 'taker_flow', type: 'divergence',
-        reason: '24h 明显增仓但主动卖压占优,仓量与买卖流背离',
+        reason: copy(
+          '24h 明显增仓但主动卖压占优,仓量与买卖流背离',
+          'Open interest rose over 24h while active selling dominated',
+        ),
       })
     } else if (oiChg > OI_CHANGE_PCT && t > 1) {
       edges.push({
         from: 'open_interest', to: 'taker_flow', type: 'resonance', direction: 'bull',
-        reason: '24h 增仓且主动买盘占优,多头动能共振',
+        reason: copy(
+          '24h 增仓且主动买盘占优,多头动能共振',
+          'Open interest rose over 24h alongside dominant active buying',
+        ),
       })
     } else if (oiChg < -OI_CHANGE_PCT && t < 1) {
       edges.push({
         from: 'open_interest', to: 'taker_flow', type: 'resonance', direction: 'bear',
-        reason: '24h 减仓且主动卖压占优,多头撤退共振',
+        reason: copy(
+          '24h 减仓且主动卖压占优,多头撤退共振',
+          'Open interest fell over 24h alongside dominant active selling',
+        ),
       })
     }
   }
@@ -169,20 +208,29 @@ export function deriveGraphEdges(snapshot: StructureSnapshot): GraphEdge[] {
   if (b !== null && a !== null && b < 0 && a > 1) {
     edges.push({
       from: 'basis', to: 'account_long_short', type: 'divergence',
-      reason: '合约贴水(基差为负)但结构偏多,基差与结构背离',
+      reason: copy(
+        '合约贴水(基差为负)但结构偏多,基差与结构背离',
+        'The perpetual trades at a discount while positioning leans long',
+      ),
     })
   }
 
   // R7 费率 ↔ 基差 ↔ 账户比 三者同向 → 共振链(两条边)
   if (f !== null && b !== null && a !== null) {
     if (f > 0 && b > 0 && a > 1) {
-      const reason = '费率为正、基差升水、结构偏多,三者同向共振'
+      const reason = copy(
+        '费率为正、基差升水、结构偏多,三者同向共振',
+        'Positive funding, premium basis and long positioning are aligned',
+      )
       edges.push(
         { from: 'funding_rate', to: 'basis', type: 'resonance', direction: 'bull', reason },
         { from: 'basis', to: 'account_long_short', type: 'resonance', direction: 'bull', reason },
       )
     } else if (f < 0 && b < 0 && a < 1) {
-      const reason = '费率为负、基差贴水、结构偏空,三者同向共振'
+      const reason = copy(
+        '费率为负、基差贴水、结构偏空,三者同向共振',
+        'Negative funding, discounted basis and short positioning are aligned',
+      )
       edges.push(
         { from: 'funding_rate', to: 'basis', type: 'resonance', direction: 'bear', reason },
         { from: 'basis', to: 'account_long_short', type: 'resonance', direction: 'bear', reason },
@@ -195,12 +243,18 @@ export function deriveGraphEdges(snapshot: StructureSnapshot): GraphEdge[] {
     if (fgi >= FGI_GREED && fAvg !== null && f > fAvg) {
       edges.push({
         from: 'sentiment', to: 'funding_rate', type: 'resonance', direction: 'bull',
-        reason: '贪婪情绪与高于 7 天均值的费率共振(过热迹象)',
+        reason: copy(
+          '贪婪情绪与高于 7 天均值的费率共振(过热迹象)',
+          'Greed aligns with funding above its 7-day average, indicating heat',
+        ),
       })
     } else if (fgi <= FGI_FEAR && f < 0) {
       edges.push({
         from: 'sentiment', to: 'funding_rate', type: 'resonance', direction: 'bear',
-        reason: '恐慌情绪与负费率共振(过冷迹象)',
+        reason: copy(
+          '恐慌情绪与负费率共振(过冷迹象)',
+          'Fear aligns with negative funding, indicating a cold market structure',
+        ),
       })
     }
   }
@@ -210,7 +264,10 @@ export function deriveGraphEdges(snapshot: StructureSnapshot): GraphEdge[] {
   if (pred !== null && fAvg !== null && pred * fAvg < 0) {
     edges.push({
       from: 'funding_predicted', to: 'funding_rate', type: 'divergence',
-      reason: '预估费率与 7 天均值方向相反,费率结构转折中',
+      reason: copy(
+        '预估费率与 7 天均值方向相反,费率结构转折中',
+        'Predicted funding has the opposite sign to the 7-day average',
+      ),
     })
   }
 
@@ -220,12 +277,18 @@ export function deriveGraphEdges(snapshot: StructureSnapshot): GraphEdge[] {
     if (z > Z_EXTREME && a > 1) {
       edges.push({
         from: 'funding_zscore', to: 'account_long_short', type: 'resonance', direction: 'bull',
-        reason: '费率 Z 分数极端偏高且结构偏多,多头拥挤确认',
+        reason: copy(
+          '费率 Z 分数极端偏高且结构偏多,多头拥挤确认',
+          'Funding z-score is extremely high while positioning leans long',
+        ),
       })
     } else if (z < -Z_EXTREME && a < 1) {
       edges.push({
         from: 'funding_zscore', to: 'account_long_short', type: 'resonance', direction: 'bear',
-        reason: '费率 Z 分数极端偏低且结构偏空,空头拥挤确认',
+        reason: copy(
+          '费率 Z 分数极端偏低且结构偏空,空头拥挤确认',
+          'Funding z-score is extremely low while positioning leans short',
+        ),
       })
     }
   }

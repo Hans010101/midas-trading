@@ -16,17 +16,22 @@ interface ForceBarProps {
   ratio: number
   /** 来源标注(如「大户账户多空比 · latest」) */
   sourceLabel: string
+  locale?: 'en' | 'zh'
 }
 
-export function ForceBar({ ratio, sourceLabel }: ForceBarProps) {
+export function ForceBar({ ratio, sourceLabel, locale = 'zh' }: ForceBarProps) {
   const pct = ratioToLongShortPct(ratio)
   if (pct === null) return null
   return (
     <div className="mt-3">
       <div className="mb-1 flex items-center justify-between text-xs">
-        <span className="font-mono font-medium text-up">多 {pct.longPct}%</span>
+        <span className="font-mono font-medium text-up">
+          {locale === 'en' ? 'Long' : '多'} {pct.longPct}%
+        </span>
         <span className="text-[10px] text-muted-foreground/60">{sourceLabel}</span>
-        <span className="font-mono font-medium text-down">空 {pct.shortPct}%</span>
+        <span className="font-mono font-medium text-down">
+          {locale === 'en' ? 'Short' : '空'} {pct.shortPct}%
+        </span>
       </div>
       <div className="flex h-2.5 w-full overflow-hidden rounded-full">
         <div className="bg-up" style={{ width: `${pct.longPct}%` }} />

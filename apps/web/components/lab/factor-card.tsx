@@ -33,10 +33,18 @@ interface FactorCardProps {
   /** sparkline 语义线色 / 基准线(sparklineSpec 算好传入) */
   sparkStroke?: string
   sparkBaseline?: number
+  locale?: 'en' | 'zh'
 }
 
 export function FactorCard({
-  finding, label, window: windowLabel, series, headline = null, sparkStroke, sparkBaseline,
+  finding,
+  label,
+  window: windowLabel,
+  series,
+  headline = null,
+  sparkStroke,
+  sparkBaseline,
+  locale = 'zh',
 }: FactorCardProps) {
   const divergent = finding != null && isDivergentFinding(finding)
   return (
@@ -51,7 +59,7 @@ export function FactorCard({
           <span className="text-xs text-muted-foreground">{label}</span>
           {divergent && (
             <span className="rounded bg-gold/15 px-1.5 py-0.5 text-[10px] text-gold">
-              背离/极端
+              {locale === 'en' ? 'Divergence / extreme' : '背离/极端'}
             </span>
           )}
         </div>

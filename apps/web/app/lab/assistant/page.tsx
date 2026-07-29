@@ -13,6 +13,7 @@
 import { useSession } from 'next-auth/react'
 import { useState } from 'react'
 
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { FactorCard } from '@/components/lab/factor-card'
 import { ForceBar } from '@/components/lab/force-bar'
 import { LabNav } from '@/components/lab/lab-nav'
@@ -34,15 +35,17 @@ import {
   useOpenInterest,
 } from '@/hooks/use-crypto'
 import { useStructureDiagnose } from '@/hooks/use-structure'
+import { useRuntimeDocumentTitle } from '@/hooks/use-runtime-document-title'
 import type {
   FactorFinding,
   IntentKind,
   StructureDiagnosis,
   StructureSnapshot,
 } from '@/lib/api/structure'
-import { FACTOR_LABEL } from '@/lib/structure-graph'
+import { FACTOR_LABEL, FACTOR_LABEL_EN } from '@/lib/structure-graph'
 import {
   CALIBER_NOTE,
+  CALIBER_NOTE_EN,
   type Tone,
   buildFactorCards,
   factorHeadline,
@@ -50,35 +53,41 @@ import {
 } from '@/lib/structure-viz'
 import { cn } from '@/lib/utils'
 
-const INTENT_LABEL: Record<IntentKind, string> = {
-  long_crowding: '多头拥挤度',
-  short_crowding: '空头拥挤度',
-  leverage_buildup: '杠杆堆积',
-  funding_extreme: '资金费率状态',
-  overall: '整体结构',
+const INTENT_LABEL: Record<IntentKind, { zh: string; en: string }> = {
+  long_crowding: { zh: '多头拥挤度', en: 'Long crowding' },
+  short_crowding: { zh: '空头拥挤度', en: 'Short crowding' },
+  leverage_buildup: { zh: '杠杆堆积', en: 'Leverage build-up' },
+  funding_extreme: { zh: '资金费率状态', en: 'Funding conditions' },
+  overall: { zh: '整体结构', en: 'Overall structure' },
 }
 
 // 429(额度耗尽)→ 结构化 detail 友好文案;其余错误原样(会员刀2)
-function diagnoseErrorText(err: Error): string {
+function diagnoseErrorText(err: Error, locale: 'en' | 'zh'): string {
   if (err instanceof StructureApiError && err.status === 429) {
     const d = parseQuotaDetail(err.rawDetail)
-    if (d) return quotaErrorMessage(d)
+    if (d) return quotaErrorMessage(d, locale)
   }
   return err.message
 }
 
 // 快捷问题(点击即提问 · 用当前 symbol)
 const QUICK_QUESTIONS = [
-  '多头是不是太拥挤',
-  '空头会不会被挤爆',
-  '杠杆堆积情况怎么样',
-  '资金费率现在极端吗',
-  '整体结构看一下',
+  { zh: '多头是不是太拥挤', en: 'Are longs overcrowded?' },
+  { zh: '空头会不会被挤爆', en: 'Is short positioning crowded?' },
+  { zh: '杠杆堆积情况怎么样', en: 'How much leverage is building up?' },
+  { zh: '资金费率现在极端吗', en: 'Is the funding rate extreme?' },
+  { zh: '整体结构看一下', en: 'Review the overall market structure' },
 ] as const
 
 export default function LabAssistantPage() {
+  const { locale } = useRuntimeLocale()
+  useRuntimeDocumentTitle({
+    locale,
+    english: 'AI Sandbox Assistant',
+    chinese: 'AI 沙盘助手',
+  })
   const { status: authStatus } = useSession()
-  const diagnose = useStructureDiagnose()
+  const diagnose = useStructureDiagnose(locale)
   // 会员刀2:额度展示(剩 N 次 / 耗尽置灰)· 诊断结果返回后刷新计数
   const quota = useQuota()
   const invalidateQuota = useInvalidateQuota()
@@ -107,12 +116,21 @@ export default function LabAssistantPage() {
         <LabNav />
 
         {authStatus === 'unauthenticated' ? (
-          <EmptyState title="请先登录" hint="AI 沙盘助手需要登录后访问" />
+          <EmptyState
+            title={locale === 'en' ? 'Sign in to continue' : '请先登录'}
+            hint={
+              locale === 'en'
+                ? 'The AI Sandbox Assistant is available to registered users'
+                : 'AI 沙盘助手需要登录后访问'
+            }
+          />
         ) : (
           <>
             {/* ── 提问区 ──────────────────────────────────────────── */}
             <section className="mb-8 rounded-lg border border-paper bg-cream p-5 shadow-sm">
-              <h2 className="mb-4 font-serif text-lg font-bold">向助手提问</h2>
+              <h2 className="mb-4 font-serif text-lg font-bold">
+                {locale === 'en' ? 'Ask the assistant' : '向助手提问'}
+              </h2>
               <div className="flex flex-col gap-3 md:flex-row">
                 {/* symbol 联想(输 eth → 下拉 ETHUSDT)· 无匹配可直输,后端补后缀兜底 */}
                 <SymbolSuggest value={symbol} onChange={setSymbol} className="md:w-44" />
@@ -122,7 +140,11 @@ export default function LabAssistantPage() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') ask(question)
                   }}
-                  placeholder="如:BTC 现在多头是不是太拥挤?"
+                  placeholder={
+                    locale === 'en'
+                      ? 'e.g. Are BTC longs overcrowded?'
+                      : '如:BTC 现在多头是不是太拥挤?'
+                  }
                   className="flex-1"
                 />
                 <Button
@@ -132,40 +154,43 @@ export default function LabAssistantPage() {
                     || question.trim() === '' || symbol.trim() === ''
                   }
                 >
-                  {diagnose.isPending ? '分析中…' : '结构诊断'}
+                  {diagnose.isPending
+                    ? locale === 'en' ? 'Analyzing…' : '分析中…'
+                    : locale === 'en' ? 'Analyze structure' : '结构诊断'}
                 </Button>
               </div>
               {/* 额度提示(剩 N 次 / 耗尽引导官网会员区)· 如实展示 */}
               <div className="mt-2">
-                <QuotaHint item={diagnoseQuota} />
+                <QuotaHint item={diagnoseQuota} locale={locale} />
               </div>
               {/* 快捷问题 */}
               <div className="mt-3 flex flex-wrap gap-2">
                 {QUICK_QUESTIONS.map((q) => (
                   <button
-                    key={q}
+                    key={q.zh}
                     type="button"
-                    onClick={() => ask(q)}
+                    onClick={() => ask(q[locale])}
                     disabled={diagnose.isPending || exhausted}
                     className="rounded-full border border-paper px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-midas-red hover:text-midas-red disabled:opacity-50"
                   >
-                    {q}
+                    {q[locale]}
                   </button>
                 ))}
               </div>
               {diagnose.isError && (
                 <p className="mt-3 text-sm text-midas-red">
-                  {diagnoseErrorText(diagnose.error)}
+                  {diagnoseErrorText(diagnose.error, locale)}
                 </p>
               )}
               <p className="mt-3 text-xs text-faint">
-                覆盖 USDT 永续 · 7 因子(多空比 / taker / OI / 资金费率 / 基差 / 情绪)·
-                数据窗口最长 60 天。
+                {locale === 'en'
+                  ? 'USDT perpetuals · 12 structural factors including positioning, taker flow, OI, funding, basis, sentiment and depth · Up to 60 days of history.'
+                  : '覆盖 USDT 永续 · 7 因子(多空比 / taker / OI / 资金费率 / 基差 / 情绪)· 数据窗口最长 60 天。'}
               </p>
             </section>
 
             {/* ── 诊断结果 · 结论先行四层 ──────────────────────────── */}
-            {diagnose.data && <DiagnosisResult diag={diagnose.data} />}
+            {diagnose.data && <DiagnosisResult diag={diagnose.data} locale={locale} />}
           </>
         )}
 
@@ -177,10 +202,10 @@ export default function LabAssistantPage() {
 // ── 大数字面板(刀2 · 关键指标竖排 · 全部 snapshot 结构化取数)──────────────
 // 三期批1 换血:basis 出(信息保留在图谱节点+因子卡)· funding_zscore 进(极端程度一眼指标)
 const BIG_NUMBER_FACTORS = [
-  { key: 'funding_rate', label: '资金费率' },
-  { key: 'account_long_short', label: '大户账户多空比' },
-  { key: 'open_interest', label: 'OI 24h 变化' },
-  { key: 'funding_zscore', label: '费率 Z 分数(60d)' },
+  { key: 'funding_rate', zh: '资金费率', en: 'Funding rate' },
+  { key: 'account_long_short', zh: '大户账户多空比', en: 'Top-trader account ratio' },
+  { key: 'open_interest', zh: 'OI 24h 变化', en: 'OI change (24h)' },
+  { key: 'funding_zscore', zh: '费率 Z 分数(60d)', en: 'Funding z-score (60d)' },
 ] as const
 
 const TONE_TEXT: Record<Tone, string> = {
@@ -188,17 +213,21 @@ const TONE_TEXT: Record<Tone, string> = {
 }
 
 function BigNumberPanel({
-  snapshot, findings,
-}: { snapshot: StructureSnapshot; findings: FactorFinding[] }) {
+  snapshot, findings, locale,
+}: {
+  snapshot: StructureSnapshot
+  findings: FactorFinding[]
+  locale: 'en' | 'zh'
+}) {
   // 刀D-B:数值色跟 finding.state 档位(与因子卡/图谱节点同源收敛)
   const byFactor = new Map(findings.map((f) => [f.factor, f]))
   return (
     <div className="flex h-full flex-col justify-center gap-3 rounded-lg border border-paper bg-cream p-4 shadow-sm">
-      {BIG_NUMBER_FACTORS.map(({ key, label }) => {
-        const head = factorHeadline(key, snapshot, byFactor.get(key))
+      {BIG_NUMBER_FACTORS.map(({ key, zh, en }) => {
+        const head = factorHeadline(key, snapshot, byFactor.get(key), locale)
         return (
           <div key={key}>
-            <div className="text-xs text-muted-foreground">{label}</div>
+            <div className="text-xs text-muted-foreground">{locale === 'en' ? en : zh}</div>
             <div
               className={cn(
                 'font-mono text-2xl font-bold tabular-nums',
@@ -215,7 +244,13 @@ function BigNumberPanel({
 }
 
 // ── 四层渲染(照 lab-report 范式)────────────────────────────────────────────
-function DiagnosisResult({ diag }: { diag: StructureDiagnosis }) {
+function DiagnosisResult({
+  diag,
+  locale,
+}: {
+  diag: StructureDiagnosis
+  locale: 'en' | 'zh'
+}) {
   // sparkline 数据旁路:crypto 现有端点(🔴 不进诊断链 · services/structure 零碰)。
   // hooks 固定提升到本层(React 规则:不能在 factor map 循环里调)· 窗口对齐 snapshot 口径。
   const symbol = diag.snapshot.symbol
@@ -259,9 +294,11 @@ function DiagnosisResult({ diag }: { diag: StructureDiagnosis }) {
       {/* ① 结论先行卡(抄 lab-report 结论卡 markup)*/}
       <section>
         <div className="mb-2 flex flex-wrap items-center gap-3">
-          <h2 className="font-serif text-lg font-bold">结构诊断</h2>
+          <h2 className="font-serif text-lg font-bold">
+            {locale === 'en' ? 'Structure assessment' : '结构诊断'}
+          </h2>
           <span className="rounded bg-midas-red-glow px-2 py-0.5 font-mono text-[11px] text-midas-red">
-            {INTENT_LABEL[diag.intent]}
+            {INTENT_LABEL[diag.intent][locale]}
           </span>
         </div>
         {/* v1.1:删 symbol·perp·时间戳元信息行(Hans 反馈无效信息 · symbol 在输入框已示)*/}
@@ -269,20 +306,34 @@ function DiagnosisResult({ diag }: { diag: StructureDiagnosis }) {
           <p className="text-sm leading-relaxed text-foreground">{diag.conclusion}</p>
           {/* 多空力量对比条(snapshot 已有字段旁路展示 · 比值非法/缺失自动不渲染) */}
           {accountRatio != null && (
-            <ForceBar ratio={accountRatio} sourceLabel="大户账户多空比 · latest" />
+            <ForceBar
+              ratio={accountRatio}
+              sourceLabel={locale === 'en' ? 'Top-trader account ratio · latest' : '大户账户多空比 · latest'}
+              locale={locale}
+            />
           )}
         </div>
       </section>
 
       {/* ①.5 结构沙盘 · 图谱 + 大数字面板并排(刀2 重排:lg 左 3/5 图谱 · 右 2/5 数字;md 以下纵排)*/}
       <section>
-        <h2 className="mb-3 font-serif text-lg font-bold">结构沙盘</h2>
+        <h2 className="mb-3 font-serif text-lg font-bold">
+          {locale === 'en' ? 'Structure map' : '结构沙盘'}
+        </h2>
         <div className="grid gap-4 lg:grid-cols-5">
           <div className="lg:col-span-3">
-            <StructureGraph snapshot={diag.snapshot} findings={diag.factor_findings} />
+            <StructureGraph
+              snapshot={diag.snapshot}
+              findings={diag.factor_findings}
+              locale={locale}
+            />
           </div>
           <div className="lg:col-span-2">
-            <BigNumberPanel snapshot={diag.snapshot} findings={diag.factor_findings} />
+            <BigNumberPanel
+              snapshot={diag.snapshot}
+              findings={diag.factor_findings}
+              locale={locale}
+            />
           </div>
         </div>
       </section>
@@ -291,21 +342,24 @@ function DiagnosisResult({ diag }: { diag: StructureDiagnosis }) {
           有 finding 附判定、无 finding 降级为数值+图 · 如实留白不伪造判定)*/}
       {factorCards.length > 0 && (
         <section>
-          <h2 className="mb-3 font-serif text-lg font-bold">分因子状态</h2>
+          <h2 className="mb-3 font-serif text-lg font-bold">
+            {locale === 'en' ? 'Factor status' : '分因子状态'}
+          </h2>
           <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">
             {factorCards.map((c) => {
               // 刀D-B:数值色/线色跟 finding.state 档位(无判定中性灰 · 与胶囊同源)
-              const spec = sparklineSpec(c.key, diag.snapshot, c.finding)
+              const spec = sparklineSpec(c.key, diag.snapshot, c.finding, locale)
               return (
                 <FactorCard
                   key={c.key}
                   finding={c.finding}
-                  label={FACTOR_LABEL[c.key] ?? c.key}
+                  label={(locale === 'en' ? FACTOR_LABEL_EN[c.key] : FACTOR_LABEL[c.key]) ?? c.key}
                   window={c.window}
                   series={seriesFor(c.key)}
-                  headline={factorHeadline(c.key, diag.snapshot, c.finding)}
+                  headline={factorHeadline(c.key, diag.snapshot, c.finding, locale)}
                   sparkStroke={spec.stroke}
                   sparkBaseline={spec.baseline}
+                  locale={locale}
                 />
               )
             })}
@@ -315,9 +369,13 @@ function DiagnosisResult({ diag }: { diag: StructureDiagnosis }) {
 
       {/* ③ 口径 / 缺失说明(抄脚注 section markup)*/}
       <section className="rounded-lg border border-paper bg-surface-subtle p-4">
-        <h2 className="mb-2 font-serif text-sm font-bold">数据口径</h2>
+        <h2 className="mb-2 font-serif text-sm font-bold">
+          {locale === 'en' ? 'Data methodology' : '数据口径'}
+        </h2>
         {/* 批1 修复刀:口径文案抽常量(与 prompts 红线三对齐 · vitest 断言防再漂移) */}
-        <p className="text-xs text-muted-foreground">{CALIBER_NOTE}</p>
+        <p className="text-xs text-muted-foreground">
+          {locale === 'en' ? CALIBER_NOTE_EN : CALIBER_NOTE}
+        </p>
         {diag.unsupported_note && (
           <p className="mt-2 text-xs text-gold">⚠ {diag.unsupported_note}</p>
         )}
@@ -327,7 +385,9 @@ function DiagnosisResult({ diag }: { diag: StructureDiagnosis }) {
       <section className="rounded-lg border border-paper bg-surface-subtle p-4">
         <details>
           <summary className="cursor-pointer text-xs text-muted-foreground/70">
-            展开 7 因子原始快照(数据下钻)
+            {locale === 'en'
+              ? 'View the raw factor snapshot'
+              : '展开 7 因子原始快照(数据下钻)'}
           </summary>
           <pre className="mt-2 max-h-72 overflow-auto rounded bg-cream p-3 font-mono text-[11px] text-muted-foreground">
             {JSON.stringify(diag.snapshot, null, 2)}

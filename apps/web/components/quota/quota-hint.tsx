@@ -7,14 +7,29 @@
  */
 
 import type { QuotaItem } from '@/lib/api/quota'
-import { EXHAUSTED_TEXT, isExhausted, quotaHintText } from '@/lib/quota-view'
+import {
+  EXHAUSTED_TEXT,
+  EXHAUSTED_TEXT_EN,
+  isExhausted,
+  quotaHintText,
+} from '@/lib/quota-view'
 
-export function QuotaHint({ item }: { item: QuotaItem | null }) {
+export function QuotaHint({
+  item,
+  locale = 'zh',
+}: {
+  item: QuotaItem | null
+  locale?: 'en' | 'zh'
+}) {
   if (item === null) return null
   if (isExhausted(item)) {
     return (
-      <span className="text-xs text-gold">{EXHAUSTED_TEXT}，明日自动恢复</span>
+      <span className="text-xs text-gold">
+        {locale === 'en' ? EXHAUSTED_TEXT_EN : `${EXHAUSTED_TEXT}，明日自动恢复`}
+      </span>
     )
   }
-  return <span className="text-xs text-muted-foreground/70">{quotaHintText(item)}</span>
+  return (
+    <span className="text-xs text-muted-foreground/70">{quotaHintText(item, locale)}</span>
+  )
 }

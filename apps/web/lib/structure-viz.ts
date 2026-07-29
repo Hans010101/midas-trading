@@ -15,10 +15,12 @@ import { FACTOR_ORDER } from '@/lib/structure-graph'
 export const CALIBER_NOTE =
   '各因子结论均限定其数据窗口(24h / 7d / latest);本系统因子历史最长 60 天,' +
   '「极值/分位」类表述均为近 N 天内口径,非长期历史基线。清算数据暂未采集。'
+export const CALIBER_NOTE_EN =
+  'Every factor is limited to its stated window (24h / 7d / latest). Factor history spans at most 60 days, so extremes and percentiles refer only to the recent N-day window, not a long-term baseline. Liquidation data is not yet collected.'
 
 /** 背离/极端因子高亮判定:LLM 在 state/detail 里点名「背离」「极端」即高亮(帝王金)。 */
 export function isDivergentFinding(f: Pick<FactorFinding, 'state' | 'detail'>): boolean {
-  return /背离|极端/.test(`${f.state} ${f.detail}`)
+  return /背离|极端|divergen|extreme/i.test(`${f.state} ${f.detail}`)
 }
 
 export interface FactorCardSpec {
@@ -76,8 +78,8 @@ function signTone(v: number): Tone {
 
 /** LLM finding.state 档位 → tone(偏多类朱红 / 偏空类墨绿 / 其余中性灰)。 */
 export function stateTone(state: string): Tone {
-  if (/多/.test(state)) return 'bull'
-  if (/空/.test(state)) return 'bear'
+  if (/多|bull|long/i.test(state)) return 'bull'
+  if (/空|bear|short/i.test(state)) return 'bear'
   return 'neutral'
 }
 
@@ -94,6 +96,7 @@ export function factorHeadline(
   factor: string,
   snapshot: StructureSnapshot,
   finding?: Pick<FactorFinding, 'state'> | null,
+  locale: 'en' | 'zh' = 'zh',
 ): FactorHeadline | null {
   const v = (snapshot as unknown as Record<string, { value?: Record<string, number> } | null>)[
     factor
@@ -148,8 +151,12 @@ export function factorHeadline(
     const imb = v.imbalance
     const sp = v.spread_pct
     const parts: string[] = []
-    if (imb != null && Number.isFinite(imb)) parts.push(`失衡 ${imb.toFixed(2)}`)
-    if (sp != null && Number.isFinite(sp)) parts.push(`价差 ${(sp * 100).toFixed(3)}%`)
+    if (imb != null && Number.isFinite(imb)) {
+      parts.push(`${locale === 'en' ? 'Imbalance' : '失衡'} ${imb.toFixed(2)}`)
+    }
+    if (sp != null && Number.isFinite(sp)) {
+      parts.push(`${locale === 'en' ? 'Spread' : '价差'} ${(sp * 100).toFixed(3)}%`)
+    }
     if (parts.length === 0) return null
     return { text: parts.join(' · '), tone }
   }
@@ -172,8 +179,9 @@ export function sparklineSpec(
   factor: string,
   snapshot: StructureSnapshot,
   finding?: Pick<FactorFinding, 'state'> | null,
+  locale: 'en' | 'zh' = 'zh',
 ): { baseline?: number; stroke: string } {
-  const head = factorHeadline(factor, snapshot, finding)
+  const head = factorHeadline(factor, snapshot, finding, locale)
   const stroke = head ? TONE_HEX[head.tone] : '#B8860B'
   if (RATIO_FACTORS.has(factor)) return { baseline: 1, stroke }
   if (factor === 'funding_rate' || factor === 'basis') return { baseline: 0, stroke }

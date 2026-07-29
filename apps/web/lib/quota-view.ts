@@ -19,11 +19,14 @@ export function isExhausted(item: QuotaItem): boolean {
 }
 
 /** 按钮旁小字:「今日剩 N/20 次」。 */
-export function quotaHintText(item: QuotaItem): string {
-  return `今日剩 ${quotaRemaining(item)}/${item.limit} 次`
+export function quotaHintText(item: QuotaItem, locale: 'en' | 'zh' = 'zh'): string {
+  return locale === 'en'
+    ? `${quotaRemaining(item)}/${item.limit} analyses remaining today`
+    : `今日剩 ${quotaRemaining(item)}/${item.limit} 次`
 }
 
 export const EXHAUSTED_TEXT = '今日额度已用完,明日 0 点重置(UTC+8)'
+export const EXHAUSTED_TEXT_EN = 'Today’s usage allowance is exhausted; it resets at 00:00 (UTC+8)'
 export const RESET_NOTE = '每日 0 点重置(UTC+8)'
 
 export interface QuotaExceededDetail {
@@ -45,8 +48,13 @@ export function parseQuotaDetail(detail: unknown): QuotaExceededDetail | null {
 }
 
 /** 429 的用户文案(detail 解析成功时)。 */
-export function quotaErrorMessage(detail: QuotaExceededDetail): string {
-  return `今日额度已用完(${detail.used}/${detail.limit}),明日 0 点重置(UTC+8)`
+export function quotaErrorMessage(
+  detail: QuotaExceededDetail,
+  locale: 'en' | 'zh' = 'zh',
+): string {
+  return locale === 'en'
+    ? `Today’s usage allowance is exhausted (${detail.used}/${detail.limit}); it resets at 00:00 (UTC+8)`
+    : `今日额度已用完(${detail.used}/${detail.limit}),明日 0 点重置(UTC+8)`
 }
 
 export const PLAN_LABEL: Record<string, string> = {

@@ -11,14 +11,16 @@
 
 import { usePathname, useRouter } from 'next/navigation'
 
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { cn } from '@/lib/utils'
 
 const TOOLS = [
-  { path: '/lab/assistant', label: 'AI 沙盘助手', exact: false },
-  { path: '/lab', label: '策略回测', exact: true },
+  { path: '/lab/assistant', zh: 'AI 沙盘助手', en: 'AI Sandbox Assistant', exact: false },
+  { path: '/lab', zh: '策略回测', en: 'Strategy Backtest', exact: true },
 ] as const
 
 export function LabNav() {
+  const { locale } = useRuntimeLocale()
   const pathname = usePathname()
   const router = useRouter()
 
@@ -38,7 +40,7 @@ export function LabNav() {
                 : 'text-muted-foreground hover:bg-midas-red-glow/50',
             )}
           >
-            {t.label}
+            {t[locale]}
           </button>
         )
       })}

@@ -23,9 +23,9 @@ function useToken(): { token: string; ready: boolean } {
   }
 }
 
-export function useStructureDiagnose() {
+export function useStructureDiagnose(locale: 'en' | 'zh' = 'zh') {
   const { token } = useToken()
   return useMutation<StructureDiagnosis, Error, DiagnoseRequest>({
-    mutationFn: (body) => postDiagnose(token, body),
+    mutationFn: (body) => postDiagnose(token, body, locale),
   })
 }

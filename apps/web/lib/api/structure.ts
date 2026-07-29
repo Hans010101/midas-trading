@@ -86,18 +86,23 @@ async function readDetail(resp: Response): Promise<{ text: string; raw: unknown 
   }
 }
 
-function authHeaders(token: string): HeadersInit {
-  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+function authHeaders(token: string, locale: 'en' | 'zh' = 'zh'): HeadersInit {
+  return {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+    'X-Lang': locale,
+  }
 }
 
 /** POST /api/v1/structure/diagnose · 自然语言结构诊断(502 = LLM 输出解析失败,detail 提示重试)。 */
 export async function postDiagnose(
   token: string,
   body: DiagnoseRequest,
+  locale: 'en' | 'zh' = 'zh',
 ): Promise<StructureDiagnosis> {
   const r = await fetch(`${API_BASE}${PREFIX}/diagnose`, {
     method: 'POST',
-    headers: authHeaders(token),
+    headers: authHeaders(token, locale),
     body: JSON.stringify(body),
   })
   if (!r.ok) {

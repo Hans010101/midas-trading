@@ -14,6 +14,7 @@
 import type { FactorFinding, StructureSnapshot } from '@/lib/api/structure'
 import {
   FACTOR_LABEL,
+  FACTOR_LABEL_EN,
   FACTOR_ORDER,
   GRAPH_GEOM,
   deriveGraphEdges,
@@ -49,17 +50,18 @@ interface NodeSpec {
 
 function stanceColor(state: string | undefined): string {
   if (!state) return C_NEUTRAL
-  if (/多/.test(state)) return C_BULL
-  if (/空/.test(state)) return C_BEAR
+  if (/多|bull|long/i.test(state)) return C_BULL
+  if (/空|bear|short/i.test(state)) return C_BEAR
   return C_NEUTRAL
 }
 
 interface StructureGraphProps {
   snapshot: StructureSnapshot
   findings: FactorFinding[]
+  locale?: 'en' | 'zh'
 }
 
-export function StructureGraph({ snapshot, findings }: StructureGraphProps) {
+export function StructureGraph({ snapshot, findings, locale = 'zh' }: StructureGraphProps) {
   const present = FACTOR_ORDER.filter(
     (k) => (snapshot as unknown as Record<string, unknown>)[k] != null,
   )
@@ -70,10 +72,10 @@ export function StructureGraph({ snapshot, findings }: StructureGraphProps) {
     // 几何(节点 + 径向外推标签)走 lib 纯函数 · 角度随节点数自适应
     const p = layoutGraphNode(i, present.length)
     const f = byFactor.get(key)
-    const head = factorHeadline(key, snapshot, f)
+    const head = factorHeadline(key, snapshot, f, locale)
     return {
       key,
-      label: FACTOR_LABEL[key] ?? key,
+      label: (locale === 'en' ? FACTOR_LABEL_EN[key] : FACTOR_LABEL[key]) ?? key,
       x: p.x,
       y: p.y,
       labelX: p.labelX,
@@ -89,7 +91,7 @@ export function StructureGraph({ snapshot, findings }: StructureGraphProps) {
   const pos = new Map(nodes.map((n) => [n.key, n]))
 
   // 边:两端节点都在场才画(缺因子的边由规则层已跳过 · 双保险)
-  const edges = deriveGraphEdges(snapshot).filter((e) => pos.has(e.from) && pos.has(e.to))
+  const edges = deriveGraphEdges(snapshot, locale).filter((e) => pos.has(e.from) && pos.has(e.to))
   const nDiv = edges.filter((e) => e.type === 'divergence').length
   const nRes = edges.length - nDiv
 
@@ -115,7 +117,9 @@ export function StructureGraph({ snapshot, findings }: StructureGraphProps) {
               {e.type === 'divergence' && (
                 <animate attributeName="stroke-dashoffset" from="20" to="0" dur="1.2s" repeatCount="indefinite" />
               )}
-              <title>{`${e.reason}(规则推导)`}</title>
+              <title>
+                {`${e.reason}${locale === 'en' ? ' (rule-derived)' : '(规则推导)'}`}
+              </title>
             </line>
           )
         })}
@@ -129,7 +133,9 @@ export function StructureGraph({ snapshot, findings }: StructureGraphProps) {
             )}
             <circle cx={n.x} cy={n.y} r={12} fill={n.color} opacity={0.92}>
               <title>
-                {n.stateText ? `${n.label}:${n.stateText}(LLM 判定)` : `${n.label}:未点名`}
+                {n.stateText
+                  ? `${n.label}: ${n.stateText}${locale === 'en' ? ' (LLM assessment)' : '(LLM 判定)'}`
+                  : `${n.label}: ${locale === 'en' ? 'not highlighted' : '未点名'}`}
               </title>
             </circle>
             {/* 名称行 + 数值行,以径向锚点为中线上下错开(几何与单测同源 GRAPH_GEOM) */}
@@ -164,7 +170,11 @@ export function StructureGraph({ snapshot, findings }: StructureGraphProps) {
           {snapshot.symbol}
         </text>
         <text x={CX} y={CY + 14} textAnchor="middle" fontSize={10} fill={edges.length > 0 ? C_GOLD : C_NEUTRAL}>
-          {edges.length > 0 ? `${nDiv} 背离 · ${nRes} 共振` : '无显著背离/共振'}
+          {edges.length > 0
+            ? locale === 'en'
+              ? `${nDiv} divergences · ${nRes} alignments`
+              : `${nDiv} 背离 · ${nRes} 共振`
+            : locale === 'en' ? 'No material divergence or alignment' : '无显著背离/共振'}
         </text>
       </svg>
 
@@ -172,19 +182,19 @@ export function StructureGraph({ snapshot, findings }: StructureGraphProps) {
       <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[10px] text-muted-foreground/70">
         <span className="flex items-center gap-1">
           <span className="inline-block h-0.5 w-4" style={{ background: C_GOLD }} />
-          背离(规则推导)
+          {locale === 'en' ? 'Divergence (rule-derived)' : '背离(规则推导)'}
         </span>
         <span className="flex items-center gap-1">
           <span className="inline-block h-0.5 w-4" style={{ background: C_BULL }} />
-          偏多共振
+          {locale === 'en' ? 'Bullish alignment' : '偏多共振'}
         </span>
         <span className="flex items-center gap-1">
           <span className="inline-block h-0.5 w-4" style={{ background: C_BEAR }} />
-          偏空共振
+          {locale === 'en' ? 'Bearish alignment' : '偏空共振'}
         </span>
         <span className="flex items-center gap-1">
           <span className="inline-block size-2 rounded-full border-2" style={{ borderColor: C_GOLD }} />
-          LLM 点名背离/极端
+          {locale === 'en' ? 'LLM-flagged divergence / extreme' : 'LLM 点名背离/极端'}
         </span>
       </div>
     </div>

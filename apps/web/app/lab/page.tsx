@@ -12,11 +12,13 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useState, type ReactNode } from 'react'
 
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { LabNav } from '@/components/lab/lab-nav'
 import { TopNav } from '@/components/layout/top-nav'
 import { Button } from '@/components/ui/button'
 import { QuotaHint } from '@/components/quota/quota-hint'
 import { useInvalidateQuota, useQuota } from '@/hooks/use-quota'
+import { useRuntimeDocumentTitle } from '@/hooks/use-runtime-document-title'
 import { BacktestApiError } from '@/lib/api/backtest'
 import { isExhausted, parseQuotaDetail, quotaErrorMessage, quotaItemFor } from '@/lib/quota-view'
 import { Input } from '@/components/ui/input'
@@ -25,10 +27,10 @@ import { useBacktestList, useCreateBacktest } from '@/hooks/use-backtest'
 import type { BacktestStatus } from '@/lib/api/backtest'
 import { cn } from '@/lib/utils'
 
-const STATUS_LABEL: Record<BacktestStatus, string> = {
-  pending: '进行中',
-  done: '完成',
-  error: '失败',
+const STATUS_LABEL: Record<BacktestStatus, { zh: string; en: string }> = {
+  pending: { zh: '进行中', en: 'Running' },
+  done: { zh: '完成', en: 'Completed' },
+  error: { zh: '失败', en: 'Failed' },
 }
 
 const PAGE_SIZE = 10 // 列表每页条数(纯前端切片分页 · 后端 limit 50 已够覆盖,不碰后端)
@@ -36,12 +38,18 @@ const PAGE_SIZE = 10 // 列表每页条数(纯前端切片分页 · 后端 limit
 // P2-period:放开 1h + 1d 两档(15m 数据太浅不放 · 后端 schema 虽允许但前端不给选项)。
 // 控件范式照 crypto-header.tsx 周期切换器;1h 年化基数由后端 bars_per_year 补丁保证(同刀)。
 const LAB_PERIODS = [
-  { value: '1h', label: '1h' },
-  { value: '1d', label: '1d · 日线' },
+  { value: '1h', zh: '1h', en: '1h' },
+  { value: '1d', zh: '1d · 日线', en: '1d · Daily' },
 ] as const
 type LabPeriod = (typeof LAB_PERIODS)[number]['value']
 
 export default function LabPage() {
+  const { locale } = useRuntimeLocale()
+  useRuntimeDocumentTitle({
+    locale,
+    english: 'Strategy Backtest',
+    chinese: '策略研究室',
+  })
   const router = useRouter()
   const { status: authStatus } = useSession()
   const list = useBacktestList()
@@ -88,7 +96,7 @@ export default function LabPage() {
   function createErrorText(err: Error): string {
     if (err instanceof BacktestApiError && err.status === 429) {
       const d = parseQuotaDetail(err.rawDetail)
-      if (d) return quotaErrorMessage(d)
+      if (d) return quotaErrorMessage(d, locale)
     }
     return err.message
   }
@@ -101,21 +109,30 @@ export default function LabPage() {
         <LabNav />
 
         {authStatus === 'unauthenticated' ? (
-          <EmptyState title="请先登录" hint="研究室回测需要登录后访问" />
+          <EmptyState
+            title={locale === 'en' ? 'Sign in to continue' : '请先登录'}
+            hint={
+              locale === 'en'
+                ? 'Strategy backtests are available to registered users'
+                : '研究室回测需要登录后访问'
+            }
+          />
         ) : (
           <>
             {/* ── 发起表单 ──────────────────────────────────────────── */}
             <section className="mb-10 rounded-lg border border-paper bg-cream p-5 shadow-sm">
-              <h2 className="mb-4 font-serif text-lg font-bold">发起回测</h2>
+              <h2 className="mb-4 font-serif text-lg font-bold">
+                {locale === 'en' ? 'Run a backtest' : '发起回测'}
+              </h2>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <Field label="标的(crypto perp)">
+                <Field label={locale === 'en' ? 'Instrument (crypto perpetual)' : '标的(crypto perp)'}>
                   <Input
                     value={symbol}
                     onChange={(e) => setSymbol(e.target.value)}
                     placeholder="BTCUSDT"
                   />
                 </Field>
-                <Field label="市场(锁定)">
+                <Field label={locale === 'en' ? 'Market (fixed)' : '市场(锁定)'}>
                   <Input
                     value="crypto perp"
                     disabled
@@ -123,7 +140,7 @@ export default function LabPage() {
                     className="cursor-not-allowed bg-surface-subtle text-muted-foreground"
                   />
                 </Field>
-                <Field label="周期">
+                <Field label={locale === 'en' ? 'Timeframe' : '周期'}>
                   <div className="flex h-10 items-center gap-1">
                     {LAB_PERIODS.map((p) => (
                       <button
@@ -137,24 +154,26 @@ export default function LabPage() {
                             : 'text-muted-foreground hover:text-foreground',
                         )}
                       >
-                        {p.label}
+                          {p[locale]}
                       </button>
                     ))}
                   </div>
                   {period === '1h' && (
                     <p className="mt-1 text-xs text-faint">
-                      1h 数据自 2026-05-08 起,选更早的开始日期将提示查无数据
+                      {locale === 'en'
+                        ? 'Hourly data begins on May 8, 2026. Earlier start dates will return no data.'
+                        : '1h 数据自 2026-05-08 起,选更早的开始日期将提示查无数据'}
                     </p>
                   )}
                 </Field>
-                <Field label="开始日期">
+                <Field label={locale === 'en' ? 'Start date' : '开始日期'}>
                   <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
                 </Field>
-                <Field label="结束日期">
+                <Field label={locale === 'en' ? 'End date' : '结束日期'}>
                   <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
                 </Field>
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="SMA 快线">
+                  <Field label={locale === 'en' ? 'Fast SMA' : 'SMA 快线'}>
                     <Input
                       type="number"
                       min={1}
@@ -162,7 +181,7 @@ export default function LabPage() {
                       onChange={(e) => setSmaFast(Number(e.target.value))}
                     />
                   </Field>
-                  <Field label="SMA 慢线">
+                  <Field label={locale === 'en' ? 'Slow SMA' : 'SMA 慢线'}>
                     <Input
                       type="number"
                       min={1}
@@ -177,28 +196,41 @@ export default function LabPage() {
                   onClick={submit}
                   disabled={create.isPending || exhausted || symbol.trim() === ''}
                 >
-                  {create.isPending ? '发起中…' : '发起回测'}
+                  {create.isPending
+                    ? locale === 'en' ? 'Starting…' : '发起中…'
+                    : locale === 'en' ? 'Run backtest' : '发起回测'}
                 </Button>
                 {/* 额度提示(剩 M 次 / 耗尽引导官网会员区)· 如实展示 */}
-                <QuotaHint item={backtestQuota} />
+                <QuotaHint item={backtestQuota} locale={locale} />
                 {create.isError && (
                   <span className="text-sm text-midas-red">{createErrorText(create.error)}</span>
                 )}
               </div>
               <p className="mt-3 text-xs text-faint">
-                策略 = SMA 双均线交叉(确定性 · 零 LLM)· 数据只读 ClickHouse。
+                {locale === 'en'
+                  ? 'Strategy: deterministic dual-SMA crossover · No LLM · Read-only ClickHouse market data.'
+                  : '策略 = SMA 双均线交叉(确定性 · 零 LLM)· 数据只读 ClickHouse。'}
               </p>
             </section>
 
             {/* ── 我的回测列表 ──────────────────────────────────────── */}
             <section>
-              <h2 className="mb-3 font-serif text-lg font-bold">我的回测</h2>
+              <h2 className="mb-3 font-serif text-lg font-bold">
+                {locale === 'en' ? 'My backtests' : '我的回测'}
+              </h2>
               {list.isPending ? (
                 <LoadingNote className="py-12" />
               ) : list.isError ? (
-                <EmptyState title="暂时无法读取" hint="后端不可达 · 稍后重试" />
+                <EmptyState
+                  title={locale === 'en' ? 'Backtests are temporarily unavailable' : '暂时无法读取'}
+                  hint={locale === 'en' ? 'Try again shortly' : '后端不可达 · 稍后重试'}
+                />
               ) : rows.length === 0 ? (
-                <EmptyState icon="🧪" title="还没有回测" hint="用上方表单发起第一个" />
+                <EmptyState
+                  icon="🧪"
+                  title={locale === 'en' ? 'No backtests yet' : '还没有回测'}
+                  hint={locale === 'en' ? 'Use the form above to run your first test' : '用上方表单发起第一个'}
+                />
               ) : (
                 <>
                   <div className="overflow-x-auto rounded-lg border border-paper">
@@ -206,10 +238,18 @@ export default function LabPage() {
                       <thead>
                         <tr className="border-b border-paper bg-surface-card text-xs text-muted-foreground">
                           <th className="px-3 py-2 text-left font-medium">#</th>
-                          <th className="px-3 py-2 text-left font-medium">标的</th>
-                          <th className="px-3 py-2 text-left font-medium">区间</th>
-                          <th className="px-3 py-2 text-left font-medium">状态</th>
-                          <th className="px-3 py-2 text-left font-medium">创建时间</th>
+                          <th className="px-3 py-2 text-left font-medium">
+                            {locale === 'en' ? 'Instrument' : '标的'}
+                          </th>
+                          <th className="px-3 py-2 text-left font-medium">
+                            {locale === 'en' ? 'Period' : '区间'}
+                          </th>
+                          <th className="px-3 py-2 text-left font-medium">
+                            {locale === 'en' ? 'Status' : '状态'}
+                          </th>
+                          <th className="px-3 py-2 text-left font-medium">
+                            {locale === 'en' ? 'Created' : '创建时间'}
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -227,10 +267,12 @@ export default function LabPage() {
                               {r.start_date} → {r.end_date}
                             </td>
                             <td className="px-3 py-2.5">
-                              <StatusBadge status={r.status} />
+                              <StatusBadge status={r.status} locale={locale} />
                             </td>
                             <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                              {new Date(r.created_at).toLocaleString('zh-CN')}
+                              {new Date(r.created_at).toLocaleString(
+                                locale === 'en' ? 'en-US' : 'zh-CN',
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -245,10 +287,12 @@ export default function LabPage() {
                         disabled={currentPage <= 1}
                         onClick={() => setPage(currentPage - 1)}
                       >
-                        上一页
+                        {locale === 'en' ? 'Previous' : '上一页'}
                       </Button>
                       <span className="font-mono text-xs text-muted-foreground">
-                        第 {currentPage} / {totalPages} 页
+                        {locale === 'en'
+                          ? `Page ${currentPage} of ${totalPages}`
+                          : `第 ${currentPage} / ${totalPages} 页`}
                       </span>
                       <Button
                         variant="outline"
@@ -256,7 +300,7 @@ export default function LabPage() {
                         disabled={currentPage >= totalPages}
                         onClick={() => setPage(currentPage + 1)}
                       >
-                        下一页
+                        {locale === 'en' ? 'Next' : '下一页'}
                       </Button>
                     </div>
                   )}
@@ -279,7 +323,13 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-function StatusBadge({ status }: { status: BacktestStatus }) {
+function StatusBadge({
+  status,
+  locale,
+}: {
+  status: BacktestStatus
+  locale: 'en' | 'zh'
+}) {
   const cls =
     status === 'done'
       ? 'bg-success/10 text-success'
@@ -288,7 +338,7 @@ function StatusBadge({ status }: { status: BacktestStatus }) {
         : 'bg-gold/15 text-gold'
   return (
     <span className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${cls}`}>
-      {STATUS_LABEL[status]}
+      {STATUS_LABEL[status][locale]}
     </span>
   )
 }

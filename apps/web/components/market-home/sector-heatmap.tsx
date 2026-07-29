@@ -1,5 +1,6 @@
 'use client'
 
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { useChartColors } from '@/lib/chart-colors'
 
 /**
@@ -53,15 +54,24 @@ function depthPct(changePct: number, isDark: boolean): number {
   return Math.min(70, Math.max(10, a))
 }
 
-function tileTip(s: HeatmapSector, fmtAmount: (n: number) => string): string {
-  const base = `${s.name} · 涨跌 ${fmtPct(s.change_pct)} · 家数 ${s.stock_count} · 成交额 ${fmtAmount(s.total_amount)}`
+function tileTip(
+  s: HeatmapSector,
+  fmtAmount: (n: number) => string,
+  locale: 'en' | 'zh',
+): string {
+  const base = locale === 'en'
+    ? `${s.name} · Change ${fmtPct(s.change_pct)} · ${s.stock_count} stocks · Turnover ${fmtAmount(s.total_amount)}`
+    : `${s.name} · 涨跌 ${fmtPct(s.change_pct)} · 家数 ${s.stock_count} · 成交额 ${fmtAmount(s.total_amount)}`
   if (s.leader_name) {
-    return `${base} · 领涨 ${s.leader_name} ${fmtPct(s.leader_change_pct ?? 0)}`
+    return locale === 'en'
+      ? `${base} · Leader ${s.leader_name} ${fmtPct(s.leader_change_pct ?? 0)}`
+      : `${base} · 领涨 ${s.leader_name} ${fmtPct(s.leader_change_pct ?? 0)}`
   }
   return base
 }
 
 export function SectorHeatmap({ sectors, fmtAmount, max }: SectorHeatmapProps) {
+  const { locale } = useRuntimeLocale()
   const { isDark } = useChartColors() // ★P3:暗底透明度映射分档 · 切主题即时跟随
   // 降序排(强左上 → 弱右下)· 后端通常已 DESC,这里防御性再排一次
   const sorted = [...sectors].sort((a, b) => b.change_pct - a.change_pct)
@@ -76,7 +86,7 @@ export function SectorHeatmap({ sectors, fmtAmount, max }: SectorHeatmapProps) {
           return (
             <div
               key={s.name}
-              title={tileTip(s, fmtAmount)}
+              title={tileTip(s, fmtAmount, locale)}
               style={{ backgroundColor: bg }}
               className="rounded-md border border-border/50 px-3 py-2.5 transition-colors"
             >
@@ -84,7 +94,9 @@ export function SectorHeatmap({ sectors, fmtAmount, max }: SectorHeatmapProps) {
               <div className="mt-1 font-mono text-lg font-bold text-foreground">
                 {fmtPct(s.change_pct)}
               </div>
-              <div className="mt-0.5 text-[11px] text-muted-foreground/70">{s.stock_count} 只</div>
+              <div className="mt-0.5 text-[11px] text-muted-foreground/70">
+                {locale === 'en' ? `${s.stock_count} stocks` : `${s.stock_count} 只`}
+              </div>
             </div>
           )
         })}
