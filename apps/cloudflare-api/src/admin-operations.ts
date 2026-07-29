@@ -17,6 +17,7 @@ import {
   ingestSocialContent,
   markContentDrafted,
   nextContentEvent,
+  type SocialContentType,
 } from './social-content'
 
 const MAX_PDF_BYTES = 5 * 1024 * 1024
@@ -654,10 +655,10 @@ async function createSocialDrafts(
   env: Env,
   style: 'default' | 'x_short',
   autoDrafted: boolean,
-  preferEvent = false,
+  preferredEventTypes: readonly SocialContentType[] = [],
 ): Promise<{ items: CreatedSocialDraft[]; provider: string }> {
-  if (style === 'default' && preferEvent) {
-    const event = await nextContentEvent(env)
+  if (style === 'default' && preferredEventTypes.length > 0) {
+    const event = await nextContentEvent(env, preferredEventTypes)
     if (event) {
       const drafted = await draftContentEvent(env, event)
       const gate = compliant(drafted.text)
@@ -924,6 +925,23 @@ async function autoStatus(
   const adapter = adapters(env)
   const dailyUsed = Number(used?.count ?? 0)
   const minute = cstMinute()
+  const sourceHealth = await env.DB
+    .prepare(
+      `SELECT source, status, last_attempt_at, last_success_at, last_error,
+              last_inserted, latency_ms
+       FROM social_source_health
+       ORDER BY CASE status WHEN 'healthy' THEN 0 WHEN 'error' THEN 1 ELSE 2 END,
+                source`,
+    )
+    .all<{
+      source: string
+      status: 'healthy' | 'error' | 'disabled'
+      last_attempt_at: number
+      last_success_at: number | null
+      last_error: string | null
+      last_inserted: number
+      latency_ms: number
+    }>()
   return jsonResponse(
     {
       enabled: config.enabled === 1,
@@ -933,6 +951,15 @@ async function autoStatus(
       failure_count: config.failure_count,
       last_error: config.last_error,
       in_window: minute >= 8 * 60 && minute <= 22 * 60,
+      sources: sourceHealth.results.map((source) => ({
+        source: source.source,
+        status: source.status,
+        last_attempt_at: iso(source.last_attempt_at),
+        last_success_at: iso(source.last_success_at),
+        last_error: source.last_error,
+        last_inserted: source.last_inserted,
+        latency_ms: source.latency_ms,
+      })),
       platforms: [
         {
           platform: 'binance_square',
@@ -1396,8 +1423,14 @@ async function runSocialAutomation(env: Env, timestamp: number): Promise<void> {
     let candidate = await autoCandidate(env, timestamp)
     if (!candidate) {
       const dailyUsed = Number(used?.count ?? 0)
-      const preferEvent = dailyUsed % 5 !== 0 && dailyUsed % 5 !== 2
-      await createSocialDrafts(env, 'default', true, preferEvent)
+      const cycle = dailyUsed % 5
+      const preferredEventTypes: readonly SocialContentType[] =
+        cycle === 1 || cycle === 3
+          ? ['news']
+          : cycle === 4
+            ? ['whale', 'unlock', 'news']
+            : []
+      await createSocialDrafts(env, 'default', true, preferredEventTypes)
       candidate = await autoCandidate(env, Date.now())
     }
     if (!candidate) throw new Error('未生成可发布且通过门禁的币安广场草稿')

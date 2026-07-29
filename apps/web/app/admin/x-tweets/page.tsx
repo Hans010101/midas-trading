@@ -43,7 +43,7 @@ function BiasBadge({ bias }: { bias: string }) {
 const CONTENT_LABEL: Record<XTweetItem['content_type'], string> = {
   market_analysis: 'K 线分析',
   news: '热点快讯',
-  whale: '巨鲸资金',
+  whale: '大额资金',
   unlock: '代币解锁',
 }
 

@@ -24,6 +24,12 @@ const PLATFORM_LABEL: Record<string, string> = {
   x: '𝕏(Twitter)',
 }
 
+const SOURCE_STATUS = {
+  healthy: { label: '正常', className: 'border-green-200 bg-green-50 text-green-700' },
+  error: { label: '异常', className: 'border-red-200 bg-red-50 text-red-700' },
+  disabled: { label: '待配置', className: 'border-paper bg-muted text-muted-foreground' },
+} as const
+
 function StatChip({ label, value, tone }: { label: string; value: string; tone: string }) {
   return (
     <div className="flex flex-col gap-0.5">
@@ -186,6 +192,33 @@ export function AutoPilotPanel({ token }: { token: string }) {
                   )}
                 </label>
               ))}
+            </div>
+          </div>
+
+          <div className="mt-4 border-t border-paper pt-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] text-muted-foreground">内容数据源</span>
+              <span className="text-[11px] text-muted-foreground">各源独立运行，单源异常不阻塞发布</span>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {(st?.sources ?? []).map((source) => {
+                const status = SOURCE_STATUS[source.status]
+                const detail = source.last_error
+                  ? `${source.last_error} · ${source.latency_ms}ms`
+                  : `本轮新增 ${source.last_inserted} 条 · ${source.latency_ms}ms`
+                return (
+                  <span
+                    key={source.source}
+                    title={detail}
+                    className={`rounded-md border px-2 py-1 text-[11px] ${status.className}`}
+                  >
+                    {source.source} · {status.label}
+                  </span>
+                )
+              })}
+              {(st?.sources ?? []).length === 0 && (
+                <span className="text-xs text-muted-foreground">等待首次采集结果…</span>
+              )}
             </div>
           </div>
 
