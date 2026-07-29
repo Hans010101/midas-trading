@@ -23,7 +23,7 @@ The scheduler runs every 20 minutes from 08:00 through 22:00 China Standard Time
 | Midas Trading market data | Active | Market ranking, K-line analysis, chart screenshot |
 | PANews, Cointelegraph CN/EN, CoinDesk, Decrypt, The Block, Blockworks | Active | Independent RSS/Atom news inputs; facts are rewritten and source-linked |
 | DefiLlama | Active, no key | DEX market volume and protocol activity; free public data only |
-| OKX Public Trades | Active, no key | At most one strongest two-hour large perpetual-market flow sample across BTC, ETH, SOL, and BNB; never labelled as an on-chain transfer |
+| OKX Public Trades | Active, no key | Rotating BTC, ETH, SOL, and BNB monitor with at most one qualified two-hour large perpetual-market flow sample; never labelled as an on-chain transfer |
 | CoinGecko Demo | Connector ready, off by default | Optional trending-asset signal; requires a free Demo key and source attribution |
 | CoinGlass | Not enabled | No free API plan; commercial use requires a paid commercial tier |
 | Arkham | Not enabled | API access approval, key, and credits are required; no assumed free production allowance |
