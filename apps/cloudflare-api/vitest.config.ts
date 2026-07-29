@@ -26,6 +26,7 @@ export default defineConfig({
           RESEND_API_KEY: 'test-resend-key',
           SUPPORT_EMAIL_TO: 'support@example.test',
           PASSWORD_PEPPER: 'test-password-pepper-with-sufficient-entropy',
+          BINANCE_SQUARE_API_KEY: 'test-square-key',
         },
       },
     })),

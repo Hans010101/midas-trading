@@ -217,7 +217,7 @@ export default {
           ? refreshMarketBoards(env)
           : refreshGlobalOverview(env).then(() => undefined),
         runVirtualTradingCron(env),
-        runAdminOperationsCron(env),
+        runAdminOperationsCron(env, controller.scheduledTime),
       ]).then((results) => {
         results.forEach((result, index) => {
           if (result.status === 'rejected') {

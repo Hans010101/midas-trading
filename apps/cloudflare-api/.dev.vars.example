@@ -8,3 +8,4 @@ FEISHU_APP_ID=cli_local_placeholder
 FEISHU_APP_SECRET=local-feishu-secret-placeholder
 FEISHU_VERIFICATION_TOKEN=local-feishu-verification-placeholder
 DEEPSEEK_API_KEY=
+BINANCE_SQUARE_API_KEY=

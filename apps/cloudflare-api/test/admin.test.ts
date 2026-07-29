@@ -1,7 +1,8 @@
 import { env, exports } from 'cloudflare:workers'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { sha256Hex } from '../src/crypto'
+import { runAdminOperationsCron } from '../src/admin-operations'
 
 function request(
   path: string,
@@ -65,6 +66,10 @@ let owner: Awaited<ReturnType<typeof createUser>>
 
 beforeAll(async () => {
   owner = await createUser('hans.pan.007@gmail.com')
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 describe('independent Cloudflare administrator controls', () => {
@@ -383,6 +388,161 @@ describe('independent Cloudflare administrator controls', () => {
       weights: expect.objectContaining({ macd: 1 }),
       atr_stop_mult: 2,
       atr_tp_mult: 4,
+    })
+  })
+
+  it('publishes an approved social draft to Binance Square and records the ledger', async () => {
+    const timestamp = Date.now()
+    const draft = await env.DB
+      .prepare(
+        `INSERT INTO social_drafts
+          (symbol, bias, tweet_text, compliance_passed, status, auto_drafted,
+           has_url, gen_style, provider, model, created_at)
+         VALUES ('BTC/USDT', '中性', 'BTC 市场结构联调内容', 1, 'draft', 0,
+                 0, 'default', 'technical-rules', 'test', ?)
+         RETURNING id`,
+      )
+      .bind(timestamp)
+      .first<{ id: number }>()
+    expect(draft).not.toBeNull()
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+      code: '000000',
+      success: true,
+      data: {
+        id: 'square-test-1',
+        shareLink: 'https://www.binance.com/square/post/square-test-1',
+      },
+    })))
+
+    const response = await exports.default.fetch(
+      request(`/api/v1/admin/x-tweets/${draft!.id}/publish`, {
+        method: 'POST',
+        token: owner.token,
+        body: { platform: 'binance_square' },
+      }),
+    )
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      platform: 'binance_square',
+      status: 'success',
+      url: 'https://www.binance.com/square/post/square-test-1',
+    })
+    await expect(
+      env.DB
+        .prepare(
+          `SELECT status, source, url FROM social_dispatches
+           WHERE draft_id = ? AND platform = 'binance_square'`,
+        )
+        .bind(draft!.id)
+        .first(),
+    ).resolves.toMatchObject({
+      status: 'success',
+      source: 'manual',
+      url: 'https://www.binance.com/square/post/square-test-1',
+    })
+  })
+
+  it('runs one claimed Binance Square auto slot and never duplicates it', async () => {
+    const scheduledAt = Date.parse('2026-07-29T08:05:00.000Z')
+    await env.DB.batch([
+      env.DB
+        .prepare(
+          `UPDATE social_automation_config
+           SET enabled = 1, circuit_open = 0, binance_checked = 1,
+               failure_count = 0, last_error = NULL, updated_at = ?
+           WHERE id = 1`,
+        )
+        .bind(scheduledAt),
+      env.DB
+        .prepare(
+          `INSERT INTO social_drafts
+            (symbol, bias, tweet_text, compliance_passed, status, auto_drafted,
+             has_url, gen_style, provider, model, created_at)
+           VALUES ('ETH/USDT', '中性', 'ETH 自动发布联调内容', 1, 'draft', 1,
+                   0, 'default', 'technical-rules', 'test', ?)`,
+        )
+        .bind(scheduledAt),
+      env.DB.prepare('UPDATE social_dispatches SET updated_at = 0'),
+    ])
+    const upstream = vi.fn(async () => Response.json({
+      code: '000000',
+      success: true,
+      data: {
+        id: 'square-auto-1',
+        shareLink: 'https://www.binance.com/square/post/square-auto-1',
+      },
+    }))
+    vi.stubGlobal('fetch', upstream)
+
+    await runAdminOperationsCron(env, scheduledAt)
+    await runAdminOperationsCron(env, scheduledAt)
+
+    expect(upstream).toHaveBeenCalledOnce()
+    await expect(
+      env.DB
+        .prepare(
+          `SELECT status, draft_id, dispatch_id FROM social_auto_runs
+           WHERE slot = '2026-07-29T16:05'`,
+        )
+        .first(),
+    ).resolves.toMatchObject({
+      status: 'success',
+      draft_id: expect.any(Number),
+      dispatch_id: expect.any(Number),
+    })
+    await env.DB
+      .prepare(
+        `UPDATE social_automation_config
+         SET enabled = 0, binance_checked = 0 WHERE id = 1`,
+      )
+      .run()
+  })
+
+  it('opens the automatic publishing circuit after three consecutive failures', async () => {
+    const firstSlot = Date.parse('2026-07-30T08:05:00.000Z')
+    await env.DB.batch([
+      env.DB
+        .prepare(
+          `UPDATE social_automation_config
+           SET enabled = 1, circuit_open = 0, binance_checked = 1,
+               failure_count = 0, last_error = NULL, updated_at = ?
+           WHERE id = 1`,
+        )
+        .bind(firstSlot),
+      env.DB
+        .prepare(
+          `INSERT INTO social_drafts
+            (symbol, bias, tweet_text, compliance_passed, status, auto_drafted,
+             has_url, gen_style, provider, model, created_at)
+           VALUES ('SOL/USDT', '中性', 'SOL 自动发布失败熔断测试', 1, 'draft', 1,
+                   0, 'default', 'technical-rules', 'test', ?)`,
+        )
+        .bind(firstSlot),
+      env.DB.prepare('UPDATE social_dispatches SET updated_at = 0'),
+    ])
+    const upstream = vi.fn(async () => Response.json({
+      code: '20002',
+      message: 'content rejected',
+    }, { status: 400 }))
+    vi.stubGlobal('fetch', upstream)
+
+    await runAdminOperationsCron(env, firstSlot)
+    await runAdminOperationsCron(env, firstSlot + 15 * 60_000)
+    await runAdminOperationsCron(env, firstSlot + 30 * 60_000)
+
+    expect(upstream).toHaveBeenCalledTimes(3)
+    await expect(
+      env.DB
+        .prepare(
+          `SELECT enabled, circuit_open, failure_count, last_error
+           FROM social_automation_config WHERE id = 1`,
+        )
+        .first(),
+    ).resolves.toMatchObject({
+      enabled: 0,
+      circuit_open: 1,
+      failure_count: 3,
+      last_error: expect.stringContaining('20002'),
     })
   })
 })

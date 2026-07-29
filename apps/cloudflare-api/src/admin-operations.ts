@@ -5,6 +5,10 @@ import {
   requireAdmin,
 } from './admin'
 import { invokeAi, parseAiJson } from './ai-provider'
+import {
+  binanceSquareEnabled,
+  publishToBinanceSquare,
+} from './binance-square'
 import { HttpError, jsonResponse, readJsonObject } from './http'
 
 const MAX_PDF_BYTES = 5 * 1024 * 1024
@@ -550,6 +554,13 @@ type SocialDraftRow = Readonly<{
   created_at: number
 }>
 
+type CreatedSocialDraft = Readonly<{
+  id: number
+  symbol: string
+  text: string
+  compliancePassed: boolean
+}>
+
 async function listSocialDrafts(
   request: Request,
   env: Env,
@@ -627,16 +638,11 @@ function compliant(text: string): { passed: boolean; reason: string | null } {
   return { passed: true, reason: null }
 }
 
-async function generateSocialDrafts(
-  request: Request,
+async function createSocialDrafts(
   env: Env,
-  requestId: string,
-  autoDrafted = false,
-): Promise<Response> {
-  const admin = await requireAdmin(request, env)
-  const style = new URL(request.url).searchParams.get('style') === 'x_short'
-    ? 'x_short'
-    : 'default'
+  style: 'default' | 'x_short',
+  autoDrafted: boolean,
+): Promise<{ items: CreatedSocialDraft[]; provider: string }> {
   const quotes = await env.DB
     .prepare(
       `SELECT symbol, name, last_point, change_pct
@@ -663,7 +669,7 @@ async function generateSocialDrafts(
   })
   const parsed = parseAiJson(ai.content)
   const drafts = Array.isArray(parsed.drafts) ? parsed.drafts.slice(0, 4) : []
-  let created = 0
+  const created: CreatedSocialDraft[] = []
   const timestamp = Date.now()
   for (const value of drafts) {
     if (typeof value !== 'object' || value === null) continue
@@ -674,12 +680,13 @@ async function generateSocialDrafts(
     if (!symbol || !text) continue
     if (style === 'x_short') text = [...text].slice(0, 110).join('')
     const gate = compliant(text)
-    await env.DB
+    const row = await env.DB
       .prepare(
         `INSERT INTO social_drafts
           (symbol, bias, tweet_text, compliance_passed, compliance_reason,
            status, auto_drafted, has_url, gen_style, provider, model, created_at)
-         VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)
+         RETURNING id`,
       )
       .bind(
         symbol,
@@ -692,21 +699,42 @@ async function generateSocialDrafts(
         style,
         ai.provider,
         ai.model,
-        timestamp + created,
+        timestamp + created.length,
       )
-      .run()
-    created += 1
+      .first<{ id: number }>()
+    if (row) {
+      created.push({
+        id: row.id,
+        symbol,
+        text,
+        compliancePassed: gate.passed,
+      })
+    }
   }
+  return { items: created, provider: ai.provider }
+}
+
+async function generateSocialDrafts(
+  request: Request,
+  env: Env,
+  requestId: string,
+): Promise<Response> {
+  const admin = await requireAdmin(request, env)
+  const style = new URL(request.url).searchParams.get('style') === 'x_short'
+    ? 'x_short'
+    : 'default'
+  const result = await createSocialDrafts(env, style, false)
+  const timestamp = Date.now()
   await adminActionStatement(env.DB, {
     operatorId: admin.user.id,
     action: 'social.generated',
-    detail: { style, created, provider: ai.provider },
+    detail: { style, created: result.items.length, provider: result.provider },
     createdAt: timestamp,
   }).run()
   return jsonResponse(
     {
       status: 'completed',
-      message: `已生成 ${created} 条${style === 'x_short' ? ' X 短推' : '内容草稿'}`,
+      message: `已生成 ${result.items.length} 条${style === 'x_short' ? ' X 短推' : '内容草稿'}`,
     },
     200,
     requestId,
@@ -715,14 +743,13 @@ async function generateSocialDrafts(
 }
 
 type ExternalEnv = Readonly<{
-  BINANCE_SQUARE_API_KEY?: string
   X_API_KEY?: string
 }>
 
 function adapters(env: Env): { binance: boolean; x: boolean } {
   const external = env as Env & ExternalEnv
   return {
-    binance: Boolean(external.BINANCE_SQUARE_API_KEY?.trim()),
+    binance: binanceSquareEnabled(env),
     x: Boolean(external.X_API_KEY?.trim()),
   }
 }
@@ -747,7 +774,8 @@ async function autoStatus(
   await requireAdmin(request, env)
   const config = await env.DB
     .prepare(
-      `SELECT enabled, circuit_open, binance_checked, x_checked, daily_limit
+      `SELECT enabled, circuit_open, binance_checked, x_checked, daily_limit,
+              failure_count, last_error
        FROM social_automation_config WHERE id = 1`,
     )
     .first<{
@@ -756,6 +784,8 @@ async function autoStatus(
       binance_checked: number
       x_checked: number
       daily_limit: number
+      failure_count: number
+      last_error: string | null
     }>()
   if (!config) throw new HttpError(500, '自动托管配置不存在')
   const today = new Intl.DateTimeFormat('en-CA', {
@@ -766,7 +796,7 @@ async function autoStatus(
       `SELECT COUNT(*) AS count
        FROM social_dispatches
        WHERE source = 'auto' AND status = 'success'
-         AND date(created_at / 1000, 'unixepoch', '+8 hours') = ?`,
+         AND date(updated_at / 1000, 'unixepoch', '+8 hours') = ?`,
     )
     .bind(today)
     .first<{ count: number }>()
@@ -779,6 +809,8 @@ async function autoStatus(
       circuit_open: config.circuit_open === 1,
       daily_used: dailyUsed,
       daily_remaining: Math.max(0, config.daily_limit - dailyUsed),
+      failure_count: config.failure_count,
+      last_error: config.last_error,
       in_window: minute >= 7 * 60 + 30 && minute <= 22 * 60 + 30,
       platforms: [
         {
@@ -790,7 +822,7 @@ async function autoStatus(
         {
           platform: 'x',
           checked: config.x_checked === 1,
-          auto_allowed: true,
+          auto_allowed: false,
           adapter_enabled: adapter.x,
         },
       ],
@@ -818,8 +850,7 @@ async function toggleAuto(
   if (
     body.enabled &&
     !(
-      (current?.binance_checked === 1 && adapter.binance) ||
-      (current?.x_checked === 1 && adapter.x)
+      current?.binance_checked === 1 && adapter.binance
     )
   ) {
     throw new HttpError(409, '请先配置并勾选至少一个发布平台')
@@ -827,7 +858,8 @@ async function toggleAuto(
   await env.DB
     .prepare(
       `UPDATE social_automation_config
-       SET enabled = ?, circuit_open = 0, updated_at = ? WHERE id = 1`,
+       SET enabled = ?, circuit_open = 0, failure_count = 0,
+           last_error = NULL, updated_at = ? WHERE id = 1`,
     )
     .bind(body.enabled ? 1 : 0, Date.now())
     .run()
@@ -851,6 +883,9 @@ async function toggleAutoPlatform(
   }
   const body = await readJsonObject(request)
   if (typeof body.checked !== 'boolean') throw new HttpError(422, 'checked 必须为布尔值')
+  if (platform === 'x' && body.checked) {
+    throw new HttpError(409, 'X 自动发布尚未开放，当前仅允许币安广场')
+  }
   const column = platform === 'x' ? 'x_checked' : 'binance_checked'
   await env.DB
     .prepare(
@@ -896,36 +931,356 @@ async function stopAuto(
 async function publishSocialDraft(
   request: Request,
   env: Env,
-  _requestId: string,
+  requestId: string,
   draftId: number,
 ): Promise<Response> {
-  await requireAdmin(request, env)
+  const admin = await requireAdmin(request, env)
   const body = await readJsonObject(request)
   const platform = body.platform
   if (platform !== 'x' && platform !== 'binance_square') {
     throw new HttpError(422, '未知发布平台')
   }
-  const draft = await env.DB
-    .prepare(
-      `SELECT compliance_passed, gen_style FROM social_drafts WHERE id = ?`,
-    )
-    .bind(draftId)
-    .first<{ compliance_passed: number; gen_style: string }>()
-  if (!draft) throw new HttpError(404, '推文草稿不存在')
-  if (draft.compliance_passed !== 1) throw new HttpError(409, '合规门禁未通过')
   const adapter = adapters(env)
   if ((platform === 'x' && !adapter.x) || (platform === 'binance_square' && !adapter.binance)) {
     throw new HttpError(409, `${platform === 'x' ? 'X' : '币安广场'} 发布凭证尚未独立配置`)
   }
-  throw new HttpError(501, '发布适配器尚未启用，请先完成独立平台凭证联调')
+  if (platform === 'x') {
+    throw new HttpError(501, 'X 发布适配器尚未启用')
+  }
+  const result = await dispatchSocialDraft(env, draftId, 'binance_square', 'manual')
+  await adminActionStatement(env.DB, {
+    operatorId: admin.user.id,
+    action: result.status === 'success' ? 'social.published' : 'social.publish_failed',
+    detail: {
+      draft_id: draftId,
+      dispatch_id: result.dispatchId,
+      platform,
+      error: result.error,
+    },
+    createdAt: Date.now(),
+  }).run()
+  return jsonResponse(
+    {
+      dispatch_id: result.dispatchId,
+      platform,
+      status: result.status,
+      message: result.status === 'success' ? '已发布到币安广场' : result.error,
+      url: result.url,
+    },
+    200,
+    requestId,
+    request.method,
+  )
 }
 
-export async function runAdminOperationsCron(env: Env): Promise<void> {
-  const minute = cstMinute()
+type DispatchResult = Readonly<{
+  dispatchId: number
+  status: 'success' | 'failed'
+  url: string | null
+  error: string | null
+}>
+
+async function dispatchSocialDraft(
+  env: Env,
+  draftId: number,
+  platform: 'binance_square',
+  source: 'manual' | 'auto',
+): Promise<DispatchResult> {
+  const draft = await env.DB
+    .prepare(
+      `SELECT id, tweet_text, compliance_passed
+       FROM social_drafts WHERE id = ?`,
+    )
+    .bind(draftId)
+    .first<{ id: number; tweet_text: string; compliance_passed: number }>()
+  if (!draft) throw new HttpError(404, '推文草稿不存在')
+  if (draft.compliance_passed !== 1) throw new HttpError(409, '合规门禁未通过')
+
+  const existing = await env.DB
+    .prepare(
+      `SELECT id, status, url, error FROM social_dispatches
+       WHERE draft_id = ? AND platform = ?`,
+    )
+    .bind(draftId, platform)
+    .first<{ id: number; status: string; url: string | null; error: string | null }>()
+  if (existing?.status === 'success') {
+    return {
+      dispatchId: existing.id,
+      status: 'success',
+      url: existing.url,
+      error: null,
+    }
+  }
+
+  const now = Date.now()
+  const [today, last] = await Promise.all([
+    env.DB
+      .prepare(
+        `SELECT COUNT(*) AS count FROM social_dispatches
+         WHERE platform = ? AND status = 'success'
+           AND date(updated_at / 1000, 'unixepoch', '+8 hours') =
+               date(? / 1000, 'unixepoch', '+8 hours')`,
+      )
+      .bind(platform, now)
+      .first<{ count: number }>(),
+    env.DB
+      .prepare(
+        `SELECT MAX(updated_at) AS last_at FROM social_dispatches
+         WHERE platform = ? AND status = 'success'`,
+      )
+      .bind(platform)
+      .first<{ last_at: number | null }>(),
+  ])
+  if (Number(today?.count ?? 0) >= 100) {
+    throw new HttpError(429, '币安广场今日已达到 100 条官方上限')
+  }
+  if (last?.last_at && now - last.last_at < 30_000) {
+    throw new HttpError(429, '发布间隔不足 30 秒，请稍后重试')
+  }
+
+  const dispatch = await env.DB
+    .prepare(
+      `INSERT INTO social_dispatches
+        (draft_id, platform, status, url, error, source, created_at, updated_at)
+       VALUES (?, ?, 'pending', NULL, NULL, ?, ?, ?)
+       ON CONFLICT(draft_id, platform) DO UPDATE SET
+         status = 'pending', url = NULL, error = NULL,
+         source = excluded.source, updated_at = excluded.updated_at
+       RETURNING id`,
+    )
+    .bind(draftId, platform, source, now, now)
+    .first<{ id: number }>()
+  if (!dispatch) throw new HttpError(500, '发布台账创建失败')
+
+  const published = await publishToBinanceSquare(env, draft.tweet_text)
+  const status = published.success ? 'success' : 'failed'
+  await env.DB.batch([
+    env.DB
+      .prepare(
+        `UPDATE social_dispatches
+         SET status = ?, url = ?, error = ?, updated_at = ? WHERE id = ?`,
+      )
+      .bind(status, published.url, published.error, Date.now(), dispatch.id),
+    env.DB
+      .prepare('UPDATE social_drafts SET status = ? WHERE id = ?')
+      .bind(published.success ? 'published' : 'failed', draftId),
+  ])
+  return {
+    dispatchId: dispatch.id,
+    status,
+    url: published.url,
+    error: published.error,
+  }
+}
+
+function socialSlot(timestamp: number): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(timestamp))
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? '00'
+  return `${value('year')}-${value('month')}-${value('day')}T${value('hour')}:${value('minute')}`
+}
+
+async function updateAutoRun(
+  env: Env,
+  slot: string,
+  values: Readonly<{
+    status: 'success' | 'failed' | 'skipped'
+    draftId?: number | null
+    dispatchId?: number | null
+    error?: string | null
+  }>,
+): Promise<void> {
+  await env.DB
+    .prepare(
+      `UPDATE social_auto_runs
+       SET status = ?, draft_id = ?, dispatch_id = ?, error = ?, updated_at = ?
+       WHERE slot = ?`,
+    )
+    .bind(
+      values.status,
+      values.draftId ?? null,
+      values.dispatchId ?? null,
+      values.error?.slice(0, 500) ?? null,
+      Date.now(),
+      slot,
+    )
+    .run()
+}
+
+async function autoCandidate(env: Env, timestamp: number): Promise<CreatedSocialDraft | null> {
+  const row = await env.DB
+    .prepare(
+      `SELECT d.id, d.symbol, d.tweet_text, d.compliance_passed
+       FROM social_drafts d
+       WHERE d.auto_drafted = 1
+         AND d.gen_style = 'default'
+         AND d.compliance_passed = 1
+         AND d.created_at >= ?
+         AND NOT EXISTS (
+           SELECT 1 FROM social_dispatches sd
+           WHERE sd.draft_id = d.id AND sd.platform = 'binance_square'
+             AND sd.status = 'success'
+         )
+         AND NOT EXISTS (
+           SELECT 1
+           FROM social_drafts recent_d
+           JOIN social_dispatches recent_sd ON recent_sd.draft_id = recent_d.id
+           WHERE recent_d.symbol = d.symbol
+             AND recent_sd.platform = 'binance_square'
+             AND recent_sd.status = 'success'
+             AND recent_sd.updated_at >= ?
+         )
+       ORDER BY d.created_at DESC
+       LIMIT 1`,
+    )
+    .bind(timestamp - 30 * 60_000, timestamp - 6 * 60 * 60_000)
+    .first<{
+      id: number
+      symbol: string
+      tweet_text: string
+      compliance_passed: number
+    }>()
+  return row
+    ? {
+        id: row.id,
+        symbol: row.symbol,
+        text: row.tweet_text,
+        compliancePassed: row.compliance_passed === 1,
+      }
+    : null
+}
+
+async function recordAutoFailure(env: Env, error: string): Promise<number> {
+  await env.DB
+    .prepare(
+      `UPDATE social_automation_config
+       SET failure_count = failure_count + 1, last_error = ?, updated_at = ?
+       WHERE id = 1`,
+    )
+    .bind(error.slice(0, 500), Date.now())
+    .run()
+  const state = await env.DB
+    .prepare('SELECT failure_count FROM social_automation_config WHERE id = 1')
+    .first<{ failure_count: number }>()
+  const failures = state?.failure_count ?? 1
+  if (failures >= 3) {
+    await env.DB
+      .prepare(
+        `UPDATE social_automation_config
+         SET enabled = 0, circuit_open = 1, updated_at = ? WHERE id = 1`,
+      )
+      .bind(Date.now())
+      .run()
+  }
+  return failures
+}
+
+async function runSocialAutomation(env: Env, timestamp: number): Promise<void> {
+  const minute = cstMinute(timestamp)
+  if (minute < 7 * 60 + 30 || minute > 22 * 60 + 30 || minute % 15 !== 5) return
+  const config = await env.DB
+    .prepare(
+      `SELECT enabled, circuit_open, binance_checked, daily_limit
+       FROM social_automation_config WHERE id = 1`,
+    )
+    .first<{
+      enabled: number
+      circuit_open: number
+      binance_checked: number
+      daily_limit: number
+    }>()
+  if (
+    !config || config.enabled !== 1 || config.circuit_open === 1 ||
+    config.binance_checked !== 1 || !binanceSquareEnabled(env)
+  ) return
+
+  const used = await env.DB
+    .prepare(
+      `SELECT COUNT(*) AS count FROM social_dispatches
+       WHERE source = 'auto' AND platform = 'binance_square' AND status = 'success'
+         AND date(updated_at / 1000, 'unixepoch', '+8 hours') =
+             date(? / 1000, 'unixepoch', '+8 hours')`,
+    )
+    .bind(timestamp)
+    .first<{ count: number }>()
+  if (Number(used?.count ?? 0) >= config.daily_limit) return
+
+  const slot = socialSlot(timestamp)
+  const claim = await env.DB
+    .prepare(
+      `INSERT OR IGNORE INTO social_auto_runs
+        (slot, status, created_at, updated_at)
+       VALUES (?, 'running', ?, ?)`,
+    )
+    .bind(slot, timestamp, timestamp)
+    .run()
+  if (Number(claim.meta.changes ?? 0) === 0) return
+
+  try {
+    let candidate = await autoCandidate(env, timestamp)
+    if (!candidate) {
+      await createSocialDrafts(env, 'default', true)
+      candidate = await autoCandidate(env, Date.now())
+    }
+    if (!candidate) throw new Error('未生成可发布且通过门禁的币安广场草稿')
+    const result = await dispatchSocialDraft(
+      env,
+      candidate.id,
+      'binance_square',
+      'auto',
+    )
+    if (result.status !== 'success') {
+      throw new Error(result.error ?? '币安广场发布失败')
+    }
+    await Promise.all([
+      updateAutoRun(env, slot, {
+        status: 'success',
+        draftId: candidate.id,
+        dispatchId: result.dispatchId,
+      }),
+      env.DB
+        .prepare(
+          `UPDATE social_automation_config
+           SET failure_count = 0, last_error = NULL, updated_at = ? WHERE id = 1`,
+        )
+        .bind(Date.now())
+        .run(),
+    ])
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const failures = await recordAutoFailure(env, message)
+    await updateAutoRun(env, slot, {
+      status: 'failed',
+      error: message,
+    })
+    console.error(JSON.stringify({
+      event: 'social.auto_failed',
+      slot,
+      failures,
+      circuitOpened: failures >= 3,
+      error: message,
+    }))
+  }
+}
+
+export async function runAdminOperationsCron(
+  env: Env,
+  timestamp = Date.now(),
+): Promise<void> {
+  await runSocialAutomation(env, timestamp)
+  const minute = cstMinute(timestamp)
   const day = new Intl.DateTimeFormat('en-US', {
     timeZone: 'Asia/Shanghai',
     weekday: 'short',
-  }).format(new Date())
+  }).format(new Date(timestamp))
   if (day === 'Sun' && minute >= 21 * 60 && minute < 21 * 60 + 5) {
     const scheduled = await env.DB
       .prepare(
