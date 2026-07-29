@@ -94,6 +94,14 @@ function decodeXml(value: string): string {
   return value
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gu, '$1')
     .replace(/<[^>]+>/gu, ' ')
+    .replace(/&#x([0-9a-f]+);/giu, (match, digits: string) => {
+      const point = Number.parseInt(digits, 16)
+      return point <= 0x10ffff ? String.fromCodePoint(point) : match
+    })
+    .replace(/&#([0-9]+);/gu, (match, digits: string) => {
+      const point = Number.parseInt(digits, 10)
+      return point <= 0x10ffff ? String.fromCodePoint(point) : match
+    })
     .replace(/&nbsp;/gu, ' ')
     .replace(/&amp;/gu, '&')
     .replace(/&lt;/gu, '<')
@@ -102,6 +110,11 @@ function decodeXml(value: string): string {
     .replace(/&#39;|&apos;/gu, "'")
     .replace(/\s+/gu, ' ')
     .trim()
+}
+
+function isCryptoRelevant(text: string): boolean {
+  return extractSymbols(text).length > 0 ||
+    /(crypto|blockchain|web3|defi|stablecoin|token|coinbase|binance|tether|wallet|altcoin|on[ -]?chain|加密|区块链|稳定币|代币|币安|链上|数字资产)/iu.test(text)
 }
 
 function xmlValue(item: string, tag: string): string {
@@ -231,6 +244,7 @@ async function ingestNewsFeed(
   let inserted = 0
   for (const item of items) {
     if (item.occurredAt < now - RSS_MAX_AGE_MS || item.occurredAt > now + 5 * 60_000) continue
+    if (!isCryptoRelevant(`${item.title} ${item.summary}`)) continue
     inserted += await insertEvent(env, {
       source: feed.source,
       sourceId: item.id,

@@ -28,7 +28,7 @@ describe('Binance Square content operations', () => {
   it('parses RSS and Atom feeds into the same normalized shape', () => {
     const rss = parseSyndicationFeed(`
       <rss><channel><item>
-        <guid>rss-1</guid><title><![CDATA[BTC update]]></title>
+        <guid>rss-1</guid><title><![CDATA[BTC &#8216;update&#8217;]]></title>
         <description><![CDATA[Market summary]]></description>
         <link>https://example.com/rss-1</link>
         <pubDate>Wed, 29 Jul 2026 00:00:00 GMT</pubDate>
@@ -42,7 +42,7 @@ describe('Binance Square content operations', () => {
 
     expect(rss).toEqual([{
       id: 'rss-1',
-      title: 'BTC update',
+      title: 'BTC ‘update’',
       summary: 'Market summary',
       link: 'https://example.com/rss-1',
       occurredAt: Date.parse('2026-07-29T00:00:00Z'),
