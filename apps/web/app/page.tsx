@@ -45,6 +45,7 @@ import { Membership } from '@/components/landing/membership'
 import { ResearchLab } from '@/components/landing/research-lab'
 import { StructureSandbox } from '@/components/landing/structure-sandbox'
 import { VirtualPractice } from '@/components/landing/virtual-practice'
+import { LanguageToggle } from '@/components/layout/language-toggle'
 import { JsonLd } from '@/components/seo/json-ld'
 import { organizationSchema, websiteSchema } from '@/lib/seo/schema'
 import { MEMBERSHIP_GATING_ENABLED } from '@/lib/features'
@@ -134,6 +135,7 @@ function TopNav() {
         </nav>
 
         <div className="flex items-center gap-3">
+          <LanguageToggle />
           <Link
             href="/login"
             className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:inline"

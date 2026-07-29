@@ -8,6 +8,8 @@
 import Image from 'next/image'
 import Link from 'next/link'
 
+import { LanguageToggle } from '@/components/layout/language-toggle'
+
 export function LegalPage({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -17,12 +19,15 @@ export function LegalPage({ title, children }: { title: string; children: React.
             <Image src="/brand/seal.png" alt="点金 Midas 印章" width={32} height={32} />
             <span className="font-serif text-lg font-bold text-midas-red">Midas</span>
           </Link>
-          <Link
-            href="/"
-            className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            返回首页
-          </Link>
+          <div className="flex items-center gap-3">
+            <LanguageToggle />
+            <Link
+              href="/"
+              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              返回首页
+            </Link>
+          </div>
         </div>
       </header>
 

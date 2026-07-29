@@ -12,6 +12,8 @@ import Image from 'next/image'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
+import { LanguageToggle } from '@/components/layout/language-toggle'
+
 interface AuthShellProps {
   title: string
   subtitle?: string
@@ -23,6 +25,9 @@ interface AuthShellProps {
 export function AuthShell({ title, subtitle, children, footer }: AuthShellProps) {
   return (
     <main className="min-h-screen bg-background">
+      <div className="fixed right-6 top-5 z-20">
+        <LanguageToggle />
+      </div>
       <div className="mx-auto w-full max-w-md px-6 pt-16 pb-10">
         {/* 印章 SVG + 衬线字 · 跟首页 TopNav 一致 · 全站统一品牌 */}
         <Link href="/" className="mb-8 flex items-center justify-center gap-3">

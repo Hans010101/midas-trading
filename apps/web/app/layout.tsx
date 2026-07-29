@@ -1,10 +1,12 @@
 import type { Metadata } from 'next'
-import { NextIntlClientProvider } from 'next-intl'
-import { getLocale, getMessages } from 'next-intl/server'
+import { getLocale } from 'next-intl/server'
 import localFont from 'next/font/local'
 
+import { LocaleRuntimeProvider } from '@/components/i18n/locale-runtime-provider'
+import { LocalePreferenceSync } from '@/components/i18n/locale-preference-sync'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import type { Locale } from '@/i18n/routing'
 import { QueryProvider } from '@/lib/providers/query-provider'
 import { SessionProvider } from '@/lib/providers/session-provider'
 import { PRODUCTION_WEB_URL } from '@/lib/site'
@@ -85,7 +87,6 @@ export default async function RootLayout({
   // i18n(cookie 模式):locale + messages 从 request.ts(读 NEXT_LOCALE cookie)取。
   // force-static 页构建期 cookies() 无值 → locale=zh 静态(见 i18n/request.ts)。
   const locale = await getLocale()
-  const messages = await getMessages()
   return (
     <html
       lang={locale === 'en' ? 'en' : 'zh-CN'}
@@ -110,17 +111,26 @@ export default async function RootLayout({
               "(function(){try{var m=document.cookie.match(/(?:^|; )color_pref=([^;]+)/);document.documentElement.dataset.colorPref=(m&&decodeURIComponent(m[1])==='green-up')?'green-up':'red-up';}catch(e){}})();",
           }}
         />
-        <NextIntlClientProvider locale={locale} messages={messages}>
+        {/* 静态页也必须尊重语言 cookie:在 React 启动前先修正 html lang，
+            LocaleRuntimeProvider 水合后接管词库并支持无刷新即时切换。 */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var m=document.cookie.match(/(?:^|; )NEXT_LOCALE=([^;]+)/);var l=m&&decodeURIComponent(m[1])==='en'?'en':'zh';document.documentElement.lang=l==='en'?'en':'zh-CN';document.documentElement.dataset.locale=l;}catch(e){}})();",
+          }}
+        />
+        <LocaleRuntimeProvider initialLocale={locale as Locale}>
           <SessionProvider>
             <ThemeProvider>
               <QueryProvider>
                 <UiStoreProvider>
+                  <LocalePreferenceSync />
                   <TooltipProvider>{children}</TooltipProvider>
                 </UiStoreProvider>
               </QueryProvider>
             </ThemeProvider>
           </SessionProvider>
-        </NextIntlClientProvider>
+        </LocaleRuntimeProvider>
         {/* Phase 1.5 刀B:OAuth 到账 toast(读一次性 midas_reward cookie) */}
         <Toaster position="top-center" closeButton />
       </body>
