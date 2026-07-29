@@ -24,6 +24,7 @@ import { auth } from '@/auth'
 import { NextResponse } from 'next/server'
 import type { NextFetchEvent, NextRequest } from 'next/server'
 
+import { midasTradingApiFetch } from '@/lib/server/midas-trading-api'
 import { BOT_RE, classifyCrawler, extractRefHost, isPrefetchRequest } from '@/lib/track/beacon-rules'
 
 // /workbench 不在保护列表 · 匿名可访问看图
@@ -48,11 +49,19 @@ const runAuth = auth((req) => {
   if (url.pathname.startsWith('/admin/redeem-codes')) {
     return NextResponse.redirect(new URL('/admin', req.nextUrl.origin))
   }
+  const migratedAdminRoutes = [
+    '/admin/users/',
+    '/admin/visit-stats',
+    '/admin/academy-stats',
+    '/admin/weekly-dispatch',
+    '/admin/x-tweets',
+    '/admin/managed',
+    '/admin/intelligent',
+    '/admin/support-tickets',
+  ]
   if (
     url.pathname.startsWith('/admin/') &&
-    !url.pathname.startsWith('/admin/users/') &&
-    !url.pathname.startsWith('/admin/academy-stats') &&
-    !url.pathname.startsWith('/admin/support-tickets')
+    !migratedAdminRoutes.some((path) => url.pathname.startsWith(path))
   ) {
     return NextResponse.redirect(new URL('/admin', req.nextUrl.origin))
   }
@@ -90,17 +99,12 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
 
   // ── 访问埋点 · 仅页面文档 GET · 非重定向(<300)──
   const ua = req.headers.get('user-agent') ?? ''
-  // 内网直连优先(http://api:8000)· 退化到公网 API base(NEXT_PUBLIC_API_URL 已 inline)
-  const base = process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL
-  const secret = process.env.TRACK_INGEST_SECRET
   const postTrack = (path: string, body: Record<string, string>) => {
-    if (!base) return
     event.waitUntil(
-      fetch(`${base}${path}`, {
+      midasTradingApiFetch(path, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          ...(secret ? { 'x-track-secret': secret } : {}),
         },
         body: JSON.stringify(body),
       }).catch(() => {

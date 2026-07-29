@@ -18,6 +18,7 @@ describe('isIndependentApiPath', () => {
   it('keeps authentication and market data on the independent API', () => {
     expect(isIndependentApiPath('/api/v1/auth/login')).toBe(true)
     expect(isIndependentApiPath('/api/v1/crypto/market/BTCUSDT')).toBe(true)
+    expect(isIndependentApiPath('/api/v1/track/visit')).toBe(true)
   })
 
   it('keeps every administrator route on the independent Cloudflare API', () => {

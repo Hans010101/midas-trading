@@ -30,6 +30,7 @@ export function isIndependentApiPath(pathname: string): boolean {
     pathname.startsWith('/api/v1/overview/') ||
     pathname.startsWith('/api/v1/market/') ||
     pathname.startsWith('/api/v1/support/') ||
+    pathname.startsWith('/api/v1/track/') ||
     pathname === '/api/v1/analysis/decision-card' ||
     pathname === '/api/v1/analysis/strategy-signals' ||
     pathname === '/api/v1/analysis/strategy-recommend' ||

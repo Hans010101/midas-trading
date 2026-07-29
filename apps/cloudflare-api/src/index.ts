@@ -1,4 +1,13 @@
 import { handleAccountRoute } from './account'
+import { handleAdminAnalyticsRoute } from './admin-analytics'
+import {
+  handleAdminOperationsRoute,
+  runAdminOperationsCron,
+} from './admin-operations'
+import {
+  handleAdminTradingRoute,
+  runVirtualTradingCron,
+} from './admin-trading'
 import { handleAdminRoute } from './admin'
 import { handleAnalysisRoute } from './analysis'
 import { handleAcademyRoute } from './academy'
@@ -122,6 +131,9 @@ export default {
     try {
       const response =
         (await handleAuthRoute(request, env, requestId)) ??
+        (await handleAdminAnalyticsRoute(request, env, requestId)) ??
+        (await handleAdminOperationsRoute(request, env, requestId)) ??
+        (await handleAdminTradingRoute(request, env, requestId)) ??
         (await handleAdminRoute(request, env, requestId)) ??
         (await handleAnalysisRoute(request, env, requestId)) ??
         (await handleBotPresetRoute(request, env, requestId)) ??
@@ -200,9 +212,26 @@ export default {
   ): Promise<void> {
     const minute = new Date(controller.scheduledTime).getUTCMinutes()
     ctx.waitUntil(
-      minute % 10 === 5
-        ? refreshMarketBoards(env)
-        : refreshGlobalOverview(env).then(() => undefined),
+      Promise.allSettled([
+        minute % 10 === 5
+          ? refreshMarketBoards(env)
+          : refreshGlobalOverview(env).then(() => undefined),
+        runVirtualTradingCron(env),
+        runAdminOperationsCron(env),
+      ]).then((results) => {
+        results.forEach((result, index) => {
+          if (result.status === 'rejected') {
+            console.error(JSON.stringify({
+              event: 'scheduled.task_failed',
+              task: ['market_refresh', 'virtual_trading', 'admin_operations'][index],
+              error:
+                result.reason instanceof Error
+                  ? result.reason.message
+                  : String(result.reason),
+            }))
+          }
+        })
+      }),
     )
   },
 } satisfies ExportedHandler<Env>

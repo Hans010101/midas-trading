@@ -12,7 +12,7 @@ function iso(timestamp: number | null): string | null {
   return timestamp === null ? null : new Date(timestamp).toISOString()
 }
 
-function integerParam(
+export function integerParam(
   url: URL,
   name: string,
   fallback: number,
@@ -26,7 +26,7 @@ function integerParam(
   return value
 }
 
-async function requireAdmin(request: Request, env: Env): Promise<AdminAuth> {
+export async function requireAdmin(request: Request, env: Env): Promise<AdminAuth> {
   const auth = await authenticate(request, env)
   if (auth.user.role !== 'admin') {
     throw new HttpError(403, '需要管理员权限')
@@ -42,7 +42,7 @@ function registerMethod(
   return googleSub ? 'google' : 'password'
 }
 
-function adminActionStatement(
+export function adminActionStatement(
   db: D1Database,
   values: Readonly<{
     operatorId: string
@@ -700,10 +700,5 @@ export async function handleAdminRoute(
       Number(ticketMatch[1]),
     )
   }
-  return jsonResponse(
-    { detail: 'Route not found' },
-    404,
-    requestId,
-    request.method,
-  )
+  return null
 }
