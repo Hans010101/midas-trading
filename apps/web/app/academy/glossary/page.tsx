@@ -30,7 +30,9 @@ export async function generateMetadata(): Promise<Metadata> {
     : '88 个交易名词速查 · 10 大类:基础概念、订单交易、合约衍生品、技术指标、缠论、策略与风险等,每条一句话定义 + 展开说明。'
 
   return {
-    title,
+    title: {
+      absolute: english ? `${title} · Midas Trading` : `${title} · 点金 Midas`,
+    },
     description,
     alternates: { canonical: '/academy/glossary' },
     openGraph: {
