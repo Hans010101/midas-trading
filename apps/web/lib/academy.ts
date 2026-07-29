@@ -24,14 +24,14 @@ import {
   ACADEMY_STAGES_EN,
   type AcademyLocale,
 } from '@/content/academy/localized-catalog'
+import glossaryEn from '@/content/academy/glossary.en.json'
+import glossaryZh from '@/content/academy/glossary.zh.json'
 
 import { parseGlossaryTerms, buildSortedAliases, type AliasEntry } from './glossary-terms'
 
 const ACADEMY_DIR = join(process.cwd(), 'content', 'academy')
 const ARTICLES_DIR = join(ACADEMY_DIR, 'articles')
 const ARTICLES_EN_DIR = join(ACADEMY_DIR, 'articles-en')
-const GLOSSARY_PATH = join(ACADEMY_DIR, 'glossary.md')
-const GLOSSARY_EN_PATH = join(ACADEMY_DIR, 'glossary.en.md')
 
 /** 读单篇文章原始 markdown;slug 非法 / 文件缺失 → 返回 null(调用方出「文章不存在」)。 */
 export function getArticleBySlug(slug: string, locale: AcademyLocale = 'zh'): string | null {
@@ -46,7 +46,7 @@ export function getArticleBySlug(slug: string, locale: AcademyLocale = 'zh'): st
 
 /** 读词典原始 markdown(词典本身含目录 + 8 大类 + 66 条)。 */
 export function getGlossary(locale: AcademyLocale = 'zh'): string {
-  return readFileSync(locale === 'en' ? GLOSSARY_EN_PATH : GLOSSARY_PATH, 'utf8')
+  return locale === 'en' ? glossaryEn.markdown : glossaryZh.markdown
 }
 
 let _glossaryAliasesCache: AliasEntry[] | null = null
@@ -54,8 +54,7 @@ let _glossaryAliasesCache: AliasEntry[] | null = null
 /** 读 content/academy/glossary.md → 派生 别名→id(按长度降序),模块级缓存只解析一次 */
 export function getGlossaryAliases(): AliasEntry[] {
   if (_glossaryAliasesCache) return _glossaryAliasesCache
-  const md = readFileSync(GLOSSARY_PATH, 'utf8')
-  _glossaryAliasesCache = buildSortedAliases(parseGlossaryTerms(md))
+  _glossaryAliasesCache = buildSortedAliases(parseGlossaryTerms(glossaryZh.markdown))
   return _glossaryAliasesCache
 }
 
