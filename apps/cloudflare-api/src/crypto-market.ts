@@ -9,8 +9,9 @@ const BINANCE_FUTURES_URL = 'https://fapi.binance.com'
 const OKX_PUBLIC_URL = 'https://www.okx.com/api/v5'
 const GATE_FUTURES_URL = 'https://api.gateio.ws/api/v4/futures/usdt'
 const CACHE_CONTROL = 'public, max-age=15, s-maxage=60'
-// Each symbol needs three analytics requests. Keep the Worker invocation below
-// Cloudflare Free's 50 external-subrequest ceiling.
+// Each symbol needs two analytics requests; funding comes from one shared Kraken
+// ticker snapshot. Keep the Worker invocation below Cloudflare Free's 50
+// external-subrequest ceiling, including the shared ticker request.
 const MAX_METRICS_SYMBOLS = 15
 
 type KrakenFutureTicker = Readonly<{
@@ -508,31 +509,49 @@ function closeValue(row: unknown): number {
   return Array.isArray(row) ? numeric(row[3]) : numeric(row)
 }
 
-async function metricsItem(symbol: string): Promise<{
+async function metricsItem(
+  symbol: string,
+  ticker?: KrakenFutureTicker,
+): Promise<{
   symbol: string
   funding_rate: number | null
   account_long_short_ratio: number | null
   oi_change_pct_24h: number | null
 }> {
   const parsed = parsePublicSymbol(symbol)
-  const [funding, ratio, oi] = await Promise.all([
-    analytics(parsed.futuresSymbol, 'funding', 4),
+  const [fundingResult, ratioResult, oiResult] = await Promise.allSettled([
+    ticker
+      ? Promise.resolve(null)
+      : analytics(parsed.futuresSymbol, 'funding', 4),
     analytics(parsed.futuresSymbol, 'long-short-ratio', 4),
     analytics(parsed.futuresSymbol, 'open-interest', 25),
   ])
+  const funding = fundingResult.status === 'fulfilled'
+    ? fundingResult.value
+    : null
+  const ratio = ratioResult.status === 'fulfilled'
+    ? ratioResult.value
+    : null
+  const oi = oiResult.status === 'fulfilled'
+    ? oiResult.value
+    : null
   const relativeRate = (
-    funding.data as { relativeRate?: unknown[] } | undefined
+    funding?.data as { relativeRate?: unknown[] } | undefined
   )?.relativeRate
-  const ratios = Array.isArray(ratio.data) ? ratio.data : []
-  const oiRows = Array.isArray(oi.data) ? oi.data : []
+  const ratios = Array.isArray(ratio?.data) ? ratio.data : []
+  const oiRows = Array.isArray(oi?.data) ? oi.data : []
   const lastOi = closeValue(oiRows.at(-1))
   const firstOi = closeValue(oiRows.at(0))
+  const tickerIndex = finite(ticker?.indexPrice)
+  const tickerFunding = tickerIndex > 0 && Number.isFinite(ticker?.fundingRate)
+    ? finite(ticker?.fundingRate) / tickerIndex
+    : null
   return {
     symbol: parsed.publicSymbol,
     funding_rate:
       relativeRate && relativeRate.length > 0
         ? closeValue(relativeRate.at(-1))
-        : null,
+        : tickerFunding,
     account_long_short_ratio:
       ratios.length > 0 ? numeric(ratios.at(-1)) : null,
     oi_change_pct_24h:
@@ -726,7 +745,25 @@ async function getMetrics(
   )]
   if (symbols.length === 0) throw new HttpError(400, 'symbols 不能为空')
   const selected = symbols.slice(0, MAX_METRICS_SYMBOLS)
-  const settled = await Promise.allSettled(selected.map(metricsItem))
+  let tickerBySymbol = new Map<string, KrakenFutureTicker>()
+  try {
+    tickerBySymbol = new Map(
+      (await futuresTickers())
+        .filter((ticker): ticker is KrakenFutureTicker & { symbol: string } =>
+          typeof ticker.symbol === 'string',
+        )
+        .map((ticker) => [ticker.symbol, ticker]),
+    )
+  } catch {
+    // Analytics still supplies all three fields when the shared ticker request
+    // is temporarily unavailable.
+  }
+  const settled = await Promise.allSettled(
+    selected.map((symbol) => {
+      const parsed = parsePublicSymbol(symbol)
+      return metricsItem(symbol, tickerBySymbol.get(parsed.futuresSymbol))
+    }),
+  )
   const items = settled.flatMap((result) =>
     result.status === 'fulfilled' ? [result.value] : [],
   )

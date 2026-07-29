@@ -30,6 +30,7 @@ import {
   fetchCryptoOverview,
   fetchFuturesMetricsBatch,
   fetchTickers24h,
+  FUTURES_METRICS_BATCH_LIMIT,
   type FuturesMetricItem,
 } from '@/lib/api/crypto-market'
 import { useQuery } from '@tanstack/react-query'
@@ -37,9 +38,10 @@ import { detailHref } from '@/lib/seo/detail-symbols'
 import { cn } from '@/lib/utils'
 
 const BOARD_SIZE = 100 // 榜单显示前 100(去无限滚动 · 更多币种走搜索 · 四市场统一)
-const METRICS_CHUNK = 100 // metrics-batch 单次最多请求 symbol 数(接口上限 200,留余量)
-// ★ 首屏 metrics 有界:visibleRows 封顶 BOARD_SIZE=100,want ≤ 100 = 单个 chunk(≤ METRICS_CHUNK 100)
-//   → 首屏只发 1 个 metrics-batch 请求(100 symbols ≤ 接口 200)· 异步填充,不阻塞行(行用 ticker 先渲染)。
+// Cloudflare 独立 API 每次最多完整处理 15 个 symbol（15 × 2 条 analytics + 1 条共享
+// ticker = 31 个上游子请求，低于 Free 的 50 上限）。必须按同一上限分批；旧版一次发送
+// 100 个、API 静默截断到 15 个，却把后 85 个也标为 fetched，导致第 16 行起永久「—」。
+const METRICS_CHUNK = FUTURES_METRICS_BATCH_LIMIT
 
 // 全域可排序列(均为 ticker 表字段,前端内存排)
 type SortKey = 'chgPct' | 'turnover' | 'price'

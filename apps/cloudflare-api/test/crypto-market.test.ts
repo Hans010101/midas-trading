@@ -75,6 +75,53 @@ describe('independent crypto market routes', () => {
     expect(body.open_interest_usd).toBeGreaterThan(0)
   })
 
+  it('keeps a metrics row when one analytics series is unavailable', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('/derivatives/api/v3/tickers')) {
+          return Response.json({ result: 'success', tickers: [futureTicker] })
+        }
+        if (url.includes('/long-short-ratio')) {
+          return new Response('temporarily unavailable', { status: 503 })
+        }
+        if (url.includes('/open-interest')) {
+          return Response.json({
+            result: {
+              timestamp: [1_785_157_200, 1_785_243_600],
+              data: [
+                [0, 0, 0, 100],
+                [0, 0, 0, 125],
+              ],
+            },
+          })
+        }
+        throw new Error(`Unexpected request: ${url}`)
+      }),
+    )
+
+    const response = await handleCryptoMarketRoute(
+      new Request(
+        'https://api.example.test/api/v1/crypto/futures/metrics-batch?symbols=BTCUSDT',
+      ),
+      'crypto-metrics-partial',
+    )
+
+    expect(response?.status).toBe(200)
+    await expect(response?.json()).resolves.toMatchObject({
+      requested: 1,
+      processed: 1,
+      truncated: false,
+      items: [{
+        symbol: 'BTCUSDT',
+        funding_rate: 0.6672 / 64_447.8,
+        account_long_short_ratio: null,
+        oi_change_pct_24h: 25,
+      }],
+    })
+  })
+
   it('returns an explicit empty state for unavailable strategy snapshots', async () => {
     const response = await handleCryptoMarketRoute(
       new Request('https://api.example.test/api/v1/crypto/boll-scan'),

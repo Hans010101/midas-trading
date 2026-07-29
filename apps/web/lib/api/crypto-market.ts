@@ -111,6 +111,13 @@ export interface FuturesMetricsBatchResponse {
   items: FuturesMetricItem[]
 }
 
+/**
+ * Cloudflare Free allows at most 50 external subrequests per Worker invocation.
+ * The independent API resolves two Kraken analytics series per symbol plus one
+ * shared ticker request, so 15 symbols keeps every batch safely below the cap.
+ */
+export const FUTURES_METRICS_BATCH_LIMIT = 15
+
 /** 批量取多个 symbol 的合约指标 · symbols 用 Binance 风格(无斜杠)· 不在采集名单的不返回。 */
 export function fetchFuturesMetricsBatch(
   binanceSymbols: string[],
