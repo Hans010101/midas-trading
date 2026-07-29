@@ -26,7 +26,9 @@ import {
 } from 'recharts'
 
 import { AdminNav } from '@/components/admin/admin-nav'
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { TopNav } from '@/components/layout/top-nav'
+import type { Locale } from '@/i18n/routing'
 import { AdminApiError, fetchAdminSourceStats, fetchAdminVisitStats } from '@/lib/api/admin'
 
 const RANGES = [7, 30, 90] as const
@@ -41,15 +43,28 @@ function hourLabel(h: number): string {
   return `${String(h).padStart(2, '0')}:00`
 }
 
-function Delta({ today, yest }: { today: number; yest: number }) {
+function Delta({
+  today,
+  yest,
+  locale,
+}: {
+  today: number
+  yest: number
+  locale: Locale
+}) {
   const diff = today - yest
   if (diff === 0) {
-    return <span className="text-xs text-muted-foreground">较昨日持平</span>
+    return (
+      <span className="text-xs text-muted-foreground">
+        {locale === 'en' ? 'Unchanged vs yesterday' : '较昨日持平'}
+      </span>
+    )
   }
   const up = diff > 0
   return (
     <span className={up ? 'text-xs text-up' : 'text-xs text-down'}>
-      {up ? '▲' : '▼'} {Math.abs(diff).toLocaleString()} 较昨日
+      {up ? '▲' : '▼'} {Math.abs(diff).toLocaleString()}{' '}
+      {locale === 'en' ? 'vs yesterday' : '较昨日'}
     </span>
   )
 }
@@ -118,6 +133,7 @@ const TOOLTIP_STYLE = {
 }
 
 export default function AdminVisitStatsPage() {
+  const { locale } = useRuntimeLocale()
   const { data: session } = useSession()
   const token = session?.accessToken ?? ''
   const [days, setDays] = useState<number>(30)
@@ -175,7 +191,7 @@ export default function AdminVisitStatsPage() {
                         : 'px-3 py-1.5 text-muted-foreground transition-colors hover:bg-midas-red-glow/50'
                     }
                   >
-                    {r} 天
+                    {r} {locale === 'en' ? 'Days' : '天'}
                   </button>
                 ))}
               </div>
@@ -186,12 +202,12 @@ export default function AdminVisitStatsPage() {
               <StatCard
                 label="今日 PV(浏览量)"
                 value={d?.today.pv ?? 0}
-                sub={d ? <Delta today={d.today.pv} yest={d.yesterday.pv} /> : null}
+                sub={d ? <Delta today={d.today.pv} yest={d.yesterday.pv} locale={locale} /> : null}
               />
               <StatCard
                 label="今日 UV(访客数)"
                 value={d?.today.uv ?? 0}
-                sub={d ? <Delta today={d.today.uv} yest={d.yesterday.uv} /> : null}
+                sub={d ? <Delta today={d.today.uv} yest={d.yesterday.uv} locale={locale} /> : null}
               />
               <StatCard
                 label="累计 PV"
