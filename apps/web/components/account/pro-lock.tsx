@@ -14,6 +14,7 @@ import { Lock } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { cn } from '@/lib/utils'
 
 export function ProLock({
@@ -25,6 +26,8 @@ export function ProLock({
   compact?: boolean
   className?: string
 }) {
+  const { locale } = useRuntimeLocale()
+  const en = locale === 'en'
   const { data: session } = useSession()
   const router = useRouter()
   const guest = !session?.accessToken
@@ -49,8 +52,14 @@ export function ProLock({
         )}
       >
         <Lock className="h-3.5 w-3.5 text-gold" />
-        <span>{guest ? `登录后查看${title}` : `${title} · 请刷新登录状态`}</span>
-        <span className="font-medium text-midas-red">登录</span>
+        <span>
+          {guest
+            ? en ? `Log in to view ${title}` : `登录后查看${title}`
+            : en ? `${title} · refresh your session` : `${title} · 请刷新登录状态`}
+        </span>
+        <span className="font-medium text-midas-red">
+          {en ? 'Log in' : '登录'}
+        </span>
       </button>
     )
   }
@@ -65,14 +74,18 @@ export function ProLock({
     >
       <Lock className="h-6 w-6 text-gold" />
       <p className="text-xs leading-relaxed text-muted-foreground">
-        {guest ? `登录后查看${title}` : '登录状态已失效，请重新登录'}
+        {guest
+          ? en ? `Log in to view ${title}` : `登录后查看${title}`
+          : en ? 'Your session has expired. Please log in again.' : '登录状态已失效，请重新登录'}
       </p>
       <button
         type="button"
         onClick={goto}
         className="rounded-md bg-midas-red px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-midas-red-deep"
       >
-        {guest ? '登录 / 注册' : '重新登录'}
+        {guest
+          ? en ? 'Log In / Register' : '登录 / 注册'
+          : en ? 'Log In Again' : '重新登录'}
       </button>
     </div>
   )

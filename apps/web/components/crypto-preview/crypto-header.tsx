@@ -11,10 +11,12 @@
  */
 
 import { WatchlistToggleButton } from '@/components/watchlist/watchlist-toggle-button'
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { useFuturesInfo } from '@/hooks/use-crypto'
 import { useKline } from '@/hooks/use-kline'
 import { cn } from '@/lib/utils'
 import type { Period } from '@midas/shared'
+import { useTranslations } from 'next-intl'
 
 // 主图周期 · 刀2 加 5m/1w(prod kline 端点回源已验:各 200 根全深度 · 5m 16h / 1w 2022→今)·
 // 15m/1h/1d 有预采集、5m/1w 走 cache-aside 回源 · 无 4h。
@@ -35,6 +37,8 @@ export function CryptoHeader({
   period,
   onPeriodChange,
 }: CryptoHeaderProps) {
+  const { locale } = useRuntimeLocale()
+  const t = useTranslations('runtime.markets')
   // 日 K 取末两根算最新价 + 日涨跌 · 合约(perp)· 跟主图/缠论/AI 同源,JCT 这类无现货对的币也能出价
   const dailyKline = useKline({ symbol: klineSymbol, market: 'crypto', period: '1d', limit: 2, instrument: 'perp' })
   const info = useFuturesInfo(futuresSymbol)
@@ -57,8 +61,8 @@ export function CryptoHeader({
   const up = changePct !== null && changePct >= 0
 
   return (
-    <header className="border-b border-paper bg-surface-card px-6 py-3">
-      <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-6 gap-y-2">
+    <header className="border-b border-paper bg-surface-card px-3 py-3 sm:px-4">
+      <div className="mx-auto flex max-w-[1680px] flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex items-baseline gap-2">
           <span className="font-serif text-2xl font-bold">{klineSymbol}</span>
           <span className={cn('font-mono text-lg font-bold', up ? 'text-up' : 'text-down')}>
@@ -67,7 +71,9 @@ export function CryptoHeader({
           <span className={cn('font-mono text-sm', up ? 'text-up' : 'text-down')}>
             {changePct !== null ? `${up ? '+' : ''}${changePct.toFixed(2)}%` : ''}
           </span>
-          <span className="text-[10px] text-muted-foreground/50">日涨跌</span>
+          <span className="text-[10px] text-muted-foreground/50">
+            {t('dailyChange')}
+          </span>
         </div>
 
         <WatchlistToggleButton symbol={klineSymbol} market="crypto" />
@@ -94,12 +100,18 @@ export function CryptoHeader({
         <div className="ml-auto font-mono text-xs text-muted-foreground">
           {fundingRate !== null ? (
             <>
-              资金费率{' '}
+              {t('fundingRate')}{' '}
               <span className={fundingRate >= 0 ? 'text-up' : 'text-down'}>
                 {fundingRate >= 0 ? '+' : ''}
                 {(fundingRate * 100).toFixed(4)}%
               </span>
-              {nextFunding && ` · 下次结算 ${new Date(nextFunding).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`}
+              {nextFunding &&
+                ` · ${t('nextSettlement', {
+                  time: new Date(nextFunding).toLocaleTimeString(
+                    locale === 'en' ? 'en-US' : 'zh-CN',
+                    { hour: '2-digit', minute: '2-digit' },
+                  ),
+                })}`}
             </>
           ) : (
             <span className="text-muted-foreground/50">资金费率 — · 待预热</span>

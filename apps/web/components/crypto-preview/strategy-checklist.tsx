@@ -17,6 +17,7 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { ProLock } from '@/components/account/pro-lock'
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { useChan } from '@/hooks/use-chan'
 import { useFuturesInfo } from '@/hooks/use-crypto'
 import { usePerpPositions } from '@/hooks/use-perp'
@@ -46,6 +47,8 @@ interface Props {
 }
 
 export function StrategyChecklist({ futuresSymbol, klineSymbol, period }: Props) {
+  const { locale } = useRuntimeLocale()
+  const en = locale === 'en'
   // ★ Pro 门控:实战策略清单是 Pro 内容(其输入为公开合约指标 · 此处为前端门控 · 两道门遮罩)
   const { data: quota } = useQuota()
   const hasAccess = hasFullFeatureAccess(quota !== undefined, quota?.plan)
@@ -80,44 +83,48 @@ export function StrategyChecklist({ futuresSymbol, klineSymbol, period }: Props)
     {
       key: 'r1',
       tone: 'green',
-      label: '资金费为正 + OI 增 → 顺势开多',
+      label: en ? 'Positive funding + rising OI → trend long' : '资金费为正 + OI 增 → 顺势开多',
       status: fundingRate == null || oiChg == null ? 'unknown' : fundingRate > 0 && oiChg > 0 ? 'hit' : 'idle',
-      hitText: '🟢 多头情绪占优 · 可考虑顺势开多',
+      hitText: en ? '🟢 Bullish positioning leads · trend-long setup' : '🟢 多头情绪占优 · 可考虑顺势开多',
       detail:
         fundingRate != null && oiChg != null
-          ? `资金费 ${(fundingRate * 100).toFixed(4)}% · OI 24H ${oiChg >= 0 ? '+' : ''}${oiChg.toFixed(2)}%`
-          : '数据待预热',
+          ? `${en ? 'Funding' : '资金费'} ${(fundingRate * 100).toFixed(4)}% · OI 24H ${oiChg >= 0 ? '+' : ''}${oiChg.toFixed(2)}%`
+          : en ? 'Data warming up' : '数据待预热',
     },
     {
       key: 'r2',
       tone: 'amber',
-      label: '大户多空比极端 → 反向预警',
+      label: en ? 'Extreme whale ratio → reversal watch' : '大户多空比极端 → 反向预警',
       status: accLsr == null ? 'unknown' : accLsr > 2 || accLsr < 0.5 ? 'hit' : 'idle',
-      hitText: '🟡 情绪过热 · 警惕反向',
-      detail: accLsr != null ? `账户多空比 ${accLsr.toFixed(2)}` : '数据待预热',
+      hitText: en ? '🟡 Positioning is crowded · reversal risk' : '🟡 情绪过热 · 警惕反向',
+      detail: accLsr != null
+        ? `${en ? 'Account ratio' : '账户多空比'} ${accLsr.toFixed(2)}`
+        : en ? 'Data warming up' : '数据待预热',
     },
     {
       key: 'r3',
       tone: 'amber',
-      label: '缠论一卖 + 基差走弱 → 减仓',
+      label: en ? 'Chan S1 + weaker basis → reduce exposure' : '缠论一卖 + 基差走弱 → 减仓',
       status: !chanReady || basisPct == null ? 'unknown' : hasS1 && basisPct < 0 ? 'hit' : 'idle',
-      hitText: '🟡 缠论一卖 + 基差转弱 · 可考虑减仓',
+      hitText: en ? '🟡 Chan S1 with weaker basis · reduce exposure' : '🟡 缠论一卖 + 基差转弱 · 可考虑减仓',
       detail:
         chanReady && basisPct != null
-          ? `缠论一卖 ${hasS1 ? '出现' : '无'} · 基差率 ${basisPct.toFixed(3)}%`
-          : '数据待预热',
+          ? en
+            ? `Chan S1 ${hasS1 ? 'present' : 'absent'} · Basis ${basisPct.toFixed(3)}%`
+            : `缠论一卖 ${hasS1 ? '出现' : '无'} · 基差率 ${basisPct.toFixed(3)}%`
+          : en ? 'Data warming up' : '数据待预热',
     },
     {
       key: 'r4',
       tone: 'red',
-      label: '强平距现价 < 5% → 降杠杆',
+      label: en ? 'Liquidation distance < 5% → cut leverage' : '强平距现价 < 5% → 降杠杆',
       status: liqDist == null ? 'unknown' : liqDist < 5 ? 'hit' : 'idle',
-      hitText: '🔴 强平距离过近 · 建议降杠杆 / 加保证金',
+      hitText: en ? '🔴 Liquidation is close · cut leverage or add margin' : '🔴 强平距离过近 · 建议降杠杆 / 加保证金',
       detail:
         liqDist != null
-          ? `强平距离 ${liqDist.toFixed(1)}%`
+          ? `${en ? 'Liquidation distance' : '强平距离'} ${liqDist.toFixed(1)}%`
           : activePos == null
-            ? '无本币活仓'
+            ? en ? 'No open position for this symbol' : '无本币活仓'
             : '—',
     },
   ]
@@ -125,21 +132,25 @@ export function StrategyChecklist({ futuresSymbol, klineSymbol, period }: Props)
   return (
     <div className="rounded-lg border border-paper bg-surface-card p-4">
       <div className="mb-3 flex items-center justify-between">
-        <span className="font-serif text-base font-bold">实战策略清单</span>
+        <span className="font-serif text-base font-bold">
+          {en ? 'Live checklist' : '实战策略清单'}
+        </span>
       </div>
       {hasAccess ? (
         <>
           <ul className="space-y-2">
             {rules.map((r) => (
-              <RuleRow key={r.key} rule={r} />
+              <RuleRow key={r.key} rule={r} locale={locale} />
             ))}
           </ul>
           <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground/70">
-            策略由实时指标驱动 · 命中仅作提示
+            {en
+              ? 'Driven by live metrics · signals are informational'
+              : '策略由实时指标驱动 · 命中仅作提示'}
           </p>
         </>
       ) : (
-        <ProLock title="实战策略清单" />
+        <ProLock title={en ? 'Live checklist' : '实战策略清单'} />
       )}
     </div>
   )
@@ -151,11 +162,18 @@ const TONE_HIT: Record<Rule['tone'], string> = {
   red: 'bg-down/15 text-down border-down/40',
 }
 
-function RuleRow({ rule }: { rule: Rule }) {
+function RuleRow({
+  rule,
+  locale,
+}: {
+  rule: Rule
+  locale: 'zh' | 'en'
+}) {
   const hit = rule.status === 'hit'
   const unknown = rule.status === 'unknown'
-  const badge =
-    rule.status === 'hit' ? '命中' : rule.status === 'idle' ? '未触发' : '待预热'
+  const badge = locale === 'en'
+    ? rule.status === 'hit' ? 'Hit' : rule.status === 'idle' ? 'Idle' : 'Warming'
+    : rule.status === 'hit' ? '命中' : rule.status === 'idle' ? '未触发' : '待预热'
   return (
     <li
       className={cn(

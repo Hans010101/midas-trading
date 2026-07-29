@@ -31,6 +31,8 @@ import {
 } from 'recharts'
 
 import { useBasisSeries, useLongShortRatio, useOpenInterest } from '@/hooks/use-crypto'
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
+import type { Locale } from '@/i18n/routing'
 import { type ChartColors, useChartColors } from '@/lib/chart-colors'
 
 // 视觉 token(recharts 需 hex)· ★数据系列色固定(多空/OI/基差·中饱和·暗底也够清晰·不随主题)。
@@ -59,13 +61,14 @@ function fmtCompact(n: number): string {
   if (abs >= 1e3) return `${(n / 1e3).toFixed(1)}K`
   return n.toFixed(2)
 }
-function sourceLabel(source?: string): string {
-  if (!source) return '永续合约'
-  if (source.startsWith('Gate')) return 'Gate 永续'
-  if (source.startsWith('Binance')) return 'Binance 永续'
-  if (source.startsWith('OKX')) return 'OKX 永续'
-  if (source.startsWith('Kraken')) return 'Kraken 永续'
-  return '永续合约'
+function sourceLabel(source: string | undefined, locale: Locale): string {
+  const suffix = locale === 'en' ? 'Perpetuals' : '永续'
+  if (!source) return locale === 'en' ? 'Perpetuals' : '永续合约'
+  if (source.startsWith('Gate')) return `Gate ${suffix}`
+  if (source.startsWith('Binance')) return `Binance ${suffix}`
+  if (source.startsWith('OKX')) return `OKX ${suffix}`
+  if (source.startsWith('Kraken')) return `Kraken ${suffix}`
+  return locale === 'en' ? 'Perpetuals' : '永续合约'
 }
 // X 轴约 6 个刻度(数据点变密后仍保持清爽)· 配合 minTickGap 防重叠
 function xInterval(len: number): number {
@@ -97,14 +100,16 @@ interface DimensionSectionProps {
 }
 
 export function DimensionSection({ futuresSymbol }: DimensionSectionProps) {
+  const { locale } = useRuntimeLocale()
+  const en = locale === 'en'
   // 288 点 = 24h @ 5min(任务4:数据点加密,曲线更细腻;采集 top100 扩容后历史变密)
   const oi = useOpenInterest(futuresSymbol, 288)
   const lsr = useLongShortRatio(futuresSymbol, 288)
   // ⑥ 基差(M2-C.2.4)· 标记价/指数价 5 分钟线 · 288 点 = 近 24h
   const basis = useBasisSeries(futuresSymbol, 288)
-  const oiSource = sourceLabel(oi.data?.source)
-  const ratioSource = sourceLabel(lsr.data?.source)
-  const basisSource = sourceLabel(basis.data?.source)
+  const oiSource = sourceLabel(oi.data?.source, locale)
+  const ratioSource = sourceLabel(lsr.data?.source, locale)
+  const basisSource = sourceLabel(basis.data?.source, locale)
 
   const oiData = (oi.data?.items ?? []).map((p) => ({
     t: hhmm(p.ts), full: mmddhhmm(p.ts), oi_coin: p.oi_coin, oi_usd: p.oi_usd,
@@ -145,48 +150,80 @@ export function DimensionSection({ futuresSymbol }: DimensionSectionProps) {
 
   return (
     <div>
-      <h3 className="mb-2 font-serif text-base font-bold">合约维度</h3>
+      <h3 className="mb-2 font-serif text-base font-bold">
+        {en ? 'Perpetual metrics' : '合约维度'}
+      </h3>
       {/* 移动刀C:窄屏单列(双列挤压 → X 轴时间标签重叠)· lg+ 恢复 2 列 */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* ① OI · 双指标双 Y 轴 */}
-        <ChartCard title="① 合约持仓量(OI)" sub={`${oiSource} · 持仓量(币)实线 / 持仓价值(USD)虚线 · 5min`}>
-          <ChartState isLoading={oi.isPending} isError={oi.isError} isEmpty={oi.isSuccess && oiData.length === 0}>
-            <OiChart data={oiData} />
+        <ChartCard
+          title={en ? '① Open interest (OI)' : '① 合约持仓量(OI)'}
+          sub={en
+            ? `${oiSource} · units (solid) / USD value (dashed) · 5 min`
+            : `${oiSource} · 持仓量(币)实线 / 持仓价值(USD)虚线 · 5min`}
+        >
+          <ChartState locale={locale} isLoading={oi.isPending} isError={oi.isError} isEmpty={oi.isSuccess && oiData.length === 0}>
+            <OiChart data={oiData} locale={locale} />
           </ChartState>
         </ChartCard>
 
         {/* ② 大户多空比 · 账户数 */}
-        <ChartCard title="② 大户多空比 · 账户数" sub={`${ratioSource} · 大户账户多空占比 + 比值 · 5min`}>
-          <ChartState isLoading={lsr.isPending} isError={lsr.isError} isEmpty={lsr.isSuccess && accData.length === 0}>
-            <RatioStackChart data={accData} />
+        <ChartCard
+          title={en ? '② Top traders · accounts' : '② 大户多空比 · 账户数'}
+          sub={en
+            ? `${ratioSource} · account long/short shares + ratio · 5 min`
+            : `${ratioSource} · 大户账户多空占比 + 比值 · 5min`}
+        >
+          <ChartState locale={locale} isLoading={lsr.isPending} isError={lsr.isError} isEmpty={lsr.isSuccess && accData.length === 0}>
+            <RatioStackChart data={accData} locale={locale} />
           </ChartState>
         </ChartCard>
 
         {/* ③ 大户多空比 · 持仓量 */}
-        <ChartCard title="③ 大户多空比 · 持仓量" sub={`${ratioSource} · 大户持仓多空占比 + 比值 · 5min`}>
-          <ChartState isLoading={lsr.isPending} isError={lsr.isError} isEmpty={lsr.isSuccess && posData.length === 0}>
-            <RatioStackChart data={posData} />
+        <ChartCard
+          title={en ? '③ Top traders · positions' : '③ 大户多空比 · 持仓量'}
+          sub={en
+            ? `${ratioSource} · position long/short shares + ratio · 5 min`
+            : `${ratioSource} · 大户持仓多空占比 + 比值 · 5min`}
+        >
+          <ChartState locale={locale} isLoading={lsr.isPending} isError={lsr.isError} isEmpty={lsr.isSuccess && posData.length === 0}>
+            <RatioStackChart data={posData} locale={locale} />
           </ChartState>
         </ChartCard>
 
         {/* ④ 多空人数比值 · 真实数据(刀C · globalLongShortAccountRatio 全市场人数比) */}
-        <ChartCard title="④ 多空人数比值" sub={`${ratioSource} · 全市场人数多空占比 + 比值 · 5min`}>
-          <ChartState isLoading={lsr.isPending} isError={lsr.isError} isEmpty={lsr.isSuccess && globalData.length === 0}>
-            <RatioStackChart data={globalData} />
+        <ChartCard
+          title={en ? '④ Global account ratio' : '④ 多空人数比值'}
+          sub={en
+            ? `${ratioSource} · market-wide long/short shares + ratio · 5 min`
+            : `${ratioSource} · 全市场人数多空占比 + 比值 · 5min`}
+        >
+          <ChartState locale={locale} isLoading={lsr.isPending} isError={lsr.isError} isEmpty={lsr.isSuccess && globalData.length === 0}>
+            <RatioStackChart data={globalData} locale={locale} />
           </ChartState>
         </ChartCard>
 
         {/* ⑤ 合约主动买卖量 · 对称双色柱 */}
-        <ChartCard title="⑤ 合约主动买卖量" sub={`${ratioSource} · taker 主买(青绿,上)/ 主卖(浅红,下) · 5min`}>
-          <ChartState isLoading={lsr.isPending} isError={lsr.isError} isEmpty={lsr.isSuccess && takerData.length === 0}>
-            <TakerChart data={takerData} />
+        <ChartCard
+          title={en ? '⑤ Taker buy / sell volume' : '⑤ 合约主动买卖量'}
+          sub={en
+            ? `${ratioSource} · taker buys (up) / sells (down) · 5 min`
+            : `${ratioSource} · taker 主买(青绿,上)/ 主卖(浅红,下) · 5min`}
+        >
+          <ChartState locale={locale} isLoading={lsr.isPending} isError={lsr.isError} isEmpty={lsr.isSuccess && takerData.length === 0}>
+            <TakerChart data={takerData} locale={locale} />
           </ChartState>
         </ChartCard>
 
         {/* ⑥ 基差 · 真实(M2-C.2.4)· 标记价/指数价 5 分钟时序 */}
-        <ChartCard title="⑥ 基差(basis)" sub={`${basisSource} · 标记价 / 指数价 / 基差率 · 5min`}>
-          <ChartState isLoading={basis.isPending} isError={basis.isError} isEmpty={basis.isSuccess && basisData.length === 0}>
-            <BasisChart data={basisData} />
+        <ChartCard
+          title={en ? '⑥ Basis' : '⑥ 基差(basis)'}
+          sub={en
+            ? `${basisSource} · mark / index / basis rate · 5 min`
+            : `${basisSource} · 标记价 / 指数价 / 基差率 · 5min`}
+        >
+          <ChartState locale={locale} isLoading={basis.isPending} isError={basis.isError} isEmpty={basis.isSuccess && basisData.length === 0}>
+            <BasisChart data={basisData} locale={locale} />
           </ChartState>
         </ChartCard>
       </div>
@@ -195,8 +232,10 @@ export function DimensionSection({ futuresSymbol }: DimensionSectionProps) {
 }
 
 // ── ① OI · 持仓量(币)实线 + 持仓价值(USD)虚线 · 双 Y 轴 ──────────────────
-function OiChart({ data }: { data: { t: string; full: string; oi_coin: number; oi_usd: number }[] }) {
+function OiChart({ data, locale }: { data: { t: string; full: string; oi_coin: number; oi_usd: number }[]; locale: Locale }) {
   const c = useChartColors()
+  const unitsLabel = locale === 'en' ? 'OI units' : '持仓量(币)'
+  const valueLabel = locale === 'en' ? 'OI value (USD)' : '持仓价值(USD)'
   return (
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
@@ -207,19 +246,22 @@ function OiChart({ data }: { data: { t: string; full: string; oi_coin: number; o
         <Tooltip
           contentStyle={tipStyle(c)}
           labelFormatter={(_l, p) => (p?.[0]?.payload?.full ?? '')}
-          formatter={(v, name) => [name === '持仓量(币)' ? fmtCompact(Number(v)) : `$${fmtCompact(Number(v))}`, name]}
+          formatter={(v, name) => [name === unitsLabel ? fmtCompact(Number(v)) : `$${fmtCompact(Number(v))}`, name]}
         />
         <Legend wrapperStyle={legendStyle} iconSize={8} />
-        <Line yAxisId="coin" type="monotone" dataKey="oi_coin" name="持仓量(币)" stroke={C_GOLD} strokeWidth={1.2} dot={false} />
-        <Line yAxisId="usd" type="monotone" dataKey="oi_usd" name="持仓价值(USD)" stroke={C_RED} strokeWidth={1} strokeDasharray="4 3" dot={false} />
+        <Line yAxisId="coin" type="monotone" dataKey="oi_coin" name={unitsLabel} stroke={C_GOLD} strokeWidth={1.2} dot={false} />
+        <Line yAxisId="usd" type="monotone" dataKey="oi_usd" name={valueLabel} stroke={C_RED} strokeWidth={1} strokeDasharray="4 3" dot={false} />
       </ComposedChart>
     </ResponsiveContainer>
   )
 }
 
 // ── ②③④ · 多/空 堆叠柱(归一 100%)+ 比值线(右轴)──────────────────────────
-function RatioStackChart({ data }: { data: { t: string; full: string; long: number; short: number; ratio: number }[] }) {
+function RatioStackChart({ data, locale }: { data: { t: string; full: string; long: number; short: number; ratio: number }[]; locale: Locale }) {
   const c = useChartColors()
+  const longLabel = locale === 'en' ? 'Long' : '多'
+  const shortLabel = locale === 'en' ? 'Short' : '空'
+  const ratioLabel = locale === 'en' ? 'Ratio' : '比值'
   return (
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }} barCategoryGap={0}>
@@ -230,20 +272,20 @@ function RatioStackChart({ data }: { data: { t: string; full: string; long: numb
         <Tooltip
           contentStyle={tipStyle(c)}
           labelFormatter={(_l, p) => (p?.[0]?.payload?.full ?? '')}
-          formatter={(v, name) => [name === '比值' ? Number(v).toFixed(3) : `${Number(v).toFixed(1)}%`, name]}
+          formatter={(v, name) => [name === ratioLabel ? Number(v).toFixed(3) : `${Number(v).toFixed(1)}%`, name]}
         />
         <Legend wrapperStyle={legendStyle} iconSize={8} />
         <ReferenceLine yAxisId="ratio" y={1} stroke={c.axisText} strokeDasharray="3 3" />
-        <Bar yAxisId="pct" dataKey="long" name="多" stackId="ls" fill={C_LONG} />
-        <Bar yAxisId="pct" dataKey="short" name="空" stackId="ls" fill={C_SHORT} />
-        <Line yAxisId="ratio" type="monotone" dataKey="ratio" name="比值" stroke={c.neutral} strokeWidth={1} dot={false} />
+        <Bar yAxisId="pct" dataKey="long" name={longLabel} stackId="ls" fill={C_LONG} />
+        <Bar yAxisId="pct" dataKey="short" name={shortLabel} stackId="ls" fill={C_SHORT} />
+        <Line yAxisId="ratio" type="monotone" dataKey="ratio" name={ratioLabel} stroke={c.neutral} strokeWidth={1} dot={false} />
       </ComposedChart>
     </ResponsiveContainer>
   )
 }
 
 // ── ⑤ 主动买卖量 · 对称双色柱(buy 正 / sell 负)─────────────────────────────
-function TakerChart({ data }: { data: { t: string; full: string; buy: number; sell: number }[] }) {
+function TakerChart({ data, locale }: { data: { t: string; full: string; buy: number; sell: number }[]; locale: Locale }) {
   const c = useChartColors()
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -258,15 +300,15 @@ function TakerChart({ data }: { data: { t: string; full: string; buy: number; se
         />
         <Legend wrapperStyle={legendStyle} iconSize={8} />
         <ReferenceLine y={0} stroke={c.axisText} />
-        <Bar dataKey="buy" name="主买" fill={C_LONG} stackId="taker" />
-        <Bar dataKey="sell" name="主卖" fill={C_SHORT} stackId="taker" />
+        <Bar dataKey="buy" name={locale === 'en' ? 'Taker buy' : '主买'} fill={C_LONG} stackId="taker" />
+        <Bar dataKey="sell" name={locale === 'en' ? 'Taker sell' : '主卖'} fill={C_SHORT} stackId="taker" />
       </ComposedChart>
     </ResponsiveContainer>
   )
 }
 
 // ── ⑥ 基差 · 合约价 + 指数价 + 基差率(右轴橙线)· 占位示意 ────────────────────
-function BasisChart({ data }: { data: { t: string; full: string; mark: number; index: number; basisPct: number }[] }) {
+function BasisChart({ data, locale }: { data: { t: string; full: string; mark: number; index: number; basisPct: number }[]; locale: Locale }) {
   const c = useChartColors()
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -276,9 +318,9 @@ function BasisChart({ data }: { data: { t: string; full: string; mark: number; i
         <YAxis yAxisId="price" width={44} tick={{ fontSize: 9, fill: c.axisText }} domain={TIGHT_DOMAIN} tickFormatter={fmtCompact} />
         <YAxis yAxisId="pct" orientation="right" width={36} tick={{ fontSize: 9, fill: c.axisText }} domain={TIGHT_DOMAIN} tickFormatter={(v: number) => `${v.toFixed(2)}%`} />
         <Legend wrapperStyle={legendStyle} iconSize={8} />
-        <Line yAxisId="price" type="monotone" dataKey="mark" name="合约价" stroke={C_GOLD} strokeWidth={1.2} dot={false} />
-        <Line yAxisId="price" type="monotone" dataKey="index" name="指数价" stroke={C_RED} strokeWidth={1} strokeDasharray="4 3" dot={false} />
-        <Line yAxisId="pct" type="monotone" dataKey="basisPct" name="基差率" stroke={C_ORANGE} strokeWidth={1} dot={false} />
+        <Line yAxisId="price" type="monotone" dataKey="mark" name={locale === 'en' ? 'Mark price' : '合约价'} stroke={C_GOLD} strokeWidth={1.2} dot={false} />
+        <Line yAxisId="price" type="monotone" dataKey="index" name={locale === 'en' ? 'Index price' : '指数价'} stroke={C_RED} strokeWidth={1} strokeDasharray="4 3" dot={false} />
+        <Line yAxisId="pct" type="monotone" dataKey="basisPct" name={locale === 'en' ? 'Basis rate' : '基差率'} stroke={C_ORANGE} strokeWidth={1} dot={false} />
       </ComposedChart>
     </ResponsiveContainer>
   )
@@ -304,11 +346,11 @@ function ChartCard({
 
 // ── 状态包装 ──────────────────────────────────────────────────────────────
 function ChartState({
-  isLoading, isError, isEmpty, children,
-}: { isLoading: boolean; isError: boolean; isEmpty: boolean; children: React.ReactNode }) {
-  if (isLoading) return <CenterNote>载入中…</CenterNote>
-  if (isError) return <CenterNote>暂时无法读取(后端不可达)</CenterNote>
-  if (isEmpty) return <CenterNote>暂无数据 · 预览环境未预热 / 待采集</CenterNote>
+  locale, isLoading, isError, isEmpty, children,
+}: { locale: Locale; isLoading: boolean; isError: boolean; isEmpty: boolean; children: React.ReactNode }) {
+  if (isLoading) return <CenterNote>{locale === 'en' ? 'Loading…' : '载入中…'}</CenterNote>
+  if (isError) return <CenterNote>{locale === 'en' ? 'Data temporarily unavailable' : '暂时无法读取(后端不可达)'}</CenterNote>
+  if (isEmpty) return <CenterNote>{locale === 'en' ? 'No data yet · warming up' : '暂无数据 · 预览环境未预热 / 待采集'}</CenterNote>
   return <>{children}</>
 }
 

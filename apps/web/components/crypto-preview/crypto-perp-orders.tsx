@@ -13,6 +13,7 @@
 
 import { useSession } from 'next-auth/react'
 
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { usePerpOrders } from '@/hooks/use-perp'
 import type { PerpAction } from '@/lib/api/perp'
 import { cn } from '@/lib/utils'
@@ -22,6 +23,12 @@ const ACTION_ZH: Record<PerpAction, string> = {
   open_short: '开空',
   close_long: '平多',
   close_short: '平空',
+}
+const ACTION_EN: Record<PerpAction, string> = {
+  open_long: 'Open long',
+  open_short: 'Open short',
+  close_long: 'Close long',
+  close_short: 'Close short',
 }
 
 const num = (s: string | null | undefined): number => (s == null ? 0 : Number(s) || 0)
@@ -33,6 +40,8 @@ const fmtU = (s: string | null | undefined): string =>
   num(s).toLocaleString('en-US', { maximumFractionDigits: 2 })
 
 export function CryptoPerpOrders({ futuresSymbol }: { futuresSymbol: string }) {
+  const { locale } = useRuntimeLocale()
+  const en = locale === 'en'
   const { status } = useSession()
   const { data: orders = [] } = usePerpOrders({ symbol: futuresSymbol, limit: 30 })
 
@@ -41,22 +50,24 @@ export function CryptoPerpOrders({ futuresSymbol }: { futuresSymbol: string }) {
   return (
     <div className="rounded-lg border border-paper bg-surface-card p-3">
       <div className="mb-2 font-serif text-sm font-bold text-foreground">
-        本币合约订单 · {futuresSymbol}
+        {en ? 'Orders for' : '本币合约订单 ·'} {futuresSymbol}
       </div>
       {orders.length === 0 ? (
-        <p className="py-4 text-center text-xs text-muted-foreground/60">暂无本币合约订单</p>
+        <p className="py-4 text-center text-xs text-muted-foreground/60">
+          {en ? 'No orders for this symbol' : '暂无本币合约订单'}
+        </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] text-[11px]">
             <thead>
               <tr className="border-b border-paper text-[10px] text-muted-foreground">
-                <th className="py-1.5 text-left">时间</th>
-                <th className="py-1.5 text-left">动作</th>
-                <th className="py-1.5 text-right">数量</th>
-                <th className="py-1.5 text-right">成交价</th>
-                <th className="py-1.5 text-right">手续费</th>
-                <th className="py-1.5 text-right">已实现</th>
-                <th className="py-1.5 text-left">状态</th>
+                <th className="py-1.5 text-left">{en ? 'Time' : '时间'}</th>
+                <th className="py-1.5 text-left">{en ? 'Action' : '动作'}</th>
+                <th className="py-1.5 text-right">{en ? 'Qty' : '数量'}</th>
+                <th className="py-1.5 text-right">{en ? 'Fill' : '成交价'}</th>
+                <th className="py-1.5 text-right">{en ? 'Fee' : '手续费'}</th>
+                <th className="py-1.5 text-right">{en ? 'Realized' : '已实现'}</th>
+                <th className="py-1.5 text-left">{en ? 'Status' : '状态'}</th>
               </tr>
             </thead>
             <tbody>
@@ -70,7 +81,7 @@ export function CryptoPerpOrders({ futuresSymbol }: { futuresSymbol: string }) {
                   >
                     <td className="py-1.5 text-[10px] text-muted-foreground">
                       {ts
-                        ? new Date(ts).toLocaleString('zh-CN', {
+                        ? new Date(ts).toLocaleString(en ? 'en-US' : 'zh-CN', {
                             month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
                           })
                         : '—'}
@@ -84,10 +95,12 @@ export function CryptoPerpOrders({ futuresSymbol }: { futuresSymbol: string }) {
                             : 'border border-midas-red text-midas-red',
                         )}
                       >
-                        {ACTION_ZH[o.action]}
+                        {(en ? ACTION_EN : ACTION_ZH)[o.action]}
                       </span>
                       {o.is_liquidation && (
-                        <span className="ml-1 rounded bg-down/15 px-1 py-0.5 text-[9px] text-down">强平</span>
+                        <span className="ml-1 rounded bg-down/15 px-1 py-0.5 text-[9px] text-down">
+                          {en ? 'Liquidated' : '强平'}
+                        </span>
                       )}
                     </td>
                     <td className="py-1.5 text-right font-mono">{num(o.quantity)}</td>
@@ -104,9 +117,13 @@ export function CryptoPerpOrders({ futuresSymbol }: { futuresSymbol: string }) {
                     </td>
                     <td className="py-1.5 text-[10px]">
                       {o.status === 'filled' ? (
-                        <span className="text-muted-foreground">成交</span>
+                        <span className="text-muted-foreground">
+                          {en ? 'Filled' : '成交'}
+                        </span>
                       ) : (
-                        <span className="text-midas-red" title={o.reject_reason ?? ''}>拒单</span>
+                        <span className="text-midas-red" title={o.reject_reason ?? ''}>
+                          {en ? 'Rejected' : '拒单'}
+                        </span>
                       )}
                     </td>
                   </tr>
@@ -117,7 +134,9 @@ export function CryptoPerpOrders({ futuresSymbol }: { futuresSymbol: string }) {
         </div>
       )}
       <p className="mt-2 text-[10px] text-muted-foreground/60">
-        本币已成交开/平记录 · 全部币种见「我的账户」
+        {en
+          ? 'Filled open/close history · all symbols are available in Account'
+          : '本币已成交开/平记录 · 全部币种见「我的账户」'}
       </p>
     </div>
   )

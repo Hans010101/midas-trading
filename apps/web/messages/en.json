@@ -787,6 +787,19 @@
       "login": "Log In",
       "userMenu": "User Menu"
     },
+    "shortNav": {
+      "aria": "Primary Navigation",
+      "global": "Global",
+      "crypto": "Crypto",
+      "us": "US",
+      "cn": "A-Shares",
+      "hk": "HK",
+      "watchlist": "Watchlist",
+      "lab": "Lab",
+      "academy": "Academy",
+      "calendar": "Calendar",
+      "search": "Search"
+    },
     "general": {
       "loading": "Loading…",
       "loadFailed": "Unable to load. Please try again later.",
@@ -1050,7 +1063,21 @@
       "cross": "Cross",
       "margin": "Margin (USDT)",
       "estimatedSize": "Estimated Position Size",
-      "estimatedLiquidation": "Estimated Liquidation Price"
+      "estimatedLiquidation": "Estimated Liquidation Price",
+      "dailyChange": "Daily Change",
+      "nextSettlement": "Next settlement {time}",
+      "loadingMetrics": "Loading perpetual metrics…",
+      "fundingLongPays": "Longs pay · bullish positioning",
+      "fundingShortPays": "Shorts pay · bearish positioning",
+      "positionBullish": "Positions net long",
+      "positionBearish": "Positions net short",
+      "accountBullish": "Accounts net long",
+      "accountBearish": "Accounts net short",
+      "oiIncrease": "OI rising",
+      "oiDecrease": "OI falling",
+      "topPositionRatio": "Top-trader position ratio",
+      "topAccountRatio": "Top-trader account ratio",
+      "oiPeriodChange": "OI change (8h)"
     },
     "productionLabels": {
       "seal": "Midas Seal",

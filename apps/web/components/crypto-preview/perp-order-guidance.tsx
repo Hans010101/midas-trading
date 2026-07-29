@@ -19,6 +19,7 @@ import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 
 import { ConditionalOrderDialog } from '@/components/trading/conditional-order-dialog'
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { useFuturesInfo } from '@/hooks/use-crypto'
 import { useKline } from '@/hooks/use-kline'
 import { usePerpPositions, usePlacePerpOrder } from '@/hooks/use-perp'
@@ -41,15 +42,22 @@ const fmtU = (n: number): string =>
 const numOr = (s: string | null, d = 0): number => (s == null ? d : Number(s) || d)
 
 // 模式标注 · 强平语义因 mode 不同(逐仓=每仓强平价;全仓=账户级 · 该字段不展示)
-const MODE_TIP: Record<'isolated' | 'cross', string> = {
-  isolated: '逐仓:强平价只取决于开仓价与杠杆,与保证金金额无关',
-  cross: '全仓:账户级强平 · 单仓不存在独立强平价(后端 worker 看整账户保证金率)',
-}
 function ModeTag({ mode }: { mode: 'isolated' | 'cross' }) {
-  const label = mode === 'isolated' ? '逐仓' : '全仓'
+  const { locale } = useRuntimeLocale()
+  const en = locale === 'en'
+  const label = en
+    ? mode === 'isolated' ? 'Isolated' : 'Cross'
+    : mode === 'isolated' ? '逐仓' : '全仓'
+  const title = en
+    ? mode === 'isolated'
+      ? 'Liquidation depends on entry price and leverage, not margin amount'
+      : 'Account-level liquidation; a single position has no independent liquidation price'
+    : mode === 'isolated'
+      ? '逐仓:强平价只取决于开仓价与杠杆,与保证金金额无关'
+      : '全仓:账户级强平 · 单仓不存在独立强平价(后端 worker 看整账户保证金率)'
   return (
     <span
-      title={MODE_TIP[mode]}
+      title={title}
       className="ml-1 cursor-help rounded bg-paper px-1 py-0.5 text-[9px] text-muted-foreground/80"
     >
       {label}
@@ -65,6 +73,8 @@ interface Props {
 }
 
 export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
+  const { locale } = useRuntimeLocale()
+  const en = locale === 'en'
   const { status } = useSession()
   const authed = status === 'authenticated'
 
@@ -115,7 +125,8 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
     && estimate.requiredMargin + estimate.fee <= available
     && !placeOrder.isPending
 
-  const sideZh = (s: PerpSide): string => (s === 'long' ? '开多' : '开空')
+  const sideLabel = (s: PerpSide): string =>
+    en ? (s === 'long' ? 'Open long' : 'Open short') : (s === 'long' ? '开多' : '开空')
 
   async function submit(intent: PerpIntent) {
     try {
@@ -133,7 +144,7 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
         const label =
           intent === 'close'
             ? `平仓 ${futuresSymbol}`
-            : `${sideZh(side)} ${futuresSymbol} ${effLeverage}x`
+            : `${sideLabel(side)} ${futuresSymbol} ${effLeverage}x`
         const pnl =
           order.realized_pnl != null
             ? ` · 已实现 ${fmtU(Number(order.realized_pnl))} USDT`
@@ -142,10 +153,15 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
           className: 'midas-toast-success', duration: 4000,
         })
       } else {
-        toast.error(`下单被拒 · ${order.reject_reason ?? '未知原因'}`, { duration: 5000 })
+        toast.error(
+          en
+            ? `Order rejected · ${order.reject_reason ?? 'Unknown reason'}`
+            : `下单被拒 · ${order.reject_reason ?? '未知原因'}`,
+          { duration: 5000 },
+        )
       }
     } catch (e) {
-      toast.error(e instanceof PerpApiError ? e.detail : '下单失败')
+      toast.error(e instanceof PerpApiError ? e.detail : en ? 'Order failed' : '下单失败')
     } finally {
       setConfirm(null)
     }
@@ -154,7 +170,9 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
   return (
     <div className="rounded-lg border border-dashed border-gold/60 bg-gold/5 p-4">
       <div className="mb-3 flex items-center justify-between">
-        <span className="font-serif text-base font-bold">下单指导</span>
+        <span className="font-serif text-base font-bold">
+          {en ? 'Order setup' : '下单指导'}
+        </span>
       </div>
 
       {/* 当前活仓卡 */}
@@ -179,7 +197,7 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
               : 'border border-midas-red/50 text-midas-red hover:bg-midas-red-glow/40',
           )}
         >
-          开多
+          {en ? 'Long' : '开多'}
         </button>
         <button
           type="button"
@@ -191,16 +209,18 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
               : 'border border-midas-red/50 text-midas-red hover:bg-midas-red-glow/40',
           )}
         >
-          开空
+          {en ? 'Short' : '开空'}
         </button>
       </div>
 
       {/* 保证金模式(MC-4)· 有活仓 → 锁定为活仓 mode(DP-7 同 symbol 单一模式) */}
       <div className="mb-3">
         <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-          <span>保证金模式</span>
+          <span>{en ? 'Margin mode' : '保证金模式'}</span>
           {activePos != null && (
-            <span className="font-mono text-[10px] text-gold">已锁定 · 与活仓一致</span>
+            <span className="font-mono text-[10px] text-gold">
+              {en ? 'Locked to open position' : '已锁定 · 与活仓一致'}
+            </span>
           )}
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -222,15 +242,21 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
                   disabled && 'cursor-not-allowed opacity-40 hover:border-paper',
                 )}
               >
-                {m === 'isolated' ? '逐仓 isolated' : '全仓 cross'}
+                {m === 'isolated'
+                  ? en ? 'Isolated' : '逐仓 isolated'
+                  : en ? 'Cross' : '全仓 cross'}
               </button>
             )
           })}
         </div>
         <p className="mt-1 text-[10px] text-muted-foreground/70">
           {effMarginMode === 'cross'
-            ? '全仓:保证金不实扣,账户 USDT 作共享抵押 · 强平为账户级(MC-3)'
-            : '逐仓:保证金从账户划出 · 每仓独立强平价 · 亏损封顶本仓保证金'}
+            ? en
+              ? 'Shared account collateral · liquidation is account-level'
+              : '全仓:保证金不实扣,账户 USDT 作共享抵押 · 强平为账户级(MC-3)'
+            : en
+              ? 'Margin is isolated per position · losses are capped at assigned margin'
+              : '逐仓:保证金从账户划出 · 每仓独立强平价 · 亏损封顶本仓保证金'}
         </p>
       </div>
 
@@ -278,7 +304,7 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
             <>
               <span className="font-mono">${fmtP(estimate.liquidationPrice)}</span>
               <span className={cn('ml-1', estimate.liquidationDistancePct < 5 ? 'text-down' : 'text-muted-foreground/70')}>
-                (距现价 {estimate.liquidationDistancePct.toFixed(2)}%)
+                ({en ? 'distance' : '距现价'} {estimate.liquidationDistancePct.toFixed(2)}%)
               </span>
               <ModeTag mode={effMarginMode} />
             </>
@@ -294,14 +320,14 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
           href="/login"
           className="block rounded-md border border-midas-red py-2 text-center text-sm text-midas-red hover:bg-midas-red-glow/40"
         >
-          登录后开始合约交易
+          {en ? 'Log in to trade perpetuals' : '登录后开始合约交易'}
         </Link>
       ) : account == null ? (
         <Link
           href="/account"
           className="block rounded-md border border-gold bg-gold/10 py-2 text-center text-sm text-gold"
         >
-          去「我的账户」设置加密 USDT
+          {en ? 'Set up crypto USDT in Account' : '去「我的账户」设置加密 USDT'}
         </Link>
       ) : (
         <button
@@ -313,12 +339,14 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
             canOpen ? 'bg-midas-red hover:bg-midas-red-deep' : 'cursor-not-allowed bg-midas-red/30',
           )}
         >
-          确认{sideZh(side)}
+          {en ? `Confirm ${side === 'long' ? 'long' : 'short'}` : `确认${sideLabel(side)}`}
         </button>
       )}
       {authed && account != null && estimate != null && !canOpen && !placeOrder.isPending && (
         <p className="mt-2 text-center text-[11px] text-midas-red">
-          保证金 + 手续费 {fmtU(estimate.requiredMargin + estimate.fee)} 超过可用 {fmtU(available)} USDT
+          {en
+            ? `Margin + fee ${fmtU(estimate.requiredMargin + estimate.fee)} exceeds available ${fmtU(available)} USDT`
+            : `保证金 + 手续费 ${fmtU(estimate.requiredMargin + estimate.fee)} 超过可用 ${fmtU(available)} USDT`}
         </p>
       )}
 
@@ -330,7 +358,7 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
           onClick={() => setPerpLimitOpen(true)}
           className="mt-2 w-full rounded-md border border-gold/60 py-2 text-sm text-gold transition-colors hover:bg-gold/10"
         >
-          挂限价单(到价自动开多 / 开空)
+          {en ? 'Place trigger limit order' : '挂限价单(到价自动开多 / 开空)'}
         </button>
       )}
 

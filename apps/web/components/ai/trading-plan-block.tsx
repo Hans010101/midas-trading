@@ -15,6 +15,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { AiOrderConfirmDialog } from '@/components/workbench/ai-order-confirm-dialog'
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { usePlaceAiPlanOrder } from '@/hooks/use-conditional-orders'
 import type { ActionableAdvice, TradingPlan } from '@/lib/api/ai-decision'
 import { ConditionalApiError } from '@/lib/api/conditional-order'
@@ -53,6 +54,8 @@ export function TradingPlanBlock({
   /** 用于「按市价下单」二次确认展示(基础依据/仓位口径)· 可空走默认文案 */
   actionable?: ActionableAdvice | null
 }) {
+  const { locale } = useRuntimeLocale()
+  const en = locale === 'en'
   const aiPlanOrder = usePlaceAiPlanOrder()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [marketOpen, setMarketOpen] = useState(false)
@@ -67,15 +70,22 @@ export function TradingPlanBlock({
   if (plan.direction === 'neutral' || plan.entry_low === null) {
     return (
       <section className="mt-3 rounded-lg border border-paper bg-cream/60 p-3">
-        <h4 className="font-serif text-sm font-bold text-muted-foreground">交易计划参考 · 中性</h4>
+        <h4 className="font-serif text-sm font-bold text-muted-foreground">
+          {en ? 'Trade plan · Neutral' : '交易计划参考 · 中性'}
+        </h4>
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-          {plan.plan_note || '当前多空信号中性,结构未给出明确顺势入场位,倾向观望等待方向选择。'}
+          {plan.plan_note ||
+            (en
+              ? 'Signals are neutral and the structure offers no clear trend entry.'
+              : '当前多空信号中性,结构未给出明确顺势入场位,倾向观望等待方向选择。')}
         </p>
       </section>
     )
   }
 
-  const dirLabel = isLong ? '开多' : '开空'
+  const dirLabel = en
+    ? isLong ? 'Long' : 'Short'
+    : isLong ? '开多' : '开空'
   // 挂单入场价:多头取区间上沿(价回落先触)· 空头取区间下沿(价反弹先触)
   const entryPrice = isLong ? plan.entry_high : plan.entry_low
   const od = orderDirection(market, plan.direction)
@@ -89,44 +99,51 @@ export function TradingPlanBlock({
         direction: od,
         entry_price: String(entryPrice),
       })
-      toast.success(`已按计划价挂限价单 · ${symbol} @ ${fmt(entryPrice)}`, {
+      toast.success(
+        en
+          ? `Limit order placed at plan entry · ${symbol} @ ${fmt(entryPrice)}`
+          : `已按计划价挂限价单 · ${symbol} @ ${fmt(entryPrice)}`,
+        {
         className: 'midas-toast-success',
         duration: 4000,
-      })
+        },
+      )
       setConfirmOpen(false)
     } catch (e) {
-      const msg = e instanceof ConditionalApiError ? e.detail : '挂单失败'
+      const msg = e instanceof ConditionalApiError
+        ? e.detail
+        : en ? 'Unable to place order' : '挂单失败'
       toast.error(msg)
     }
   }
 
   return (
     <section
-      className="mt-3 rounded-lg border p-3"
-      style={{ borderColor: tone, background: `${tone}0d` }}
+      className="mt-3 border-l-2 bg-background/60 py-3 pl-3 pr-2"
+      style={{ borderColor: tone }}
     >
       <h4 className="font-serif text-sm font-bold" style={{ color: tone }}>
-        交易计划参考 · {dirLabel}
+        {en ? 'Trade plan' : '交易计划参考'} · {dirLabel}
       </h4>
 
       <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-        <Field label="入场区间">
+        <Field label={en ? 'Entry zone' : '入场区间'}>
           <span className="font-mono" style={{ color: tone }}>
             {fmt(plan.entry_low)} – {fmt(plan.entry_high)}
           </span>
         </Field>
-        <Field label="止损(失效价)">
+        <Field label={en ? 'Invalidation' : '止损(失效价)'}>
           <span className="font-mono" style={{ color: RED }}>
             {fmt(plan.stop)}
           </span>
         </Field>
-        <Field label="目标 1">
+        <Field label={en ? 'Target 1' : '目标 1'}>
           <span className="font-mono text-foreground">{fmt(plan.target1)}</span>
         </Field>
-        <Field label="目标 2">
+        <Field label={en ? 'Target 2' : '目标 2'}>
           <span className="font-mono text-foreground">{fmt(plan.target2)}</span>
         </Field>
-        <Field label="风险回报比">
+        <Field label={en ? 'Risk / reward' : '风险回报比'}>
           <span className="font-mono text-foreground">
             {plan.risk_reward === null ? '—' : `1 : ${plan.risk_reward}`}
           </span>
@@ -147,7 +164,7 @@ export function TradingPlanBlock({
             className="rounded-md py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
             style={{ background: tone }}
           >
-            按计划挂限价单
+            {en ? 'Place limit' : '按计划挂限价单'}
           </button>
           <button
             type="button"
@@ -155,7 +172,7 @@ export function TradingPlanBlock({
             className="rounded-md border py-2 text-sm font-medium transition-opacity hover:opacity-80"
             style={{ borderColor: tone, color: tone }}
           >
-            按市价下单
+            {en ? 'Market order' : '按市价下单'}
           </button>
         </div>
       )}
@@ -171,6 +188,7 @@ export function TradingPlanBlock({
           tone={tone}
           pending={aiPlanOrder.isPending}
           onConfirm={handlePlaceLimit}
+          locale={locale}
         />
       )}
 
@@ -182,8 +200,8 @@ export function TradingPlanBlock({
           symbol={symbol}
           market={market}
           direction={od}
-          basis={actionable?.basis ?? 'AI 交易计划方向'}
-          sizeNote={actionable?.size_note ?? '按你的下单预设'}
+          basis={actionable?.basis ?? (en ? 'AI trade-plan direction' : 'AI 交易计划方向')}
+          sizeNote={actionable?.size_note ?? (en ? 'Use your order preset' : '按你的下单预设')}
         />
       )}
     </section>
@@ -208,6 +226,7 @@ function PlanLimitConfirm({
   tone,
   pending,
   onConfirm,
+  locale,
 }: {
   open: boolean
   onClose: () => void
@@ -217,8 +236,10 @@ function PlanLimitConfirm({
   tone: string
   pending: boolean
   onConfirm: () => void
+  locale: 'zh' | 'en'
 }) {
   if (!open) return null
+  const en = locale === 'en'
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4"
@@ -233,11 +254,13 @@ function PlanLimitConfirm({
         style={{ borderColor: tone }}
       >
         <h3 className="mb-4 text-center font-serif text-lg font-bold text-foreground">
-          确认按计划价挂限价单
+          {en ? 'Confirm plan limit order' : '确认按计划价挂限价单'}
         </h3>
         <dl className="space-y-2 text-sm">
           <div className="flex justify-between">
-            <dt className="text-muted-foreground">标的 / 方向</dt>
+            <dt className="text-muted-foreground">
+              {en ? 'Symbol / side' : '标的 / 方向'}
+            </dt>
             <dd>
               <span className="font-mono">{symbol}</span>
               <span
@@ -249,14 +272,18 @@ function PlanLimitConfirm({
             </dd>
           </div>
           <div className="flex justify-between">
-            <dt className="text-muted-foreground">限价(入场价)</dt>
+            <dt className="text-muted-foreground">
+              {en ? 'Limit entry' : '限价(入场价)'}
+            </dt>
             <dd className="font-mono" style={{ color: tone }}>
               {fmt(entryPrice)}
             </dd>
           </div>
         </dl>
         <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground/70">
-          挂单后由系统监控,价格触及即按虚拟引擎成交;仓位按你的下单预设。
+          {en
+            ? 'The virtual engine monitors the level and fills when price reaches it, using your order preset.'
+            : '挂单后由系统监控,价格触及即按虚拟引擎成交;仓位按你的下单预设。'}
         </p>
         <div className="mt-4 flex justify-end gap-2">
           <button
@@ -264,7 +291,7 @@ function PlanLimitConfirm({
             onClick={onClose}
             className="rounded-md border border-paper bg-background px-4 py-2 text-sm text-foreground hover:bg-cream"
           >
-            取消
+            {en ? 'Cancel' : '取消'}
           </button>
           <button
             type="button"
@@ -276,7 +303,9 @@ function PlanLimitConfirm({
             )}
             style={{ background: tone }}
           >
-            {pending ? '挂单中…' : '确认挂单'}
+            {pending
+              ? en ? 'Placing…' : '挂单中…'
+              : en ? 'Confirm order' : '确认挂单'}
           </button>
         </div>
       </div>

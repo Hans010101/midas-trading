@@ -18,9 +18,9 @@
  */
 
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import { usePathname, useRouter } from 'next/navigation'
 
-import { MARKET_LABEL } from '@/lib/format-money'
 import { detailMarketOf, homeMarketOf, resolveActiveMarket } from '@/lib/market-nav'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
 import { cn } from '@/lib/utils'
@@ -32,6 +32,7 @@ import type { Market } from '@midas/shared'
 const NAV_MARKETS: readonly Market[] = ['crypto', 'us', 'cn', 'hk']
 
 export function MarketSwitcher({ className }: { className?: string }) {
+  const t = useTranslations('runtime.shortNav')
   const pathname = usePathname()
   const router = useRouter()
   const storeMarket = useWorkbenchStore((s) => s.market)
@@ -89,20 +90,23 @@ export function MarketSwitcher({ className }: { className?: string }) {
   return (
     // 移动刀B:overflow-x-auto + 按钮 nowrap —— 375px 单行可横滑,杜绝竖排折字(全站首屏破相)
     <nav
-      className={cn('flex items-center gap-1 overflow-x-auto', className)}
-      aria-label="市场切换"
+      className={cn(
+        'flex max-w-full items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+        className,
+      )}
+      aria-label={t('aria')}
     >
       {/* SEO 批3b:纯导航按钮 → Link(爬虫可循 <a href> · 高亮逻辑不变 · 保留 UX)*/}
       <Link
         href="/global"
         className={cn(
-          'whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+          'whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors',
           onGlobal
             ? 'bg-midas-red text-primary-foreground'
             : 'text-muted-foreground hover:bg-midas-red-glow hover:text-foreground',
         )}
       >
-        全球市场
+        {t('global')}
       </Link>
       {NAV_MARKETS.map((m) => (
         <button
@@ -110,60 +114,60 @@ export function MarketSwitcher({ className }: { className?: string }) {
           type="button"
           onClick={() => handleSelect(m)}
           className={cn(
-            'whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+            'whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors',
             m === active
               ? 'bg-midas-red text-primary-foreground'
               : 'text-muted-foreground hover:bg-midas-red-glow hover:text-foreground',
           )}
         >
-          {MARKET_LABEL[m]}
+          {t(m)}
         </button>
       ))}
       <span className="mx-1 h-4 w-px self-center bg-paper" aria-hidden />
       <Link
         href="/watchlist"
         className={cn(
-          'whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+          'whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors',
           onWatchlist
             ? 'bg-midas-red text-primary-foreground'
             : 'text-muted-foreground hover:bg-midas-red-glow hover:text-foreground',
         )}
       >
-        自选
+        {t('watchlist')}
       </Link>
       {/* 方案乙:研究室默认落 AI 沙盘助手(/lab 回测 URL 不动不破书签)*/}
       <Link
         href="/lab/assistant"
         className={cn(
-          'whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+          'whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors',
           onLab
             ? 'bg-midas-red text-primary-foreground'
             : 'text-muted-foreground hover:bg-midas-red-glow hover:text-foreground',
         )}
       >
-        策略研究室
+        {t('lab')}
       </Link>
       <Link
         href="/academy"
         className={cn(
-          'whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+          'whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors',
           onAcademy
             ? 'bg-midas-red text-primary-foreground'
             : 'text-muted-foreground hover:bg-midas-red-glow hover:text-foreground',
         )}
       >
-        训练营
+        {t('academy')}
       </Link>
       <Link
         href="/calendar"
         className={cn(
-          'whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+          'whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors',
           onCalendar
             ? 'bg-midas-red text-primary-foreground'
             : 'text-muted-foreground hover:bg-midas-red-glow hover:text-foreground',
         )}
       >
-        财经日历
+        {t('calendar')}
       </Link>
     </nav>
   )

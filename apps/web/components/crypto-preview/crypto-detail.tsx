@@ -80,16 +80,16 @@ export function CryptoDetail({ symbol: propSymbol }: { symbol?: string } = {}) {
       />
 
       {/* 移动刀B:照 spot-detail 范式补响应式(窄屏单列堆叠:图表全宽在上 · AI卡/下单在下) */}
-      <div className="mx-auto flex max-w-[1600px] flex-col gap-4 px-4 py-4 lg:flex-row">
+      <div className="mx-auto grid max-w-[1680px] grid-cols-1 gap-5 px-3 py-4 sm:px-4 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_360px]">
         {/* 左主区 */}
-        <div className="flex-1 space-y-4">
+        <div className="min-w-0 space-y-5">
           {/* 主图(策略面板内含「布林做T」结构标签 · B-2 重构后做T并入策略面板,不再是独立模块)*/}
           <CryptoMainChart symbol={klineSymbol} period={period} />
           <DimensionSection futuresSymbol={futuresSymbol} />
         </div>
 
         {/* 右侧栏 */}
-        <aside className="w-full shrink-0 space-y-4 lg:w-[360px]">
+        <aside className="min-w-0 space-y-4">
           <CryptoAiCard
             klineSymbol={klineSymbol}
             futuresSymbol={futuresSymbol}

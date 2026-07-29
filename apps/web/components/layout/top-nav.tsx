@@ -39,6 +39,7 @@ export function TopNav() {
   const email = session?.user?.email ?? ''
   const [paletteOpen, setPaletteOpen] = useState(false)
   const tNav = useTranslations('common.nav')
+  const tShort = useTranslations('runtime.shortNav')
 
   // ★全局 Cmd/Ctrl+K → 打开命令面板(preventDefault 挡浏览器默认 · ESC/遮罩/X 关闭)。
   //   TopNav 挂在所有产品页 → 全局生效;landing 用自己的 nav(不渲染本组件)→ 天然排除(方案 C)。
@@ -55,10 +56,10 @@ export function TopNav() {
   }, [])
 
   return (
-    <header className="h-12 shrink-0 border-b border-paper bg-background">
-      <div className="flex h-full items-center justify-between px-6">
+    <header className="h-12 shrink-0 overflow-hidden border-b border-paper bg-background">
+      <div className="flex h-full items-center justify-between gap-2 px-3 lg:px-4 2xl:px-5">
         {/* 左:Logo + 市场 Tab(常驻 · gap 留间距)· 移动刀B:min-w-0 允许切换条收缩进横滚 */}
-        <div className="flex min-w-0 items-center gap-5">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <Link href="/" className="flex shrink-0 items-center gap-2">
             <Image src="/brand/seal.png" alt="Midas 印章" width={24} height={24} priority />
             <span className="font-serif text-lg font-bold text-midas-red">Midas</span>
@@ -67,7 +68,7 @@ export function TopNav() {
         </div>
 
         {/* 右:主题切换 + Cmd+K 搜索入口 + 用户头像下拉(登录态)/ 登录入口(未登录)/ loading 占位 */}
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2">
           {/* i18n 激活:中↔EN 语言切换(cookie 模式 · 与暗黑独立) */}
           <LanguageToggle />
           {/* ★暗黑模式 P0:浅↔深 一键切(与用户菜单里的设置页三档独立·都能用) */}
@@ -80,7 +81,7 @@ export function TopNav() {
             className="flex shrink-0 items-center gap-2 rounded-md border border-paper bg-surface-subtle/40 px-2.5 py-1 text-muted-foreground transition-colors hover:border-midas-red/30 hover:text-foreground"
           >
             <Search className="h-3.5 w-3.5" />
-            <span className="hidden text-sm sm:inline">{tNav('top')}</span>
+            <span className="hidden text-sm xl:inline">{tShort('search')}</span>
             <kbd className="hidden rounded bg-paper px-1.5 py-0.5 font-mono text-[10px] leading-none text-muted-foreground sm:inline">
               ⌘K
             </kbd>

@@ -787,6 +787,19 @@
       "login": "登录",
       "userMenu": "用户菜单"
     },
+    "shortNav": {
+      "aria": "主导航",
+      "global": "全球",
+      "crypto": "加密",
+      "us": "美股",
+      "cn": "A股",
+      "hk": "港股",
+      "watchlist": "自选",
+      "lab": "策略",
+      "academy": "训练营",
+      "calendar": "日历",
+      "search": "搜索"
+    },
     "general": {
       "loading": "加载中…",
       "loadFailed": "加载失败,请稍后重试。",
@@ -1050,7 +1063,21 @@
       "cross": "全仓 cross",
       "margin": "保证金(USDT)",
       "estimatedSize": "预估开仓量",
-      "estimatedLiquidation": "预估强平价"
+      "estimatedLiquidation": "预估强平价",
+      "dailyChange": "日涨跌",
+      "nextSettlement": "下次结算 {time}",
+      "loadingMetrics": "加载合约指标…",
+      "fundingLongPays": "多头付费 · 偏多情绪",
+      "fundingShortPays": "空头付费 · 偏空情绪",
+      "positionBullish": "持仓偏多",
+      "positionBearish": "持仓偏空",
+      "accountBullish": "账户偏多",
+      "accountBearish": "账户偏空",
+      "oiIncrease": "增仓",
+      "oiDecrease": "减仓",
+      "topPositionRatio": "大户持仓多空比",
+      "topAccountRatio": "大户账户多空比",
+      "oiPeriodChange": "OI 区间变化(8h)"
     },
     "productionLabels": {
       "seal": "Midas 印章",

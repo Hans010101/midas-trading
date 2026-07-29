@@ -100,7 +100,7 @@ export function CryptoMainChart({ symbol, period }: CryptoMainChartProps) {
         </div>
       </div>
 
-      <div className="h-[460px] overflow-hidden rounded-md border border-paper">
+      <div className="h-[420px] overflow-hidden rounded-md border border-paper sm:h-[460px] 2xl:h-[500px]">
         <KlineChart
           symbol={symbol}
           market="crypto"

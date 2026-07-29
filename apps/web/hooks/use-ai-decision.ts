@@ -9,6 +9,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { useLocale } from 'next-intl'
 import { useSession } from 'next-auth/react'
 
 import {
@@ -27,13 +28,14 @@ export interface UseAiDecisionArgs {
 }
 
 export function useAiDecision(args: UseAiDecisionArgs) {
+  const locale = useLocale()
   // ★ Pro 门控:带 session token 后端才识别 Pro · token 并入 queryKey(登录/登出即刷新锁态)
   const { data: session } = useSession()
   const token = session?.accessToken ?? ''
   return useQuery<DecisionCard>({
     queryKey: [
       'ai-decision', args.market, args.symbol, args.period, args.limit ?? 300,
-      args.instrument ?? 'spot', token,
+      args.instrument ?? 'spot', locale, token,
     ],
     queryFn: ({ signal }) =>
       fetchDecisionCard({

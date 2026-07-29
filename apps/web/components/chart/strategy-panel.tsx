@@ -21,6 +21,7 @@ import { useEffect, useState } from 'react'
 
 import { ProLock } from '@/components/account/pro-lock'
 import { biasTone } from '@/components/crypto/boll-scan-list'
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { useQuota } from '@/hooks/use-quota'
 import { hasFullFeatureAccess } from '@/lib/features'
 import { useStrategyRecommend, useStrategySignals } from '@/hooks/use-strategy'
@@ -33,20 +34,28 @@ import { cn } from '@/lib/utils'
 import type { Market, Period } from '@midas/shared'
 import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 
-const STRATEGY_LABELS: Record<StrategyKind, string> = {
-  ma_cross: '均线金叉',
-  rsi_reversal: 'RSI 反弹',
-  boll_reversion: '布林均值回归',
-  macd_cross: 'MACD 金叉死叉',
-  kdj_cross: 'KDJ 金叉死叉',
-  extreme: '合约极端',
+const STRATEGY_LABELS: Record<'zh' | 'en', Record<StrategyKind, string>> = {
+  zh: {
+    ma_cross: '均线金叉',
+    rsi_reversal: 'RSI 反弹',
+    boll_reversion: '布林均值回归',
+    macd_cross: 'MACD 金叉死叉',
+    kdj_cross: 'KDJ 金叉死叉',
+    extreme: '合约极端',
+  },
+  en: {
+    ma_cross: 'MA Cross',
+    rsi_reversal: 'RSI Rebound',
+    boll_reversion: 'Bollinger Reversion',
+    macd_cross: 'MACD Cross',
+    kdj_cross: 'KDJ Cross',
+    extreme: 'Perpetual Extremes',
+  },
 }
 
 // ★布林做T 作为标签序列里的一个特殊 token(非 StrategyKind · 独立布林结构 view)· 仅 crypto 出现。
 const DOTT_TAB = 'dott' as const
 type TabKey = StrategyKind | typeof DOTT_TAB
-const DOTT_LABEL = '布林做T'
-
 // 价格符号(按市场)· cn ¥ / hk HK$ / us·crypto $
 function priceSym(market: Market): string {
   return market === 'cn' ? '¥' : market === 'hk' ? 'HK$' : '$'
@@ -103,6 +112,9 @@ export function StrategyPanel({
   enabled,
   onToggle,
 }: Props) {
+  const { locale } = useRuntimeLocale()
+  const en = locale === 'en'
+  const labels = STRATEGY_LABELS[locale]
   const recommend = useStrategyRecommend({ symbol, market, period, instrument, enabled })
   const signals = useStrategySignals({ symbol, market, period, strategy, instrument, enabled })
   const storedOrder = useUiStore((s) => s.strategyOrder)
@@ -164,9 +176,13 @@ export function StrategyPanel({
     <div className="rounded-lg border border-paper bg-surface-card p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <span className="font-serif text-sm font-bold">AI 策略信号</span>
+          <span className="font-serif text-sm font-bold">
+            {en ? 'AI strategy signals' : 'AI 策略信号'}
+          </span>
           <span className="ml-2 text-[11px] text-muted-foreground/50">
-            买卖信号标在 K 线 · 朱红买点 / 墨绿卖点
+            {en
+              ? 'Buy/sell signals on the chart · red buys / green sells'
+              : '买卖信号标在 K 线 · 朱红买点 / 墨绿卖点'}
           </span>
         </div>
         <button
@@ -179,7 +195,7 @@ export function StrategyPanel({
               : 'border-paper text-muted-foreground hover:border-gold/60',
           )}
         >
-          策略信号 {enabled ? '开' : '关'}
+          {en ? 'Signals' : '策略信号'} {enabled ? (en ? 'On' : '开') : (en ? 'Off' : '关')}
         </button>
       </div>
 
@@ -190,14 +206,14 @@ export function StrategyPanel({
               布林做T 也纳入 reorder(★修复:不再是序列外固定项)· 点 dott→结构视图 / 点策略→信号视图 */}
           <div className="flex flex-wrap items-center gap-2">
             {tabs.map((k, idx) => {
-              const label = k === DOTT_TAB ? DOTT_LABEL : STRATEGY_LABELS[k]
+              const label = k === DOTT_TAB ? (en ? 'Bollinger Day Trade' : '布林做T') : labels[k]
               const active = k === DOTT_TAB ? view === 'dott' : view === 'strategy' && strategy === k
               const isRecommended = k !== DOTT_TAB && rec?.recommended_strategy === k
               return (
                 <div key={k} className="flex items-center gap-0.5">
                   <button
                     type="button"
-                    aria-label={`${label} 左移`}
+                    aria-label={en ? `Move ${label} left` : `${label} 左移`}
                     disabled={idx === 0}
                     onClick={() => moveTab(idx, -1)}
                     className="px-1 text-[11px] text-muted-foreground/50 transition-colors hover:text-midas-red disabled:opacity-25"
@@ -222,11 +238,13 @@ export function StrategyPanel({
                     )}
                   >
                     {label}
-                    {isRecommended && <span className="ml-1 text-[10px] text-gold">★荐</span>}
+                    {isRecommended && (
+                      <span className="ml-1 text-[10px] text-gold">{en ? '★ Pick' : '★荐'}</span>
+                    )}
                   </button>
                   <button
                     type="button"
-                    aria-label={`${label} 右移`}
+                    aria-label={en ? `Move ${label} right` : `${label} 右移`}
                     disabled={idx === tabs.length - 1}
                     onClick={() => moveTab(idx, 1)}
                     className="px-1 text-[11px] text-muted-foreground/50 transition-colors hover:text-midas-red disabled:opacity-25"
@@ -242,22 +260,22 @@ export function StrategyPanel({
               策略视图 → 信号(Pro 门控)· crypto 未开策略信号时选中策略 → 提示开开关 */}
           {view === 'dott' ? (
             hasAccess ? (
-              <DottStructureView query={bollStructure} />
+              <DottStructureView query={bollStructure} en={en} />
             ) : (
-              <ProLock title="布林做T结构" />
+              <ProLock title={en ? 'Bollinger day-trade structure' : '布林做T结构'} />
             )
           ) : enabled ? (
           <>
           {/* AI 推荐理由 */}
           {rec && (
             <p className="text-[11px] text-gold/90">
-              AI 推荐:{STRATEGY_LABELS[rec.recommended_strategy]} · {rec.reason}
+              {en ? 'AI pick' : 'AI 推荐'}: {labels[rec.recommended_strategy]} · {rec.reason}
             </p>
           )}
 
           {/* 当前触发 / 历史信号 · Pro 门控(非 Pro → 后端 locked 空壳 → 遮罩两道门)*/}
           {signals.data?.locked ? (
-            <ProLock title="实战策略信号" />
+            <ProLock title={en ? 'Live strategy signals' : '实战策略信号'} />
           ) : (
           <>
           {/* 当前触发状态(① 含触发价) */}
@@ -266,13 +284,16 @@ export function StrategyPanel({
             last={sig?.last_signal ?? null}
             market={market}
             hasSignals={(sig?.signals.length ?? 0) > 0}
+            en={en}
           />
 
           {/* ② 历史信号列表(可折叠 · 复盘该策略历史买卖信号点 · 纯数据展示 · 不加建议/风险废话) */}
           {sig && sig.signals.length > 0 && (
             <details className="group rounded-md border border-paper bg-background/50">
               <summary className="cursor-pointer px-2.5 py-1.5 text-[11px] text-muted-foreground/80 hover:text-foreground">
-                历史信号 {sig.signals.length} 个 · 点击展开复盘
+                {en
+                  ? `${sig.signals.length} historical signals · open to review`
+                  : `历史信号 ${sig.signals.length} 个 · 点击展开复盘`}
               </summary>
               <div className="max-h-44 overflow-y-auto border-t border-paper/60">
                 {[...sig.signals].reverse().map((s, i) => {
@@ -290,7 +311,8 @@ export function StrategyPanel({
                         <span
                           className={cn('shrink-0 font-mono font-medium', isBuy ? 'text-up' : 'text-down')}
                         >
-                          {isBuy ? '买' : '卖'} {fmtSignalPrice(s.price, market)}
+                          {isBuy ? (en ? 'Buy' : '买') : (en ? 'Sell' : '卖')}{' '}
+                          {fmtSignalPrice(s.price, market)}
                         </span>
                         <span className="flex-1 truncate text-right text-muted-foreground/60">
                           {s.reason}
@@ -302,7 +324,11 @@ export function StrategyPanel({
                           {Object.keys(s.levels).length > 0 && (
                             <span className="font-mono">{fmtLevels(s.levels)}</span>
                           )}
-                          {s.strength_note && <span className="text-gold/70">成色 · {s.strength_note}</span>}
+                          {s.strength_note && (
+                            <span className="text-gold/70">
+                              {en ? 'Quality' : '成色'} · {s.strength_note}
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -316,7 +342,9 @@ export function StrategyPanel({
           </>
           ) : (
             <p className="rounded-md border border-paper bg-background/50 px-2.5 py-1.5 text-[11px] text-muted-foreground/70">
-              开启上方「策略信号」开关 · 在 K 线标注买卖点 + 复盘历史信号
+              {en
+                ? 'Turn on Signals to mark entries and exits on the chart and review their history'
+                : '开启上方「策略信号」开关 · 在 K 线标注买卖点 + 复盘历史信号'}
             </p>
           )}
         </div>
@@ -330,42 +358,57 @@ export function StrategyPanel({
  * ★层级标注「布林结构」(化解两块手表 · 区别 AI 决策卡综合研判)· 倾向复用 biasTone 涨跌色 ·
  *   倾向只偏多/偏空/中性 · 纯展示不下单 · ★免责已移除(依赖全站统一提示)。免费层(不门控)。
  */
-function DottStructureView({ query }: { query: UseQueryResult<BollStructureResponse> }) {
+function DottStructureView({
+  query,
+  en,
+}: {
+  query: UseQueryResult<BollStructureResponse>
+  en: boolean
+}) {
   const it = query.isSuccess && query.data.available ? query.data.item : null
   return (
     <div className="rounded-md border border-paper bg-background/50 px-2.5 py-2">
-      {query.isPending && <p className="text-[11px] text-muted-foreground/60">载入中…</p>}
+      {query.isPending && (
+        <p className="text-[11px] text-muted-foreground/60">
+          {en ? 'Loading…' : '载入中…'}
+        </p>
+      )}
       {query.isError && (
-        <p className="text-[11px] text-muted-foreground/60">暂时无法读取做T结构</p>
+        <p className="text-[11px] text-muted-foreground/60">
+          {en ? 'Unable to load the Bollinger structure' : '暂时无法读取做T结构'}
+        </p>
       )}
       {query.isSuccess && !query.data.available && (
-        <p className="text-[11px] text-muted-foreground/60">该币暂无做T结构数据</p>
+        <p className="text-[11px] text-muted-foreground/60">
+          {en ? 'No Bollinger structure data for this symbol' : '该币暂无做T结构数据'}
+        </p>
       )}
       {it && (
         <div className="space-y-1.5 text-sm">
           {/* ★布林结构:倾向(层级标注 + 涨跌色偏好 · 区别于 AI 决策卡综合研判)*/}
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-muted-foreground">布林结构:</span>
+            <span className="text-muted-foreground">{en ? 'Bollinger structure:' : '布林结构:'}</span>
             <span className={cn('font-bold', biasTone(it.bias))}>{it.bias}</span>
             <span className="text-xs text-muted-foreground/70">· {it.state_label}</span>
             {it.transition && it.transition_from && (
               <span className="rounded bg-midas-red-glow/50 px-1.5 py-0.5 text-[10px] font-medium text-midas-red">
-                刚转换
+                {en ? 'Just changed' : '刚转换'}
               </span>
             )}
           </div>
           {/* 通道位置 %B + zone */}
           <div className="text-xs text-muted-foreground/80">
-            通道位置 %B={it.pct_b.toFixed(2)}（{it.zone_label}）
+            {en ? 'Channel position' : '通道位置'} %B={it.pct_b.toFixed(2)} ({it.zone_label})
           </div>
           {/* 布林三轨 + 现价 */}
           <div className="font-mono text-xs text-muted-foreground/80">
-            上 {fmtN(it.upper)} / 中 {fmtN(it.mid)} / 下 {fmtN(it.lower)} · 现价 {fmtN(it.close)}
+            {en ? 'Upper' : '上'} {fmtN(it.upper)} / {en ? 'Mid' : '中'} {fmtN(it.mid)} /{' '}
+            {en ? 'Lower' : '下'} {fmtN(it.lower)} · {en ? 'Price' : '现价'} {fmtN(it.close)}
           </div>
           {/* 状态转换路径 */}
           {it.transition && it.transition_from && (
             <div className="text-xs text-muted-foreground/60">
-              转换:{it.transition_from} → {it.state_label}
+              {en ? 'Changed' : '转换'}: {it.transition_from} → {it.state_label}
             </div>
           )}
         </div>
@@ -379,22 +422,24 @@ function TriggerStatus({
   last,
   market,
   hasSignals,
+  en,
 }: {
   triggered: boolean
   last: StrategySignal | null
   market: Market
   hasSignals: boolean
+  en: boolean
 }) {
   if (!hasSignals || !last) {
     return (
       <div className="rounded-md border border-paper bg-background/50 px-2.5 py-1.5 text-[11px] text-muted-foreground/70">
-        近期无信号
+        {en ? 'No recent signals' : '近期无信号'}
       </div>
     )
   }
   const isBuy = last.kind === 'buy'
   const tone = isBuy ? 'text-up' : 'text-down'
-  const label = isBuy ? '买点' : '卖点'
+  const label = isBuy ? (en ? 'Buy' : '买点') : (en ? 'Sell' : '卖点')
   // ① 触发价(纯数据 · 带市场符号)
   const priceStr = ` ${fmtSignalPrice(last.price, market)}`
   // ⑤ 关键价位(信号点已算值)· ⑥ 成色(只 rsi/boll · ma_cross 为 null → 不显示成色 · 不空塞)
@@ -411,17 +456,22 @@ function TriggerStatus({
       )}
     >
       {triggered ? (
-        <span className={cn('font-medium', tone)}>🔔 当前触发:{label}{priceStr} · {last.reason}</span>
+        <span className={cn('font-medium', tone)}>
+          🔔 {en ? 'Triggered' : '当前触发'}: {label}{priceStr} · {last.reason}
+        </span>
       ) : (
         <span className="text-muted-foreground/70">
-          最近信号:<span className={tone}>{label}{priceStr}</span> · {last.reason}
+          {en ? 'Latest signal' : '最近信号'}:
+          <span className={tone}>{label}{priceStr}</span> · {last.reason}
         </span>
       )}
       {/* ⑤ 关键价位 + ⑥ 成色(批2 · 第二行)· 成色 ma_cross 为 null → 整段不显示成色(诚实不空塞)*/}
       {(levelsStr || last.strength_note) && (
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground/60">
           {levelsStr && <span className="font-mono">{levelsStr}</span>}
-          {last.strength_note && <span className="text-gold/80">成色 · {last.strength_note}</span>}
+          {last.strength_note && (
+            <span className="text-gold/80">{en ? 'Quality' : '成色'} · {last.strength_note}</span>
+          )}
         </div>
       )}
     </div>

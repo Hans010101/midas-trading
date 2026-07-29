@@ -154,6 +154,7 @@ function CompositeBlock({ card }: { card: DecisionCard }) {
 
 // ── B · 多空研判(合约面)· 真实指标 + 透明规则 ────────────────────────────
 function ContractRead({ futuresSymbol }: { futuresSymbol: string }) {
+  const t = useTranslations('runtime.markets')
   const info = useFuturesInfo(futuresSymbol)
   const lsr = useLongShortRatio(futuresSymbol, 96)
   const oi = useOpenInterest(futuresSymbol, 96)
@@ -181,60 +182,66 @@ function ContractRead({ futuresSymbol }: { futuresSymbol: string }) {
   return (
     <div className="mb-3 rounded-md bg-background/60 p-2">
       <div className="mb-1 flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">多空研判(合约面)</span>
-        <span className="text-[10px] text-muted-foreground/50">实时指标 · 规则解读</span>
+        <span className="text-xs font-medium text-muted-foreground">
+          {t('contractAssessment')}
+        </span>
+        <span className="text-[10px] text-muted-foreground/50">
+          {t('ruleReadout')}
+        </span>
       </div>
 
       {anyLoading && !anyData ? (
-        <p className="py-2 text-center text-[11px] text-muted-foreground/60">加载合约指标…</p>
+        <p className="py-2 text-center text-[11px] text-muted-foreground/60">
+          {t('loadingMetrics')}
+        </p>
       ) : !anyData ? (
         <p className="py-2 text-center text-[11px] text-muted-foreground/60">
-          暂无合约指标 · 预览环境未预热 / 待采集
+          {t('noContractMetrics')}
         </p>
       ) : (
         <ul className="space-y-1 text-xs text-foreground/80">
           <FactorLine
-            label="资金费率"
+            label={t('fundingRate')}
             value={fundingRate !== null ? `${fundingRate >= 0 ? '+' : ''}${(fundingRate * 100).toFixed(4)}%` : '—'}
             tag={
               fundingRate === null
                 ? null
                 : fundingRate >= 0
-                  ? { text: '多头付费 · 偏多情绪', tone: 'bull' }
-                  : { text: '空头付费 · 偏空情绪', tone: 'bear' }
+                  ? { text: t('fundingLongPays'), tone: 'bull' }
+                  : { text: t('fundingShortPays'), tone: 'bear' }
             }
           />
           <FactorLine
-            label="大户持仓多空比"
+            label={t('topPositionRatio')}
             value={posRatio !== null ? posRatio.toFixed(2) : '—'}
             tag={
               posRatio === null
                 ? null
                 : posRatio >= 1
-                  ? { text: '持仓偏多', tone: 'bull' }
-                  : { text: '持仓偏空', tone: 'bear' }
+                  ? { text: t('positionBullish'), tone: 'bull' }
+                  : { text: t('positionBearish'), tone: 'bear' }
             }
           />
           <FactorLine
-            label="大户账户多空比"
+            label={t('topAccountRatio')}
             value={accRatio !== null ? accRatio.toFixed(2) : '—'}
             tag={
               accRatio === null
                 ? null
                 : accRatio >= 1
-                  ? { text: '账户偏多', tone: 'bull' }
-                  : { text: '账户偏空', tone: 'bear' }
+                  ? { text: t('accountBullish'), tone: 'bull' }
+                  : { text: t('accountBearish'), tone: 'bear' }
             }
           />
           <FactorLine
-            label="OI 区间变化(8h)"
+            label={t('oiPeriodChange')}
             value={oiChangePct !== null ? `${oiChangePct >= 0 ? '+' : ''}${oiChangePct.toFixed(2)}%` : '—'}
             tag={
               oiChangePct === null
                 ? null
                 : oiChangePct >= 0
-                  ? { text: '增仓', tone: 'bull' }
-                  : { text: '减仓', tone: 'bear' }
+                  ? { text: t('oiIncrease'), tone: 'bull' }
+                  : { text: t('oiDecrease'), tone: 'bear' }
             }
           />
         </ul>
