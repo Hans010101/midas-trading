@@ -1,5 +1,9 @@
 const CONTENT_ENDPOINT =
   'https://www.binance.com/bapi/composite/v1/public/pgc/openApi/content/add'
+const IMAGE_PRESIGN_ENDPOINT =
+  'https://www.binance.com/bapi/composite/v2/public/pgc/openApi/image/presignedUrl'
+const IMAGE_STATUS_ENDPOINT =
+  'https://www.binance.com/bapi/composite/v2/public/pgc/openApi/image/imageStatus'
 
 type BinanceSquareEnv = Readonly<{
   BINANCE_SQUARE_API_KEY?: string
@@ -18,6 +22,8 @@ export type BinanceSquarePublishResult = Readonly<{
   postId: string | null
   url: string | null
   error: string | null
+  imageUrl: string | null
+  imageError: string | null
 }>
 
 export function binanceSquareEnabled(env: Env): boolean {
@@ -55,9 +61,60 @@ function safeMessage(body: BinanceEnvelope): string {
     : '币安广场拒绝发布请求'
 }
 
+function headers(apiKey: string): Record<string, string> {
+  return {
+    'X-Square-OpenAPI-Key': apiKey,
+    'content-type': 'application/json',
+    clienttype: 'binanceSkill',
+  }
+}
+
+async function uploadImage(apiKey: string, bytes: ArrayBuffer): Promise<string> {
+  const presignResponse = await fetch(IMAGE_PRESIGN_ENDPOINT, {
+    method: 'POST',
+    headers: headers(apiKey),
+    body: JSON.stringify({ imageName: `midas-chart-${Date.now()}.png` }),
+    signal: AbortSignal.timeout(30_000),
+  })
+  const presign = await presignResponse.json() as BinanceEnvelope
+  const data = typeof presign.data === 'object' && presign.data !== null
+    ? presign.data as Record<string, unknown>
+    : {}
+  const url = typeof data.presignedUrl === 'string' ? data.presignedUrl : ''
+  const ticket = typeof data.fileTicket === 'string' ? data.fileTicket : ''
+  if (!presignResponse.ok || !url || !ticket) {
+    throw new Error(`图片预签名失败 [${String(presign.code ?? presignResponse.status)}]`)
+  }
+  const put = await fetch(url, {
+    method: 'PUT',
+    headers: { 'content-type': 'image/png' },
+    body: bytes,
+    signal: AbortSignal.timeout(30_000),
+  })
+  if (!put.ok) throw new Error(`图片上传 HTTP ${put.status}`)
+  for (let attempt = 0; attempt < 15; attempt += 1) {
+    const statusResponse = await fetch(IMAGE_STATUS_ENDPOINT, {
+      method: 'POST',
+      headers: headers(apiKey),
+      body: JSON.stringify({ fileTicket: ticket }),
+      signal: AbortSignal.timeout(30_000),
+    })
+    const status = await statusResponse.json() as BinanceEnvelope
+    const statusData = typeof status.data === 'object' && status.data !== null
+      ? status.data as Record<string, unknown>
+      : {}
+    if (statusData.status === 1 && typeof statusData.imageUrl === 'string') {
+      return statusData.imageUrl
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2_000))
+  }
+  throw new Error('图片处理超时')
+}
+
 export async function publishToBinanceSquare(
   env: Env,
   text: string,
+  imageBytes?: ArrayBuffer | null,
 ): Promise<BinanceSquarePublishResult> {
   const apiKey = (env as Env & BinanceSquareEnv).BINANCE_SQUARE_API_KEY?.trim()
   if (!apiKey) {
@@ -66,6 +123,21 @@ export async function publishToBinanceSquare(
       postId: null,
       url: null,
       error: '币安广场发布凭证尚未配置',
+      imageUrl: null,
+      imageError: null,
+    }
+  }
+
+  let imageUrl: string | null = null
+  let imageError: string | null = null
+  if (imageBytes && imageBytes.byteLength > 0) {
+    try {
+      imageUrl = await uploadImage(apiKey, imageBytes)
+    } catch (error) {
+      // Image is an enhancement. A rendering/upload outage must not stop the
+      // already-vetted market post from being published as text.
+      imageError = error instanceof Error ? error.message : '图片上传失败'
+      console.error(JSON.stringify({ event: 'binance.image_failed', error: imageError }))
     }
   }
 
@@ -73,14 +145,11 @@ export async function publishToBinanceSquare(
   try {
     response = await fetch(CONTENT_ENDPOINT, {
       method: 'POST',
-      headers: {
-        'X-Square-OpenAPI-Key': apiKey,
-        'content-type': 'application/json',
-        clienttype: 'binanceSkill',
-      },
+      headers: headers(apiKey),
       body: JSON.stringify({
         contentType: 1,
         bodyTextOnly: [...text.trim()].slice(0, 4_000).join(''),
+        ...(imageUrl ? { imageList: [imageUrl] } : {}),
       }),
       signal: AbortSignal.timeout(30_000),
     })
@@ -90,6 +159,8 @@ export async function publishToBinanceSquare(
       postId: null,
       url: null,
       error: `币安广场网络错误：${error instanceof Error ? error.name : 'unknown'}`,
+      imageUrl,
+      imageError,
     }
   }
 
@@ -97,7 +168,7 @@ export async function publishToBinanceSquare(
   // was accepted but its id was not returned. Treat it as a successful publish
   // so an automatic retry cannot create a duplicate public post.
   if (response.status === 504) {
-    return { success: true, postId: null, url: null, error: null }
+    return { success: true, postId: null, url: null, error: null, imageUrl, imageError }
   }
 
   let body: BinanceEnvelope
@@ -109,6 +180,8 @@ export async function publishToBinanceSquare(
       postId: null,
       url: null,
       error: `币安广场返回非 JSON 响应（HTTP ${response.status}）`,
+      imageUrl,
+      imageError,
     }
   }
   const code = String(body.code ?? '')
@@ -119,6 +192,8 @@ export async function publishToBinanceSquare(
       postId: null,
       url: null,
       error: `币安广场拒绝 [${code || response.status}] ${safeMessage(body)}`,
+      imageUrl,
+      imageError,
     }
   }
   const identity = postIdentity(body.data)
@@ -127,5 +202,7 @@ export async function publishToBinanceSquare(
     postId: identity.postId,
     url: identity.url,
     error: null,
+    imageUrl,
+    imageError,
   }
 }

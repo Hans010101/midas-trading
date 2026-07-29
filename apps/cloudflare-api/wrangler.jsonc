@@ -9,6 +9,9 @@
   "ai": {
     "binding": "AI"
   },
+  "browser": {
+    "binding": "BROWSER"
+  },
   "routes": [
     {
       "pattern": "midas-trading-api.openclaw007.online",

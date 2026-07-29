@@ -45,6 +45,8 @@ describe('Binance Square publishing adapter', () => {
       postId: '12345',
       url: 'https://www.binance.com/square/post/12345',
       error: null,
+      imageUrl: null,
+      imageError: null,
     })
     expect(upstream).toHaveBeenCalledOnce()
   })
@@ -58,6 +60,8 @@ describe('Binance Square publishing adapter', () => {
       postId: null,
       url: null,
       error: null,
+      imageUrl: null,
+      imageError: null,
     })
   })
 

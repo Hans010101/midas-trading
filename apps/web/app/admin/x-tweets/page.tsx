@@ -40,6 +40,13 @@ function BiasBadge({ bias }: { bias: string }) {
   )
 }
 
+const CONTENT_LABEL: Record<XTweetItem['content_type'], string> = {
+  market_analysis: 'K 线分析',
+  news: '热点快讯',
+  whale: '巨鲸资金',
+  unlock: '代币解锁',
+}
+
 /** K线主图截图:★端点 AdminDep → authed fetch blob → objectURL → <img>。无图/未截好显占位。
  *
  * ★配图修复(2026-07-08):旧版 useEffect 一次性 fetch——瞬时失败/挂起 = 永久占位、无重试、
@@ -202,6 +209,9 @@ function TweetCard({
       <div className="mb-2 flex items-center gap-2">
         <span className="font-mono text-sm font-bold">{t.symbol}</span>
         <BiasBadge bias={t.bias} />
+        <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-700">
+          {CONTENT_LABEL[t.content_type]}
+        </span>
         {/* ★内容风格/平台标识(step1 分平台)· x_short=专为 X 生成的短推 */}
         {t.gen_style === 'x_short' && (
           <span className="rounded bg-midas-red/15 px-1.5 py-0.5 text-[11px] font-medium text-midas-red">
@@ -219,9 +229,11 @@ function TweetCard({
         </span>
       </div>
       <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{t.tweet_text}</p>
-      <div className="mt-3">
-        <XTweetImage id={t.id} hasImage={t.image_path !== null} token={token} />
-      </div>
+      {t.content_type === 'market_analysis' && (
+        <div className="mt-3">
+          <XTweetImage id={t.id} hasImage={t.image_path !== null} token={token} />
+        </div>
+      )}
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-paper pt-2">
         {t.compliance_passed ? (
           <span className="rounded bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
@@ -263,7 +275,8 @@ export default function AdminXTweetsPage() {
       const items = q.state.data?.items ?? []
       const cutoff = Date.now() - 20 * 60_000
       const waiting = items.some(
-        (t) => t.image_path === null && new Date(t.created_at).getTime() > cutoff,
+        (t) => t.content_type === 'market_analysis' && t.status === 'published' &&
+          t.image_path === null && new Date(t.created_at).getTime() > cutoff,
       )
       return waiting ? 12_000 : false
     },

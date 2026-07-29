@@ -10,6 +10,13 @@ import {
   publishToBinanceSquare,
 } from './binance-square'
 import { HttpError, jsonResponse, readJsonObject } from './http'
+import {
+  contentTags,
+  draftContentEvent,
+  ingestSocialContent,
+  markContentDrafted,
+  nextContentEvent,
+} from './social-content'
 
 const MAX_PDF_BYTES = 5 * 1024 * 1024
 const MAX_MD_BYTES = 512 * 1024
@@ -551,6 +558,8 @@ type SocialDraftRow = Readonly<{
   auto_drafted: number
   has_url: number
   gen_style: string
+  content_type: string
+  source_event_id: number | null
   created_at: number
 }>
 
@@ -573,7 +582,7 @@ async function listSocialDrafts(
       .prepare(
         `SELECT id, symbol, bias, tweet_text, compliance_passed,
                 compliance_reason, status, image_key, auto_drafted, has_url,
-                gen_style, created_at
+                gen_style, content_type, source_event_id, created_at
          FROM social_drafts
          WHERE created_at >= ?
          ORDER BY created_at DESC
@@ -614,6 +623,8 @@ async function listSocialDrafts(
         auto_drafted: draft.auto_drafted === 1,
         has_url: draft.has_url === 1,
         gen_style: draft.gen_style,
+        content_type: draft.content_type,
+        source_event_id: draft.source_event_id,
         dispatches: dispatches.results
           .filter((item) => item.draft_id === draft.id)
           .map((item) => ({
@@ -642,7 +653,50 @@ async function createSocialDrafts(
   env: Env,
   style: 'default' | 'x_short',
   autoDrafted: boolean,
+  preferEvent = false,
 ): Promise<{ items: CreatedSocialDraft[]; provider: string }> {
+  if (style === 'default' && preferEvent) {
+    const event = await nextContentEvent(env)
+    if (event) {
+      const drafted = await draftContentEvent(env, event)
+      const gate = compliant(drafted.text)
+      const row = await env.DB
+        .prepare(
+          `INSERT INTO social_drafts
+            (symbol, bias, tweet_text, compliance_passed, compliance_reason,
+             status, auto_drafted, has_url, gen_style, provider, model,
+             content_type, source_event_id, created_at)
+           VALUES (?, ?, ?, ?, ?, 'draft', ?, 1, 'default', ?, ?, ?, ?, ?)
+           RETURNING id`,
+        )
+        .bind(
+          drafted.symbol,
+          drafted.bias,
+          drafted.text,
+          gate.passed ? 1 : 0,
+          gate.reason,
+          autoDrafted ? 1 : 0,
+          drafted.provider,
+          drafted.model,
+          event.contentType,
+          event.id,
+          Date.now(),
+        )
+        .first<{ id: number }>()
+      if (row) {
+        await markContentDrafted(env, event.id)
+        return {
+          items: [{
+            id: row.id,
+            symbol: drafted.symbol,
+            text: drafted.text,
+            compliancePassed: gate.passed,
+          }],
+          provider: drafted.provider,
+        }
+      }
+    }
+  }
   const quotes = await env.DB
     .prepare(
       `SELECT symbol, name, last_point, change_pct
@@ -658,17 +712,18 @@ async function createSocialDrafts(
       change_pct: number
     }>()
   if (quotes.results.length === 0) throw new HttpError(409, '暂无可用市场数据')
+  const draftCount = autoDrafted ? 1 : 2
   const ai = await invokeAi(env, {
     system:
       '你是专业市场内容编辑。只输出 JSON，不承诺收益，不给确定性涨跌结论，数据必须原样引用。',
-    prompt: `根据以下实时行情生成 2 条${style === 'x_short' ? '不超过 110 个汉字的 X 短推' : '币安广场中文市场观察'}。
+    prompt: `根据以下实时行情生成 ${draftCount} 条${style === 'x_short' ? '不超过 110 个汉字的 X 短推' : '币安广场中文市场观察'}。
 行情：${JSON.stringify(quotes.results)}
-输出 {"drafts":[{"symbol":"BTC/USDT","bias":"偏多|偏空|中性","text":"..."}]}。`,
+输出 {"drafts":[{"symbol":"BTC/USDT","bias":"偏多|偏空|中性","text":"..."}]}。不要自行添加 # 或 $ 标签。`,
     maxTokens: 700,
     temperature: 0.35,
   })
   const parsed = parseAiJson(ai.content)
-  const drafts = Array.isArray(parsed.drafts) ? parsed.drafts.slice(0, 4) : []
+  const drafts = Array.isArray(parsed.drafts) ? parsed.drafts.slice(0, draftCount) : []
   const created: CreatedSocialDraft[] = []
   const timestamp = Date.now()
   for (const value of drafts) {
@@ -679,13 +734,18 @@ async function createSocialDrafts(
     let text = typeof item.text === 'string' ? item.text.trim() : ''
     if (!symbol || !text) continue
     if (style === 'x_short') text = [...text].slice(0, 110).join('')
+    if (style === 'default') {
+      const baseSymbol = symbol.split('/')[0]?.toUpperCase() ?? 'BTC'
+      text = `${text}\n\n${contentTags([baseSymbol], `market:${symbol}:${timestamp}`).join(' ')}`
+    }
     const gate = compliant(text)
     const row = await env.DB
       .prepare(
         `INSERT INTO social_drafts
           (symbol, bias, tweet_text, compliance_passed, compliance_reason,
-           status, auto_drafted, has_url, gen_style, provider, model, created_at)
-         VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)
+           status, auto_drafted, has_url, gen_style, provider, model,
+           content_type, created_at)
+         VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, 'market_analysis', ?)
          RETURNING id`,
       )
       .bind(
@@ -980,6 +1040,30 @@ type DispatchResult = Readonly<{
   error: string | null
 }>
 
+type BrowserEnv = Readonly<{ BROWSER?: BrowserRun }>
+
+async function captureMarketChart(env: Env, symbol: string): Promise<ArrayBuffer | null> {
+  const browser = (env as Env & BrowserEnv).BROWSER
+  if (!browser) return null
+  const url = new URL('/crypto-preview', env.PUBLIC_WEB_URL)
+  url.searchParams.set('symbol', symbol)
+  const response = await browser.quickAction('screenshot', {
+    url: url.toString(),
+    selector: '[data-social-chart="true"]',
+    viewport: { width: 1280, height: 900, deviceScaleFactor: 2 },
+    gotoOptions: { waitUntil: 'networkidle2', timeout: 45_000 },
+    waitForTimeout: 3_000,
+    actionTimeout: 60_000,
+    screenshotOptions: { type: 'png', optimizeForSpeed: true },
+    cacheTTL: 0,
+  })
+  if (!response.ok) {
+    console.error(JSON.stringify({ event: 'social.chart_capture_failed', status: response.status }))
+    return null
+  }
+  return response.arrayBuffer()
+}
+
 async function dispatchSocialDraft(
   env: Env,
   draftId: number,
@@ -988,11 +1072,17 @@ async function dispatchSocialDraft(
 ): Promise<DispatchResult> {
   const draft = await env.DB
     .prepare(
-      `SELECT id, tweet_text, compliance_passed
+      `SELECT id, symbol, tweet_text, compliance_passed, content_type
        FROM social_drafts WHERE id = ?`,
     )
     .bind(draftId)
-    .first<{ id: number; tweet_text: string; compliance_passed: number }>()
+    .first<{
+      id: number
+      symbol: string
+      tweet_text: string
+      compliance_passed: number
+      content_type: string
+    }>()
   if (!draft) throw new HttpError(404, '推文草稿不存在')
   if (draft.compliance_passed !== 1) throw new HttpError(409, '合规门禁未通过')
 
@@ -1052,7 +1142,18 @@ async function dispatchSocialDraft(
     .first<{ id: number }>()
   if (!dispatch) throw new HttpError(500, '发布台账创建失败')
 
-  const published = await publishToBinanceSquare(env, draft.tweet_text)
+  let imageBytes: ArrayBuffer | null = null
+  if (draft.content_type === 'market_analysis') {
+    try {
+      imageBytes = await captureMarketChart(env, draft.symbol)
+    } catch (error) {
+      console.error(JSON.stringify({
+        event: 'social.chart_capture_failed',
+        error: error instanceof Error ? error.message : String(error),
+      }))
+    }
+  }
+  const published = await publishToBinanceSquare(env, draft.tweet_text, imageBytes)
   const status = published.success ? 'success' : 'failed'
   await env.DB.batch([
     env.DB
@@ -1062,8 +1163,8 @@ async function dispatchSocialDraft(
       )
       .bind(status, published.url, published.error, Date.now(), dispatch.id),
     env.DB
-      .prepare('UPDATE social_drafts SET status = ? WHERE id = ?')
-      .bind(published.success ? 'published' : 'failed', draftId),
+      .prepare('UPDATE social_drafts SET status = ?, image_key = COALESCE(?, image_key) WHERE id = ?')
+      .bind(published.success ? 'published' : 'failed', published.imageUrl, draftId),
   ])
   return {
     dispatchId: dispatch.id,
@@ -1227,7 +1328,9 @@ async function runSocialAutomation(env: Env, timestamp: number): Promise<void> {
   try {
     let candidate = await autoCandidate(env, timestamp)
     if (!candidate) {
-      await createSocialDrafts(env, 'default', true)
+      const dailyUsed = Number(used?.count ?? 0)
+      const preferEvent = dailyUsed % 5 !== 0 && dailyUsed % 5 !== 2
+      await createSocialDrafts(env, 'default', true, preferEvent)
       candidate = await autoCandidate(env, Date.now())
     }
     if (!candidate) throw new Error('未生成可发布且通过门禁的币安广场草稿')
@@ -1275,8 +1378,11 @@ export async function runAdminOperationsCron(
   env: Env,
   timestamp = Date.now(),
 ): Promise<void> {
-  await runSocialAutomation(env, timestamp)
   const minute = cstMinute(timestamp)
+  if (env.ENVIRONMENT !== 'test' && minute % 15 === 5) {
+    await ingestSocialContent(env, timestamp)
+  }
+  await runSocialAutomation(env, timestamp)
   const day = new Intl.DateTimeFormat('en-US', {
     timeZone: 'Asia/Shanghai',
     weekday: 'short',
@@ -1384,7 +1490,21 @@ export async function handleAdminOperationsRoute(
     /^\/api\/v1\/admin\/x-tweets\/(\d+)\/image$/u.exec(path)
   if (imageMatch && request.method === 'GET') {
     await requireAdmin(request, env)
-    throw new HttpError(404, '该草稿暂无配图')
+    const row = await env.DB
+      .prepare('SELECT image_key FROM social_drafts WHERE id = ?')
+      .bind(Number(imageMatch[1]))
+      .first<{ image_key: string | null }>()
+    if (!row?.image_key?.startsWith('https://')) {
+      throw new HttpError(404, '该草稿暂无配图')
+    }
+    const upstream = await fetch(row.image_key, { signal: AbortSignal.timeout(15_000) })
+    if (!upstream.ok || !upstream.body) throw new HttpError(502, '配图读取失败')
+    return new Response(upstream.body, {
+      headers: {
+        'content-type': upstream.headers.get('content-type') ?? 'image/png',
+        'cache-control': 'private, max-age=3600',
+      },
+    })
   }
   return null
 }

@@ -32,6 +32,8 @@ export interface XTweetItem {
   auto_drafted: boolean // ★自动托管起草(待补发素材标识 · 频率调整)
   has_url: boolean // ★正文含 URL(发 X 贵十几倍 · 成本提醒 · 非门禁否决)
   gen_style: string // ★内容风格/平台(default 币安长文 / x_short X 短推)
+  content_type: 'market_analysis' | 'news' | 'whale' | 'unlock'
+  source_event_id: number | null
   dispatches: XTweetDispatchItem[] // 各平台发布状态(发布层 PR-3)
 }
 
