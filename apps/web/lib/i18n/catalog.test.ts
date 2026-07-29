@@ -36,6 +36,12 @@ describe('translation catalog', () => {
     expect(translateCatalogText('全球市场', 'en', catalog)).toBe(
       'Global Markets',
     )
+    expect(translateCatalogText('恒生国企指数', 'en', catalog)).toBe(
+      'Hang Seng China Enterprises Index',
+    )
+    expect(translateCatalogText('管理导航', 'en', catalog)).toBe(
+      'Admin Navigation',
+    )
   })
 
   it('preserves surrounding whitespace', () => {
