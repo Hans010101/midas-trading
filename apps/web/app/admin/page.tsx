@@ -15,7 +15,11 @@ import { useState } from 'react'
 
 import { AdminNav } from '@/components/admin/admin-nav'
 import { TopNav } from '@/components/layout/top-nav'
-import { AdminApiError, fetchAdminUsers } from '@/lib/api/admin'
+import {
+  AdminApiError,
+  fetchAdminOverview,
+  fetchAdminUsers,
+} from '@/lib/api/admin'
 import { createdAtText, lastActiveText, registerMethodLabel } from '@/lib/admin-view'
 
 const PAGE_SIZE = 20
@@ -25,6 +29,11 @@ export default function AdminUsersPage() {
   const token = session?.accessToken ?? ''
   const [page, setPage] = useState(1)
 
+  const overview = useQuery({
+    queryKey: ['admin-overview'],
+    queryFn: ({ signal }) => fetchAdminOverview(token, signal),
+    enabled: token !== '',
+  })
   const query = useQuery({
     queryKey: ['admin-users', page],
     queryFn: ({ signal }) => fetchAdminUsers(token, { page, pageSize: PAGE_SIZE }, signal),
@@ -39,6 +48,24 @@ export default function AdminUsersPage() {
       <TopNav />
       <main className="mx-auto w-full max-w-6xl px-6 py-8">
         <AdminNav />
+        {overview.data && (
+          <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[
+              ['注册用户', overview.data.total_users],
+              ['近 7 天活跃', overview.data.active_users_7d],
+              ['当前有效会话', overview.data.active_sessions],
+              ['待处理工单', overview.data.open_support_tickets],
+            ].map(([label, value]) => (
+              <section
+                key={String(label)}
+                className="rounded-lg border border-paper bg-cream p-4 shadow-sm"
+              >
+                <p className="text-xs text-muted-foreground">{label}</p>
+                <p className="mt-1 font-mono text-2xl font-bold">{value}</p>
+              </section>
+            ))}
+          </div>
+        )}
         {query.data && (
           <p className="mb-4 text-sm text-muted-foreground">
             共 <span className="font-mono font-bold text-foreground">{query.data.total}</span> 位用户
@@ -87,7 +114,7 @@ export default function AdminUsersPage() {
                         </Link>
                         {u.role === 'admin' && (
                           <span className="ml-1.5 rounded bg-gold/15 px-1.5 py-0.5 text-[10px] text-gold">
-                            admin
+                            {u.locked_admin ? '锁定管理员' : 'admin'}
                           </span>
                         )}
                         {u.banned && (

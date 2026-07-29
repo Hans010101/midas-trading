@@ -17,12 +17,14 @@ export function BanSection({
   userId,
   email,
   banned,
+  locked,
   token,
   onChanged,
 }: {
   userId: string
   email: string
   banned: boolean
+  locked: boolean
   token: string
   onChanged: () => void
 }) {
@@ -47,13 +49,17 @@ export function BanSection({
         <div>
           <h2 className="font-serif text-base font-bold">账号状态</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {banned ? '已停用 · 该账号无法登录' : '正常 · 可登录'}
+            {locked
+              ? '锁定管理员 · 禁止停用、降级或删除'
+              : banned
+                ? '已停用 · 该账号无法登录'
+                : '正常 · 可登录'}
           </p>
         </div>
         <button
           type="button"
           onClick={() => setConfirming(true)}
-          disabled={mut.isPending}
+          disabled={locked || mut.isPending}
           className={
             banned
               ? 'min-h-10 shrink-0 rounded-md border border-down px-4 text-sm font-medium text-down transition-colors hover:bg-down/10 disabled:opacity-60'

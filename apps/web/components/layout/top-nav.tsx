@@ -128,10 +128,10 @@ export function TopNav() {
                     <Link href="/platinum">铂金 · 自动交易</Link>
                   </DropdownMenuItem>
                 )}
-                {/* 用户管理(刀2)· admin 才渲染 —— 仅 UX,安全边界在后端 AdminDep 403 */}
-                {session.user.role === 'admin' && (
+                {/* 实时 /me 角色判定使管理员置位后无需重新登录；安全边界仍在后端 403。 */}
+                {me?.role === 'admin' && (
                   <DropdownMenuItem asChild className="justify-end">
-                    <Link href="/admin">用户管理</Link>
+                    <Link href="/admin">管理后台</Link>
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />

@@ -12,13 +12,14 @@ export type RegisterMethod = 'google' | 'password' | 'both'
 export interface AdminUserItem {
   id: string
   email: string
+  display_name: string | null
   role: string
+  locked_admin: boolean
   banned: boolean
-  plan: string
-  is_platinum: boolean // ★铂金标记(多账户 PR-1)· superadmin 手动设
   created_at: string
   email_verified: boolean
   register_method: RegisterMethod
+  last_login_at: string | null
   /** 未过期 session 的最后活跃时间 · 7 天滚动 TTL 口径 · null = 7 天内无活跃 */
   last_active_7d: string | null
   active_sessions: number
@@ -29,6 +30,17 @@ export interface AdminUserListOut {
   total: number
   page: number
   page_size: number
+}
+
+export interface AdminOverview {
+  total_users: number
+  verified_users: number
+  active_users_7d: number
+  active_sessions: number
+  registrations_7d: number
+  open_support_tickets: number
+  enabled_alert_rules: number
+  generated_at: string
 }
 
 export class AdminApiError extends Error {
@@ -67,6 +79,18 @@ export async function fetchAdminUsers(
   return (await r.json()) as AdminUserListOut
 }
 
+export async function fetchAdminOverview(
+  token: string,
+  signal?: AbortSignal,
+): Promise<AdminOverview> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/overview`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as AdminOverview
+}
+
 // ── 用户详情(刀3a · 纯只读聚合)──
 export interface AdminQuotaUsage {
   feature: string
@@ -86,23 +110,30 @@ export interface AdminActionItem {
   created_at: string
 }
 
+export interface AdminAuthEvent {
+  event_type: string
+  metadata: Record<string, unknown>
+  created_at: string
+}
+
 export interface AdminUserDetail {
   id: string
   email: string
+  display_name: string | null
   role: string
+  locked_admin: boolean
   created_at: string
   email_verified: boolean
   banned: boolean
-  plan: string
-  is_platinum: boolean // ★铂金标记(多账户 PR-1)
-  plan_status: string | null
-  plan_expires_at: string | null
-  plan_source: string | null
-  quota: AdminQuotaUsage[]
-  invite_code: string | null
-  invited_count: number
-  rewarded_count: number
-  redeemed: AdminRedeemedItem[]
+  register_method: RegisterMethod
+  last_login_at: string | null
+  last_active_7d: string | null
+  active_sessions: number
+  alert_rules_count: number
+  notifications_count: number
+  unread_notifications_count: number
+  support_ticket_count: number
+  auth_events: AdminAuthEvent[]
   admin_actions: AdminActionItem[]
 }
 
@@ -142,6 +173,92 @@ export async function setBan(
   })
   if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
   return (await r.json()) as { user_id: string; banned: boolean }
+}
+
+export async function revokeUserSessions(
+  token: string,
+  userId: string,
+): Promise<{
+  user_id: string
+  revoked_sessions: number
+  kept_current_session: boolean
+}> {
+  const r = await fetch(
+    `${API_BASE}/api/v1/admin/users/${userId}/revoke-sessions`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  )
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as {
+    user_id: string
+    revoked_sessions: number
+    kept_current_session: boolean
+  }
+}
+
+export type SupportTicketStatus = 'open' | 'resolved' | 'closed'
+
+export interface AdminSupportTicket {
+  id: number
+  user_id: string
+  account_email: string
+  contact_email: string
+  category: string
+  description: string
+  related_order_id: string | null
+  image_count: number
+  status: SupportTicketStatus
+  created_at: string
+}
+
+export interface AdminSupportTicketList {
+  items: AdminSupportTicket[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export async function fetchAdminSupportTickets(
+  token: string,
+  params: { page?: number; pageSize?: number; status?: SupportTicketStatus },
+  signal?: AbortSignal,
+): Promise<AdminSupportTicketList> {
+  const qs = new URLSearchParams({
+    page: String(params.page ?? 1),
+    page_size: String(params.pageSize ?? 20),
+  })
+  if (params.status) qs.set('status', params.status)
+  const r = await fetch(`${API_BASE}/api/v1/admin/support-tickets?${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as AdminSupportTicketList
+}
+
+export async function updateAdminSupportTicket(
+  token: string,
+  ticketId: number,
+  status: SupportTicketStatus,
+): Promise<{ ticket_id: number; status: SupportTicketStatus }> {
+  const r = await fetch(
+    `${API_BASE}/api/v1/admin/support-tickets/${ticketId}`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status }),
+    },
+  )
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as {
+    ticket_id: number
+    status: SupportTicketStatus
+  }
 }
 
 /** ★superadmin 设/取铂金标记(多账户 PR-1 · 享受所有 pro 权益 · 仿 setBan)。 */

@@ -13,10 +13,15 @@ import { useParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 
 import { BanSection } from '@/components/admin/ban-section'
-import { PlatinumSection } from '@/components/admin/platinum-section'
+import { AdminNav } from '@/components/admin/admin-nav'
+import { SessionSection } from '@/components/admin/session-section'
 import { TopNav } from '@/components/layout/top-nav'
 import { AdminApiError, type AdminUserDetail, fetchAdminUserDetail } from '@/lib/api/admin'
-import { createdAtText } from '@/lib/admin-view'
+import {
+  createdAtText,
+  lastActiveText,
+  registerMethodLabel,
+} from '@/lib/admin-view'
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -57,6 +62,7 @@ export default function AdminUserDetailPage() {
     <div className="flex min-h-screen flex-col bg-background">
       <TopNav />
       <main className="mx-auto w-full max-w-3xl px-6 py-8">
+        <AdminNav />
         <Link
           href="/admin"
           className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -86,25 +92,33 @@ export default function AdminUserDetailPage() {
                   已停用
                 </span>
               )}
+              {d.locked_admin && (
+                <span className="rounded bg-gold/15 px-1.5 py-0.5 font-sans text-[11px] text-gold">
+                  锁定管理员
+                </span>
+              )}
             </h1>
 
             <Card title="基础">
               <dl>
                 <Row label="角色">{d.role}</Row>
+                <Row label="注册方式">{registerMethodLabel(d.register_method)}</Row>
                 <Row label="注册时间">{createdAtText(d.created_at)}</Row>
+                <Row label="最后登录">{lastActiveText(d.last_login_at)}</Row>
+                <Row label="近 7 天活跃">{lastActiveText(d.last_active_7d)}</Row>
                 <Row label="邮箱验证">
                   {d.email_verified ? <span className="text-up">已验证</span> : <span className="text-muted-foreground/60">未验证</span>}
                 </Row>
               </dl>
             </Card>
 
-            <Card title="系统容量">
+            <Card title="账户资源">
               <dl>
-                {d.quota.map((q) => (
-                  <Row key={q.feature} label={q.feature === 'diagnose' ? '沙盘诊断' : '回测'}>
-                    <span className="font-mono">{q.used ?? '—'}/{q.limit}</span>
-                  </Row>
-                ))}
+                <Row label="有效会话">{d.active_sessions}</Row>
+                <Row label="提醒规则">{d.alert_rules_count}</Row>
+                <Row label="站内通知">{d.notifications_count}</Row>
+                <Row label="未读通知">{d.unread_notifications_count}</Row>
+                <Row label="支持工单">{d.support_ticket_count}</Row>
               </dl>
             </Card>
 
@@ -113,18 +127,51 @@ export default function AdminUserDetailPage() {
               userId={d.id}
               email={d.email}
               banned={d.banned}
+              locked={d.locked_admin}
               token={token}
               onChanged={() => void qc.invalidateQueries({ queryKey: ['admin-user-detail', id] })}
             />
 
-            {/* ★铂金标记(多账户 PR-1 · superadmin 手动设 · 享受所有 pro 权益 + 托管/智能交易)*/}
-            <PlatinumSection
+            <SessionSection
               userId={d.id}
-              email={d.email}
-              isPlatinum={d.is_platinum}
+              activeSessions={d.active_sessions}
               token={token}
               onChanged={() => void qc.invalidateQueries({ queryKey: ['admin-user-detail', id] })}
             />
+
+            <Card title="最近登录与安全事件">
+              {d.auth_events.length === 0 ? (
+                <p className="text-sm text-muted-foreground">暂无记录</p>
+              ) : (
+                <ul className="divide-y divide-paper text-sm">
+                  {d.auth_events.map((event, index) => (
+                    <li key={`${event.created_at}-${index}`} className="flex justify-between gap-4 py-2">
+                      <span className="font-mono text-xs">{event.event_type}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {createdAtText(event.created_at)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+
+            <Card title="管理员审计">
+              {d.admin_actions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">暂无管理员操作</p>
+              ) : (
+                <ul className="divide-y divide-paper text-sm">
+                  {d.admin_actions.map((action, index) => (
+                    <li key={`${action.created_at}-${index}`} className="flex justify-between gap-4 py-2">
+                      <span className="font-mono text-xs">{action.action}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {createdAtText(action.created_at)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
 
           </div>
         )}

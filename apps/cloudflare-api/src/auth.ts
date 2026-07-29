@@ -1,4 +1,5 @@
 import { base64UrlEncode, hmacSha256, randomToken, sha256Hex } from './crypto'
+import { isLockedAdminEmail, roleForEmail } from './admin-policy'
 import { sendVerificationEmail } from './email'
 import { COMMERCIAL_MEMBERSHIP_ENABLED } from './features'
 import { verifyGoogleIdToken } from './google'
@@ -29,6 +30,7 @@ type UserRow = Readonly<{
   display_name: string | null
   avatar_url: string | null
   role: string
+  banned_at: number | null
   age_confirmed: number
   email_verified_at: number | null
 }>
@@ -89,14 +91,18 @@ async function findUserByEmail(
   db: D1Database,
   email: string,
 ): Promise<UserRow | null> {
+  const whereClause = isLockedAdminEmail(email)
+    ? `REPLACE(SUBSTR(LOWER(email), 1, INSTR(email, '@') - 1), '.', '') = ?
+       AND SUBSTR(LOWER(email), INSTR(email, '@') + 1) IN ('gmail.com', 'googlemail.com')`
+    : 'email = ?'
   return db
     .prepare(
       `SELECT id, email, password_hash, google_sub, display_name, avatar_url,
-              role, age_confirmed, email_verified_at
+              role, banned_at, age_confirmed, email_verified_at
        FROM users
-       WHERE email = ?`,
+       WHERE ${whereClause}`,
     )
-    .bind(email)
+    .bind(isLockedAdminEmail(email) ? 'hanspan007' : email)
     .first<UserRow>()
 }
 
@@ -189,6 +195,7 @@ export async function authenticate(
          u.display_name,
          u.avatar_url,
          u.role,
+         u.banned_at,
          u.age_confirmed,
          u.email_verified_at
        FROM sessions s
@@ -201,6 +208,7 @@ export async function authenticate(
     .first<UserRow & { session_id: string }>()
 
   if (!row) throw new HttpError(401, '登录已过期，请重新登录')
+  if (row.banned_at !== null) throw new HttpError(403, '账号已停用')
 
   await env.DB
     .prepare(
@@ -219,6 +227,7 @@ export async function authenticate(
       display_name: row.display_name,
       avatar_url: row.avatar_url,
       role: row.role,
+      banned_at: row.banned_at,
       age_confirmed: row.age_confirmed,
       email_verified_at: row.email_verified_at,
     },
@@ -244,6 +253,7 @@ async function register(
   }
 
   const passwordHash = await hashPassword(password, env.PASSWORD_PEPPER)
+  const role = roleForEmail(email)
   const timestamp = nowMs()
   const userId = crypto.randomUUID()
   const token = randomToken(48)
@@ -254,9 +264,9 @@ async function register(
       .prepare(
         `INSERT INTO users
           (id, email, password_hash, role, age_confirmed, created_at, updated_at)
-         VALUES (?, ?, ?, 'user', 1, ?, ?)`,
+         VALUES (?, ?, ?, ?, 1, ?, ?)`,
       )
-      .bind(userId, email, passwordHash, timestamp, timestamp),
+      .bind(userId, email, passwordHash, role, timestamp, timestamp),
     env.DB
       .prepare(
         `INSERT INTO verification_tokens
@@ -359,6 +369,9 @@ async function login(
       createdAt: timestamp,
     }).run()
     throw new HttpError(401, '邮箱或密码错误')
+  }
+  if (user.banned_at !== null) {
+    throw new HttpError(403, '账号已停用')
   }
   if (user.email_verified_at === null) {
     throw new HttpError(403, '请先完成邮箱验证')
@@ -563,7 +576,7 @@ async function googleOauth(
   let user = await env.DB
     .prepare(
       `SELECT id, email, password_hash, google_sub, display_name, avatar_url,
-              role, age_confirmed, email_verified_at
+              role, banned_at, age_confirmed, email_verified_at
        FROM users
        WHERE google_sub = ?`,
     )
@@ -579,6 +592,9 @@ async function googleOauth(
     }
 
     if (emailUser) {
+      if (emailUser.banned_at !== null) {
+        throw new HttpError(403, '账号已停用')
+      }
       await env.DB
         .prepare(
           `UPDATE users
@@ -605,12 +621,13 @@ async function googleOauth(
       }
     } else {
       const userId = crypto.randomUUID()
+      const role = roleForEmail(email)
       await env.DB
         .prepare(
           `INSERT INTO users
             (id, email, google_sub, display_name, avatar_url, role, age_confirmed,
              email_verified_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, 'user', 1, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
         )
         .bind(
           userId,
@@ -618,6 +635,7 @@ async function googleOauth(
           identity.subject,
           identity.name,
           identity.picture,
+          role,
           timestamp,
           timestamp,
           timestamp,
@@ -630,7 +648,8 @@ async function googleOauth(
         google_sub: identity.subject,
         display_name: identity.name,
         avatar_url: identity.picture,
-        role: 'user',
+        role,
+        banned_at: null,
         age_confirmed: 1,
         email_verified_at: timestamp,
       }
@@ -657,6 +676,10 @@ async function googleOauth(
         }
       }
     }
+  }
+
+  if (user.banned_at !== null) {
+    throw new HttpError(403, '账号已停用')
   }
 
   const token = await issueSession(

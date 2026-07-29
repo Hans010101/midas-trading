@@ -48,6 +48,14 @@ const runAuth = auth((req) => {
   if (url.pathname.startsWith('/admin/redeem-codes')) {
     return NextResponse.redirect(new URL('/admin', req.nextUrl.origin))
   }
+  if (
+    url.pathname.startsWith('/admin/') &&
+    !url.pathname.startsWith('/admin/users/') &&
+    !url.pathname.startsWith('/admin/academy-stats') &&
+    !url.pathname.startsWith('/admin/support-tickets')
+  ) {
+    return NextResponse.redirect(new URL('/admin', req.nextUrl.origin))
+  }
 
   const isProtected = PROTECTED.some((p) => url.pathname.startsWith(p))
   const isAuthPage = AUTH_PAGES.some((p) => url.pathname.startsWith(p))
