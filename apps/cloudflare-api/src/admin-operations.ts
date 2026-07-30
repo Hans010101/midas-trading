@@ -878,6 +878,7 @@ async function generateSocialDrafts(
 
 type ExternalEnv = Readonly<{
   X_API_KEY?: string
+  BINANCE_SQUARE_PUBLISH_MODE?: string
 }>
 
 function adapters(env: Env): { binance: boolean; x: boolean } {
@@ -1446,6 +1447,25 @@ async function runSocialAutomation(env: Env, timestamp: number): Promise<void> {
       candidate = await autoCandidate(env, Date.now())
     }
     if (!candidate) throw new Error('未生成可发布且通过门禁的币安广场草稿')
+    if (
+      (env as Env & ExternalEnv).BINANCE_SQUARE_PUBLISH_MODE === 'github'
+    ) {
+      await Promise.all([
+        updateAutoRun(env, slot, {
+          status: 'skipped',
+          draftId: candidate.id,
+          error: '等待独立币安广场发布执行器',
+        }),
+        env.DB
+          .prepare(
+            `UPDATE social_automation_config
+             SET failure_count = 0, last_error = NULL, updated_at = ? WHERE id = 1`,
+          )
+          .bind(Date.now())
+          .run(),
+      ])
+      return
+    }
     const result = await dispatchSocialDraft(
       env,
       candidate.id,

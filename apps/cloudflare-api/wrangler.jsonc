@@ -24,7 +24,8 @@
     "API_VERSION": "v1",
     "PUBLIC_WEB_URL": "https://midas-trading.hans-pan007.workers.dev",
     "EMAIL_FROM": "Midas Trading <noreply@midastrade.asia>",
-    "GOOGLE_CLIENT_ID": "85423363850-6ot32sau6gffb9k4mgj9ish8bo6el8gu.apps.googleusercontent.com"
+    "GOOGLE_CLIENT_ID": "85423363850-6ot32sau6gffb9k4mgj9ish8bo6el8gu.apps.googleusercontent.com",
+    "BINANCE_SQUARE_PUBLISH_MODE": "github"
   },
   "d1_databases": [
     {
