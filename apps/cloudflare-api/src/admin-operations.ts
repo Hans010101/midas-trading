@@ -1157,9 +1157,14 @@ async function publishSocialDraft(
     throw new HttpError(501, 'X 发布适配器尚未启用')
   }
   const result = await dispatchSocialDraft(env, draftId, 'binance_square', 'manual')
+  const action = result.status === 'success'
+    ? 'social.published'
+    : result.status === 'pending'
+      ? 'social.publish_queued'
+      : 'social.publish_failed'
   await adminActionStatement(env.DB, {
     operatorId: admin.user.id,
-    action: result.status === 'success' ? 'social.published' : 'social.publish_failed',
+    action,
     detail: {
       draft_id: draftId,
       dispatch_id: result.dispatchId,
@@ -1173,7 +1178,11 @@ async function publishSocialDraft(
       dispatch_id: result.dispatchId,
       platform,
       status: result.status,
-      message: result.status === 'success' ? '已发布到币安广场' : result.error,
+      message: result.status === 'success'
+        ? '已发布到币安广场'
+        : result.status === 'pending'
+          ? '已进入币安广场独立发布队列'
+          : result.error,
       url: result.url,
     },
     200,
@@ -1184,7 +1193,7 @@ async function publishSocialDraft(
 
 type DispatchResult = Readonly<{
   dispatchId: number
-  status: 'success' | 'failed'
+  status: 'pending' | 'success' | 'failed'
   url: string | null
   error: string | null
 }>
@@ -1290,6 +1299,19 @@ async function dispatchSocialDraft(
     .bind(draftId, platform, source, now, now)
     .first<{ id: number }>()
   if (!dispatch) throw new HttpError(500, '发布台账创建失败')
+
+  if ((env as Env & ExternalEnv).BINANCE_SQUARE_PUBLISH_MODE === 'github') {
+    await env.DB
+      .prepare("UPDATE social_drafts SET status = 'draft' WHERE id = ?")
+      .bind(draftId)
+      .run()
+    return {
+      dispatchId: dispatch.id,
+      status: 'pending',
+      url: null,
+      error: null,
+    }
+  }
 
   let imageBytes: ArrayBuffer | null = null
   if (draft.content_type === 'market_analysis') {

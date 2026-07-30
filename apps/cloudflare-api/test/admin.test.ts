@@ -2,7 +2,11 @@ import { env, exports } from 'cloudflare:workers'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { sha256Hex } from '../src/crypto'
-import { isAutoPublishSlot, runAdminOperationsCron } from '../src/admin-operations'
+import {
+  handleAdminOperationsRoute,
+  isAutoPublishSlot,
+  runAdminOperationsCron,
+} from '../src/admin-operations'
 
 function request(
   path: string,
@@ -447,6 +451,66 @@ describe('independent Cloudflare administrator controls', () => {
       status: 'success',
       source: 'manual',
       url: 'https://www.binance.com/square/post/square-test-1',
+    })
+  })
+
+  it('queues an explicit Binance publish when production uses the GitHub executor', async () => {
+    const timestamp = Date.now()
+    await env.DB
+      .prepare("UPDATE social_dispatches SET updated_at = 0 WHERE status = 'success'")
+      .run()
+    const draft = await env.DB
+      .prepare(
+        `INSERT INTO social_drafts
+          (symbol, bias, tweet_text, compliance_passed, status, auto_drafted,
+           has_url, gen_style, provider, model, created_at)
+         VALUES ('BTC/USDT', '中性', 'BTC 人工队列联调内容', 1, 'failed', 0,
+                 0, 'default', 'technical-rules', 'test', ?)
+         RETURNING id`,
+      )
+      .bind(timestamp)
+      .first<{ id: number }>()
+    expect(draft).not.toBeNull()
+    const upstream = vi.fn(async () => {
+      throw new Error('Cloudflare must not publish directly in GitHub mode')
+    })
+    vi.stubGlobal('fetch', upstream)
+
+    const githubEnv = {
+      ...env,
+      BINANCE_SQUARE_PUBLISH_MODE: 'github',
+    } as unknown as Env
+    const response = await handleAdminOperationsRoute(
+      request(`/api/v1/admin/x-tweets/${draft!.id}/publish`, {
+        method: 'POST',
+        token: owner.token,
+        body: { platform: 'binance_square' },
+      }),
+      githubEnv,
+      crypto.randomUUID(),
+    )
+    expect(response?.status).toBe(200)
+    await expect(response!.json()).resolves.toMatchObject({
+      platform: 'binance_square',
+      status: 'pending',
+      message: '已进入币安广场独立发布队列',
+      url: null,
+    })
+    expect(upstream).not.toHaveBeenCalled()
+    await expect(
+      env.DB
+        .prepare(
+          `SELECT sd.status, sd.source, d.status AS draft_status
+           FROM social_dispatches sd
+           JOIN social_drafts d ON d.id = sd.draft_id
+           WHERE sd.draft_id = ? AND sd.platform = 'binance_square'`,
+        )
+        .bind(draft!.id)
+        .first(),
+    ).resolves.toMatchObject({
+      status: 'pending',
+      source: 'manual',
+      draft_status: 'draft',
     })
   })
 

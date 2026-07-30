@@ -129,34 +129,51 @@ async function main() {
     return
   }
 
+  const now = Date.now()
+  // Explicit admin requests must not depend on the automatic-publishing
+  // switch. They were already authenticated, compliance-checked and rate
+  // checked by the API before this pending ledger row was created.
+  let candidate = query(
+    `SELECT d.id,d.symbol,d.tweet_text,d.content_type,d.image_key,
+            e.source AS event_source,e.title AS event_title,
+            e.summary AS event_summary,e.source_url AS event_source_url,
+            sd.id AS dispatch_id,sd.source AS dispatch_source
+     FROM social_dispatches sd
+     JOIN social_drafts d ON d.id=sd.draft_id
+     LEFT JOIN social_content_events e ON e.id=d.source_event_id
+     WHERE sd.platform='binance_square' AND sd.status='pending'
+       AND sd.source='manual' AND d.gen_style='default'
+       AND d.compliance_passed=1
+     ORDER BY sd.updated_at
+     LIMIT 1`,
+  )[0]
+
   const config = query(
     `SELECT enabled,circuit_open,binance_checked,daily_limit
      FROM social_automation_config WHERE id=1`,
   )[0]
-  if (
-    !config || config.enabled !== 1 || config.circuit_open === 1 ||
-    config.binance_checked !== 1
-  ) {
-    console.log('自动托管未开启，跳过')
-    return
-  }
-
-  const used = query(
-    `SELECT COUNT(*) AS count FROM social_dispatches
-     WHERE source='auto' AND platform='binance_square' AND status='success'
-       AND date(updated_at/1000,'unixepoch','+8 hours')=date('now','+8 hours')`,
-  )[0]
-  if (Number(used?.count ?? 0) >= Number(config.daily_limit)) {
-    console.log(`今日已达到 ${config.daily_limit} 条上限，跳过`)
-    return
-  }
-
-  const now = Date.now()
-  const candidate = query(
+  if (!candidate) {
+    if (
+      !config || config.enabled !== 1 || config.circuit_open === 1 ||
+      config.binance_checked !== 1
+    ) {
+      console.log('自动托管未开启，且没有人工发布任务，跳过')
+      return
+    }
+    const used = query(
+      `SELECT COUNT(*) AS count FROM social_dispatches
+       WHERE source='auto' AND platform='binance_square' AND status='success'
+         AND date(updated_at/1000,'unixepoch','+8 hours')=date('now','+8 hours')`,
+    )[0]
+    if (Number(used?.count ?? 0) >= Number(config.daily_limit)) {
+      console.log(`今日已达到 ${config.daily_limit} 条自动发布上限，跳过`)
+      return
+    }
+    candidate = query(
     `SELECT d.id,d.symbol,d.tweet_text,d.content_type,d.image_key,
             e.source AS event_source,e.title AS event_title,
             e.summary AS event_summary,e.source_url AS event_source_url,
-            sd.id AS dispatch_id
+            sd.id AS dispatch_id,COALESCE(sd.source,'auto') AS dispatch_source
      FROM social_drafts d
      LEFT JOIN social_content_events e ON e.id=d.source_event_id
      LEFT JOIN social_dispatches sd
@@ -178,18 +195,37 @@ async function main() {
        )
      ORDER BY d.created_at
      LIMIT 1`,
-  )[0]
+    )[0]
+  }
   if (!candidate) {
     console.log('暂无待发布合规草稿，等待下一轮')
     return
   }
 
+  const guard = query(
+    `SELECT
+       SUM(CASE WHEN date(updated_at/1000,'unixepoch','+8 hours')=
+                         date('now','+8 hours') THEN 1 ELSE 0 END) AS today,
+       MAX(updated_at) AS last_at
+     FROM social_dispatches
+     WHERE platform='binance_square' AND status='success'`,
+  )[0]
+  if (Number(guard?.today ?? 0) >= 100) {
+    console.log('币安广场今日已达到 100 条官方上限，保留队列等待')
+    return
+  }
+  if (guard?.last_at && now - Number(guard.last_at) < 30_000) {
+    console.log('发布间隔不足 30 秒，保留队列等待下一轮')
+    return
+  }
+
+  const dispatchSource = candidate.dispatch_source === 'manual' ? 'manual' : 'auto'
   query(
     `INSERT INTO social_dispatches
        (draft_id,platform,status,url,error,source,created_at,updated_at)
-     VALUES (${candidate.id},'binance_square','pending',NULL,NULL,'auto',${now},${now})
+     VALUES (${candidate.id},'binance_square','pending',NULL,NULL,${quote(dispatchSource)},${now},${now})
      ON CONFLICT(draft_id,platform) DO UPDATE SET
-       status='pending',url=NULL,error=NULL,source='auto',updated_at=${now};`,
+       status='pending',url=NULL,error=NULL,source=${quote(dispatchSource)},updated_at=${now};`,
   )
   const dispatch = query(
     `SELECT id FROM social_dispatches
@@ -260,7 +296,7 @@ async function main() {
   const completedAt = Date.now()
   query(
     `UPDATE social_dispatches
-     SET status='success',url=${quote(url)},error=NULL,source='auto',updated_at=${completedAt}
+     SET status='success',url=${quote(url)},error=NULL,source=${quote(dispatchSource)},updated_at=${completedAt}
      WHERE id=${dispatch.id};
      UPDATE social_drafts SET status='published' WHERE id=${candidate.id};
      UPDATE social_auto_runs
