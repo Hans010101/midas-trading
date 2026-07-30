@@ -761,17 +761,29 @@ async function createSocialDrafts(
   }
   if (quotes.length === 0) throw new HttpError(409, '暂无可用市场数据')
   const draftCount = autoDrafted ? 1 : 2
-  const ai = await invokeAi(env, {
-    system:
-      '你是专业市场内容编辑。只输出 JSON，不承诺收益，不给确定性涨跌结论，数据必须原样引用。',
-    prompt: `根据以下 Midas Trading 实时波动扫描生成 ${draftCount} 条${style === 'x_short' ? '不超过 110 个汉字的 X 短推' : '币安广场中文市场观察'}。
+  let provider = 'rules-fallback'
+  let model = 'market-scan-template-v1'
+  let parsed: Record<string, unknown> = {}
+  try {
+    const ai = await invokeAi(env, {
+      system:
+        '你是专业市场内容编辑。只输出 JSON，不承诺收益，不给确定性涨跌结论，数据必须原样引用。',
+      prompt: `根据以下 Midas Trading 实时波动扫描生成 ${draftCount} 条${style === 'x_short' ? '不超过 110 个汉字的 X 短推' : '币安广场中文市场观察'}。
 优先选择绝对涨跌幅、成交活跃度更值得关注的标的；价格、涨跌幅、24H 高低点和成交额只能引用输入数据。避免与普通行情播报雷同，要说明市场正在关注什么以及后续验证点。
 行情：${JSON.stringify(quotes)}
 输出 {"drafts":[{"symbol":"BTC/USDT","bias":"偏多|偏空|中性","text":"..."}]}。不要自行添加 # 或 $ 标签。`,
-    maxTokens: 700,
-    temperature: 0.35,
-  })
-  const parsed = parseAiJson(ai.content)
+      maxTokens: 700,
+      temperature: 0.35,
+    })
+    parsed = parseAiJson(ai.content)
+    provider = ai.provider
+    model = ai.model
+  } catch (error) {
+    console.error(JSON.stringify({
+      event: 'social.market_ai_fallback',
+      error: error instanceof Error ? error.message : String(error),
+    }))
+  }
   const drafts = Array.isArray(parsed.drafts) ? parsed.drafts.slice(0, draftCount) : []
   const created: CreatedSocialDraft[] = []
   const timestamp = Date.now()
@@ -819,8 +831,8 @@ async function createSocialDrafts(
         autoDrafted ? 1 : 0,
         /https?:\/\//iu.test(text) ? 1 : 0,
         style,
-        ai.provider,
-        ai.model,
+        provider,
+        model,
         timestamp + created.length,
       )
       .first<{ id: number }>()
@@ -833,7 +845,7 @@ async function createSocialDrafts(
       })
     }
   }
-  return { items: created, provider: ai.provider }
+  return { items: created, provider }
 }
 
 async function generateSocialDrafts(

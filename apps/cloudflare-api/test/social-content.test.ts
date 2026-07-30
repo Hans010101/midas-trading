@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   contentTags,
+  draftContentEvent,
   extractSymbols,
   parseSyndicationFeed,
 } from '../src/social-content'
@@ -54,5 +55,36 @@ describe('Binance Square content operations', () => {
       link: 'https://example.com/atom-1',
       occurredAt: Date.parse('2026-07-29T00:00:00Z'),
     }])
+  })
+
+  it('keeps an attributed, tagged event draft available when both AI channels are unavailable', async () => {
+    const env = {
+      AI: {
+        run: async () => {
+          throw new Error('temporary Workers AI outage')
+        },
+      },
+    } as unknown as Env
+    const result = await draftContentEvent(env, {
+      id: 42,
+      source: 'PANews',
+      contentType: 'news',
+      title: 'BTC 现货成交活跃度上升',
+      summary: '公开市场数据更新',
+      sourceUrl: 'https://example.com/news/42',
+      symbols: ['BTC'],
+      score: 80,
+      occurredAt: Date.parse('2026-07-30T01:00:00Z'),
+    })
+
+    expect(result).toMatchObject({
+      provider: 'rules-fallback',
+      model: 'event-template-v1',
+      symbol: 'BTC/USDT',
+      bias: '中性',
+    })
+    expect(result.text).toContain('据 PANews')
+    expect(result.text).toContain('https://example.com/news/42')
+    expect(result.text).toContain('$BTC')
   })
 })

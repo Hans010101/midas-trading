@@ -690,26 +690,41 @@ export async function draftContentEvent(
   env: Env,
   event: SocialContentEvent,
 ): Promise<{ text: string; bias: string; provider: string; model: string; symbol: string }> {
-  const ai = await invokeAi(env, {
-    system:
-      '你是专业的 Web3 快讯编辑。只输出 JSON，不复制原文，不补造事实，不承诺收益，不下确定性涨跌结论。',
-    prompt: `${JSON.stringify({
-      type: event.contentType,
-      source: event.source,
-      title: event.title,
-      facts: event.summary,
-      source_url: event.sourceUrl,
-      symbols: event.symbols,
-      occurred_at: new Date(event.occurredAt).toISOString(),
-    })}
+  let provider = 'rules-fallback'
+  let model = 'event-template-v1'
+  let parsed: Record<string, unknown> = {}
+  try {
+    const ai = await invokeAi(env, {
+      system:
+        '你是专业的 Web3 快讯编辑。只输出 JSON，不复制原文，不补造事实，不承诺收益，不下确定性涨跌结论。',
+      prompt: `${JSON.stringify({
+        type: event.contentType,
+        source: event.source,
+        title: event.title,
+        facts: event.summary,
+        source_url: event.sourceUrl,
+        symbols: event.symbols,
+        occurred_at: new Date(event.occurredAt).toISOString(),
+      })}
 改写为 180-360 个中文字的币安广场帖子：首句给出信息点，然后解释市场为何关注、两个可验证的后续观察点。明确写“据 ${event.source}”并在末尾保留来源链接。不要生成 # 或 $ 标签，标签由系统添加。
 输出 {"text":"...","bias":"偏多|偏空|中性"}。`,
-    maxTokens: 800,
-    temperature: 0.3,
-  })
-  const parsed = parseAiJson(ai.content)
+      maxTokens: 800,
+      temperature: 0.3,
+    })
+    parsed = parseAiJson(ai.content)
+    provider = ai.provider
+    model = ai.model
+  } catch (error) {
+    console.error(JSON.stringify({
+      event: 'social.event_ai_fallback',
+      source: event.source,
+      error: error instanceof Error ? error.message : String(error),
+    }))
+  }
   let text = typeof parsed.text === 'string' ? parsed.text.trim() : ''
-  if (!text) throw new Error('热点内容改写未返回正文')
+  if (!text) {
+    text = `据 ${event.source}，${event.title}。这一信息可能影响相关资产的短期关注度与风险偏好。后续可验证两个方向：一是价格与成交量是否同步放大，二是市场反应能否延续而非快速回落。`
+  }
   if (!text.includes(event.sourceUrl)) text += `\n\n来源：${event.source} ${event.sourceUrl}`
   const tags = contentTags(event.symbols, `${event.source}:${event.id}`)
   text = `${text}\n\n${tags.join(' ')}`
@@ -717,8 +732,8 @@ export async function draftContentEvent(
   return {
     text: [...text].slice(0, 4_000).join(''),
     bias: typeof parsed.bias === 'string' ? parsed.bias.slice(0, 16) : '中性',
-    provider: ai.provider,
-    model: ai.model,
+    provider,
+    model,
     symbol: `${symbol}/USDT`,
   }
 }
