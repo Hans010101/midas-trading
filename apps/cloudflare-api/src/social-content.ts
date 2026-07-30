@@ -686,6 +686,18 @@ export function contentTags(symbols: readonly string[], seed: string): string[] 
   return [...new Set([...unique, ...rotated])].slice(0, count).map((symbol) => `$${symbol}`)
 }
 
+export function cleanSocialPostText(value: string): string {
+  return value
+    .replace(/https?:\/\/\S+/giu, '')
+    .replace(/^来源[:：].*$/gmu, '')
+    .replace(/(?:仅供参考[，,、\s]*)?不构成投资建议[。.]?/gu, '')
+    .replace(/仅供参考[。.]?/gu, '')
+    .replace(/^风险提示[:：].*$/gmu, '')
+    .replace(/[ \t]+\n/gu, '\n')
+    .replace(/\n{3,}/gu, '\n\n')
+    .trim()
+}
+
 function compactText(value: string, maximum = 180): string {
   const text = value.replace(/\s+/gu, ' ').trim()
   return [...text].slice(0, maximum).join('')
@@ -726,7 +738,7 @@ export function eventTemplateFallback(event: SocialContentEvent): string {
     },
   }
   const selected = templates[event.contentType]
-  return `${selected.emoji} ${selected.hook}\n\n据 ${event.source}，${selected.meaning}\n\n我的观察：${selected.watch}\n\n仅供参考，不构成投资建议。`
+  return `${selected.emoji} ${selected.hook}\n\n据 ${event.source}，${selected.meaning}\n\n我的观察：${selected.watch}`
 }
 
 export async function draftContentEvent(
@@ -745,7 +757,6 @@ export async function draftContentEvent(
         source: event.source,
         title: event.title,
         facts: event.summary,
-        source_url: event.sourceUrl,
         symbols: event.symbols,
         occurred_at: new Date(event.occurredAt).toISOString(),
       })}
@@ -753,9 +764,8 @@ export async function draftContentEvent(
 1. 用 1 个贴合事件的 emoji 和一句口语化钩子开场；
 2. 用公开事实和关键数字说明“发生了什么”，不得照抄大段原文；
 3. 单独写“我的观察”，说明为什么值得关注；
-4. 给出两个可验证的后续观察点；
-5. 末尾写“仅供参考，不构成投资建议。”
-明确写“据 ${event.source}”并在末尾保留来源链接。不要生成 # 或 $ 标签，标签由系统添加。
+4. 给出两个可验证的后续观察点。
+明确写“据 ${event.source}”，但不要输出链接、独立来源行、免责声明或风险提示。不要生成 # 或 $ 标签，标签由系统添加。
 输出 {"text":"...","bias":"偏多|偏空|中性"}。`,
       maxTokens: 800,
       temperature: 0.3,
@@ -772,7 +782,7 @@ export async function draftContentEvent(
   }
   let text = typeof parsed.text === 'string' ? parsed.text.trim() : ''
   if (!text) text = eventTemplateFallback(event)
-  if (!text.includes(event.sourceUrl)) text += `\n\n来源：${event.source} ${event.sourceUrl}`
+  text = cleanSocialPostText(text)
   const tags = contentTags(event.symbols, `${event.source}:${event.id}`)
   text = `${text}\n\n${tags.join(' ')}`
   const symbol = event.symbols[0] ?? 'BTC'

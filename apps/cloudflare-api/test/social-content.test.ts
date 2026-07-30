@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  cleanSocialPostText,
   contentTags,
   draftContentEvent,
   eventTemplateFallback,
@@ -85,7 +86,8 @@ describe('Binance Square content operations', () => {
       bias: '中性',
     })
     expect(result.text).toContain('据 PANews')
-    expect(result.text).toContain('https://example.com/news/42')
+    expect(result.text).not.toContain('https://')
+    expect(result.text).not.toContain('不构成投资建议')
     expect(result.text).toContain('$BTC')
   })
 
@@ -104,6 +106,12 @@ describe('Binance Square content operations', () => {
     expect(text).toContain('📰')
     expect(text).toContain('先看事实')
     expect(text).toContain('我的观察')
-    expect(text).toContain('仅供参考，不构成投资建议')
+    expect(text).not.toContain('不构成投资建议')
+  })
+
+  it('removes links and redundant public-post boilerplate', () => {
+    expect(cleanSocialPostText(
+      '正文\n\n仅供参考，不构成投资建议。\n\n来源：PANews https://example.com/news/1',
+    )).toBe('正文')
   })
 })

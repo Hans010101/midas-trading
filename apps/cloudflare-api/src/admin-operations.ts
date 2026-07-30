@@ -12,6 +12,7 @@ import {
 import { fetchCryptoMarketScan } from './crypto-market'
 import { HttpError, jsonResponse, readJsonObject } from './http'
 import {
+  cleanSocialPostText,
   contentTags,
   draftContentEvent,
   ingestSocialContent,
@@ -705,7 +706,7 @@ export function marketTemplateFallback(quote: SocialMarketQuote): {
   return {
     symbol: quote.symbol,
     bias: move > 0 ? '偏多' : move < 0 ? '偏空' : '中性',
-    text: `${hook}\n\n数据摆在这：${facts.join('，')}。\n\n我的判断：${stance}\n\n接下来盯两件事：一是能否带量突破 24H 高点；二是回踩时能否守住日内中枢。没有量能确认，就要防冲高回落。\n\n仅供参考，不构成投资建议。`,
+    text: `${hook}\n\n数据摆在这：${facts.join('，')}。\n\n我的判断：${stance}\n\n接下来盯两件事：一是能否带量突破 24H 高点；二是回踩时能否守住日内中枢。没有量能确认，就要防冲高回落。`,
   }
 }
 
@@ -726,7 +727,7 @@ async function createSocialDrafts(
             (symbol, bias, tweet_text, compliance_passed, compliance_reason,
              status, auto_drafted, has_url, gen_style, provider, model,
              content_type, source_event_id, created_at)
-           VALUES (?, ?, ?, ?, ?, 'draft', ?, 1, 'default', ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, 'draft', ?, 0, 'default', ?, ?, ?, ?, ?)
            RETURNING id`,
         )
         .bind(
@@ -819,8 +820,8 @@ async function createSocialDrafts(
         '你是有判断力、说人话的加密市场内容主编。只输出 JSON，不承诺收益，不给确定性涨跌结论，数据必须原样引用。语言口语化、有节奏、有画面感，但不使用虚假夸张。',
       prompt: `根据以下 Midas Trading 实时波动扫描生成 ${draftCount} 条${style === 'x_short' ? '不超过 110 个汉字的 X 短推' : '币安广场中文市场观察'}。
 优先选择绝对涨跌幅、成交活跃度更值得关注的标的；价格、涨跌幅、24H 高低点和成交额只能引用输入数据。
-每条必须用“抓眼但不过度”的口语化首句开场（最多 1 个 emoji），然后依次写：核心数据、我的判断、接下来盯两件事。结尾写“仅供参考，不构成投资建议。”
-不要像普通行情播报，不要喊单，不要写“必涨/必跌/稳赚”，不要虚构支撑位、阻力位或新闻。
+每条必须用“抓眼但不过度”的口语化首句开场（最多 1 个 emoji），然后依次写：核心数据、我的判断、接下来盯两件事。
+不要像普通行情播报，不要喊单，不要写“必涨/必跌/稳赚”，不要虚构支撑位、阻力位或新闻。不要输出链接、免责声明或风险提示。
 行情：${JSON.stringify(quotes)}
 输出 {"drafts":[{"symbol":"BTC/USDT","bias":"偏多|偏空|中性","text":"..."}]}。不要自行添加 # 或 $ 标签。`,
       maxTokens: 700,
@@ -852,7 +853,7 @@ async function createSocialDrafts(
     const item = value as Record<string, unknown>
     const symbol = typeof item.symbol === 'string' ? item.symbol.slice(0, 32) : ''
     const bias = typeof item.bias === 'string' ? item.bias.slice(0, 16) : '中性'
-    let text = typeof item.text === 'string' ? item.text.trim() : ''
+    let text = typeof item.text === 'string' ? cleanSocialPostText(item.text) : ''
     if (!symbol || !text || !allowedSymbols.has(symbol)) continue
     if (style === 'x_short') text = [...text].slice(0, 110).join('')
     if (style === 'default') {

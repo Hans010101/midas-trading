@@ -24,21 +24,11 @@ function cardLabel(contentType) {
   return ['热点快讯', '📰']
 }
 
-function sourceHost(sourceUrl) {
-  try {
-    return new URL(sourceUrl).hostname.replace(/^www\./u, '')
-  } catch {
-    return ''
-  }
-}
-
 export function newsCardHtml(candidate) {
   const [label, icon] = cardLabel(candidate.content_type)
   const title = compact(candidate.event_title || candidate.tweet_text, 120)
   const summary = compact(candidate.event_summary, 260)
   const source = compact(candidate.event_source || '公开信息', 40)
-  const host = sourceHost(candidate.event_source_url)
-  const symbol = compact(candidate.symbol?.split('/')[0] || 'CRYPTO', 12)
   const time = new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'Asia/Shanghai',
     month: '2-digit',
@@ -73,11 +63,6 @@ export function newsCardHtml(candidate) {
     line-height: 1.25; letter-spacing: -.02em; }
   .summary { padding-left: 26px; border-left: 5px solid #c8102e; color: #4f4b45;
     font-size: 31px; line-height: 1.7; }
-  .footer { position: absolute; left: 56px; right: 56px; bottom: 54px;
-    display: flex; align-items: end; justify-content: space-between; padding-top: 28px;
-    border-top: 1px solid #e8e1d6; }
-  .source { color: #6e685f; font-size: 23px; line-height: 1.55; }
-  .symbol { color: #c8102e; font: 700 34px ui-monospace, SFMono-Regular, monospace; }
   .watermark { position: absolute; right: -20px; bottom: 90px; color: rgba(200,16,46,.035);
     font: 700 170px Georgia, serif; transform: rotate(-12deg); }
 </style>
@@ -93,10 +78,6 @@ export function newsCardHtml(candidate) {
     <div class="eyebrow">${escapeHtml(source)} · ${escapeHtml(time)}</div>
     <h1>${escapeHtml(title)}</h1>
     <div class="summary">${escapeHtml(summary || '市场信息正在更新，重点关注后续数据与价格反应。')}</div>
-    <div class="footer">
-      <div class="source">信息来源：${escapeHtml(source)}${host ? `<br>${escapeHtml(host)}` : ''}<br>原创整理 · 请核验原始来源</div>
-      <div class="symbol">$${escapeHtml(symbol)}</div>
-    </div>
   </main>
 </body>
 </html>`
