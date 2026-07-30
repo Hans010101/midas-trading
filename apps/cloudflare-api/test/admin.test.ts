@@ -672,6 +672,85 @@ describe('independent Cloudflare administrator controls', () => {
       .run()
   })
 
+  it('treats a temporarily unavailable candidate as a skipped slot, not a circuit failure', async () => {
+    const scheduledAt = Date.parse('2026-07-30T10:00:00.000Z')
+    vi.useFakeTimers()
+    vi.setSystemTime(scheduledAt)
+    try {
+      await env.DB.batch([
+        env.DB.prepare('DELETE FROM social_auto_runs'),
+        env.DB.prepare('UPDATE social_drafts SET auto_drafted = 0'),
+        env.DB.prepare("UPDATE social_content_events SET status = 'drafted'"),
+        env.DB
+          .prepare(
+            `UPDATE social_automation_config
+             SET enabled = 1, circuit_open = 0, binance_checked = 1,
+                 failure_count = 0, last_error = NULL, updated_at = ?
+             WHERE id = 1`,
+          )
+          .bind(scheduledAt),
+        env.DB
+          .prepare(
+            `INSERT OR REPLACE INTO market_overview_quotes
+              (symbol, market, name, category, unit, quoted_at, last_point,
+               prev_close, change_point, change_pct, source, updated_at)
+             VALUES ('ETH/USDT', 'crypto', 'ETH', 'crypto', 'price', ?,
+                     3200, 3100, 100, 3.22, 'kraken', ?)`,
+          )
+          .bind(scheduledAt, scheduledAt),
+      ])
+      const recent = await env.DB
+        .prepare(
+          `INSERT INTO social_drafts
+            (symbol, bias, tweet_text, compliance_passed, status, auto_drafted,
+             has_url, gen_style, provider, model, created_at)
+           VALUES ('ETH/USDT', '中性', 'ETH 最近已发布内容', 1, 'published', 0,
+                   0, 'default', 'technical-rules', 'test', ?)
+           RETURNING id`,
+        )
+        .bind(scheduledAt)
+        .first<{ id: number }>()
+      await env.DB
+        .prepare(
+          `INSERT INTO social_dispatches
+            (draft_id, platform, source, status, created_at, updated_at)
+           VALUES (?, 'binance_square', 'auto', 'success', ?, ?)`,
+        )
+        .bind(recent!.id, scheduledAt, scheduledAt)
+        .run()
+      vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })))
+
+      await runAdminOperationsCron(env, scheduledAt)
+
+      await expect(
+        env.DB
+          .prepare(
+            `SELECT status, error FROM social_auto_runs
+             WHERE slot = '2026-07-30T18:00'`,
+          )
+          .first(),
+      ).resolves.toMatchObject({
+        status: 'skipped',
+        error: '当前暂无符合发布间隔的合规草稿，等待下一时段',
+      })
+      await expect(
+        env.DB
+          .prepare(
+            `SELECT enabled, circuit_open, failure_count, last_error
+             FROM social_automation_config WHERE id = 1`,
+          )
+          .first(),
+      ).resolves.toMatchObject({
+        enabled: 1,
+        circuit_open: 0,
+        failure_count: 0,
+        last_error: null,
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('opens the automatic publishing circuit after three consecutive failures', async () => {
     const firstSlot = Date.parse('2026-07-30T07:00:00.000Z')
     await env.DB.batch([

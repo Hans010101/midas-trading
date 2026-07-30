@@ -767,7 +767,7 @@ async function createSocialDrafts(
        WHERE sd.platform = 'binance_square' AND sd.status = 'success'
          AND sd.updated_at >= ?`,
     )
-    .bind(Date.now() - 2 * 60 * 60_000)
+    .bind(Date.now() - SOCIAL_SYMBOL_COOLDOWN_MS)
     .all<{ symbol: string }>()
   const recentSymbols = new Set(recentlyPublished.results.map((item) => item.symbol))
   let quotes: SocialMarketQuote[] = []
@@ -933,6 +933,7 @@ type ExternalEnv = Readonly<{
 
 const GITHUB_PUBLISH_ENDPOINT =
   'https://api.github.com/repos/Hans010101/midas-trading/actions/workflows/binance-square.yml/dispatches'
+const SOCIAL_SYMBOL_COOLDOWN_MS = 45 * 60_000
 
 async function wakeGithubPublisher(env: Env): Promise<void> {
   const token = (env as Env & ExternalEnv).GITHUB_PUBLISH_TOKEN?.trim()
@@ -1480,7 +1481,7 @@ async function autoCandidate(env: Env, timestamp: number): Promise<CreatedSocial
        ORDER BY d.created_at DESC
        LIMIT 1`,
     )
-    .bind(timestamp - 4 * 60 * 60_000, timestamp - 2 * 60 * 60_000)
+    .bind(timestamp - 4 * 60 * 60_000, timestamp - SOCIAL_SYMBOL_COOLDOWN_MS)
     .first<{
       id: number
       symbol: string
@@ -1577,7 +1578,13 @@ async function runSocialAutomation(env: Env, timestamp: number): Promise<void> {
       await createSocialDrafts(env, 'default', true, preferredEventTypes)
       candidate = await autoCandidate(env, Date.now())
     }
-    if (!candidate) throw new Error('未生成可发布且通过门禁的币安广场草稿')
+    if (!candidate) {
+      await updateAutoRun(env, slot, {
+        status: 'skipped',
+        error: '当前暂无符合发布间隔的合规草稿，等待下一时段',
+      })
+      return
+    }
     if (
       (env as Env & ExternalEnv).BINANCE_SQUARE_PUBLISH_MODE === 'github'
     ) {

@@ -9,6 +9,7 @@ const IMAGE_PRESIGN_ENDPOINT =
   'https://www.binance.com/bapi/composite/v2/public/pgc/openApi/image/presignedUrl'
 const IMAGE_STATUS_ENDPOINT =
   'https://www.binance.com/bapi/composite/v2/public/pgc/openApi/image/imageStatus'
+const SYMBOL_COOLDOWN_MS = 45 * 60_000
 
 function headers(apiKey) {
   return {
@@ -204,7 +205,7 @@ async function main() {
          WHERE recent_d.symbol=d.symbol
            AND recent_sd.platform='binance_square'
            AND recent_sd.status='success'
-           AND recent_sd.updated_at>=${now - 2 * 60 * 60_000}
+           AND recent_sd.updated_at>=${now - SYMBOL_COOLDOWN_MS}
        )
      ORDER BY d.created_at
      LIMIT 1`,
