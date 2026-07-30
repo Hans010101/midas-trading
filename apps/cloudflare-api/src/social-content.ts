@@ -686,6 +686,49 @@ export function contentTags(symbols: readonly string[], seed: string): string[] 
   return [...new Set([...unique, ...rotated])].slice(0, count).map((symbol) => `$${symbol}`)
 }
 
+function compactText(value: string, maximum = 180): string {
+  const text = value.replace(/\s+/gu, ' ').trim()
+  return [...text].slice(0, maximum).join('')
+}
+
+export function eventTemplateFallback(event: SocialContentEvent): string {
+  const subject = compactText(event.title, 90).replace(/[。！？!?]+$/gu, '')
+  const fact = compactText(event.summary, 150)
+  const templates: Record<SocialContentType, {
+    emoji: string
+    hook: string
+    meaning: string
+    watch: string
+  }> = {
+    news: {
+      emoji: '📰',
+      hook: `${subject}，这条消息值得留意。`,
+      meaning: fact
+        ? `先看事实：${fact}`
+        : '市场正在重新评估这件事对资金偏好和相关资产定价的影响。',
+      watch: '接下来盯两点：价格和成交量是否同步响应；热度能否延续，而不是一波脉冲后迅速降温。',
+    },
+    whale: {
+      emoji: '🐋',
+      hook: `${subject}，大额资金有新动作。`,
+      meaning: fact
+        ? `链上信号显示：${fact}`
+        : '单笔转账不等于买卖方向，但资金去向和后续分拆动作值得继续跟踪。',
+      watch: '接下来盯两点：资金最终流向交易所还是托管地址；相关币种的成交量与价格是否出现同步异动。',
+    },
+    unlock: {
+      emoji: '⏳',
+      hook: `${subject}，供应端的时间表要记一下。`,
+      meaning: fact
+        ? `公开信息显示：${fact}`
+        : '解锁本身不等于价格一定下跌，真正重要的是规模、流通占比和承接强度。',
+      watch: '接下来盯两点：解锁前后的成交量变化；新增供应是否被市场顺利吸收。',
+    },
+  }
+  const selected = templates[event.contentType]
+  return `${selected.emoji} ${selected.hook}\n\n据 ${event.source}，${selected.meaning}\n\n我的观察：${selected.watch}\n\n仅供参考，不构成投资建议。`
+}
+
 export async function draftContentEvent(
   env: Env,
   event: SocialContentEvent,
@@ -696,7 +739,7 @@ export async function draftContentEvent(
   try {
     const ai = await invokeAi(env, {
       system:
-        '你是专业的 Web3 快讯编辑。只输出 JSON，不复制原文，不补造事实，不承诺收益，不下确定性涨跌结论。',
+        '你是有判断力、说人话的 Web3 内容主编。只输出 JSON；不复制原文，不补造事实，不承诺收益，不下确定性涨跌结论。语言口语化、有节奏、有信息密度，不使用夸张标题党。',
       prompt: `${JSON.stringify({
         type: event.contentType,
         source: event.source,
@@ -706,7 +749,13 @@ export async function draftContentEvent(
         symbols: event.symbols,
         occurred_at: new Date(event.occurredAt).toISOString(),
       })}
-改写为 180-360 个中文字的币安广场帖子：首句给出信息点，然后解释市场为何关注、两个可验证的后续观察点。明确写“据 ${event.source}”并在末尾保留来源链接。不要生成 # 或 $ 标签，标签由系统添加。
+改写为 180-360 个中文字的币安广场帖子，结构必须是：
+1. 用 1 个贴合事件的 emoji 和一句口语化钩子开场；
+2. 用公开事实和关键数字说明“发生了什么”，不得照抄大段原文；
+3. 单独写“我的观察”，说明为什么值得关注；
+4. 给出两个可验证的后续观察点；
+5. 末尾写“仅供参考，不构成投资建议。”
+明确写“据 ${event.source}”并在末尾保留来源链接。不要生成 # 或 $ 标签，标签由系统添加。
 输出 {"text":"...","bias":"偏多|偏空|中性"}。`,
       maxTokens: 800,
       temperature: 0.3,
@@ -722,9 +771,7 @@ export async function draftContentEvent(
     }))
   }
   let text = typeof parsed.text === 'string' ? parsed.text.trim() : ''
-  if (!text) {
-    text = `据 ${event.source}，${event.title}。这一信息可能影响相关资产的短期关注度与风险偏好。后续可验证两个方向：一是价格与成交量是否同步放大，二是市场反应能否延续而非快速回落。`
-  }
+  if (!text) text = eventTemplateFallback(event)
   if (!text.includes(event.sourceUrl)) text += `\n\n来源：${event.source} ${event.sourceUrl}`
   const tags = contentTags(event.symbols, `${event.source}:${event.id}`)
   text = `${text}\n\n${tags.join(' ')}`

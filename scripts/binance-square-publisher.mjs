@@ -1,8 +1,22 @@
 import { execFileSync } from 'node:child_process'
 
+import { createSquareMedia } from './lib/binance-square-media.mjs'
+
 const DATABASE = 'midas-trading-db'
 const CONTENT_ENDPOINT =
   'https://www.binance.com/bapi/composite/v1/public/pgc/openApi/content/add'
+const IMAGE_PRESIGN_ENDPOINT =
+  'https://www.binance.com/bapi/composite/v2/public/pgc/openApi/image/presignedUrl'
+const IMAGE_STATUS_ENDPOINT =
+  'https://www.binance.com/bapi/composite/v2/public/pgc/openApi/image/imageStatus'
+
+function headers(apiKey) {
+  return {
+    'X-Square-OpenAPI-Key': apiKey,
+    'Content-Type': 'application/json',
+    clienttype: 'binanceSkill',
+  }
+}
 
 function quote(value) {
   if (value === null || value === undefined) return 'NULL'
@@ -59,6 +73,44 @@ function failDispatch(dispatchId, message) {
   )
 }
 
+async function uploadImage(apiKey, bytes, kind) {
+  const presignResponse = await fetch(IMAGE_PRESIGN_ENDPOINT, {
+    method: 'POST',
+    headers: headers(apiKey),
+    body: JSON.stringify({ imageName: `midas-${kind}-${Date.now()}.png` }),
+    signal: AbortSignal.timeout(30_000),
+  })
+  const presign = await presignResponse.json()
+  const data = presign && typeof presign.data === 'object' ? presign.data : {}
+  const url = typeof data.presignedUrl === 'string' ? data.presignedUrl : ''
+  const ticket = typeof data.fileTicket === 'string' ? data.fileTicket : ''
+  if (!presignResponse.ok || !url || !ticket) {
+    throw new Error(`图片预签名失败 [${presign.code ?? presignResponse.status}]`)
+  }
+  const put = await fetch(url, {
+    method: 'PUT',
+    headers: { 'content-type': 'image/png' },
+    body: bytes,
+    signal: AbortSignal.timeout(30_000),
+  })
+  if (!put.ok) throw new Error(`图片上传 HTTP ${put.status}`)
+  for (let attempt = 0; attempt < 15; attempt += 1) {
+    const statusResponse = await fetch(IMAGE_STATUS_ENDPOINT, {
+      method: 'POST',
+      headers: headers(apiKey),
+      body: JSON.stringify({ fileTicket: ticket }),
+      signal: AbortSignal.timeout(30_000),
+    })
+    const status = await statusResponse.json()
+    const statusData = status && typeof status.data === 'object' ? status.data : {}
+    if (statusData.status === 1 && typeof statusData.imageUrl === 'string') {
+      return statusData.imageUrl
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2_000))
+  }
+  throw new Error('图片处理超时')
+}
+
 async function main() {
   const apiKey = process.env.BINANCE_SQUARE_API_KEY?.trim()
   if (!apiKey) throw new Error('BINANCE_SQUARE_API_KEY 未配置')
@@ -92,8 +144,12 @@ async function main() {
 
   const now = Date.now()
   const candidate = query(
-    `SELECT d.id,d.symbol,d.tweet_text,sd.id AS dispatch_id
+    `SELECT d.id,d.symbol,d.tweet_text,d.content_type,d.image_key,
+            e.source AS event_source,e.title AS event_title,
+            e.summary AS event_summary,e.source_url AS event_source_url,
+            sd.id AS dispatch_id
      FROM social_drafts d
+     LEFT JOIN social_content_events e ON e.id=d.source_event_id
      LEFT JOIN social_dispatches sd
        ON sd.draft_id=d.id AND sd.platform='binance_square'
      WHERE d.auto_drafted=1 AND d.gen_style='default'
@@ -132,18 +188,35 @@ async function main() {
   )[0]
   if (!dispatch) throw new Error('发布台账认领失败')
 
+  let imageUrl = typeof candidate.image_key === 'string' &&
+    candidate.image_key.startsWith('https://')
+    ? candidate.image_key
+    : null
+  if (!imageUrl) {
+    try {
+      const media = await createSquareMedia(candidate)
+      imageUrl = await uploadImage(apiKey, media.bytes, media.kind)
+      query(
+        `UPDATE social_drafts SET image_key=${quote(imageUrl)}
+         WHERE id=${candidate.id};`,
+      )
+      console.log(`配图已就绪：${media.kind}`)
+    } catch (error) {
+      console.error(`配图生成/上传失败，降级为纯文字：${
+        error instanceof Error ? error.message : String(error)
+      }`)
+    }
+  }
+
   let response
   try {
     response = await fetch(CONTENT_ENDPOINT, {
       method: 'POST',
-      headers: {
-        'X-Square-OpenAPI-Key': apiKey,
-        'Content-Type': 'application/json',
-        clienttype: 'binanceSkill',
-      },
+      headers: headers(apiKey),
       body: JSON.stringify({
         contentType: 1,
         bodyTextOnly: [...candidate.tweet_text.trim()].slice(0, 4_000).join(''),
+        ...(imageUrl ? { imageList: [imageUrl] } : {}),
       }),
       signal: AbortSignal.timeout(30_000),
     })

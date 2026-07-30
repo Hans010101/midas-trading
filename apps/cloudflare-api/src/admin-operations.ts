@@ -651,6 +651,64 @@ function compliant(text: string): { passed: boolean; reason: string | null } {
   return { passed: true, reason: null }
 }
 
+type SocialMarketQuote = Readonly<{
+  symbol: string
+  name: string
+  last_point: number
+  change_pct: number
+  high_24h?: number
+  low_24h?: number
+  quote_volume_24h?: number
+  quoted_at?: string
+}>
+
+function compactMarketNumber(value: number): string {
+  return new Intl.NumberFormat('zh-CN', {
+    maximumFractionDigits: value >= 100 ? 2 : value >= 1 ? 4 : 8,
+  }).format(value)
+}
+
+function compactMarketVolume(value: number): string {
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B USDT`
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M USDT`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K USDT`
+  return `${value.toFixed(0)} USDT`
+}
+
+export function marketTemplateFallback(quote: SocialMarketQuote): {
+  symbol: string
+  bias: string
+  text: string
+} {
+  const move = quote.change_pct
+  const change = `${move >= 0 ? '+' : ''}${move.toFixed(2)}%`
+  const base = quote.symbol.split('/')[0] ?? quote.name
+  const hook = move >= 8
+    ? `🔥 $${base} 今天是真热闹：24 小时已经冲了 ${change}。`
+    : move <= -8
+      ? `⚠️ $${base} 这波回撤不小：24 小时跌了 ${Math.abs(move).toFixed(2)}%。`
+      : move >= 0
+        ? `👀 $${base} 正在悄悄走强：24 小时 ${change}。`
+        : `👀 $${base} 短线有点承压：24 小时 ${change}。`
+  const facts = [`最新价 ${compactMarketNumber(quote.last_point)}`]
+  if (Number.isFinite(quote.high_24h) && Number.isFinite(quote.low_24h)) {
+    facts.push(
+      `日内区间 ${compactMarketNumber(quote.low_24h!)}–${compactMarketNumber(quote.high_24h!)}`,
+    )
+  }
+  if (Number.isFinite(quote.quote_volume_24h) && quote.quote_volume_24h! > 0) {
+    facts.push(`24H 成交额 ${compactMarketVolume(quote.quote_volume_24h!)}`)
+  }
+  const stance = Math.abs(move) >= 8
+    ? '波动已经明显放大，追涨杀跌都容易被来回扫，先看量价能不能继续配合。'
+    : '现在更像是方向选择前的试探，单看涨跌幅还不够，量能确认更重要。'
+  return {
+    symbol: quote.symbol,
+    bias: move > 0 ? '偏多' : move < 0 ? '偏空' : '中性',
+    text: `${hook}\n\n数据摆在这：${facts.join('，')}。\n\n我的判断：${stance}\n\n接下来盯两件事：一是能否带量突破 24H 高点；二是回踩时能否守住日内中枢。没有量能确认，就要防冲高回落。\n\n仅供参考，不构成投资建议。`,
+  }
+}
+
 async function createSocialDrafts(
   env: Env,
   style: 'default' | 'x_short',
@@ -710,16 +768,7 @@ async function createSocialDrafts(
     .bind(Date.now() - 2 * 60 * 60_000)
     .all<{ symbol: string }>()
   const recentSymbols = new Set(recentlyPublished.results.map((item) => item.symbol))
-  let quotes: Array<{
-    symbol: string
-    name: string
-    last_point: number
-    change_pct: number
-    high_24h?: number
-    low_24h?: number
-    quote_volume_24h?: number
-    quoted_at?: string
-  }> = []
+  let quotes: SocialMarketQuote[] = []
   try {
     const scan = await fetchCryptoMarketScan(60)
     quotes = scan
@@ -767,9 +816,11 @@ async function createSocialDrafts(
   try {
     const ai = await invokeAi(env, {
       system:
-        '你是专业市场内容编辑。只输出 JSON，不承诺收益，不给确定性涨跌结论，数据必须原样引用。',
+        '你是有判断力、说人话的加密市场内容主编。只输出 JSON，不承诺收益，不给确定性涨跌结论，数据必须原样引用。语言口语化、有节奏、有画面感，但不使用虚假夸张。',
       prompt: `根据以下 Midas Trading 实时波动扫描生成 ${draftCount} 条${style === 'x_short' ? '不超过 110 个汉字的 X 短推' : '币安广场中文市场观察'}。
-优先选择绝对涨跌幅、成交活跃度更值得关注的标的；价格、涨跌幅、24H 高低点和成交额只能引用输入数据。避免与普通行情播报雷同，要说明市场正在关注什么以及后续验证点。
+优先选择绝对涨跌幅、成交活跃度更值得关注的标的；价格、涨跌幅、24H 高低点和成交额只能引用输入数据。
+每条必须用“抓眼但不过度”的口语化首句开场（最多 1 个 emoji），然后依次写：核心数据、我的判断、接下来盯两件事。结尾写“仅供参考，不构成投资建议。”
+不要像普通行情播报，不要喊单，不要写“必涨/必跌/稳赚”，不要虚构支撑位、阻力位或新闻。
 行情：${JSON.stringify(quotes)}
 输出 {"drafts":[{"symbol":"BTC/USDT","bias":"偏多|偏空|中性","text":"..."}]}。不要自行添加 # 或 $ 标签。`,
       maxTokens: 700,
@@ -795,11 +846,7 @@ async function createSocialDrafts(
   })
   const values = validDrafts.length > 0
     ? validDrafts
-    : quotes.slice(0, draftCount).map((quote) => ({
-        symbol: quote.symbol,
-        bias: quote.change_pct > 0 ? '偏多' : quote.change_pct < 0 ? '偏空' : '中性',
-        text: `${quote.name}（${quote.symbol}）24 小时涨跌幅 ${quote.change_pct >= 0 ? '+' : ''}${quote.change_pct.toFixed(2)}%，最新价 ${quote.last_point}。当前波动进入市场前列，后续重点观察成交量能否延续，以及价格是否确认突破或重新回到日内区间。`,
-      }))
+    : quotes.slice(0, draftCount).map(marketTemplateFallback)
   for (const value of values) {
     if (typeof value !== 'object' || value === null) continue
     const item = value as Record<string, unknown>

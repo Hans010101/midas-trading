@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   contentTags,
   draftContentEvent,
+  eventTemplateFallback,
   extractSymbols,
   parseSyndicationFeed,
 } from '../src/social-content'
@@ -86,5 +87,23 @@ describe('Binance Square content operations', () => {
     expect(result.text).toContain('据 PANews')
     expect(result.text).toContain('https://example.com/news/42')
     expect(result.text).toContain('$BTC')
+  })
+
+  it('keeps the deterministic news fallback conversational and evidence-led', () => {
+    const text = eventTemplateFallback({
+      id: 7,
+      source: 'PANews',
+      contentType: 'news',
+      title: 'BTC 现货成交活跃度上升',
+      summary: '公开市场数据显示，成交量较前一时段放大。',
+      sourceUrl: 'https://example.com/news/7',
+      symbols: ['BTC'],
+      score: 80,
+      occurredAt: Date.parse('2026-07-30T01:00:00Z'),
+    })
+    expect(text).toContain('📰')
+    expect(text).toContain('先看事实')
+    expect(text).toContain('我的观察')
+    expect(text).toContain('仅供参考，不构成投资建议')
   })
 })
