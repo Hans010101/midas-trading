@@ -24,6 +24,19 @@ function quote(value) {
   return `'${String(value).replaceAll("'", "''")}'`
 }
 
+function limitCoinPairTags(text, limit = 3) {
+  const seen = new Set()
+  return text.replace(/\$[A-Z][A-Z0-9]{1,14}\b/gi, (tag) => {
+    const normalized = tag.toUpperCase()
+    if (seen.has(normalized)) return tag
+    if (seen.size < limit) {
+      seen.add(normalized)
+      return tag
+    }
+    return tag.slice(1)
+  })
+}
+
 function query(sql) {
   const output = execFileSync(
     'pnpm',
@@ -256,12 +269,13 @@ async function main() {
 
   let response
   try {
+    const publishText = limitCoinPairTags(candidate.tweet_text.trim())
     response = await fetch(CONTENT_ENDPOINT, {
       method: 'POST',
       headers: headers(apiKey),
       body: JSON.stringify({
         contentType: 1,
-        bodyTextOnly: [...candidate.tweet_text.trim()].slice(0, 4_000).join(''),
+        bodyTextOnly: [...publishText].slice(0, 4_000).join(''),
         ...(imageUrl ? { imageList: [imageUrl] } : {}),
       }),
       signal: AbortSignal.timeout(30_000),
