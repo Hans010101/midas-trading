@@ -73,6 +73,15 @@ function failDispatch(dispatchId, message) {
   )
 }
 
+function ensureBrowserRuntime() {
+  if (process.env.CI !== 'true') return
+  execFileSync(
+    'pnpm',
+    ['exec', 'playwright', 'install', '--with-deps', 'chromium'],
+    { stdio: 'inherit' },
+  )
+}
+
 async function uploadImage(apiKey, bytes, kind) {
   const presignResponse = await fetch(IMAGE_PRESIGN_ENDPOINT, {
     method: 'POST',
@@ -194,6 +203,7 @@ async function main() {
     : null
   if (!imageUrl) {
     try {
+      ensureBrowserRuntime()
       const media = await createSquareMedia(candidate)
       imageUrl = await uploadImage(apiKey, media.bytes, media.kind)
       query(

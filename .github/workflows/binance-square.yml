@@ -39,8 +39,5 @@ jobs:
       - name: 安装锁定依赖
         run: pnpm install --frozen-lockfile
 
-      - name: 安装配图渲染浏览器
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: 发布一条合规草稿
+      - name: 检查队列并发布一条合规草稿
         run: node scripts/binance-square-publisher.mjs
