@@ -471,14 +471,13 @@ describe('independent Cloudflare administrator controls', () => {
       .bind(timestamp)
       .first<{ id: number }>()
     expect(draft).not.toBeNull()
-    const upstream = vi.fn(async () => {
-      throw new Error('Cloudflare must not publish directly in GitHub mode')
-    })
+    const upstream = vi.fn(async () => new Response(null, { status: 204 }))
     vi.stubGlobal('fetch', upstream)
 
     const githubEnv = {
       ...env,
       BINANCE_SQUARE_PUBLISH_MODE: 'github',
+      GITHUB_PUBLISH_TOKEN: 'github-test-token',
     } as unknown as Env
     const response = await handleAdminOperationsRoute(
       request(`/api/v1/admin/x-tweets/${draft!.id}/publish`, {
@@ -496,7 +495,17 @@ describe('independent Cloudflare administrator controls', () => {
       message: '已进入币安广场独立发布队列',
       url: null,
     })
-    expect(upstream).not.toHaveBeenCalled()
+    expect(upstream).toHaveBeenCalledOnce()
+    expect(upstream).toHaveBeenCalledWith(
+      'https://api.github.com/repos/Hans010101/midas-trading/actions/workflows/binance-square.yml/dispatches',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          authorization: 'Bearer github-test-token',
+        }),
+        body: JSON.stringify({ ref: 'main' }),
+      }),
+    )
     await expect(
       env.DB
         .prepare(
@@ -511,6 +520,99 @@ describe('independent Cloudflare administrator controls', () => {
       status: 'pending',
       source: 'manual',
       draft_status: 'draft',
+    })
+  })
+
+  it('records a failed dispatch when the GitHub publisher cannot be woken', async () => {
+    const timestamp = Date.now()
+    const draft = await env.DB
+      .prepare(
+        `INSERT INTO social_drafts
+          (symbol, bias, tweet_text, compliance_passed, status, auto_drafted,
+           has_url, gen_style, provider, model, created_at)
+         VALUES ('BNB/USDT', '中性', 'BNB 独立发布器失败联调内容', 1, 'draft', 0,
+                 0, 'default', 'technical-rules', 'test', ?)
+         RETURNING id`,
+      )
+      .bind(timestamp)
+      .first<{ id: number }>()
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('upstream unavailable', {
+      status: 503,
+    })))
+    const githubEnv = {
+      ...env,
+      BINANCE_SQUARE_PUBLISH_MODE: 'github',
+      GITHUB_PUBLISH_TOKEN: 'github-test-token',
+    } as unknown as Env
+
+    const response = await handleAdminOperationsRoute(
+      request(`/api/v1/admin/x-tweets/${draft!.id}/publish`, {
+        method: 'POST',
+        token: owner.token,
+        body: { platform: 'binance_square' },
+      }),
+      githubEnv,
+      crypto.randomUUID(),
+    )
+
+    expect(response?.status).toBe(200)
+    await expect(response!.json()).resolves.toMatchObject({
+      platform: 'binance_square',
+      status: 'failed',
+      message: expect.stringContaining('HTTP 503'),
+    })
+    await expect(
+      env.DB
+        .prepare(
+          `SELECT status, error FROM social_dispatches
+           WHERE draft_id = ? AND platform = 'binance_square'`,
+        )
+        .bind(draft!.id)
+        .first(),
+    ).resolves.toMatchObject({
+      status: 'failed',
+      error: expect.stringContaining('HTTP 503'),
+    })
+  })
+
+  it('releases a Binance Square dispatch after ten minutes without a result', async () => {
+    const timestamp = Date.now()
+    const draft = await env.DB
+      .prepare(
+        `INSERT INTO social_drafts
+          (symbol, bias, tweet_text, compliance_passed, status, auto_drafted,
+           has_url, gen_style, provider, model, created_at)
+         VALUES ('SOL/USDT', '中性', 'SOL 超时发布联调内容', 1, 'draft', 0,
+                 0, 'default', 'technical-rules', 'test', ?)
+         RETURNING id`,
+      )
+      .bind(timestamp)
+      .first<{ id: number }>()
+    await env.DB
+      .prepare(
+        `INSERT INTO social_dispatches
+          (draft_id, platform, source, status, created_at, updated_at)
+         VALUES (?, 'binance_square', 'manual', 'pending', ?, ?)`,
+      )
+      .bind(draft!.id, timestamp - 11 * 60_000, timestamp - 11 * 60_000)
+      .run()
+
+    const response = await exports.default.fetch(
+      request('/api/v1/admin/x-tweets', { token: owner.token }),
+    )
+
+    expect(response.status).toBe(200)
+    await expect(
+      env.DB
+        .prepare(
+          `SELECT status, error FROM social_dispatches
+           WHERE draft_id = ? AND platform = 'binance_square'`,
+        )
+        .bind(draft!.id)
+        .first(),
+    ).resolves.toMatchObject({
+      status: 'failed',
+      error: '独立发布器等待超过 10 分钟，已自动释放，可重新发布',
     })
   })
 

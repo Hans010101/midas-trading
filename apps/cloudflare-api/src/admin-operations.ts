@@ -579,6 +579,7 @@ async function listSocialDrafts(
   requestId: string,
 ): Promise<Response> {
   await requireAdmin(request, env)
+  await recoverStaleSocialDispatches(env)
   const since = Date.now() - 7 * 24 * 60 * 60 * 1_000
   const [drafts, dispatches] = await Promise.all([
     env.DB
@@ -927,7 +928,49 @@ async function generateSocialDrafts(
 type ExternalEnv = Readonly<{
   X_API_KEY?: string
   BINANCE_SQUARE_PUBLISH_MODE?: string
+  GITHUB_PUBLISH_TOKEN?: string
 }>
+
+const GITHUB_PUBLISH_ENDPOINT =
+  'https://api.github.com/repos/Hans010101/midas-trading/actions/workflows/binance-square.yml/dispatches'
+
+async function wakeGithubPublisher(env: Env): Promise<void> {
+  const token = (env as Env & ExternalEnv).GITHUB_PUBLISH_TOKEN?.trim()
+  if (!token) throw new Error('GitHub 独立发布器唤醒凭证未配置')
+  const response = await fetch(GITHUB_PUBLISH_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      accept: 'application/vnd.github+json',
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+      'user-agent': 'midas-trading-cloudflare',
+      'x-github-api-version': '2022-11-28',
+    },
+    body: JSON.stringify({ ref: 'main' }),
+    signal: AbortSignal.timeout(15_000),
+  })
+  if (response.status !== 204) {
+    const detail = (await response.text()).slice(0, 300)
+    throw new Error(`GitHub 独立发布器唤醒失败（HTTP ${response.status}）${detail ? `：${detail}` : ''}`)
+  }
+}
+
+async function recoverStaleSocialDispatches(
+  env: Env,
+  timestamp = Date.now(),
+): Promise<void> {
+  await env.DB
+    .prepare(
+      `UPDATE social_dispatches
+       SET status = 'failed',
+           error = '独立发布器等待超过 10 分钟，已自动释放，可重新发布',
+           updated_at = ?
+       WHERE platform = 'binance_square' AND status = 'pending'
+         AND updated_at < ?`,
+    )
+    .bind(timestamp, timestamp - 10 * 60_000)
+    .run()
+}
 
 function adapters(env: Env): { binance: boolean; x: boolean } {
   const external = env as Env & ExternalEnv
@@ -1305,6 +1348,24 @@ async function dispatchSocialDraft(
       .prepare("UPDATE social_drafts SET status = 'draft' WHERE id = ?")
       .bind(draftId)
       .run()
+    try {
+      await wakeGithubPublisher(env)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      await env.DB
+        .prepare(
+          `UPDATE social_dispatches
+           SET status = 'failed', error = ?, updated_at = ? WHERE id = ?`,
+        )
+        .bind(message.slice(0, 500), Date.now(), dispatch.id)
+        .run()
+      return {
+        dispatchId: dispatch.id,
+        status: 'failed',
+        url: null,
+        error: message,
+      }
+    }
     return {
       dispatchId: dispatch.id,
       status: 'pending',
@@ -1520,11 +1581,12 @@ async function runSocialAutomation(env: Env, timestamp: number): Promise<void> {
     if (
       (env as Env & ExternalEnv).BINANCE_SQUARE_PUBLISH_MODE === 'github'
     ) {
+      await wakeGithubPublisher(env)
       await Promise.all([
         updateAutoRun(env, slot, {
           status: 'skipped',
           draftId: candidate.id,
-          error: '等待独立币安广场发布执行器',
+          error: '已唤醒独立币安广场发布执行器',
         }),
         env.DB
           .prepare(
@@ -1580,6 +1642,7 @@ export async function runAdminOperationsCron(
   env: Env,
   timestamp = Date.now(),
 ): Promise<void> {
+  await recoverStaleSocialDispatches(env, timestamp)
   const minute = cstMinute(timestamp)
   if (env.ENVIRONMENT !== 'test' && minute % 15 === 5) {
     await ingestSocialContent(env, timestamp)
