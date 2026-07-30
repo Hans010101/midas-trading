@@ -111,7 +111,7 @@ describe('Binance Square content operations', () => {
 
   it('removes links and redundant public-post boilerplate', () => {
     expect(cleanSocialPostText(
-      '正文\n\n仅供参考，不构成投资建议。\n\n来源：PANews https://example.com/news/1',
-    )).toBe('正文')
+      '**核心数据：** 正文\n\n仅供参考，不构成投资建议。\n\n来源：PANews https://example.com/news/1',
+    )).toBe('核心数据： 正文')
   })
 })

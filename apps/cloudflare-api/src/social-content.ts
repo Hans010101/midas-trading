@@ -688,6 +688,7 @@ export function contentTags(symbols: readonly string[], seed: string): string[] 
 
 export function cleanSocialPostText(value: string): string {
   return value
+    .replace(/\*{2,}/gu, '')
     .replace(/https?:\/\/\S+/giu, '')
     .replace(/^来源[:：].*$/gmu, '')
     .replace(/(?:仅供参考[，,、\s]*)?不构成投资建议[。.]?/gu, '')
@@ -765,7 +766,7 @@ export async function draftContentEvent(
 2. 用公开事实和关键数字说明“发生了什么”，不得照抄大段原文；
 3. 单独写“我的观察”，说明为什么值得关注；
 4. 给出两个可验证的后续观察点。
-明确写“据 ${event.source}”，但不要输出链接、独立来源行、免责声明或风险提示。不要生成 # 或 $ 标签，标签由系统添加。
+明确写“据 ${event.source}”，但不要输出链接、独立来源行、免责声明或风险提示。不要使用 Markdown 格式或 ** 加粗标记。不要生成 # 或 $ 标签，标签由系统添加。
 输出 {"text":"...","bias":"偏多|偏空|中性"}。`,
       maxTokens: 800,
       temperature: 0.3,

@@ -38,6 +38,10 @@ function limitCoinPairTags(text, limit = 3) {
   })
 }
 
+function cleanPublishText(text) {
+  return limitCoinPairTags(text).replace(/\*{2,}/gu, '')
+}
+
 function query(sql) {
   const output = execFileSync(
     'pnpm',
@@ -270,7 +274,7 @@ async function main() {
 
   let response
   try {
-    const publishText = limitCoinPairTags(candidate.tweet_text.trim())
+    const publishText = cleanPublishText(candidate.tweet_text.trim())
     response = await fetch(CONTENT_ENDPOINT, {
       method: 'POST',
       headers: headers(apiKey),
