@@ -1341,7 +1341,7 @@ function socialSlot(timestamp: number): string {
 export function isAutoPublishSlot(minute: number): boolean {
   const firstSlot = 8 * 60
   const lastMinute = 22 * 60
-  return minute >= firstSlot && minute <= lastMinute && (minute - firstSlot) % 20 === 0
+  return minute >= firstSlot && minute <= lastMinute && (minute - firstSlot) % 15 === 0
 }
 
 async function updateAutoRun(

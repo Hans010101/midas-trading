@@ -2,7 +2,7 @@ name: Binance Square · 独立内容发布
 
 on:
   schedule:
-    - cron: '*/20 0-13 * * *'
+    - cron: '*/15 0-13 * * *'
     - cron: '0 14 * * *'
   workflow_dispatch:
 
