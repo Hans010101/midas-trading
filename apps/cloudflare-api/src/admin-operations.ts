@@ -1425,7 +1425,15 @@ function socialSlot(timestamp: number): string {
 export function isAutoPublishSlot(minute: number): boolean {
   const firstSlot = 8 * 60
   const lastMinute = 22 * 60
-  return minute >= firstSlot && minute <= lastMinute && (minute - firstSlot) % 15 === 0
+  return minute >= firstSlot && minute <= lastMinute && (minute - firstSlot) % 10 === 0
+}
+
+export function isAutoPublishTimestamp(timestamp: number): boolean {
+  return isAutoPublishSlot(cstMinute(timestamp))
+}
+
+export function isSocialIngestSlot(minute: number): boolean {
+  return minute % 30 === 5
 }
 
 async function updateAutoRun(
@@ -1651,7 +1659,7 @@ export async function runAdminOperationsCron(
 ): Promise<void> {
   await recoverStaleSocialDispatches(env, timestamp)
   const minute = cstMinute(timestamp)
-  if (env.ENVIRONMENT !== 'test' && minute % 15 === 5) {
+  if (env.ENVIRONMENT !== 'test' && isSocialIngestSlot(minute)) {
     await ingestSocialContent(env, timestamp)
   }
   await runSocialAutomation(env, timestamp)

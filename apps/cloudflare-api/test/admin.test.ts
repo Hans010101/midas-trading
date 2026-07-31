@@ -5,6 +5,8 @@ import { sha256Hex } from '../src/crypto'
 import {
   handleAdminOperationsRoute,
   isAutoPublishSlot,
+  isAutoPublishTimestamp,
+  isSocialIngestSlot,
   runAdminOperationsCron,
 } from '../src/admin-operations'
 
@@ -77,13 +79,22 @@ afterEach(() => {
 })
 
 describe('independent Cloudflare administrator controls', () => {
-  it('limits Binance Square publishing opportunities to 08:00-22:00 CST every 15 minutes', () => {
+  it('limits Binance Square publishing opportunities to 08:00-22:00 CST every 10 minutes', () => {
     expect(isAutoPublishSlot(7 * 60 + 40)).toBe(false)
     expect(isAutoPublishSlot(8 * 60)).toBe(true)
-    expect(isAutoPublishSlot(8 * 60 + 15)).toBe(true)
+    expect(isAutoPublishSlot(8 * 60 + 10)).toBe(true)
+    expect(isAutoPublishSlot(8 * 60 + 15)).toBe(false)
     expect(isAutoPublishSlot(8 * 60 + 5)).toBe(false)
     expect(isAutoPublishSlot(22 * 60)).toBe(true)
-    expect(isAutoPublishSlot(22 * 60 + 15)).toBe(false)
+    expect(isAutoPublishSlot(22 * 60 + 10)).toBe(false)
+  })
+
+  it('reserves social publishing timestamps and staggers content ingestion', () => {
+    expect(isAutoPublishTimestamp(Date.parse('2026-07-31T00:10:00.000Z'))).toBe(true)
+    expect(isAutoPublishTimestamp(Date.parse('2026-07-31T00:15:00.000Z'))).toBe(false)
+    expect(isSocialIngestSlot(8 * 60 + 5)).toBe(true)
+    expect(isSocialIngestSlot(8 * 60 + 35)).toBe(true)
+    expect(isSocialIngestSlot(8 * 60 + 15)).toBe(false)
   })
   it('locks the owner mailbox as an administrator at the database boundary', async () => {
     const row = await env.DB
@@ -780,8 +791,8 @@ describe('independent Cloudflare administrator controls', () => {
     vi.stubGlobal('fetch', upstream)
 
     await runAdminOperationsCron(env, firstSlot)
-    await runAdminOperationsCron(env, firstSlot + 15 * 60_000)
-    await runAdminOperationsCron(env, firstSlot + 30 * 60_000)
+    await runAdminOperationsCron(env, firstSlot + 10 * 60_000)
+    await runAdminOperationsCron(env, firstSlot + 20 * 60_000)
 
     expect(upstream).toHaveBeenCalledTimes(3)
     await expect(

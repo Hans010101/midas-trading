@@ -2,6 +2,7 @@ import { handleAccountRoute } from './account'
 import { handleAdminAnalyticsRoute } from './admin-analytics'
 import {
   handleAdminOperationsRoute,
+  isAutoPublishTimestamp,
   runAdminOperationsCron,
 } from './admin-operations'
 import {
@@ -211,19 +212,32 @@ export default {
     ctx: ExecutionContext,
   ): Promise<void> {
     const minute = new Date(controller.scheduledTime).getUTCMinutes()
+    const socialPublishSlot = isAutoPublishTimestamp(controller.scheduledTime)
+    const tasks: Array<{ name: string; promise: Promise<void> }> = socialPublishSlot
+      ? [{
+          name: 'admin_operations',
+          promise: runAdminOperationsCron(env, controller.scheduledTime),
+        }]
+      : [
+          {
+            name: 'market_refresh',
+            promise: minute % 10 === 5
+              ? refreshMarketBoards(env)
+              : refreshGlobalOverview(env).then(() => undefined),
+          },
+          { name: 'virtual_trading', promise: runVirtualTradingCron(env) },
+          {
+            name: 'admin_operations',
+            promise: runAdminOperationsCron(env, controller.scheduledTime),
+          },
+        ]
     ctx.waitUntil(
-      Promise.allSettled([
-        minute % 10 === 5
-          ? refreshMarketBoards(env)
-          : refreshGlobalOverview(env).then(() => undefined),
-        runVirtualTradingCron(env),
-        runAdminOperationsCron(env, controller.scheduledTime),
-      ]).then((results) => {
+      Promise.allSettled(tasks.map((task) => task.promise)).then((results) => {
         results.forEach((result, index) => {
           if (result.status === 'rejected') {
             console.error(JSON.stringify({
               event: 'scheduled.task_failed',
-              task: ['market_refresh', 'virtual_trading', 'admin_operations'][index],
+              task: tasks[index]?.name ?? 'unknown',
               error:
                 result.reason instanceof Error
                   ? result.reason.message

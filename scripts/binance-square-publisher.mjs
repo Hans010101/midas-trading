@@ -232,12 +232,13 @@ async function main() {
     console.log('币安广场今日已达到 100 条官方上限，保留队列等待')
     return
   }
-  if (guard?.last_at && now - Number(guard.last_at) < 30_000) {
-    console.log('发布间隔不足 30 秒，保留队列等待下一轮')
+  const dispatchSource = candidate.dispatch_source === 'manual' ? 'manual' : 'auto'
+  const minimumInterval = dispatchSource === 'auto' ? 8 * 60_000 : 30_000
+  if (guard?.last_at && now - Number(guard.last_at) < minimumInterval) {
+    console.log(`发布间隔不足 ${minimumInterval / 60_000} 分钟，保留队列等待下一轮`)
     return
   }
 
-  const dispatchSource = candidate.dispatch_source === 'manual' ? 'manual' : 'auto'
   query(
     `INSERT INTO social_dispatches
        (draft_id,platform,status,url,error,source,created_at,updated_at)
