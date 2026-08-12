@@ -17,12 +17,7 @@ const SAMPLE = JSON.stringify({
   users: [{
     legacy_user_id: 'old-user-id',
     email: 'user@example.com',
-    google_sub: null,
     display_name: 'User',
-    language_pref: 'zh',
-    email_verified_at: null,
-    watchlist: [{ symbol: 'BTC/USDT', market: 'crypto' }],
-    alert_rules: [],
   }],
 }, null, 2)
 
@@ -55,7 +50,7 @@ export default function MigrationCenterPage() {
         <AdminNav />
         <h1 className="font-serif text-xl font-bold">用户迁移中心</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          每批最多 25 人。必须先预演；密码用户导入后需通过重置密码激活，Google 用户可按原邮箱和 Google 身份衔接。
+          最小批次只需旧用户 ID 与邮箱。Google 用户切换后用原邮箱登录即可自动绑定，无需重新注册；收藏、提醒和模拟交易记录均为可选数据。
         </p>
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           {Object.entries(status.data?.cloudflare_counts ?? {}).map(([key, value]) => (
