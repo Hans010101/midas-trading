@@ -1,7 +1,7 @@
 import { HttpError, jsonResponse } from './http'
 
 const MARKETS = new Set(['cn', 'us', 'hk', 'crypto'])
-const PERIODS = new Set(['1m', '5m', '15m', '30m', '1h', '1d', '1w'])
+const PERIODS = new Set(['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'])
 
 export type Kline = Readonly<{
   ts: string
@@ -79,6 +79,10 @@ function yahooPeriod(period: string): { interval: string; range: string } {
       return { interval: '30m', range: '1mo' }
     case '1h':
       return { interval: '1h', range: '3mo' }
+    case '4h':
+      // Yahoo does not expose a native four-hour bar. Fetch hourly bars and
+      // aggregate them below so every market shares the same public periods.
+      return { interval: '1h', range: '3mo' }
     case '1d':
       return { interval: '1d', range: '2y' }
     case '1w':
@@ -86,6 +90,30 @@ function yahooPeriod(period: string): { interval: string; range: string } {
     default:
       throw new HttpError(400, '周期不受支持')
   }
+}
+
+function aggregateBars(items: Kline[], size: number): Kline[] {
+  if (size <= 1) return items
+  const result: Kline[] = []
+  for (let index = 0; index < items.length; index += size) {
+    const window = items.slice(index, index + size)
+    const first = window[0]
+    const last = window.at(-1)
+    if (!first || !last || window.length < size) continue
+    const amounts = window.map((item) => item.amount)
+    result.push({
+      ts: first.ts,
+      open: first.open,
+      high: Math.max(...window.map((item) => item.high)),
+      low: Math.min(...window.map((item) => item.low)),
+      close: last.close,
+      volume: window.reduce((total, item) => total + item.volume, 0),
+      amount: amounts.every((amount) => amount !== null)
+        ? amounts.reduce((total, amount) => total + (amount ?? 0), 0)
+        : null,
+    })
+  }
+  return result
 }
 
 function validOhlc(
@@ -176,7 +204,7 @@ async function fetchYahooKlinesFromHost(
       amount: null,
     }]
   })
-  return items.slice(-limit)
+  return (period === '4h' ? aggregateBars(items, 4) : items).slice(-limit)
 }
 
 async function fetchYahooKlines(
@@ -238,6 +266,7 @@ function krakenInterval(period: string): number {
     '15m': 15,
     '30m': 30,
     '1h': 60,
+    '4h': 240,
     '1d': 1_440,
     '1w': 10_080,
   }
@@ -315,6 +344,7 @@ function okxBar(period: string): string {
     '15m': '15m',
     '30m': '30m',
     '1h': '1H',
+    '4h': '4H',
     '1d': '1Dutc',
     '1w': '1Wutc',
   }
