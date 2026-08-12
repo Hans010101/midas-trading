@@ -570,6 +570,44 @@ export async function deleteAdminMaterial(token: string, id: number): Promise<vo
   if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
 }
 
+export interface MigrationStatus {
+  cloudflare_counts: Record<string, number>
+  recent_runs: Array<Record<string, unknown>>
+  readiness: Record<string, boolean>
+}
+
+export interface MigrationImportResult {
+  dry_run: boolean
+  accepted?: number
+  conflicts?: Array<{ email: string; reason: string }>
+  password_users_require_reset: number
+  run_id?: string
+  status?: string
+  imported?: Record<string, number>
+}
+
+export async function fetchMigrationStatus(token: string, signal?: AbortSignal): Promise<MigrationStatus> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/migration/status`, {
+    headers: { Authorization: `Bearer ${token}` }, signal,
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as MigrationStatus
+}
+
+export async function importLegacyUsers(
+  token: string,
+  payload: Record<string, unknown>,
+  dryRun: boolean,
+): Promise<MigrationImportResult> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/migration/import-users`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...payload, dry_run: dryRun }),
+  })
+  if (!r.ok) throw new AdminApiError(r.status, await readDetail(r))
+  return (await r.json()) as MigrationImportResult
+}
+
 // ── 周报全自动发送(weekly-dispatch)· 上传成品 PDF+md → 提取 → 定时/补传发送 ──────
 export interface WeeklyDispatchItem {
   id: number

@@ -219,3 +219,11 @@ jobs:
             "https://midas-trading-api.openclaw007.online/api/v1/analysis/decision-card?symbol=AGLD%2FUSDT&market=crypto&period=1h&instrument=perp&limit=60" \
             '.locked == true and .llm_mode == "real"' \
             "AI 决策卡注册墙与原生路由"
+          check_json \
+            "https://midas-trading-api.openclaw007.online/api/v1/econ/calendar" \
+            '.events | length > 20' \
+            "独立财经日历"
+          check_json \
+            "https://midas-trading-api.openclaw007.online/api/v1/analysis/chan?symbol=BTC%2FUSDT&market=crypto&period=1h&limit=120" \
+            '.bar_count > 50 and (.fractals | type == "array") and (.bis | type == "array")' \
+            "独立缠论结构"

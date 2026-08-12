@@ -11,6 +11,19 @@ type EconEvent = Readonly<{
   source: string
 }>
 
+type StoredEconEvent = Readonly<{
+  event_key: string
+  event_type: string
+  title_zh: string
+  title_en: string
+  markets_json: string
+  importance: number
+  scheduled_at: number
+  time_confirmed: number
+  source: string
+  source_url: string | null
+}>
+
 const FED_URL = 'https://www.federalreserve.gov/json/calendar.json'
 const BEA_URL = 'https://apps.bea.gov/API/signup/release_dates.json'
 
@@ -23,7 +36,10 @@ async function publicJson<T>(url: string): Promise<T> {
     signal: AbortSignal.timeout(12_000),
   })
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  const declaredSize = Number(response.headers.get('content-length') ?? 0)
+  if (declaredSize > 2_000_000) throw new Error('upstream payload too large')
   const text = (await response.text()).replace(/^\uFEFF/u, '')
+  if (text.length > 2_000_000) throw new Error('upstream payload too large')
   return JSON.parse(text) as T
 }
 
@@ -153,6 +169,12 @@ function monthSequence(now: Date, count: number): Array<[number, number]> {
   return result
 }
 
+function weekdayOnOrAfter(year: number, month: number, day: number, weekday: number): Date {
+  const value = new Date(Date.UTC(year, month - 1, day))
+  while (value.getUTCDay() !== weekday) value.setUTCDate(value.getUTCDate() + 1)
+  return value
+}
+
 function ruleEvents(now: Date): EconEvent[] {
   return monthSequence(now, 6).flatMap(([year, month]) => {
     const lprDate = new Date(Date.UTC(year, month - 1, 20))
@@ -164,6 +186,13 @@ function ruleEvents(now: Date): EconEvent[] {
     while (firstFriday.getUTCDay() !== 5) {
       firstFriday.setUTCDate(firstFriday.getUTCDate() + 1)
     }
+    const usCpi = weekdayOnOrAfter(year, month, 10, 3)
+    const usPpi = new Date(usCpi)
+    usPpi.setUTCDate(usPpi.getUTCDate() + 1)
+    const usRetail = weekdayOnOrAfter(year, month, 15, 2)
+    const cnInflation = new Date(Date.UTC(year, month - 1, 9))
+    const optionExpiry = new Date(Date.UTC(year, month, 0))
+    while (optionExpiry.getUTCDay() !== 5) optionExpiry.setUTCDate(optionExpiry.getUTCDate() - 1)
     return [
       {
         event_key: `lpr-${year}-${String(month).padStart(2, '0')}`,
@@ -226,8 +255,88 @@ function ruleEvents(now: Date): EconEvent[] {
         time_confirmed: false,
         source: 'rule',
       },
+      {
+        event_key: `us_cpi-${usCpi.toISOString().slice(0, 10)}`,
+        event_type: 'us_cpi',
+        title: '美国CPI(官方发布窗口·具体日待确认)',
+        markets: ['us', 'crypto', 'hk'],
+        importance: 3,
+        scheduled_at: zonedUtc(year, month, usCpi.getUTCDate(), 8, 30, 'America/New_York').toISOString(),
+        time_confirmed: false,
+        source: 'rule',
+      },
+      {
+        event_key: `us_ppi-${usPpi.toISOString().slice(0, 10)}`,
+        event_type: 'us_ppi',
+        title: '美国PPI(官方发布窗口·具体日待确认)',
+        markets: ['us', 'crypto'],
+        importance: 2,
+        scheduled_at: zonedUtc(year, month, usPpi.getUTCDate(), 8, 30, 'America/New_York').toISOString(),
+        time_confirmed: false,
+        source: 'rule',
+      },
+      {
+        event_key: `us_retail-${usRetail.toISOString().slice(0, 10)}`,
+        event_type: 'us_retail',
+        title: '美国零售销售(官方发布窗口·具体日待确认)',
+        markets: ['us'],
+        importance: 2,
+        scheduled_at: zonedUtc(year, month, usRetail.getUTCDate(), 8, 30, 'America/New_York').toISOString(),
+        time_confirmed: false,
+        source: 'rule',
+      },
+      {
+        event_key: `cn_cpi-${cnInflation.toISOString().slice(0, 10)}`,
+        event_type: 'cn_cpi',
+        title: '中国CPI(官方发布窗口·具体日待确认)',
+        markets: ['cn', 'hk'],
+        importance: 2,
+        scheduled_at: zonedUtc(year, month, 9, 9, 30, 'Asia/Shanghai').toISOString(),
+        time_confirmed: false,
+        source: 'rule',
+      },
+      {
+        event_key: `cn_ppi-${cnInflation.toISOString().slice(0, 10)}`,
+        event_type: 'cn_ppi',
+        title: '中国PPI(官方发布窗口·具体日待确认)',
+        markets: ['cn', 'hk'],
+        importance: 2,
+        scheduled_at: zonedUtc(year, month, 9, 9, 30, 'Asia/Shanghai').toISOString(),
+        time_confirmed: false,
+        source: 'rule',
+      },
+      {
+        event_key: `crypto_options_expiry-${optionExpiry.toISOString().slice(0, 10)}`,
+        event_type: 'crypto_options_expiry',
+        title: '加密月度期权到期窗口',
+        markets: ['crypto'],
+        importance: 2,
+        scheduled_at: new Date(Date.UTC(year, month - 1, optionExpiry.getUTCDate(), 8)).toISOString(),
+        time_confirmed: false,
+        source: 'rule',
+      },
     ]
-  })
+  }).concat(
+    Array.from({ length: 26 }, (_, index) => {
+      const thursday = weekdayOnOrAfter(
+        now.getUTCFullYear(), now.getUTCMonth() + 1, now.getUTCDate(), 4,
+      )
+      thursday.setUTCDate(thursday.getUTCDate() + index * 7)
+      return {
+        event_key: `us_jobless-${thursday.toISOString().slice(0, 10)}`,
+        event_type: 'us_jobless',
+        title: '美国初请失业金人数(惯例日·以官方为准)',
+        markets: ['us'],
+        importance: 1,
+        scheduled_at: zonedUtc(
+          thursday.getUTCFullYear(), thursday.getUTCMonth() + 1,
+          thursday.getUTCDate(), 8, 30, 'America/New_York',
+        ).toISOString(),
+        time_confirmed: false,
+        source: 'rule',
+      }
+    }),
+  )
 }
 
 const SEEDED: ReadonlyArray<readonly [
@@ -291,8 +400,111 @@ function seedEvents(): EconEvent[] {
   }))
 }
 
+function englishTitle(event: EconEvent): string {
+  const titles: Readonly<Record<string, string>> = {
+    fomc: 'FOMC Rate Decision',
+    us_gdp: 'U.S. GDP',
+    us_pce: 'U.S. PCE Inflation',
+    us_cpi: 'U.S. CPI (Official Release Window)',
+    us_ppi: 'U.S. PPI (Official Release Window)',
+    us_retail: 'U.S. Retail Sales (Official Release Window)',
+    us_jobless: 'U.S. Initial Jobless Claims',
+    nfp: 'U.S. Nonfarm Payrolls',
+    lpr: 'China Loan Prime Rate',
+    cn_pmi: 'China Manufacturing PMI',
+    cn_credit: 'China Total Social Financing / M2',
+    cn_cpi: 'China CPI',
+    cn_ppi: 'China PPI',
+    cn_gdp: 'China GDP',
+    ecb: 'ECB Rate Decision',
+    boj: 'BOJ Rate Decision',
+    bok: 'BOK Rate Decision',
+    gb_boe: 'Bank of England Rate Decision',
+    crypto_options_expiry: 'Monthly Crypto Options Expiry Window',
+  }
+  return titles[event.event_type] ?? event.title
+}
+
+function storedToEvent(row: StoredEconEvent, locale: 'zh' | 'en'): EconEvent {
+  return {
+    event_key: row.event_key,
+    event_type: row.event_type,
+    title: locale === 'en' ? row.title_en : row.title_zh,
+    markets: JSON.parse(row.markets_json) as string[],
+    importance: row.importance,
+    scheduled_at: new Date(row.scheduled_at).toISOString(),
+    time_confirmed: row.time_confirmed === 1,
+    source: row.source,
+  }
+}
+
+export async function refreshEconCalendar(env: Env): Promise<Readonly<{
+  events: EconEvent[]
+  sourceStatus: ReadonlyArray<Readonly<{ source: string; ok: boolean }>>
+}>> {
+  const started = new Date()
+  const [fed, bea] = await Promise.allSettled([
+    publicJson<{ events?: Array<Record<string, unknown>> }>(FED_URL),
+    publicJson<Record<string, { release_dates?: string[] }>>(BEA_URL),
+  ])
+  const events = [
+    ...(fed.status === 'fulfilled' ? parseFed(fed.value) : []),
+    ...(bea.status === 'fulfilled' ? parseBea(bea.value) : []),
+    ...seedEvents(),
+    ...ruleEvents(started),
+  ]
+    .filter((event) => Date.parse(event.scheduled_at) >= started.valueOf() - 86_400_000)
+    .filter((event, index, all) =>
+      all.findIndex((candidate) => candidate.event_key === event.event_key) === index,
+    )
+    .sort((left, right) => Date.parse(left.scheduled_at) - Date.parse(right.scheduled_at))
+  const updatedAt = Date.now()
+  const statements = events.map((event) => env.DB.prepare(
+    `INSERT INTO econ_events
+      (event_key, event_type, title_zh, title_en, markets_json, importance,
+       scheduled_at, time_confirmed, source, source_url, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(event_key) DO UPDATE SET
+       event_type = excluded.event_type,
+       title_zh = excluded.title_zh,
+       title_en = excluded.title_en,
+       markets_json = excluded.markets_json,
+       importance = excluded.importance,
+       scheduled_at = excluded.scheduled_at,
+       time_confirmed = excluded.time_confirmed,
+       source = excluded.source,
+       source_url = excluded.source_url,
+       updated_at = excluded.updated_at`,
+  ).bind(
+    event.event_key,
+    event.event_type,
+    event.title,
+    englishTitle(event),
+    JSON.stringify(event.markets),
+    event.importance,
+    Date.parse(event.scheduled_at),
+    event.time_confirmed ? 1 : 0,
+    event.source,
+    event.source === 'fed_json' ? FED_URL : event.source === 'bea_json' ? BEA_URL : null,
+    updatedAt,
+  ))
+  for (let offset = 0; offset < statements.length; offset += 50) {
+    await env.DB.batch(statements.slice(offset, offset + 50))
+  }
+  return {
+    events,
+    sourceStatus: [
+      { source: 'fed_json', ok: fed.status === 'fulfilled' },
+      { source: 'bea_json', ok: bea.status === 'fulfilled' },
+      { source: 'rule', ok: true },
+      { source: 'seed', ok: true },
+    ],
+  }
+}
+
 export async function handleEconRoute(
   request: Request,
+  env: Env,
   requestId: string,
 ): Promise<Response | null> {
   const path = new URL(request.url).pathname
@@ -303,55 +515,41 @@ export async function handleEconRoute(
   if (request.method !== 'GET') {
     return jsonResponse({ detail: 'Method not allowed' }, 405, requestId, request.method)
   }
-  const started = new Date()
-  const [fed, bea] = await Promise.allSettled([
-    publicJson<{ events?: Array<Record<string, unknown>> }>(FED_URL),
-    publicJson<Record<string, { release_dates?: string[] }>>(BEA_URL),
-  ])
-  const events = [
-    ...ruleEvents(started),
-    ...seedEvents(),
-    ...(fed.status === 'fulfilled' ? parseFed(fed.value) : []),
-    ...(bea.status === 'fulfilled' ? parseBea(bea.value) : []),
-  ]
-    .filter((event) => Date.parse(event.scheduled_at) >= started.valueOf() - 86_400_000)
-    .filter((event, index, all) =>
-      all.findIndex((candidate) => candidate.event_key === event.event_key) === index,
-    )
-    .sort((left, right) => Date.parse(left.scheduled_at) - Date.parse(right.scheduled_at))
+  let sourceStatus: ReadonlyArray<Readonly<{ source: string; ok: boolean }>> = []
+  try {
+    sourceStatus = (await refreshEconCalendar(env)).sourceStatus
+  } catch (cause) {
+    console.error(JSON.stringify({
+      event: 'econ.refresh_failed',
+      error: cause instanceof Error ? cause.message : String(cause),
+    }))
+  }
+  const locale = request.headers.get('x-lang')?.toLowerCase().startsWith('en')
+    ? 'en'
+    : 'zh'
+  const rows = await env.DB.prepare(
+    `SELECT event_key, event_type, title_zh, title_en, markets_json, importance,
+            scheduled_at, time_confirmed, source, source_url
+     FROM econ_events
+     WHERE scheduled_at >= ?
+     ORDER BY scheduled_at, importance DESC
+     LIMIT 500`,
+  ).bind(Date.now() - 86_400_000).all<StoredEconEvent>()
+  const events = rows.results.map((row) => storedToEvent(row, locale))
   const now = new Date().toISOString()
-  const sources = [
-    {
-      source: 'fed_json',
-      last_success: fed.status === 'fulfilled' ? now : null,
-      age_seconds: fed.status === 'fulfilled' ? 0 : null,
-      stale: fed.status !== 'fulfilled',
-    },
-    {
-      source: 'bea_json',
-      last_success: bea.status === 'fulfilled' ? now : null,
-      age_seconds: bea.status === 'fulfilled' ? 0 : null,
-      stale: bea.status !== 'fulfilled',
-    },
-    {
-      source: 'rule',
-      last_success: now,
-      age_seconds: 0,
-      stale: false,
-    },
-    {
-      source: 'seed',
-      last_success: now,
-      age_seconds: 0,
-      stale: false,
-    },
-  ]
+  const sources = (sourceStatus.length > 0 ? sourceStatus : [
+    { source: 'stored_cache', ok: events.length > 0 },
+  ]).map((source) => ({
+    source: source.source,
+    last_success: source.ok ? now : null,
+    age_seconds: source.ok ? 0 : null,
+    stale: !source.ok,
+  }))
   const response = jsonResponse(
     {
       events,
       sources,
-      updated_at:
-        fed.status === 'fulfilled' || bea.status === 'fulfilled' ? now : null,
+      updated_at: events.length > 0 ? now : null,
       any_stale: sources.some((source) => source.stale),
     },
     200,

@@ -10,13 +10,22 @@ import {
   runVirtualTradingCron,
 } from './admin-trading'
 import { handleAdminRoute } from './admin'
+import { handleAdminReportsRoute } from './admin-reports'
+import { handleAdminMigrationRoute } from './admin-migration'
 import { handleAnalysisRoute } from './analysis'
+import { runAlertScan } from './alert-engine'
 import { handleAcademyRoute } from './academy'
 import { handleAlertRulesRoute } from './alert-rules'
 import { handleAuthRoute } from './auth'
+import { handleBacktestRoute } from './backtest'
 import { handleBotPresetRoute } from './bot-preset'
 import { handleCryptoMarketRoute } from './crypto-market'
-import { handleEconRoute } from './econ'
+import { handleEconRoute, refreshEconCalendar } from './econ'
+import { handleChanAnalysisRoute } from './chan-analysis'
+import {
+  handleConditionalOrderRoute,
+  runConditionalOrderScan,
+} from './conditional-orders'
 import { HttpError, jsonResponse } from './http'
 import { handleMarketRoute } from './market'
 import { handleNotificationRoute } from './notifications'
@@ -30,6 +39,11 @@ import { handleRedeemRoute } from './redeem'
 import { handleScreenerRoute } from './screener'
 import { handleSupportRoute } from './support'
 import { handleWatchlistRoute } from './watchlist'
+import {
+  handleVirtualTradingRoute,
+  runVirtualFundingSettlement,
+  runVirtualRiskScan,
+} from './virtual-trading'
 
 async function databaseReady(db: D1Database): Promise<boolean> {
   const row = await db.prepare('SELECT 1 AS ok').first<{ ok: number }>()
@@ -135,10 +149,16 @@ export default {
         (await handleAdminAnalyticsRoute(request, env, requestId)) ??
         (await handleAdminOperationsRoute(request, env, requestId)) ??
         (await handleAdminTradingRoute(request, env, requestId)) ??
+        (await handleAdminMigrationRoute(request, env, requestId)) ??
+        (await handleAdminReportsRoute(request, env, requestId)) ??
         (await handleAdminRoute(request, env, requestId)) ??
+        (await handleBacktestRoute(request, env, requestId)) ??
+        (await handleChanAnalysisRoute(request, requestId)) ??
         (await handleAnalysisRoute(request, env, requestId)) ??
         (await handleBotPresetRoute(request, env, requestId)) ??
         (await handleAccountRoute(request, env, requestId)) ??
+        (await handleConditionalOrderRoute(request, env, requestId)) ??
+        (await handleVirtualTradingRoute(request, env, requestId)) ??
         (await handleAlertRulesRoute(request, env, requestId)) ??
         (await handleNotificationRoute(request, env, requestId)) ??
         (await handleProfileRoute(request, env, requestId)) ??
@@ -146,7 +166,7 @@ export default {
         (await handleRedeemRoute(request, env, requestId)) ??
         (await handleAcademyRoute(request, env, requestId)) ??
         (await handleCryptoMarketRoute(request, requestId)) ??
-        (await handleEconRoute(request, requestId)) ??
+        (await handleEconRoute(request, env, requestId)) ??
         (await handleOverviewRoute(request, env, requestId)) ??
         (await handleMarketHomeRoute(request, env, requestId)) ??
         (await handleMarketRoute(request, env, requestId)) ??
@@ -226,6 +246,16 @@ export default {
               : refreshGlobalOverview(env).then(() => undefined),
           },
           { name: 'virtual_trading', promise: runVirtualTradingCron(env) },
+          { name: 'user_virtual_risk', promise: runVirtualRiskScan(env) },
+          {
+            name: 'user_virtual_funding',
+            promise: runVirtualFundingSettlement(env, controller.scheduledTime),
+          },
+          { name: 'conditional_orders', promise: runConditionalOrderScan(env) },
+          { name: 'alert_scan', promise: runAlertScan(env) },
+          ...(minute === 15
+            ? [{ name: 'econ_calendar', promise: refreshEconCalendar(env).then(() => undefined) }]
+            : []),
           {
             name: 'admin_operations',
             promise: runAdminOperationsCron(env, controller.scheduledTime),

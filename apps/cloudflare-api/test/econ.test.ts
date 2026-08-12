@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { env } from 'cloudflare:workers'
 
 import { handleEconRoute } from '../src/econ'
 
@@ -39,6 +40,7 @@ describe('independent economic calendar', () => {
 
     const response = await handleEconRoute(
       new Request('https://api.example.test/api/v1/econ/calendar'),
+      env,
       'econ-1',
     )
     const body = (await response?.json()) as {

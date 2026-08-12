@@ -10,9 +10,11 @@ describe('isIndependentApiPath', () => {
     expect(isIndependentApiPath('/api/v1/structure/diagnose')).toBe(true)
   })
 
-  it('does not redirect analysis routes that have not been migrated yet', () => {
-    expect(isIndependentApiPath('/api/v1/analysis/chan')).toBe(false)
-    expect(isIndependentApiPath('/api/v1/analysis/weekly-report')).toBe(false)
+  it('fails closed on every v1 path instead of forwarding to the legacy API', () => {
+    expect(isIndependentApiPath('/api/v1/analysis/chan')).toBe(true)
+    expect(isIndependentApiPath('/api/v1/analysis/weekly-report')).toBe(true)
+    expect(isIndependentApiPath('/api/v1/retired-feature')).toBe(true)
+    expect(isIndependentApiPath('/external/path')).toBe(false)
   })
 
   it('keeps authentication and market data on the independent API', () => {

@@ -18,7 +18,6 @@
     }
   ],
   "vars": {
-    "LEGACY_API_UPSTREAM_URL": "https://api.midastrade.asia",
     "AUTH_URL": "https://midas-trading.hans-pan007.workers.dev",
     "AUTH_TRUST_HOST": "true",
     "NEXT_PUBLIC_API_URL": "/api-proxy"

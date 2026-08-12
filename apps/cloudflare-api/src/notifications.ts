@@ -206,6 +206,109 @@ async function feishuSend(env: Env, openId: string, text: string): Promise<void>
   if (!response.ok) throw new Error(`飞书 HTTP ${response.status}`)
 }
 
+function isQuietHour(row: ConfigRow, now: number): boolean {
+  if (row.quiet_hours_enabled !== 1) return false
+  const hour = Number(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: row.quiet_hours_tz,
+      hour: '2-digit',
+      hourCycle: 'h23',
+    }).format(new Date(now)),
+  )
+  return row.quiet_hours_start === row.quiet_hours_end
+    ? true
+    : row.quiet_hours_start < row.quiet_hours_end
+      ? hour >= row.quiet_hours_start && hour < row.quiet_hours_end
+      : hour >= row.quiet_hours_start || hour < row.quiet_hours_end
+}
+
+export async function deliverUserNotification(
+  env: Env,
+  input: Readonly<{
+    userId: string
+    category: string
+    title: string
+    body: string
+    dedupeKey?: string
+  }>,
+): Promise<string> {
+  const now = Date.now()
+  const notificationId = input.dedupeKey
+    ? `dedupe:${input.dedupeKey}`
+    : crypto.randomUUID()
+  const inserted = await env.DB
+    .prepare(
+      `INSERT INTO in_app_notifications
+        (id, user_id, category, title, body, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO NOTHING`,
+    )
+    .bind(
+      notificationId,
+      input.userId,
+      input.category,
+      input.title.slice(0, 160),
+      input.body.slice(0, 2_000),
+      now,
+    )
+    .run()
+  if (inserted.meta.changes === 0) return notificationId
+
+  const config = await configRow(env.DB, input.userId)
+  const deliveries: Array<Readonly<{
+    channel: 'in_app' | 'telegram' | 'feishu'
+    enabled: boolean
+    send?: () => Promise<void>
+  }>> = [{ channel: 'in_app', enabled: true }]
+  deliveries.push(config.tg_chat_id
+    ? {
+        channel: 'telegram',
+        enabled: !isQuietHour(config, now),
+        send: () => telegramSend(env, config.tg_chat_id!, `${input.title}\n${input.body}`),
+      }
+    : { channel: 'telegram', enabled: false })
+  deliveries.push(config.feishu_open_id
+    ? {
+        channel: 'feishu',
+        enabled: !isQuietHour(config, now),
+        send: () => feishuSend(env, config.feishu_open_id!, `${input.title}\n${input.body}`),
+      }
+    : { channel: 'feishu', enabled: false })
+  for (const delivery of deliveries) {
+    let status: 'sent' | 'failed' | 'skipped' = delivery.enabled ? 'sent' : 'skipped'
+    let error: string | null = null
+    if (delivery.enabled && delivery.send) {
+      try {
+        await delivery.send()
+      } catch (cause) {
+        status = 'failed'
+        error = cause instanceof Error ? cause.message : String(cause)
+      }
+    }
+    await env.DB
+      .prepare(
+        `INSERT INTO notification_deliveries
+          (id, notification_id, user_id, channel, status, attempts, error,
+           sent_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+      )
+      .bind(
+        crypto.randomUUID(),
+        notificationId,
+        input.userId,
+        delivery.channel,
+        status,
+        delivery.enabled ? 1 : 0,
+        error,
+        status === 'sent' ? now : null,
+        now,
+        now,
+      )
+      .run()
+  }
+  return notificationId
+}
+
 async function sendTest(request: Request, env: Env, requestId: string) {
   const { user } = await authenticate(request, env)
   const row = await configRow(env.DB, user.id)

@@ -3,8 +3,6 @@ import type { NextRequest } from 'next/server'
 
 import { isIndependentApiPath } from '@/lib/server/api-route-policy'
 
-const LEGACY_API_UPSTREAM =
-  process.env.LEGACY_API_UPSTREAM_URL ?? 'http://localhost:8000'
 const INDEPENDENT_API_ORIGIN = 'https://midas-trading-api.internal'
 const INDEPENDENT_API_FALLBACK =
   process.env.API_AUTH_FALLBACK_URL ?? 'http://localhost:8787'
@@ -18,10 +16,7 @@ async function proxy(request: NextRequest, context: RouteContext) {
   const pathname = `/${path.join('/')}`
   const incomingUrl = new URL(request.url)
   const isIndependentApi = isIndependentApiPath(pathname)
-  const upstreamUrl = new URL(
-    pathname,
-    isIndependentApi ? INDEPENDENT_API_ORIGIN : LEGACY_API_UPSTREAM,
-  )
+  const upstreamUrl = new URL(pathname, INDEPENDENT_API_ORIGIN)
   upstreamUrl.search = incomingUrl.search
 
   const headers = new Headers(request.headers)
@@ -51,9 +46,7 @@ async function proxy(request: NextRequest, context: RouteContext) {
       fallbackUrl.search = incomingUrl.search
       response = await fetch(fallbackUrl, init)
     }
-  } else {
-    response = await fetch(upstreamUrl, init)
-  }
+  } else return new Response('Not found', { status: 404 })
 
   const responseHeaders = new Headers(response.headers)
   responseHeaders.delete('access-control-allow-origin')

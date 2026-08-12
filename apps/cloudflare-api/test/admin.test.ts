@@ -136,6 +136,77 @@ describe('independent Cloudflare administrator controls', () => {
     })
   })
 
+  it('generates, edits and approves an independent market report', async () => {
+    const generated = await exports.default.fetch(
+      request('/api/v1/admin/reports/generate', {
+        method: 'POST',
+        token: owner.token,
+      }),
+    )
+    expect(generated.status).toBe(200)
+    const report = await generated.json() as { id: number; status: string }
+    expect(report).toMatchObject({ status: 'draft' })
+
+    const updated = await exports.default.fetch(
+      request(`/api/v1/admin/reports/${report.id}`, {
+        method: 'PUT',
+        token: owner.token,
+        body: { title: '独立周报测试', content: '# 独立内容' },
+      }),
+    )
+    expect(updated.status).toBe(200)
+
+    const approved = await exports.default.fetch(
+      request(`/api/v1/admin/reports/${report.id}/approve`, {
+        method: 'POST',
+        token: owner.token,
+      }),
+    )
+    expect(approved.status).toBe(200)
+    await expect(approved.json()).resolves.toMatchObject({
+      title: '独立周报测试',
+      status: 'approved',
+    })
+  })
+
+  it('previews and imports a legacy user batch idempotently', async () => {
+    const legacy = {
+      source_revision: 'legacy-test-1',
+      users: [{
+        legacy_user_id: `legacy-${crypto.randomUUID()}`,
+        email: `${crypto.randomUUID()}@legacy.example`,
+        display_name: 'Legacy User',
+        language_pref: 'zh',
+        watchlist: [{ symbol: 'BTC/USDT', market: 'crypto' }],
+        alert_rules: [{
+          market: 'crypto', symbol: 'BTC/USDT', indicator: 'rsi_14',
+          operator: 'gt', threshold: 75, timeframe: '1h',
+        }],
+      }],
+    }
+    const preview = await exports.default.fetch(
+      request('/api/v1/admin/migration/import-users', {
+        method: 'POST', token: owner.token, body: legacy,
+      }),
+    )
+    expect(preview.status).toBe(200)
+    await expect(preview.json()).resolves.toMatchObject({
+      dry_run: true, accepted: 1, conflicts: [], password_users_require_reset: 1,
+    })
+
+    const committed = await exports.default.fetch(
+      request('/api/v1/admin/migration/import-users', {
+        method: 'POST', token: owner.token, body: { ...legacy, dry_run: false },
+      }),
+    )
+    expect(committed.status).toBe(200)
+    await expect(committed.json()).resolves.toMatchObject({
+      dry_run: false,
+      status: 'verified',
+      imported: { users: 1, watchlist: 1, alert_rules: 1 },
+    })
+  })
+
   it('lists users, returns security detail, and protects the locked admin', async () => {
     const list = await exports.default.fetch(
       request('/api/v1/admin/users?page=1&page_size=20', {
