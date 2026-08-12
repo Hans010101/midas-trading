@@ -103,7 +103,7 @@ function PublishRow({
 }) {
   const [err, setErr] = useState('')
   const mut = useMutation({
-    mutationFn: (platform: string) => publishXTweet(token, t.id, platform),
+    mutationFn: (platform: string) => publishXTweet(token, t.id, platform, t.account_key),
     onSuccess: () => {
       setErr('')
       onChange() // 异步发布 pending → 稍后补刷一次拿 success/failed
@@ -208,6 +208,9 @@ function TweetCard({
     <div className="rounded-lg border border-paper bg-cream p-4 shadow-sm">
       <div className="mb-2 flex items-center gap-2">
         <span className="font-mono text-sm font-bold">{t.symbol}</span>
+        <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+          {t.account_key === 'legacy_midas' ? '点金 Midas' : '点金雷达'}
+        </span>
         <BiasBadge bias={t.bias} />
         <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-700">
           {CONTENT_LABEL[t.content_type]}
@@ -264,6 +267,9 @@ export default function AdminXTweetsPage() {
   const [note, setNote] = useState<string>('')
   // ★查看 tab(gen_style)· 切换只筛选查看已自动生成的草稿,不触发生成(Hans 重构:动作→查看)
   const [tab, setTab] = useState<'default' | 'x_short'>('default')
+  const [squareAccount, setSquareAccount] = useState<'midas_trading' | 'legacy_midas'>(
+    'midas_trading',
+  )
 
   const query = useQuery({
     queryKey: ['admin-x-tweets'],
@@ -285,7 +291,8 @@ export default function AdminXTweetsPage() {
   const invalidate = () => void qc.invalidateQueries({ queryKey: ['admin-x-tweets'] })
 
   const genMut = useMutation({
-    mutationFn: (style: 'default' | 'x_short') => generateXTweets(token, style),
+    mutationFn: (style: 'default' | 'x_short') =>
+      generateXTweets(token, style, squareAccount),
     onSuccess: (res) => {
       setNote(res.message)
       // ★异步生成约数十秒 · 先刷一次,再延时补刷一次(覆盖 worker 跑完)
@@ -298,7 +305,9 @@ export default function AdminXTweetsPage() {
   const forbidden = query.isError
   const items: XTweetItem[] = query.data?.items ?? []
   // ★按平台(gen_style)分两条线 · tab 只切换查看,数据本来就带 gen_style
-  const binanceItems = items.filter((t) => t.gen_style !== 'x_short')
+  const binanceItems = items.filter(
+    (t) => t.gen_style !== 'x_short' && t.account_key === squareAccount,
+  )
   const xItems = items.filter((t) => t.gen_style === 'x_short')
   const visible = tab === 'x_short' ? xItems : binanceItems
   const passed = visible.filter((t) => t.compliance_passed).length
@@ -323,6 +332,26 @@ export default function AdminXTweetsPage() {
           <>
             {/* ★自动托管控制面板(开关/熔断/配额/时段)· 自动托管 PR-4 */}
             <AutoPilotPanel token={token} />
+
+            {tab === 'default' && (
+              <div className="mb-3 flex items-center gap-1 rounded-md bg-muted p-1">
+                {([
+                  ['midas_trading', '点金雷达'],
+                  ['legacy_midas', '点金 Midas'],
+                ] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setSquareAccount(key)}
+                    className={squareAccount === key
+                      ? 'rounded bg-cream px-3 py-1.5 text-sm font-medium shadow-sm'
+                      : 'rounded px-3 py-1.5 text-sm text-muted-foreground'}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* ★查看 tab(Hans 重构):顶部两个 tab 只切换查看对应平台已【自动生成】的草稿,
                 不触发生成。草稿由后台每 15 分钟(:04/:19/:34/:49)自动生成好(带图),打开即见现成的。 */}

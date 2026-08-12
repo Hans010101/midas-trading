@@ -16,6 +16,7 @@ import {
   stopAutoPilot,
   toggleAutoPilot,
   toggleAutoPlatform,
+  type BinanceSquareAccountKey,
 } from '@/lib/api/x-auto'
 
 // 平台标识 → 显示名(加平台 = registry 加一行后,这里补个显示名即可;缺省显示原标识)
@@ -52,7 +53,10 @@ export function AutoPilotPanel({ token }: { token: string }) {
   const invalidate = () => void qc.invalidateQueries({ queryKey: ['admin-x-auto-status'] })
 
   const toggleMut = useMutation({
-    mutationFn: (enabled: boolean) => toggleAutoPilot(token, enabled),
+    mutationFn: ({ enabled, accountKey }: {
+      enabled: boolean
+      accountKey: BinanceSquareAccountKey
+    }) => toggleAutoPilot(token, enabled, accountKey),
     onSuccess: (s) => {
       setNote(s.enabled ? '✓ 自动托管已开启 · 系统将按守卫自动起草并发布' : '自动托管已关闭')
       invalidate()
@@ -61,7 +65,7 @@ export function AutoPilotPanel({ token }: { token: string }) {
   })
 
   const stopMut = useMutation({
-    mutationFn: () => stopAutoPilot(token),
+    mutationFn: (accountKey?: BinanceSquareAccountKey) => stopAutoPilot(token, accountKey),
     onSuccess: (r) => {
       setNote(`⚠️ 已紧急熔断 · ${r.message}`)
       invalidate()
@@ -71,8 +75,11 @@ export function AutoPilotPanel({ token }: { token: string }) {
 
   // ★平台勾选(架子刀 · ADR 0050)· 白名单外(X)后端 400 拒,UI 也灰显不可点
   const platformMut = useMutation({
-    mutationFn: ({ platform, checked }: { platform: string; checked: boolean }) =>
-      toggleAutoPlatform(token, platform, checked),
+    mutationFn: ({ platform, checked, accountKey }: {
+      platform: string
+      checked: boolean
+      accountKey: BinanceSquareAccountKey
+    }) => toggleAutoPlatform(token, platform, checked, accountKey),
     onSuccess: (_s, v) => {
       setNote(v.checked ? `✓ 已勾选 ${PLATFORM_LABEL[v.platform] ?? v.platform} 自动发布` : `已取消 ${PLATFORM_LABEL[v.platform] ?? v.platform} 自动发布`)
       invalidate()
@@ -81,11 +88,12 @@ export function AutoPilotPanel({ token }: { token: string }) {
   })
 
   const st = query.data
-  const enabled = st?.enabled ?? false
-  const circuitOpen = st?.circuit_open ?? false
+  const accounts = st?.accounts ?? []
+  const runningCount = accounts.filter((account) => account.enabled && !account.circuit_open).length
+  const circuitCount = accounts.filter((account) => account.circuit_open).length
 
-  const onToggle = () => {
-    if (!enabled) {
+  const onToggle = (accountKey: BinanceSquareAccountKey, isEnabled: boolean) => {
+    if (!isEnabled) {
       const ok = window.confirm(
         '确定开启【全自动托管】?\n\n开启后系统将自动起草并发布推文到币安广场:\n' +
           '· 每 15 分钟一个发布机会，每小时最多 4 条、每日最多 40 条 · 仅 8:00-22:00 发\n· 新闻不足时自动回退热门波动币种分析\n· 门禁不通过的绝不发\n· 无需人工逐条审核\n\n' +
@@ -93,27 +101,27 @@ export function AutoPilotPanel({ token }: { token: string }) {
       )
       if (!ok) return
     }
-    toggleMut.mutate(!enabled)
+    toggleMut.mutate({ enabled: !isEnabled, accountKey })
   }
 
-  const onStop = () => {
+  const onStop = (accountKey?: BinanceSquareAccountKey) => {
     const ok = window.confirm(
       '确定【紧急熔断】?\n\n将立刻:\n· 关闭自动托管开关\n· 开启熔断(停所有自动发)\n· 取消排队中的发布任务\n\n确定?',
     )
-    if (ok) stopMut.mutate()
+    if (ok) stopMut.mutate(accountKey)
   }
 
   return (
     <div className="mb-6 rounded-lg border border-paper bg-cream p-4 shadow-sm">
       <div className="mb-3 flex items-center gap-2">
         <span className="font-serif text-base font-bold">自动托管</span>
-        {circuitOpen ? (
+        {circuitCount > 0 ? (
           <span className="rounded bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
-            ● 熔断中
+            ● {circuitCount} 个账号熔断
           </span>
-        ) : enabled ? (
+        ) : runningCount > 0 ? (
           <span className="rounded bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
-            ● 运行中
+            ● {runningCount} 个账号运行中
           </span>
         ) : (
           <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
@@ -129,70 +137,62 @@ export function AutoPilotPanel({ token }: { token: string }) {
         <p className="text-sm text-muted-foreground">该面板仅管理员可见。</p>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatChip
-              label="总开关"
-              value={enabled ? '开启' : '关闭'}
-              tone={enabled ? 'text-green-700' : 'text-muted-foreground'}
-            />
-            <StatChip
-              label="熔断"
-              value={circuitOpen ? '已熔断' : '正常'}
-              tone={circuitOpen ? 'text-red-700' : 'text-foreground'}
-            />
-            <StatChip
-              label="今日配额"
-              value={st ? `${st.daily_used} / ${st.daily_used + st.daily_remaining}` : '—'}
-              tone="text-gold"
-            />
-            <StatChip
-              label="发布时段"
-              value={st ? (st.in_window ? '在窗(8:00-22:00)' : '不在窗') : '—'}
-              tone={st?.in_window ? 'text-foreground' : 'text-muted-foreground'}
-            />
-          </div>
-
-          {st?.last_error && (
-            <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-              最近失败（连续 {st.failure_count}/3）：{st.last_error}
-            </p>
-          )}
-
-          {/* ★平台多选(架子刀 · ADR 0050):勾选的平台才自动质检发布 · 总开关 AND 平台勾选双闸。
-              X 灰显「暂未启用」= auto_publish 白名单物理焊死(后端 400 双保险),待 Hans 验质量授权。 */}
-          <div className="mt-4 border-t border-paper pt-3">
-            <span className="text-[11px] text-muted-foreground">自动发布平台</span>
-            <div className="mt-1.5 flex flex-wrap items-center gap-4">
-              {(st?.platforms ?? []).map((p) => (
-                <label
-                  key={p.platform}
-                  className={`flex items-center gap-1.5 text-sm ${
-                    p.auto_allowed ? 'cursor-pointer text-foreground' : 'cursor-not-allowed text-muted-foreground'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={p.checked}
-                    disabled={!p.auto_allowed || platformMut.isPending || token === ''}
-                    onChange={(e) =>
-                      platformMut.mutate({ platform: p.platform, checked: e.target.checked })
-                    }
-                    className="h-3.5 w-3.5 accent-midas-red disabled:cursor-not-allowed"
-                  />
-                  {PLATFORM_LABEL[p.platform] ?? p.platform}
-                  {!p.auto_allowed && (
-                    <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                      暂未启用
-                    </span>
-                  )}
-                  {p.auto_allowed && !p.adapter_enabled && (
-                    <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] text-amber-700">
-                      未配 API Key
-                    </span>
-                  )}
-                </label>
-              ))}
-            </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {(st?.accounts ?? []).map((account) => (
+              <section key={account.account_key} className="rounded-md border border-paper p-3">
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="font-medium">{account.display_name}</span>
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    {account.content_profile === 'radar' ? '热点 + 行情' : 'K 线 + 结构'}
+                  </span>
+                  <span className={`ml-auto text-xs ${account.enabled ? 'text-green-700' : 'text-muted-foreground'}`}>
+                    {account.circuit_open ? '● 已熔断' : account.enabled ? '● 运行中' : '● 已关闭'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <StatChip label="今日配额" value={`${account.daily_used} / ${account.daily_limit}`} tone="text-gold" />
+                  <StatChip label="发布错峰" value={`每 10 分钟 · +${account.slot_offset_minutes}分`} tone="text-foreground" />
+                  <StatChip label="独立凭证" value={account.adapter_enabled ? '已配置' : '待配置'} tone={account.adapter_enabled ? 'text-green-700' : 'text-amber-700'} />
+                </div>
+                {account.last_error && (
+                  <p className="mt-2 rounded bg-red-50 px-2 py-1.5 text-xs text-red-700">
+                    连续 {account.failure_count}/3：{account.last_error}
+                  </p>
+                )}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={account.checked}
+                      disabled={!account.adapter_enabled || platformMut.isPending}
+                      onChange={(event) => platformMut.mutate({
+                        platform: 'binance_square',
+                        checked: event.target.checked,
+                        accountKey: account.account_key,
+                      })}
+                      className="accent-midas-red"
+                    />
+                    允许自动发布
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => onToggle(account.account_key, account.enabled)}
+                    disabled={!account.checked || toggleMut.isPending}
+                    className="rounded bg-midas-red px-2.5 py-1 text-xs text-white disabled:opacity-40"
+                  >
+                    {account.enabled ? '关闭' : '开启'}此账号
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onStop(account.account_key)}
+                    disabled={stopMut.isPending}
+                    className="rounded border border-red-200 px-2.5 py-1 text-xs text-red-700"
+                  >
+                    熔断此账号
+                  </button>
+                </div>
+              </section>
+            ))}
           </div>
 
           <div className="mt-4 border-t border-paper pt-3">
@@ -225,27 +225,15 @@ export function AutoPilotPanel({ token }: { token: string }) {
           <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-paper pt-3">
             <button
               type="button"
-              onClick={onToggle}
-              disabled={toggleMut.isPending || token === ''}
-              className={
-                enabled
-                  ? 'rounded-md border border-paper px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground disabled:opacity-50'
-                  : 'rounded-md bg-midas-red px-4 py-1.5 text-sm font-medium text-white hover:bg-midas-red/90 disabled:opacity-50'
-              }
-            >
-              {toggleMut.isPending ? '处理中…' : enabled ? '关闭自动托管' : '开启自动托管'}
-            </button>
-            <button
-              type="button"
-              onClick={onStop}
+              onClick={() => onStop()}
               disabled={stopMut.isPending || token === ''}
               className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
             >
               {stopMut.isPending ? '熔断中…' : '🛑 紧急熔断'}
             </button>
-            {circuitOpen && (
+            {circuitCount > 0 && (
               <span className="text-xs text-red-600">
-                熔断中 · 重新「开启自动托管」会自动清熔断
+                熔断账号可在上方账号卡片中重新开启
               </span>
             )}
           </div>

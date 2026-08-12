@@ -24,6 +24,8 @@ type ConfigRow = Readonly<{
   weekly_report_enabled: number
   dott_digest_enabled: number
   dott_transition_enabled: number
+  econ_alert_enabled: number
+  econ_alert_minutes: number
   quiet_hours_enabled: number
   quiet_hours_start: number
   quiet_hours_end: number
@@ -69,6 +71,8 @@ function serializeConfig(row: ConfigRow) {
     weekly_report_enabled: row.weekly_report_enabled === 1,
     dott_digest_enabled: row.dott_digest_enabled === 1,
     dott_transition_enabled: row.dott_transition_enabled === 1,
+    econ_alert_enabled: row.econ_alert_enabled === 1,
+    econ_alert_minutes: row.econ_alert_minutes,
     has_telegram: Boolean(row.tg_chat_id),
     has_feishu: Boolean(row.feishu_open_id),
     quiet_hours_enabled: row.quiet_hours_enabled === 1,
@@ -97,6 +101,7 @@ async function updateConfig(request: Request, env: Env, requestId: string) {
     'weekly_report_enabled',
     'dott_digest_enabled',
     'dott_transition_enabled',
+    'econ_alert_enabled',
     'quiet_hours_enabled',
   ] as const
   const integerFields = ['quiet_hours_start', 'quiet_hours_end'] as const
@@ -118,6 +123,14 @@ async function updateConfig(request: Request, env: Env, requestId: string) {
       throw new HttpError(400, `${field} 必须是 0 到 23 的整数`)
     }
     sets.push(`${field} = ?`)
+    values.push(value)
+  }
+  if (body.econ_alert_minutes !== undefined) {
+    const value = body.econ_alert_minutes
+    if (!Number.isSafeInteger(value) || ![15, 30, 60].includes(Number(value))) {
+      throw new HttpError(400, 'econ_alert_minutes 必须是 15、30 或 60')
+    }
+    sets.push('econ_alert_minutes = ?')
     values.push(value)
   }
   if (body.quiet_hours_tz !== undefined) {

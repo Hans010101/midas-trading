@@ -2,6 +2,7 @@ import { env, exports } from 'cloudflare:workers'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { sha256Hex } from '../src/crypto'
+import { runEconReminderScan } from '../src/econ'
 import { runVirtualFundingSettlement } from '../src/virtual-trading'
 
 function request(
@@ -64,6 +65,61 @@ afterEach(() => {
 })
 
 describe('independent professional trading tools', () => {
+  it('gives every registered user an isolated automatic strategy account', async () => {
+    const first = await session()
+    const second = await session()
+    const enabled = await exports.default.fetch(request(
+      '/api/v1/platinum/intelligent/toggle',
+      first.token,
+      'POST',
+      { enabled: true },
+    ))
+    expect(enabled.status).toBe(200)
+    await expect(enabled.json()).resolves.toMatchObject({
+      enabled: true,
+      account_ready: true,
+      initial_capital: 100000,
+    })
+    const other = await exports.default.fetch(request(
+      '/api/v1/platinum/intelligent/status', second.token,
+    ))
+    expect(other.status).toBe(200)
+    await expect(other.json()).resolves.toMatchObject({ enabled: false })
+    await expect(
+      env.DB.prepare(
+        `SELECT COUNT(*) AS count FROM user_strategy_accounts
+         WHERE strategy='intelligent' AND user_id IN (?,?)`,
+      ).bind(first.userId, second.userId).first<{ count: number }>(),
+    ).resolves.toMatchObject({ count: 2 })
+  })
+
+  it('delivers economic-event reminders once through the notification inbox', async () => {
+    const auth = await session()
+    const now = Date.parse('2026-08-12T02:00:00.000Z')
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO notification_configs
+          (user_id, econ_alert_enabled, econ_alert_minutes, created_at, updated_at)
+         VALUES (?, 1, 30, ?, ?)`,
+      ).bind(auth.userId, now, now),
+      env.DB.prepare(
+        `INSERT INTO econ_events
+          (event_key, event_type, title_zh, title_en, markets_json, importance,
+           scheduled_at, time_confirmed, source, updated_at)
+         VALUES ('test-cpi', 'us_cpi', '美国 CPI', 'U.S. CPI', '["US","crypto"]',
+                 3, ?, 1, 'test', ?)`,
+      ).bind(now + 30 * 60_000, now),
+    ])
+    await runEconReminderScan(env, now)
+    await runEconReminderScan(env, now)
+    const notices = await env.DB.prepare(
+      `SELECT category, title FROM in_app_notifications
+       WHERE user_id = ? AND category = 'econ_calendar'`,
+    ).bind(auth.userId).all<{ category: string; title: string }>()
+    expect(notices.results).toHaveLength(1)
+    expect(notices.results[0]?.title).toContain('30 分钟后')
+  })
+
   it('uses the Cloudflare session for accounts, perpetuals and conditional orders', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       if (String(input).includes('okx.com/api/v5/market/candles')) return okxCandles()
@@ -193,7 +249,10 @@ describe('independent professional trading tools', () => {
     await expect(detail.json()).resolves.toMatchObject({
       status: 'done',
       metrics_json: { final_value: expect.any(Number) },
-      run_card_json: { engine: 'cloudflare-sma-cross-v1' },
+      run_card_json: {
+        engine: 'cloudflare-sma-cross-v2',
+        assumptions: { commission_included: true },
+      },
     })
 
     const chan = await exports.default.fetch(request(
@@ -204,11 +263,15 @@ describe('independent professional trading tools', () => {
       bar_count: number
       fractals: unknown[]
       bis: unknown[]
+      segments: unknown[]
+      structure: { data_quality: string }
       disclaimer: string
     }
     expect(chanBody.bar_count).toBe(120)
     expect(chanBody.fractals.length).toBeGreaterThan(5)
     expect(chanBody.bis.length).toBeGreaterThan(3)
+    expect(chanBody.segments.length).toBeGreaterThan(0)
+    expect(chanBody.structure.data_quality).toBeTruthy()
     expect(chanBody.disclaimer).toBe('')
   })
 })

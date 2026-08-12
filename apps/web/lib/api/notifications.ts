@@ -17,6 +17,8 @@ export interface NotificationConfig {
   // 做T M2-4 · 做T信号 TG 通知拆两体系(都 Pro 专属 · 默认 false · opt-in)
   dott_digest_enabled: boolean       // 体系1 · 每小时定时全景
   dott_transition_enabled: boolean   // 体系2 · 行情转换
+  econ_alert_enabled: boolean
+  econ_alert_minutes: 15 | 30 | 60
   has_telegram: boolean
   // ADR 0032 阶段三 · 是否已绑定飞书
   has_feishu: boolean
@@ -37,6 +39,8 @@ export interface NotificationConfigUpdate {
   // 做T M2-4 · 做T信号 TG 通知拆两体系(★Pro 专属 · 后端二道 gate · undefined = 不动)
   dott_digest_enabled?: boolean
   dott_transition_enabled?: boolean
+  econ_alert_enabled?: boolean
+  econ_alert_minutes?: 15 | 30 | 60
   // 0028 N2 · 4 字段各自可选(undefined = 不动,后端 None 语义)
   quiet_hours_enabled?: boolean
   quiet_hours_start?: number

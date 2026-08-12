@@ -122,11 +122,9 @@ export function TopNav() {
                 <DropdownMenuItem asChild className="justify-end">
                   <Link href="/account/profile">偏好设置</Link>
                 </DropdownMenuItem>
-                {/* 铂金自助(多账户 PR-6)· is_platinum 才渲染 —— 仅 UX,安全边界在后端 PlatinumDep 403。
-                    走 useMe(实时查 /me)·superadmin 刚开通即可见、免重登(不靠 JWT)。 */}
-                {me?.is_platinum && (
+                {me && (
                   <DropdownMenuItem asChild className="justify-end">
-                    <Link href="/platinum">铂金 · 自动交易</Link>
+                    <Link href="/platinum">自动策略</Link>
                   </DropdownMenuItem>
                 )}
                 {/* 实时 /me 角色判定使管理员置位后无需重新登录；安全边界仍在后端 403。 */}

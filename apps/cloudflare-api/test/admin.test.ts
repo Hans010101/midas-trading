@@ -703,10 +703,10 @@ describe('independent Cloudflare administrator controls', () => {
     await env.DB.batch([
       env.DB
         .prepare(
-          `UPDATE social_automation_config
-           SET enabled = 1, circuit_open = 0, binance_checked = 1,
+          `UPDATE social_automation_accounts
+           SET enabled = 1, circuit_open = 0, platform_checked = 1,
                failure_count = 0, last_error = NULL, updated_at = ?
-           WHERE id = 1`,
+           WHERE account_key = 'midas_trading'`,
         )
         .bind(scheduledAt),
       env.DB
@@ -738,7 +738,7 @@ describe('independent Cloudflare administrator controls', () => {
       env.DB
         .prepare(
           `SELECT status, draft_id, dispatch_id FROM social_auto_runs
-          WHERE slot = '2026-07-29T15:00'`,
+          WHERE slot = 'midas_trading:2026-07-29T15:00'`,
         )
         .first(),
     ).resolves.toMatchObject({
@@ -748,8 +748,8 @@ describe('independent Cloudflare administrator controls', () => {
     })
     await env.DB
       .prepare(
-        `UPDATE social_automation_config
-         SET enabled = 0, binance_checked = 0 WHERE id = 1`,
+        `UPDATE social_automation_accounts
+         SET enabled = 0, platform_checked = 0 WHERE account_key = 'midas_trading'`,
       )
       .run()
   })
@@ -765,10 +765,10 @@ describe('independent Cloudflare administrator controls', () => {
         env.DB.prepare("UPDATE social_content_events SET status = 'drafted'"),
         env.DB
           .prepare(
-            `UPDATE social_automation_config
-             SET enabled = 1, circuit_open = 0, binance_checked = 1,
+            `UPDATE social_automation_accounts
+             SET enabled = 1, circuit_open = 0, platform_checked = 1,
                  failure_count = 0, last_error = NULL, updated_at = ?
-             WHERE id = 1`,
+             WHERE account_key = 'midas_trading'`,
           )
           .bind(scheduledAt),
         env.DB
@@ -808,7 +808,7 @@ describe('independent Cloudflare administrator controls', () => {
         env.DB
           .prepare(
             `SELECT status, error FROM social_auto_runs
-             WHERE slot = '2026-07-30T18:00'`,
+             WHERE slot = 'midas_trading:2026-07-30T18:00'`,
           )
           .first(),
       ).resolves.toMatchObject({
@@ -819,7 +819,7 @@ describe('independent Cloudflare administrator controls', () => {
         env.DB
           .prepare(
             `SELECT enabled, circuit_open, failure_count, last_error
-             FROM social_automation_config WHERE id = 1`,
+             FROM social_automation_accounts WHERE account_key = 'midas_trading'`,
           )
           .first(),
       ).resolves.toMatchObject({
@@ -838,10 +838,10 @@ describe('independent Cloudflare administrator controls', () => {
     await env.DB.batch([
       env.DB
         .prepare(
-          `UPDATE social_automation_config
-           SET enabled = 1, circuit_open = 0, binance_checked = 1,
+          `UPDATE social_automation_accounts
+           SET enabled = 1, circuit_open = 0, platform_checked = 1,
                failure_count = 0, last_error = NULL, updated_at = ?
-           WHERE id = 1`,
+           WHERE account_key = 'midas_trading'`,
         )
         .bind(firstSlot),
       env.DB
@@ -870,7 +870,7 @@ describe('independent Cloudflare administrator controls', () => {
       env.DB
         .prepare(
           `SELECT enabled, circuit_open, failure_count, last_error
-           FROM social_automation_config WHERE id = 1`,
+           FROM social_automation_accounts WHERE account_key = 'midas_trading'`,
         )
         .first(),
     ).resolves.toMatchObject({

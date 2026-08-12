@@ -14,7 +14,16 @@ The automatic scheduler uses a five-post cycle:
 - 40% verified industry news: official or licensed feeds, rewritten with source attribution and follow-up checkpoints.
 - 20% event intelligence: large exchange-flow signals and token unlocks when an authorized source is configured; otherwise the slot falls back to news or market analysis.
 
-The scheduler runs every 20 minutes from 08:00 through 22:00 China Standard Time. Those 43 possible windows absorb retries and skipped drafts, while a database-enforced ceiling permits at most 40 successful automatic posts per day. If the verified event queue is empty or stale, the slot immediately falls back to the Midas Trading volatility scan instead of publishing filler news.
+Each account has an independent ten-minute scheduler offset inside the 08:00-22:00 China Standard Time window. The primary `点金雷达` account uses the `:00/:10/...` slots; the migrated `点金 Midas` account uses `:05/:15/...`. Each account has its own database-enforced daily ceiling, failure counter, circuit breaker, content profile, queue, dispatch ledger and API credential. If the verified event queue is empty or stale, the slot immediately falls back to the Midas Trading volatility scan instead of publishing filler news.
+
+## Dual-account cutover
+
+| Account | Key | Secret | Default state | Content profile |
+| --- | --- | --- | --- | --- |
+| 点金雷达 | `midas_trading` | `BINANCE_SQUARE_API_KEY` | Preserve current state | Hot news + market scan |
+| 点金 Midas | `legacy_midas` | `BINANCE_SQUARE_LEGACY_API_KEY` | Disabled until credential cutover | K-line + structure analysis |
+
+The legacy credential must be installed independently in both the Cloudflare Worker secret store and the GitHub Actions repository secret store. Never copy the AliCloud environment file into this project. Activate the legacy account from the admin account card only after its old scheduler has been stopped; otherwise both projects could publish from the same Square identity at the same time.
 
 ## Source policy
 

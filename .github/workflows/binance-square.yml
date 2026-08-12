@@ -10,18 +10,27 @@ permissions:
   contents: read
 
 concurrency:
-  group: midas-trading-binance-square
+  group: midas-trading-binance-square-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   publish:
-    name: 发布合规内容
+    name: 发布合规内容 · ${{ matrix.account_key }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - account_key: midas_trading
+            secret_slot: primary
+          - account_key: legacy_midas
+            secret_slot: legacy
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      BINANCE_SQUARE_API_KEY: ${{ secrets.BINANCE_SQUARE_API_KEY }}
+      SQUARE_ACCOUNT_KEY: ${{ matrix.account_key }}
+      BINANCE_SQUARE_API_KEY: ${{ matrix.secret_slot == 'legacy' && secrets.BINANCE_SQUARE_LEGACY_API_KEY || secrets.BINANCE_SQUARE_API_KEY }}
 
     steps:
       - uses: actions/checkout@v6

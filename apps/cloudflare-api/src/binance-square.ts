@@ -7,7 +7,17 @@ const IMAGE_STATUS_ENDPOINT =
 
 type BinanceSquareEnv = Readonly<{
   BINANCE_SQUARE_API_KEY?: string
+  BINANCE_SQUARE_LEGACY_API_KEY?: string
 }>
+
+export type BinanceSquareAccountKey = 'midas_trading' | 'legacy_midas'
+
+function apiKeyForAccount(env: Env, accountKey: BinanceSquareAccountKey): string {
+  const external = env as Env & BinanceSquareEnv
+  return (accountKey === 'legacy_midas'
+    ? external.BINANCE_SQUARE_LEGACY_API_KEY
+    : external.BINANCE_SQUARE_API_KEY)?.trim() ?? ''
+}
 
 type BinanceEnvelope = Readonly<{
   code?: unknown
@@ -26,8 +36,11 @@ export type BinanceSquarePublishResult = Readonly<{
   imageError: string | null
 }>
 
-export function binanceSquareEnabled(env: Env): boolean {
-  return Boolean((env as Env & BinanceSquareEnv).BINANCE_SQUARE_API_KEY?.trim())
+export function binanceSquareEnabled(
+  env: Env,
+  accountKey: BinanceSquareAccountKey = 'midas_trading',
+): boolean {
+  return Boolean(apiKeyForAccount(env, accountKey))
 }
 
 function postIdentity(data: unknown): { postId: string | null; url: string | null } {
@@ -115,8 +128,9 @@ export async function publishToBinanceSquare(
   env: Env,
   text: string,
   imageBytes?: ArrayBuffer | null,
+  accountKey: BinanceSquareAccountKey = 'midas_trading',
 ): Promise<BinanceSquarePublishResult> {
-  const apiKey = (env as Env & BinanceSquareEnv).BINANCE_SQUARE_API_KEY?.trim()
+  const apiKey = apiKeyForAccount(env, accountKey)
   if (!apiKey) {
     return {
       success: false,

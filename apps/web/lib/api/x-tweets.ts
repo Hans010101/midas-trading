@@ -34,6 +34,7 @@ export interface XTweetItem {
   gen_style: string // ★内容风格/平台(default 币安长文 / x_short X 短推)
   content_type: 'market_analysis' | 'news' | 'whale' | 'unlock'
   source_event_id: number | null
+  account_key: 'midas_trading' | 'legacy_midas'
   dispatches: XTweetDispatchItem[] // 各平台发布状态(发布层 PR-3)
 }
 
@@ -74,11 +75,15 @@ export async function fetchXTweets(token: string, signal?: AbortSignal): Promise
 export async function generateXTweets(
   token: string,
   style: 'default' | 'x_short' = 'default',
+  accountKey: 'midas_trading' | 'legacy_midas' = 'midas_trading',
 ): Promise<XTweetGenerateOut> {
-  const r = await fetch(`${API_BASE}/api/v1/admin/x-tweets/generate?style=${style}`, {
+  const r = await fetch(
+    `${API_BASE}/api/v1/admin/x-tweets/generate?style=${style}&account_key=${accountKey}`,
+    {
     method: 'POST',
     headers: _authHeaders(token),
-  })
+    },
+  )
   if (!r.ok) throw new Error(`x-tweets generate HTTP ${r.status}`)
   return (await r.json()) as XTweetGenerateOut
 }
@@ -103,11 +108,12 @@ export async function publishXTweet(
   token: string,
   id: number,
   platform: string,
+  accountKey?: 'midas_trading' | 'legacy_midas',
 ): Promise<XTweetPublishOut> {
   const r = await fetch(`${API_BASE}/api/v1/admin/x-tweets/${id}/publish`, {
     method: 'POST',
     headers: { ...(_authHeaders(token) ?? {}), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ platform }),
+    body: JSON.stringify({ platform, ...(accountKey ? { account_key: accountKey } : {}) }),
   })
   if (!r.ok) {
     const detail = (await r.json().catch(() => null)) as

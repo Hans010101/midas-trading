@@ -214,7 +214,7 @@ export function IntelligentPanel() {
   const shortCount = pos.filter((p) => p.side === 'short').length
 
   if (status.isError) {
-    return <p className="py-8 text-center text-sm text-muted-foreground">该功能仅铂金用户可用。</p>
+    return <p className="py-8 text-center text-sm text-muted-foreground">自动策略暂时不可用，请稍后重试。</p>
   }
 
   return (

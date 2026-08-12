@@ -59,12 +59,16 @@ export function NotificationsConfigSection() {
   const [tradeEnabled, setTradeEnabled] = useState(true)
   const [priceEnabled, setPriceEnabled] = useState(true)
   const [weeklyReportEnabled, setWeeklyReportEnabled] = useState(false)
+  const [econAlertEnabled, setEconAlertEnabled] = useState(true)
+  const [econAlertMinutes, setEconAlertMinutes] = useState<15 | 30 | 60>(30)
 
   useEffect(() => {
     if (config) {
       setTradeEnabled(config.trade_alert_enabled)
       setPriceEnabled(config.price_alert_enabled)
       setWeeklyReportEnabled(config.weekly_report_enabled)
+      setEconAlertEnabled(config.econ_alert_enabled)
+      setEconAlertMinutes(config.econ_alert_minutes)
     }
   }, [config])
 
@@ -74,6 +78,8 @@ export function NotificationsConfigSection() {
         trade_alert_enabled: tradeEnabled,
         price_alert_enabled: priceEnabled,
         weekly_report_enabled: weeklyReportEnabled,
+        econ_alert_enabled: econAlertEnabled,
+        econ_alert_minutes: econAlertMinutes,
       })
       toast.success(en ? 'Notification settings saved' : '推送开关已保存')
     } catch (e) {
@@ -130,6 +136,27 @@ export function NotificationsConfigSection() {
               checked={priceEnabled}
               onChange={setPriceEnabled}
             />
+            <Toggle
+              locale={locale}
+              label={en ? 'Economic calendar reminder' : '财经事件提醒'}
+              hint={en ? 'High- and medium-impact events · In-app and bound channels' : '中高重要度事件 · 站内及已绑定外部通道'}
+              checked={econAlertEnabled}
+              onChange={setEconAlertEnabled}
+            />
+            {econAlertEnabled && (
+              <label className="flex items-center justify-between gap-4 rounded-md border border-paper px-3 py-2 text-sm">
+                <span>{en ? 'Notify me before the event' : '提前提醒时间'}</span>
+                <select
+                  value={econAlertMinutes}
+                  onChange={(event) => setEconAlertMinutes(Number(event.target.value) as 15 | 30 | 60)}
+                  className="rounded border border-paper bg-background px-2 py-1"
+                >
+                  <option value={15}>{en ? '15 minutes' : '15 分钟'}</option>
+                  <option value={30}>{en ? '30 minutes' : '30 分钟'}</option>
+                  <option value={60}>{en ? '60 minutes' : '60 分钟'}</option>
+                </select>
+              </label>
+            )}
             <Toggle
               locale={locale}
               label={en ? 'Market weekly report' : '订阅市场周报'}

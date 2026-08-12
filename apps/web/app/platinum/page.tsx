@@ -1,11 +1,9 @@
 'use client'
 
 /**
- * 铂金用户自助页(多账户 PR-6 · 最后一刀)· /platinum 独立路由。
+ * 注册用户自动策略页 · /platinum 保留为兼容旧链接。
  *
- * 铂金用户自助开/关 + 看自己的智能/托管影子账户(Tabs 切换)。接 PR-5a 的 /platinum/* 端点。
- * 🔴 真安全边界后端 PlatinumDep(403)· 前端入口门控(非铂金不显入口)= 刀3。
- * ★ 非铂金用户即使手输 /platinum,各面板 status 端点 403 → 面板渲染「该功能仅铂金用户可用」。
+ * 注册用户可开/关并查看自己的智能/托管独立模拟账户。
  */
 
 import { useState } from 'react'
@@ -31,8 +29,8 @@ export default function PlatinumSelfPage() {
       <TopNav />
       <main className="mx-auto w-full max-w-6xl px-6 py-8">
         <div className="mb-1 flex items-center gap-2">
-          <h1 className="font-serif text-xl font-bold">铂金 · 我的自动交易</h1>
-          <span className="rounded bg-gold/10 px-2 py-0.5 text-[11px] text-gold">铂金专属</span>
+          <h1 className="font-serif text-xl font-bold">我的自动策略</h1>
+          <span className="rounded bg-gold/10 px-2 py-0.5 text-[11px] text-gold">注册用户免费</span>
         </div>
         <p className="mb-5 text-sm text-muted-foreground">
           开/关后,系统按策略信号在你的独立账户自动开仓 / 平仓 · 持仓与盈亏实时展示。

@@ -1,4 +1,5 @@
 import { jsonResponse } from './http'
+import { deliverUserNotification } from './notifications'
 
 type EconEvent = Readonly<{
   event_key: string
@@ -499,6 +500,62 @@ export async function refreshEconCalendar(env: Env): Promise<Readonly<{
       { source: 'rule', ok: true },
       { source: 'seed', ok: true },
     ],
+  }
+}
+
+/**
+ * Deliver high/medium-importance event reminders to every registered user who
+ * has not opted out. The time window deliberately overlaps the five-minute
+ * scheduler; the deterministic notification id makes retries idempotent.
+ */
+export async function runEconReminderScan(env: Env, now = Date.now()): Promise<void> {
+  const leadTimes = [15, 30, 60] as const
+  for (const leadMinutes of leadTimes) {
+    const target = now + leadMinutes * 60_000
+    const events = await env.DB.prepare(
+      `SELECT event_key, title_zh, markets_json, importance, scheduled_at
+       FROM econ_events
+       WHERE time_confirmed = 1
+         AND importance >= 2
+         AND scheduled_at BETWEEN ? AND ?
+       ORDER BY importance DESC, scheduled_at
+       LIMIT 20`,
+    ).bind(target - 150_000, target + 150_000).all<{
+      event_key: string
+      title_zh: string
+      markets_json: string
+      importance: number
+      scheduled_at: number
+    }>()
+    if (events.results.length === 0) continue
+    const users = await env.DB.prepare(
+      `SELECT u.id
+       FROM users u
+       LEFT JOIN notification_configs c ON c.user_id = u.id
+       WHERE COALESCE(c.econ_alert_enabled, 1) = 1
+         AND COALESCE(c.econ_alert_minutes, 30) = ?
+       LIMIT 1000`,
+    ).bind(leadMinutes).all<{ id: string }>()
+    for (const event of events.results) {
+      const markets = (JSON.parse(event.markets_json) as string[]).join(' / ')
+      const time = new Intl.DateTimeFormat('zh-CN', {
+        timeZone: 'Asia/Shanghai',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).format(new Date(event.scheduled_at))
+      for (const user of users.results) {
+        await deliverUserNotification(env, {
+          userId: user.id,
+          category: 'econ_calendar',
+          title: `${leadMinutes} 分钟后：${event.title_zh}`,
+          body: `${time}（北京时间）· 影响市场：${markets || '全球市场'} · 重要度 ${event.importance}/3`,
+          dedupeKey: `econ:${event.event_key}:${leadMinutes}:${user.id}`,
+        })
+      }
+    }
   }
 }
 

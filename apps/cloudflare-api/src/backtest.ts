@@ -88,6 +88,8 @@ function runSmaBacktest(
     fast: number
     slow: number
     leverage: number
+    commissionRate: number
+    slippageBps: number
   }>,
 ) {
   let cash = input.initialCash
@@ -117,8 +119,10 @@ function runSmaBacktest(
     const crossUp = index >= input.slow && previousFast <= previousSlow && fast > slow
     const crossDown = index >= input.slow && previousFast >= previousSlow && fast < slow
     if (crossUp && quantity === 0) {
-      entryPrice = item.close * 1.001
+      const slippage = input.slippageBps / 10_000
+      entryPrice = item.close * (1 + slippage)
       quantity = (cash * input.leverage) / entryPrice
+      cash -= entryPrice * quantity * input.commissionRate
       entryAt = item.ts
       trades.push({
         timestamp: item.ts,
@@ -132,8 +136,10 @@ function runSmaBacktest(
         return_pct: 0,
       })
     } else if (crossDown && quantity > 0) {
-      const exitPrice = item.close * 0.999
-      const pnl = (exitPrice - entryPrice) * quantity
+      const slippage = input.slippageBps / 10_000
+      const exitPrice = item.close * (1 - slippage)
+      const exitFee = exitPrice * quantity * input.commissionRate
+      const pnl = (exitPrice - entryPrice) * quantity - exitFee
       const returnPct = ((exitPrice - entryPrice) / entryPrice) * 100 * input.leverage
       cash += pnl
       const holdingDays = Math.max(
@@ -229,7 +235,12 @@ async function create(request: Request, env: Env, requestId: string) {
   if (fast >= slow) throw new HttpError(400, 'sma_fast 必须小于 sma_slow')
   const initialCash = finite(body.initial_cash, 100_000, 100, 100_000_000)
   const leverage = finite(body.leverage, 1, 1, 20)
-  const params = { sma_fast: fast, sma_slow: slow, initial_cash: initialCash, leverage }
+  const commissionRate = finite(body.commission_rate, 0.0005, 0, 0.02)
+  const slippageBps = finite(body.slippage_bps, 5, 0, 200)
+  const params = {
+    sma_fast: fast, sma_slow: slow, initial_cash: initialCash, leverage,
+    commission_rate: commissionRate, slippage_bps: slippageBps,
+  }
   const now = Date.now()
   const created = await env.DB.prepare(
     `INSERT INTO backtest_runs
@@ -253,7 +264,9 @@ async function create(request: Request, env: Env, requestId: string) {
       return timestamp >= startAt && timestamp <= endAt
     })
     if (items.length < slow + 5) throw new Error('所选区间有效 K 线不足，请扩大日期范围')
-    const output = runSmaBacktest(items, { symbol, initialCash, fast, slow, leverage })
+    const output = runSmaBacktest(items, {
+      symbol, initialCash, fast, slow, leverage, commissionRate, slippageBps,
+    })
     await env.DB.prepare(
       `UPDATE backtest_runs SET status = 'done', metrics_json = ?, equity_json = ?,
          trades_json = ?, run_card_json = ?, updated_at = ? WHERE id = ?`,
@@ -261,10 +274,10 @@ async function create(request: Request, env: Env, requestId: string) {
       JSON.stringify(output.metrics), JSON.stringify(output.equity),
       JSON.stringify(output.trades),
       JSON.stringify({
-        engine: 'cloudflare-sma-cross-v1',
+        engine: 'cloudflare-sma-cross-v2',
         source: result.source,
         bars: items.length,
-        assumptions: { commission_included: false, slippage_bps: 10 },
+        assumptions: { commission_included: true, commission_rate: commissionRate, slippage_bps: slippageBps },
       }),
       Date.now(), id,
     ).run()

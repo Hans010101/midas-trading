@@ -20,7 +20,7 @@ import { handleAuthRoute } from './auth'
 import { handleBacktestRoute } from './backtest'
 import { handleBotPresetRoute } from './bot-preset'
 import { handleCryptoMarketRoute } from './crypto-market'
-import { handleEconRoute, refreshEconCalendar } from './econ'
+import { handleEconRoute, refreshEconCalendar, runEconReminderScan } from './econ'
 import { handleChanAnalysisRoute } from './chan-analysis'
 import {
   handleConditionalOrderRoute,
@@ -44,6 +44,7 @@ import {
   runVirtualFundingSettlement,
   runVirtualRiskScan,
 } from './virtual-trading'
+import { handleUserStrategyRoute, runUserStrategiesCron } from './user-strategies'
 
 async function databaseReady(db: D1Database): Promise<boolean> {
   const row = await db.prepare('SELECT 1 AS ok').first<{ ok: number }>()
@@ -158,6 +159,7 @@ export default {
         (await handleBotPresetRoute(request, env, requestId)) ??
         (await handleAccountRoute(request, env, requestId)) ??
         (await handleConditionalOrderRoute(request, env, requestId)) ??
+        (await handleUserStrategyRoute(request, env, requestId)) ??
         (await handleVirtualTradingRoute(request, env, requestId)) ??
         (await handleAlertRulesRoute(request, env, requestId)) ??
         (await handleNotificationRoute(request, env, requestId)) ??
@@ -246,6 +248,7 @@ export default {
               : refreshGlobalOverview(env).then(() => undefined),
           },
           { name: 'virtual_trading', promise: runVirtualTradingCron(env) },
+          { name: 'user_strategies', promise: runUserStrategiesCron(env) },
           { name: 'user_virtual_risk', promise: runVirtualRiskScan(env) },
           {
             name: 'user_virtual_funding',
@@ -253,6 +256,7 @@ export default {
           },
           { name: 'conditional_orders', promise: runConditionalOrderScan(env) },
           { name: 'alert_scan', promise: runAlertScan(env) },
+          { name: 'econ_reminders', promise: runEconReminderScan(env, controller.scheduledTime) },
           ...(minute === 15
             ? [{ name: 'econ_calendar', promise: refreshEconCalendar(env).then(() => undefined) }]
             : []),

@@ -65,6 +65,8 @@ export default function LabPage() {
   const [end, setEnd] = useState('2026-05-31')
   const [smaFast, setSmaFast] = useState(5)
   const [smaSlow, setSmaSlow] = useState(20)
+  const [commissionRate, setCommissionRate] = useState(0.0005)
+  const [slippageBps, setSlippageBps] = useState(5)
   const [period, setPeriod] = useState<LabPeriod>('1d')
   const [page, setPage] = useState(1)
 
@@ -84,6 +86,8 @@ export default function LabPage() {
         period, // P2-period:1h / 1d 从段控件取(LabPeriod 仅两档)
         sma_fast: smaFast,
         sma_slow: smaSlow,
+        commission_rate: commissionRate,
+        slippage_bps: slippageBps,
       },
       {
         onSuccess: (data) => router.push(`/lab/report?id=${data.id}`),
@@ -190,6 +194,27 @@ export default function LabPage() {
                     />
                   </Field>
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label={locale === 'en' ? 'Commission rate' : '手续费率'}>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={0.02}
+                      step={0.0001}
+                      value={commissionRate}
+                      onChange={(e) => setCommissionRate(Number(e.target.value))}
+                    />
+                  </Field>
+                  <Field label={locale === 'en' ? 'Slippage (bps)' : '滑点（bps）'}>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={200}
+                      value={slippageBps}
+                      onChange={(e) => setSlippageBps(Number(e.target.value))}
+                    />
+                  </Field>
+                </div>
               </div>
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <Button
@@ -208,8 +233,8 @@ export default function LabPage() {
               </div>
               <p className="mt-3 text-xs text-faint">
                 {locale === 'en'
-                  ? 'Strategy: deterministic dual-SMA crossover · No LLM · Read-only ClickHouse market data.'
-                  : '策略 = SMA 双均线交叉(确定性 · 零 LLM)· 数据只读 ClickHouse。'}
+                  ? 'Deterministic dual-SMA crossover with configurable commission and slippage.'
+                  : 'SMA 双均线确定性回测，手续费和滑点均可配置并计入收益。'}
               </p>
             </section>
 

@@ -202,7 +202,7 @@ export function ManagedPanel() {
   const totalUpnl = pos.reduce((s, p) => s + (p.unrealized_pnl ?? 0), 0)
 
   if (status.isError) {
-    return <p className="py-8 text-center text-sm text-muted-foreground">该功能仅铂金用户可用。</p>
+    return <p className="py-8 text-center text-sm text-muted-foreground">自动策略暂时不可用，请稍后重试。</p>
   }
 
   return (

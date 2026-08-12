@@ -21,6 +21,8 @@ export interface BacktestCreateRequest {
   sma_slow?: number
   initial_cash?: number
   leverage?: number
+  commission_rate?: number
+  slippage_bps?: number
 }
 
 export interface BacktestCreateResponse {

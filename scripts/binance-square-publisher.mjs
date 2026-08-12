@@ -10,6 +10,7 @@ const IMAGE_PRESIGN_ENDPOINT =
 const IMAGE_STATUS_ENDPOINT =
   'https://www.binance.com/bapi/composite/v2/public/pgc/openApi/image/imageStatus'
 const SYMBOL_COOLDOWN_MS = 45 * 60_000
+const ACCOUNT_KEYS = new Set(['midas_trading', 'legacy_midas'])
 
 function headers(apiKey) {
   return {
@@ -79,15 +80,15 @@ function cstMinute() {
   return value('hour') * 60 + value('minute')
 }
 
-function failDispatch(dispatchId, message) {
+function failDispatch(dispatchId, accountKey, message) {
   const now = Date.now()
   query(
     `UPDATE social_dispatches
      SET status='failed',error=${quote(message.slice(0, 500))},updated_at=${now}
      WHERE id=${dispatchId};
-     UPDATE social_automation_config
+     UPDATE social_automation_accounts
      SET last_error=${quote(message.slice(0, 500))},updated_at=${now}
-     WHERE id=1;`,
+     WHERE account_key=${quote(accountKey)};`,
   )
 }
 
@@ -139,8 +140,13 @@ async function uploadImage(apiKey, bytes, kind) {
 }
 
 async function main() {
+  const accountKey = process.env.SQUARE_ACCOUNT_KEY?.trim() || 'midas_trading'
+  if (!ACCOUNT_KEYS.has(accountKey)) throw new Error(`未知币安广场账户：${accountKey}`)
   const apiKey = process.env.BINANCE_SQUARE_API_KEY?.trim()
-  if (!apiKey) throw new Error('BINANCE_SQUARE_API_KEY 未配置')
+  if (!apiKey) {
+    console.log(`${accountKey} 尚未配置独立 API Key，本轮安全跳过`)
+    return
+  }
   const minute = cstMinute()
   if (minute < 8 * 60 || minute > 22 * 60) {
     console.log('当前不在 08:00–22:00 发布窗口，跳过')
@@ -160,6 +166,7 @@ async function main() {
      JOIN social_drafts d ON d.id=sd.draft_id
      LEFT JOIN social_content_events e ON e.id=d.source_event_id
      WHERE sd.platform='binance_square' AND sd.status='pending'
+       AND sd.account_key=${quote(accountKey)}
        AND sd.source='manual' AND d.gen_style='default'
        AND d.compliance_passed=1
      ORDER BY sd.updated_at
@@ -167,13 +174,13 @@ async function main() {
   )[0]
 
   const config = query(
-    `SELECT enabled,circuit_open,binance_checked,daily_limit
-     FROM social_automation_config WHERE id=1`,
+    `SELECT enabled,circuit_open,platform_checked,daily_limit
+     FROM social_automation_accounts WHERE account_key=${quote(accountKey)}`,
   )[0]
   if (!candidate) {
     if (
       !config || config.enabled !== 1 || config.circuit_open === 1 ||
-      config.binance_checked !== 1
+      config.platform_checked !== 1
     ) {
       console.log('自动托管未开启，且没有人工发布任务，跳过')
       return
@@ -181,6 +188,7 @@ async function main() {
     const used = query(
       `SELECT COUNT(*) AS count FROM social_dispatches
        WHERE source='auto' AND platform='binance_square' AND status='success'
+         AND account_key=${quote(accountKey)}
          AND date(updated_at/1000,'unixepoch','+8 hours')=date('now','+8 hours')`,
     )[0]
     if (Number(used?.count ?? 0) >= Number(config.daily_limit)) {
@@ -196,11 +204,14 @@ async function main() {
      LEFT JOIN social_content_events e ON e.id=d.source_event_id
      LEFT JOIN social_dispatches sd
        ON sd.draft_id=d.id AND sd.platform='binance_square'
+      AND sd.account_key=${quote(accountKey)}
      WHERE d.auto_drafted=1 AND d.gen_style='default'
+       AND d.account_key=${quote(accountKey)}
        AND d.compliance_passed=1 AND d.created_at>=${now - 4 * 60 * 60_000}
        AND NOT EXISTS (
          SELECT 1 FROM social_dispatches ok
          WHERE ok.draft_id=d.id AND ok.platform='binance_square'
+           AND ok.account_key=${quote(accountKey)}
            AND ok.status='success'
        )
        AND NOT EXISTS (
@@ -208,6 +219,7 @@ async function main() {
          JOIN social_dispatches recent_sd ON recent_sd.draft_id=recent_d.id
          WHERE recent_d.symbol=d.symbol
            AND recent_sd.platform='binance_square'
+           AND recent_sd.account_key=${quote(accountKey)}
            AND recent_sd.status='success'
            AND recent_sd.updated_at>=${now - SYMBOL_COOLDOWN_MS}
        )
@@ -226,7 +238,8 @@ async function main() {
                          date('now','+8 hours') THEN 1 ELSE 0 END) AS today,
        MAX(updated_at) AS last_at
      FROM social_dispatches
-     WHERE platform='binance_square' AND status='success'`,
+     WHERE platform='binance_square' AND status='success'
+       AND account_key=${quote(accountKey)}`,
   )[0]
   if (Number(guard?.today ?? 0) >= 100) {
     console.log('币安广场今日已达到 100 条官方上限，保留队列等待')
@@ -241,8 +254,8 @@ async function main() {
 
   query(
     `INSERT INTO social_dispatches
-       (draft_id,platform,status,url,error,source,created_at,updated_at)
-     VALUES (${candidate.id},'binance_square','pending',NULL,NULL,${quote(dispatchSource)},${now},${now})
+       (draft_id,platform,status,url,error,source,created_at,updated_at,account_key)
+     VALUES (${candidate.id},'binance_square','pending',NULL,NULL,${quote(dispatchSource)},${now},${now},${quote(accountKey)})
      ON CONFLICT(draft_id,platform) DO UPDATE SET
        status='pending',url=NULL,error=NULL,source=${quote(dispatchSource)},updated_at=${now};`,
   )
@@ -288,7 +301,7 @@ async function main() {
     })
   } catch (error) {
     const message = `币安广场网络错误：${error instanceof Error ? error.message : String(error)}`
-    failDispatch(dispatch.id, message)
+    failDispatch(dispatch.id, accountKey, message)
     throw new Error(message)
   }
 
@@ -300,12 +313,12 @@ async function main() {
       body = JSON.parse(raw)
     } catch {
       const message = `币安广场返回非 JSON 响应（HTTP ${response.status}）`
-      failDispatch(dispatch.id, message)
+      failDispatch(dispatch.id, accountKey, message)
       throw new Error(message)
     }
     if (!response.ok || body.code !== '000000') {
       const message = `币安广场拒绝 [${body.code ?? response.status}] ${body.message ?? '未知错误'}`
-      failDispatch(dispatch.id, message)
+      failDispatch(dispatch.id, accountKey, message)
       throw new Error(message)
     }
     url = body.data?.shareLink ?? (
@@ -321,12 +334,12 @@ async function main() {
      UPDATE social_drafts SET status='published' WHERE id=${candidate.id};
      UPDATE social_auto_runs
      SET status='success',dispatch_id=${dispatch.id},error=NULL,updated_at=${completedAt}
-     WHERE draft_id=${candidate.id};
-     UPDATE social_automation_config
+     WHERE draft_id=${candidate.id} AND account_key=${quote(accountKey)};
+     UPDATE social_automation_accounts
      SET failure_count=0,last_error=NULL,updated_at=${completedAt}
-     WHERE id=1;`,
+     WHERE account_key=${quote(accountKey)};`,
   )
-  console.log(`发布成功：draft=${candidate.id}${url ? ` ${url}` : ''}`)
+  console.log(`发布成功：account=${accountKey} draft=${candidate.id}${url ? ` ${url}` : ''}`)
 }
 
 main().catch((error) => {

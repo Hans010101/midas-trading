@@ -37,6 +37,25 @@ export interface AutoPilotStatus {
   in_window: boolean // 当前在发布时段(8:00-22:00 CST)
   sources: AutoPilotSourceItem[] // 内容源健康状态；单源失败不会阻塞其它源
   platforms: AutoPilotPlatformItem[] // ★平台勾选(架子刀 · ADR 0050)
+  accounts: AutoPilotAccountItem[]
+}
+
+export type BinanceSquareAccountKey = 'midas_trading' | 'legacy_midas'
+
+export interface AutoPilotAccountItem {
+  account_key: BinanceSquareAccountKey
+  display_name: string
+  enabled: boolean
+  circuit_open: boolean
+  checked: boolean
+  adapter_enabled: boolean
+  daily_used: number
+  daily_limit: number
+  daily_remaining: number
+  failure_count: number
+  last_error: string | null
+  content_profile: 'radar' | 'legacy_market'
+  slot_offset_minutes: number
 }
 
 export interface AutoPilotStopOut {
@@ -62,11 +81,15 @@ export async function getAutoPilotStatus(
 }
 
 /** 开/关自动托管(★开 = 全自动起草+发布上线 · 调用方应在开启前二次确认)。 */
-export async function toggleAutoPilot(token: string, enabled: boolean): Promise<AutoPilotStatus> {
+export async function toggleAutoPilot(
+  token: string,
+  enabled: boolean,
+  accountKey: BinanceSquareAccountKey = 'midas_trading',
+): Promise<AutoPilotStatus> {
   const r = await fetch(`${API_BASE}/api/v1/admin/x-auto/toggle`, {
     method: 'POST',
     headers: { ...(_authHeaders(token) ?? {}), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ enabled }),
+    body: JSON.stringify({ enabled, account_key: accountKey }),
   })
   if (!r.ok) throw new Error(`x-auto toggle HTTP ${r.status}`)
   return (await r.json()) as AutoPilotStatus
@@ -77,11 +100,12 @@ export async function toggleAutoPlatform(
   token: string,
   platform: string,
   checked: boolean,
+  accountKey: BinanceSquareAccountKey = 'midas_trading',
 ): Promise<AutoPilotStatus> {
   const r = await fetch(`${API_BASE}/api/v1/admin/x-auto/platforms/${platform}`, {
     method: 'POST',
     headers: { ...(_authHeaders(token) ?? {}), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ checked }),
+    body: JSON.stringify({ checked, account_key: accountKey }),
   })
   if (!r.ok) {
     const detail = (await r.json().catch(() => null)) as
@@ -93,8 +117,12 @@ export async function toggleAutoPlatform(
 }
 
 /** ★紧急熔断:立刻停止自动托管(关开关 + 熔断 + revoke 排队任务)。 */
-export async function stopAutoPilot(token: string): Promise<AutoPilotStopOut> {
-  const r = await fetch(`${API_BASE}/api/v1/admin/x-auto/stop`, {
+export async function stopAutoPilot(
+  token: string,
+  accountKey?: BinanceSquareAccountKey,
+): Promise<AutoPilotStopOut> {
+  const query = accountKey ? `?account_key=${accountKey}` : ''
+  const r = await fetch(`${API_BASE}/api/v1/admin/x-auto/stop${query}`, {
     method: 'POST',
     headers: _authHeaders(token),
   })

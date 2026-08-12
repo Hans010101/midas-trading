@@ -78,6 +78,69 @@ function buildZhongshus(bis: ReturnType<typeof buildBis>) {
   return result
 }
 
+function buildSegments(bis: ReturnType<typeof buildBis>) {
+  const segments: Array<Readonly<{
+    start_ts: string
+    end_ts: string
+    direction: 'up' | 'down'
+    high: number
+    low: number
+    bi_count: number
+  }>> = []
+  for (let index = 0; index <= bis.length - 3; index += 2) {
+    const window = bis.slice(index, index + 3)
+    if (window.length < 3) continue
+    const first = window[0]!
+    const last = window[2]!
+    const direction = last.end_price >= first.start_price ? 'up' : 'down'
+    const candidate = {
+      start_ts: first.start_ts,
+      end_ts: last.end_ts,
+      direction,
+      high: Math.max(...window.map((item) => item.high)),
+      low: Math.min(...window.map((item) => item.low)),
+      bi_count: window.length,
+    } as const
+    const previous = segments.at(-1)
+    if (previous?.direction === candidate.direction) {
+      segments[segments.length - 1] = {
+        ...candidate,
+        start_ts: previous.start_ts,
+        high: Math.max(previous.high, candidate.high),
+        low: Math.min(previous.low, candidate.low),
+        bi_count: previous.bi_count + candidate.bi_count - 1,
+      }
+    } else segments.push(candidate)
+  }
+  return segments
+}
+
+function structureSummary(
+  items: Kline[],
+  bis: ReturnType<typeof buildBis>,
+  zhongshus: ReturnType<typeof buildZhongshus>,
+) {
+  const recent = bis.slice(-5)
+  const last = items.at(-1)!
+  const trend = recent.length >= 3 && recent.at(-1)!.end_price > recent[0]!.start_price
+    ? 'up'
+    : recent.length >= 3 && recent.at(-1)!.end_price < recent[0]!.start_price
+      ? 'down'
+      : 'range'
+  const current = zhongshus.at(-1) ?? null
+  const location = !current ? 'outside'
+    : last.close > current.high ? 'above'
+      : last.close < current.low ? 'below' : 'inside'
+  return {
+    trend,
+    location,
+    latest_close: last.close,
+    current_zhongshu: current,
+    confirmed_bis: bis.length,
+    data_quality: items.length >= 200 && bis.length >= 6 ? 'good' : 'limited',
+  }
+}
+
 function buySellPoints(
   points: Fractal[],
   bis: ReturnType<typeof buildBis>,
@@ -143,6 +206,7 @@ export async function handleChanAnalysisRoute(
   if (result.items.length < 20) throw new HttpError(404, '有效 K 线不足，无法生成缠论结构')
   const points = fractals(result.items)
   const bis = buildBis(points)
+  const zhongshus = buildZhongshus(bis)
   return jsonResponse(
     {
       symbol,
@@ -151,8 +215,10 @@ export async function handleChanAnalysisRoute(
       bar_count: result.items.length,
       fractals: points.map(({ index: _index, ...point }) => point),
       bis,
-      zhongshus: buildZhongshus(bis),
+      segments: buildSegments(bis),
+      zhongshus,
       buy_sell_points: buySellPoints(points, bis),
+      structure: structureSummary(result.items, bis, zhongshus),
       disclaimer: '',
       source: result.source,
       data_as_of: result.items.at(-1)?.ts ?? null,
