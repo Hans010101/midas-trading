@@ -21,16 +21,15 @@ jobs:
       matrix:
         include:
           - account_key: midas_trading
-            secret_slot: primary
           - account_key: legacy_midas
-            secret_slot: legacy
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       SQUARE_ACCOUNT_KEY: ${{ matrix.account_key }}
-      BINANCE_SQUARE_API_KEY: ${{ matrix.secret_slot == 'legacy' && secrets.BINANCE_SQUARE_LEGACY_API_KEY || secrets.BINANCE_SQUARE_API_KEY }}
+      BINANCE_SQUARE_PRIMARY_API_KEY: ${{ secrets.BINANCE_SQUARE_API_KEY }}
+      BINANCE_SQUARE_LEGACY_API_KEY: ${{ secrets.BINANCE_SQUARE_LEGACY_API_KEY }}
 
     steps:
       - uses: actions/checkout@v6

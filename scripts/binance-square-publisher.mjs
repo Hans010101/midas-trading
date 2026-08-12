@@ -142,7 +142,9 @@ async function uploadImage(apiKey, bytes, kind) {
 async function main() {
   const accountKey = process.env.SQUARE_ACCOUNT_KEY?.trim() || 'midas_trading'
   if (!ACCOUNT_KEYS.has(accountKey)) throw new Error(`未知币安广场账户：${accountKey}`)
-  const apiKey = process.env.BINANCE_SQUARE_API_KEY?.trim()
+  const apiKey = (accountKey === 'legacy_midas'
+    ? process.env.BINANCE_SQUARE_LEGACY_API_KEY
+    : process.env.BINANCE_SQUARE_PRIMARY_API_KEY)?.trim()
   if (!apiKey) {
     console.log(`${accountKey} 尚未配置独立 API Key，本轮安全跳过`)
     return
