@@ -3,7 +3,7 @@
 // Runtime types generated with workerd@1.20260722.1 2026-07-26 nodejs_compat
 interface __BaseEnv_CloudflareEnv {
 	ASSETS: Fetcher;
-	AUTH_URL: "https://midas-trading.hans-pan007.workers.dev";
+	AUTH_URL: "https://midastrading.work";
 	AUTH_TRUST_HOST: "true";
 	NEXT_PUBLIC_API_URL: "/api-proxy";
 	MIDAS_TRADING_API: Fetcher /* midas-trading-api */;

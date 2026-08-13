@@ -2,6 +2,8 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "midas-trading",
   "main": ".open-next/worker.js",
+  "workers_dev": true,
+  "preview_urls": false,
   "compatibility_date": "2026-07-26",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
@@ -17,8 +19,14 @@
       "service": "midas-trading-api"
     }
   ],
+  "routes": [
+    {
+      "pattern": "midastrading.work",
+      "custom_domain": true
+    }
+  ],
   "vars": {
-    "AUTH_URL": "https://midas-trading.hans-pan007.workers.dev",
+    "AUTH_URL": "https://midastrading.work",
     "AUTH_TRUST_HOST": "true",
     "NEXT_PUBLIC_API_URL": "/api-proxy"
   }

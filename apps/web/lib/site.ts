@@ -1,4 +1,4 @@
 export const PRODUCTION_WEB_URL =
-  'https://midas-trading.hans-pan007.workers.dev'
+  'https://midastrading.work'
 
 export const PRODUCT_NAME = 'Midas Trading'
