@@ -28,7 +28,7 @@ import {
 } from './conditional-orders'
 import { HttpError, jsonResponse } from './http'
 import { handleMarketRoute } from './market'
-import { handleNotificationRoute } from './notifications'
+import { ensureTelegramWebhook, handleNotificationRoute } from './notifications'
 import {
   handleMarketHomeRoute,
   refreshMarketBoards,
@@ -265,6 +265,7 @@ export default {
             promise: runAdminOperationsCron(env, controller.scheduledTime),
           },
         ]
+    tasks.push({ name: 'telegram_webhook', promise: ensureTelegramWebhook(env) })
     ctx.waitUntil(
       Promise.allSettled(tasks.map((task) => task.promise)).then((results) => {
         results.forEach((result, index) => {

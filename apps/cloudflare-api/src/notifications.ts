@@ -7,6 +7,7 @@ import {
 } from './http'
 
 const BIND_TTL_MS = 10 * 60 * 1_000
+const TELEGRAM_WEBHOOK_ORIGIN = 'https://midas-trading-api.openclaw007.online'
 const TIME_ZONES = new Set([
   'Asia/Shanghai',
   'Asia/Tokyo',
@@ -174,6 +175,43 @@ async function telegramSend(
     },
   )
   if (!response.ok) throw new Error(`Telegram HTTP ${response.status}`)
+}
+
+export async function ensureTelegramWebhook(env: Env): Promise<void> {
+  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_WEBHOOK_SECRET) return
+  const desiredUrl = `${TELEGRAM_WEBHOOK_ORIGIN}/api/v1/telegram/webhook/${env.TELEGRAM_WEBHOOK_SECRET}`
+  const infoResponse = await fetch(
+    `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getWebhookInfo`,
+    { signal: AbortSignal.timeout(10_000) },
+  )
+  const info = (await infoResponse.json()) as {
+    ok?: boolean
+    result?: { url?: string }
+  }
+  if (!infoResponse.ok || !info.ok) throw new Error('Telegram webhook 查询失败')
+  if (info.result?.url === desiredUrl) return
+
+  const setResponse = await fetch(
+    `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/setWebhook`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        url: desiredUrl,
+        allowed_updates: ['message'],
+        drop_pending_updates: false,
+      }),
+      signal: AbortSignal.timeout(10_000),
+    },
+  )
+  const setResult = (await setResponse.json()) as { ok?: boolean }
+  if (!setResponse.ok || !setResult.ok) throw new Error('Telegram webhook 注册失败')
+  console.log(JSON.stringify({
+    event: 'telegram.webhook_migrated',
+    bot: env.TELEGRAM_BOT_USERNAME,
+    from: info.result?.url ? new URL(info.result.url).hostname : null,
+    to: new URL(desiredUrl).hostname,
+  }))
 }
 
 async function feishuTenantToken(env: Env): Promise<string> {

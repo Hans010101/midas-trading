@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import examBank from '../../api/app/services/academy/exam_questions.json'
 import examBankEn from '../../api/app/services/academy/exam_questions.en.json'
 import { sha256Hex } from '../src/crypto'
+import { ensureTelegramWebhook } from '../src/notifications'
 import { hashPassword, verifyPassword } from '../src/password'
 
 function apiRequest(
@@ -93,6 +94,22 @@ describe('password storage', () => {
 })
 
 describe('independent alerts and notification settings', () => {
+  it('moves the Telegram webhook to the Cloudflare API', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ok: true,
+        result: { url: 'https://legacy.example.com/api/v1/telegram/webhook' },
+      })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true })))
+
+    await ensureTelegramWebhook(env)
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[1]?.[1]?.body as string).toContain(
+      'midas-trading-api.openclaw007.online',
+    )
+  })
+
   it('stores notification settings and alert rules in D1 per user', async () => {
     const { token } = await createTestSession()
     const update = await exports.default.fetch(
