@@ -5,6 +5,12 @@ import {
   jsonResponse,
   readJsonObject,
 } from './http'
+import {
+  handleTelegramBotUpdate,
+  sendTelegramWelcome,
+  TELEGRAM_COMMANDS,
+  telegramSend,
+} from './telegram-bot'
 
 const BIND_TTL_MS = 10 * 60 * 1_000
 const TELEGRAM_WEBHOOK_ORIGIN = 'https://midas-trading-api.openclaw007.online'
@@ -160,23 +166,6 @@ async function updateConfig(request: Request, env: Env, requestId: string) {
   )
 }
 
-async function telegramSend(
-  env: Env,
-  chatId: string,
-  text: string,
-): Promise<void> {
-  const response = await fetch(
-    `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text }),
-      signal: AbortSignal.timeout(10_000),
-    },
-  )
-  if (!response.ok) throw new Error(`Telegram HTTP ${response.status}`)
-}
-
 export async function ensureTelegramWebhook(env: Env): Promise<void> {
   if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_WEBHOOK_SECRET) return
   const desiredUrl = `${TELEGRAM_WEBHOOK_ORIGIN}/api/v1/telegram/webhook/${env.TELEGRAM_WEBHOOK_SECRET}`
@@ -186,10 +175,14 @@ export async function ensureTelegramWebhook(env: Env): Promise<void> {
   )
   const info = (await infoResponse.json()) as {
     ok?: boolean
-    result?: { url?: string }
+    result?: { url?: string; allowed_updates?: string[] }
   }
   if (!infoResponse.ok || !info.ok) throw new Error('Telegram webhook 查询失败')
-  if (info.result?.url === desiredUrl) return
+  if (
+    info.result?.url === desiredUrl &&
+    info.result.allowed_updates?.includes('message') &&
+    info.result.allowed_updates.includes('callback_query')
+  ) return
 
   const setResponse = await fetch(
     `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/setWebhook`,
@@ -198,7 +191,7 @@ export async function ensureTelegramWebhook(env: Env): Promise<void> {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         url: desiredUrl,
-        allowed_updates: ['message'],
+        allowed_updates: ['message', 'callback_query'],
         drop_pending_updates: false,
       }),
       signal: AbortSignal.timeout(10_000),
@@ -206,6 +199,19 @@ export async function ensureTelegramWebhook(env: Env): Promise<void> {
   )
   const setResult = (await setResponse.json()) as { ok?: boolean }
   if (!setResponse.ok || !setResult.ok) throw new Error('Telegram webhook 注册失败')
+  const commandsResponse = await fetch(
+    `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/setMyCommands`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ commands: TELEGRAM_COMMANDS }),
+      signal: AbortSignal.timeout(10_000),
+    },
+  )
+  const commandsResult = (await commandsResponse.json()) as { ok?: boolean }
+  if (!commandsResponse.ok || !commandsResult.ok) {
+    throw new Error('Telegram 指令菜单注册失败')
+  }
   console.log(JSON.stringify({
     event: 'telegram.webhook_migrated',
     bot: env.TELEGRAM_BOT_USERNAME,
@@ -473,11 +479,10 @@ async function telegramWebhook(request: Request, env: Env, requestId: string) {
   const chatId = message?.chat?.id
   if (match?.[1] && (typeof chatId === 'number' || typeof chatId === 'string')) {
     const ok = await consumeBindToken(env, 'telegram', match[1], String(chatId))
-    await telegramSend(
-      env,
-      String(chatId),
-      ok ? 'Midas Trading 绑定成功。' : '绑定码无效或已过期，请重新生成。',
-    )
+    if (ok) await sendTelegramWelcome(env, String(chatId), true)
+    else await telegramSend(env, String(chatId), '绑定码无效或已过期，请重新生成。')
+  } else {
+    await handleTelegramBotUpdate(env, body)
   }
   return jsonResponse({ ok: true }, 200, requestId, request.method)
 }

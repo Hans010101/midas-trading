@@ -6,6 +6,7 @@ import examBankEn from '../../api/app/services/academy/exam_questions.en.json'
 import { sha256Hex } from '../src/crypto'
 import { ensureTelegramWebhook } from '../src/notifications'
 import { hashPassword, verifyPassword } from '../src/password'
+import { handleTelegramBotUpdate } from '../src/telegram-bot'
 
 function apiRequest(
   path: string,
@@ -98,16 +99,78 @@ describe('independent alerts and notification settings', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response(JSON.stringify({
         ok: true,
-        result: { url: 'https://legacy.example.com/api/v1/telegram/webhook' },
+        result: {
+          url: 'https://legacy.example.com/api/v1/telegram/webhook',
+          allowed_updates: ['message'],
+        },
       })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true })))
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true })))
 
     await ensureTelegramWebhook(env)
 
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
     expect(fetchMock.mock.calls[1]?.[1]?.body as string).toContain(
       'midas-trading-api.openclaw007.online',
     )
+    expect(fetchMock.mock.calls[1]?.[1]?.body as string).toContain(
+      'callback_query',
+    )
+    expect(fetchMock.mock.calls[2]?.[1]?.body as string).toContain('"price"')
+  })
+
+  it('serves the migrated Telegram menu only to a bound Cloudflare user', async () => {
+    const { userId } = await createTestSession()
+    const now = Date.now()
+    await env.DB.prepare(
+      `INSERT INTO notification_configs (user_id, tg_chat_id, created_at, updated_at)
+       VALUES (?, '12345', ?, ?)`,
+    ).bind(userId, now, now).run()
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => new Response(JSON.stringify({ ok: true })))
+
+    await handleTelegramBotUpdate(env, {
+      message: { text: '/menu', chat: { id: 12345 } },
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[0]?.[1]?.body as string).toContain('管理提醒')
+    expect(fetchMock.mock.calls[1]?.[1]?.body as string).toContain('menu:order')
+  })
+
+  it('atomically consumes a Telegram order confirmation before execution', async () => {
+    const { userId } = await createTestSession()
+    const now = Date.now()
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO notification_configs (user_id, tg_chat_id, created_at, updated_at)
+         VALUES (?, '67890', ?, ?)`,
+      ).bind(userId, now, now),
+      env.DB.prepare(
+        `INSERT INTO telegram_bot_sessions
+          (chat_id, state_json, state_expires_at, updated_at)
+         VALUES ('67890', ?, ?, ?)`,
+      ).bind(JSON.stringify({
+        action: 'order_confirm', market: 'crypto', symbol: 'BTC/USDT',
+        direction: 'open_long', preview: 'BTC 模拟开多',
+      }), now + 60_000, now),
+    ])
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => new Response(JSON.stringify({ ok: true })))
+
+    const update = {
+      callback_query: {
+        id: 'callback-1', data: 'ordok', message: { chat: { id: 67890 } },
+      },
+    }
+    await handleTelegramBotUpdate(env, update)
+    await handleTelegramBotUpdate(env, {
+      callback_query: { ...update.callback_query, id: 'callback-2' },
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+    expect(fetchMock.mock.calls[1]?.[1]?.body as string).toContain('请先激活')
+    expect(fetchMock.mock.calls[3]?.[1]?.body as string).toContain('会话已过期')
   })
 
   it('stores notification settings and alert rules in D1 per user', async () => {
