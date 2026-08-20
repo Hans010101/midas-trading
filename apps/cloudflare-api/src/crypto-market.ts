@@ -1435,35 +1435,6 @@ export async function handleCryptoMarketRoute(
   if (path === '/api/v1/crypto/futures/metrics-batch') {
     return getMetrics(request, requestId)
   }
-  if (path === '/api/v1/crypto/boll-scan') {
-    return cachedJson(
-      {
-        as_of: null,
-        count: 0,
-        disclaimer: '',
-        items: [],
-      },
-      requestId,
-      request.method,
-    )
-  }
-  const bollMatch = path.match(/^\/api\/v1\/crypto\/boll-structure\/([^/]+)$/u)
-  if (bollMatch?.[1]) {
-    const parsed = parsePublicSymbol(decodeURIComponent(bollMatch[1]))
-    return cachedJson(
-      {
-        symbol: parsed.publicSymbol,
-        available: false,
-        source: 'none',
-        layer: '布林结构',
-        as_of: null,
-        item: null,
-        disclaimer: '',
-      },
-      requestId,
-      request.method,
-    )
-  }
   const futuresMatch = path.match(
     /^\/api\/v1\/crypto\/futures\/([^/]+)\/(open-interest|long-short-ratio|funding-rate|info|basis)$/u,
   )

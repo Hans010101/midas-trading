@@ -19,6 +19,7 @@ import { handleAlertRulesRoute } from './alert-rules'
 import { handleAuthRoute } from './auth'
 import { handleBacktestRoute } from './backtest'
 import { handleBotPresetRoute } from './bot-preset'
+import { handleBollScanRoute, runTelegramMarketCron } from './boll-scan'
 import { handleCryptoMarketRoute } from './crypto-market'
 import { handleEconRoute, refreshEconCalendar, runEconReminderScan } from './econ'
 import { handleChanAnalysisRoute } from './chan-analysis'
@@ -167,6 +168,7 @@ export default {
         (await handleWatchlistRoute(request, env, requestId)) ??
         (await handleRedeemRoute(request, env, requestId)) ??
         (await handleAcademyRoute(request, env, requestId)) ??
+        (await handleBollScanRoute(request, env, requestId)) ??
         (await handleCryptoMarketRoute(request, requestId)) ??
         (await handleEconRoute(request, env, requestId)) ??
         (await handleOverviewRoute(request, env, requestId)) ??
@@ -266,6 +268,10 @@ export default {
           },
         ]
     tasks.push({ name: 'telegram_webhook', promise: ensureTelegramWebhook(env) })
+    tasks.push({
+      name: 'telegram_market_scan',
+      promise: runTelegramMarketCron(env, controller.scheduledTime),
+    })
     ctx.waitUntil(
       Promise.allSettled(tasks.map((task) => task.promise)).then((results) => {
         results.forEach((result, index) => {

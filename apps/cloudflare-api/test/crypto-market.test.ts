@@ -157,21 +157,6 @@ describe('independent crypto market routes', () => {
     })
   })
 
-  it('returns an explicit empty state for unavailable strategy snapshots', async () => {
-    const response = await handleCryptoMarketRoute(
-      new Request('https://api.example.test/api/v1/crypto/boll-scan'),
-      'crypto-3',
-    )
-
-    expect(response?.status).toBe(200)
-    await expect(response?.json()).resolves.toMatchObject({
-      as_of: null,
-      count: 0,
-      disclaimer: '',
-      items: [],
-    })
-  })
-
   it('uses Gate contract statistics for complete OI history', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
