@@ -81,6 +81,7 @@ export async function fetchNotificationConfig(
   token: string, signal?: AbortSignal,
 ): Promise<NotificationConfig> {
   const r = await fetch(`${API_BASE}/api/v1/notifications/config`, {
+    cache: 'no-store',
     headers: authHeaders(token), signal,
   })
   if (!r.ok) throw new NotificationApiError(r.status, await readDetail(r))

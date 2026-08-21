@@ -551,6 +551,7 @@ function FeishuCard({ bound }: { bound: boolean }) {
   const queryClient = useQueryClient()
   const [bindInfo, setBindInfo] = useState<FeishuBindTokenResult | null>(null)
   const [appUnavailable, setAppUnavailable] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
   async function handleBind() {
     setAppUnavailable(false)
@@ -575,8 +576,27 @@ function FeishuCard({ bound }: { bound: boolean }) {
     }
   }
 
-  function handleRefresh() {
-    void queryClient.invalidateQueries({ queryKey: NOTIFICATIONS_KEY.config })
+  async function handleRefresh() {
+    setRefreshing(true)
+    try {
+      await queryClient.refetchQueries({
+        queryKey: NOTIFICATIONS_KEY.config,
+        type: 'active',
+      }, { throwOnError: true })
+      const latest = queryClient.getQueryData<NotificationConfig>(NOTIFICATIONS_KEY.config)
+      if (latest?.has_feishu) {
+        setBindInfo(null)
+        toast.success(en ? 'Feishu binding confirmed' : '飞书绑定已确认')
+      } else {
+        toast.error(en
+          ? 'No binding event received. Send the binding code to the bot, then try again.'
+          : '尚未收到绑定事件，请把绑定码作为一条消息发送给机器人后再刷新')
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : en ? 'Unable to refresh status' : '刷新状态失败')
+    } finally {
+      setRefreshing(false)
+    }
   }
 
   return (
@@ -645,7 +665,12 @@ function FeishuCard({ bound }: { bound: boolean }) {
           )}
 
           {bindInfo && (
-            <FeishuBindInstructions info={bindInfo} onRefresh={handleRefresh} locale={locale} />
+            <FeishuBindInstructions
+              info={bindInfo}
+              onRefresh={handleRefresh}
+              refreshing={refreshing}
+              locale={locale}
+            />
           )}
         </>
       )}
@@ -656,10 +681,12 @@ function FeishuCard({ bound }: { bound: boolean }) {
 function FeishuBindInstructions({
   info,
   onRefresh,
+  refreshing,
   locale,
 }: {
   info: FeishuBindTokenResult
-  onRefresh: () => void
+  onRefresh: () => Promise<void>
+  refreshing: boolean
   locale: 'en' | 'zh'
 }) {
   const en = locale === 'en'
@@ -701,9 +728,11 @@ function FeishuBindInstructions({
       </p>
       <button
         type="button"
-        onClick={onRefresh}
-        className="w-full rounded-md border border-paper bg-background px-4 py-2 text-sm text-foreground transition-colors hover:bg-cream"
+        onClick={() => void onRefresh()}
+        disabled={refreshing}
+        className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-paper bg-background px-4 py-2 text-sm text-foreground transition-colors hover:bg-cream disabled:cursor-wait disabled:opacity-60"
       >
+        {refreshing && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
         {en ? 'Binding complete · Refresh status' : '我已完成绑定 · 刷新状态'}
       </button>
     </div>
