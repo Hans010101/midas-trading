@@ -142,8 +142,8 @@ function structureSummary(
 }
 
 function buySellPoints(
-  points: Fractal[],
   bis: ReturnType<typeof buildBis>,
+  zhongshus: ReturnType<typeof buildZhongshus>,
 ) {
   const result: Array<Readonly<{
     ts: string
@@ -151,38 +151,68 @@ function buySellPoints(
     kind: 'B1' | 'B2' | 'B3' | 'S1' | 'S2' | 'S3'
     description: string
   }>> = []
-  for (let index = 2; index < points.length; index += 1) {
-    const point = points[index]!
-    const previousSame = points[index - 2]!
-    const recentBi = bis[index - 1]
-    if (!recentBi) continue
-    if (point.kind === 'D' && point.price > previousSame.price) {
-      result.push({
-        ts: point.ts,
-        price: point.price,
-        kind: 'B2',
-        description: '底分型抬高，次级别回撤未创新低',
-      })
-    }
-    if (point.kind === 'G' && point.price < previousSame.price) {
-      result.push({
-        ts: point.ts,
-        price: point.price,
-        kind: 'S2',
-        description: '顶分型降低，次级别反弹未创新高',
-      })
-    }
-    const priorPower = bis[index - 3]?.power
-    if (priorPower && recentBi.power < priorPower * 0.7) {
-      result.push({
-        ts: point.ts,
-        price: point.price,
-        kind: point.kind === 'D' ? 'B1' : 'S1',
-        description: '同向笔力度明显衰减，出现背驰候选',
-      })
+  if (bis.length < 3 || zhongshus.length === 0) return result
+  for (const zhongshu of zhongshus) {
+    for (let index = 0; index < bis.length - 1; index += 1) {
+      const current = bis[index]!
+      const next = bis[index + 1]!
+      if (current.start_ts < zhongshu.end_ts) continue
+      if (current.direction === 'up' && current.end_price > zhongshu.high &&
+          next.direction === 'down' && next.end_price >= zhongshu.high) {
+        result.push({ ts: next.end_ts, price: next.end_price, kind: 'B3',
+          description: `三买 · 突破中枢(${zhongshu.high.toFixed(2)})后回踩不破上沿` })
+        break
+      }
+      if (current.direction === 'down' && current.end_price < zhongshu.low &&
+          next.direction === 'up' && next.end_price <= zhongshu.low) {
+        result.push({ ts: next.end_ts, price: next.end_price, kind: 'S3',
+          description: `三卖 · 跌破中枢(${zhongshu.low.toFixed(2)})后反弹不破下沿` })
+        break
+      }
     }
   }
-  return result.slice(-30)
+  const recent = bis.slice(-5)
+  const last = zhongshus.at(-1)!
+  for (let index = 0; index < recent.length; index += 1) {
+    const current = recent[index]!
+    if (current.direction === 'down' && current.end_price < last.low) {
+      result.push({ ts: current.end_ts, price: current.end_price, kind: 'B1',
+        description: `一买 · 跌破中枢下沿(${last.low.toFixed(2)})后底背离` })
+      const second = recent[index + 2]
+      if (recent[index + 1]?.direction === 'up' && second?.direction === 'down' &&
+          second.end_price > current.end_price) {
+        result.push({ ts: second.end_ts, price: second.end_price, kind: 'B2',
+          description: '二买 · 一买后回踩不破前低' })
+      }
+      break
+    }
+    if (current.direction === 'up' && current.end_price > last.high) {
+      result.push({ ts: current.end_ts, price: current.end_price, kind: 'S1',
+        description: `一卖 · 突破中枢上沿(${last.high.toFixed(2)})后顶背离` })
+      const second = recent[index + 2]
+      if (recent[index + 1]?.direction === 'down' && second?.direction === 'up' &&
+          second.end_price < current.end_price) {
+        result.push({ ts: second.end_ts, price: second.end_price, kind: 'S2',
+          description: '二卖 · 一卖后反弹不破前高' })
+      }
+      break
+    }
+  }
+  return result.sort((left, right) => left.ts.localeCompare(right.ts)).slice(-30)
+}
+
+export function analyzeChanItems(items: Kline[]) {
+  const points = fractals(items)
+  const bis = buildBis(points)
+  const zhongshus = buildZhongshus(bis)
+  return {
+    fractals: points.map(({ index: _index, ...point }) => point),
+    bis,
+    segments: buildSegments(bis),
+    zhongshus,
+    buy_sell_points: buySellPoints(bis, zhongshus),
+    structure: structureSummary(items, bis, zhongshus),
+  }
 }
 
 export async function handleChanAnalysisRoute(
@@ -204,21 +234,14 @@ export async function handleChanAnalysisRoute(
   }
   const result = await fetchMarketKlines({ symbol, market, period, instrument, limit })
   if (result.items.length < 20) throw new HttpError(404, '有效 K 线不足，无法生成缠论结构')
-  const points = fractals(result.items)
-  const bis = buildBis(points)
-  const zhongshus = buildZhongshus(bis)
+  const analysis = analyzeChanItems(result.items)
   return jsonResponse(
     {
       symbol,
       market,
       period,
       bar_count: result.items.length,
-      fractals: points.map(({ index: _index, ...point }) => point),
-      bis,
-      segments: buildSegments(bis),
-      zhongshus,
-      buy_sell_points: buySellPoints(points, bis),
-      structure: structureSummary(result.items, bis, zhongshus),
+      ...analysis,
       disclaimer: '',
       source: result.source,
       data_as_of: result.items.at(-1)?.ts ?? null,

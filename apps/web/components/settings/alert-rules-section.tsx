@@ -52,7 +52,7 @@ const INDICATOR_LABEL_EN: Record<string, string> = {
   index_change_pct: 'Index change %',
 }
 const OP_LABEL: Record<Operator, string> = { gt: '>', gte: '≥', lt: '<', lte: '≤' }
-const MAX_RULES = 20
+const MAX_RULES = 50
 
 export function AlertRulesSection() {
   const { locale } = useRuntimeLocale()

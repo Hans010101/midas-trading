@@ -4,6 +4,11 @@ import {
   requireAdmin,
 } from './admin'
 import { HttpError, jsonResponse, readJsonObject } from './http'
+import {
+  DEFAULT_STRATEGY_PARAMS as DEFAULT_PARAMS,
+  normalizeStrategyParams,
+  scoreQuote,
+} from './strategy-score'
 
 type Strategy = 'managed' | 'intelligent'
 
@@ -57,20 +62,6 @@ type TradeRow = Readonly<{
   opened_at: number
   closed_at: number
 }>
-
-const DEFAULT_PARAMS = {
-  threshold: 3,
-  weights: {
-    boll: 1,
-    macd: 1,
-    ma: 1,
-    rsi: 1,
-    kdj: 1,
-    extreme: 1,
-  },
-  atr_stop_mult: 2,
-  atr_tp_mult: 4,
-}
 
 function iso(timestamp: number): string {
   return new Date(timestamp).toISOString()
@@ -700,9 +691,11 @@ async function runStrategy(
   env: Env,
   strategy: Strategy,
   quotes: readonly Quote[],
+  klineCache: Map<string, Promise<import('./market').Kline[]>>,
 ): Promise<void> {
   const state = await account(env, strategy)
   if (state.enabled !== 1) return
+  const params = normalizeStrategyParams(parseObject(state.strategy_params_json))
   const open = await positions(env, strategy)
   const quoteMap = new Map(quotes.map((quote) => [quote.symbol, quote]))
   for (const position of open) {
@@ -729,10 +722,10 @@ async function runStrategy(
       (marked.side === 'short' && marked.tp_price !== null && quote.last_point <= marked.tp_price)
     ) {
       await closePosition(env, marked, 'take_profit')
-    } else if (
-      (marked.side === 'long' && quote.change_pct < -0.5) ||
-      (marked.side === 'short' && quote.change_pct > 0.5)
-    ) {
+    } else if (strategy === 'intelligent' && await scoreQuote(quote, params, klineCache)
+      .then((signal) => Math.abs(signal.score) >= params.threshold &&
+        ((marked.side === 'long' && signal.score < 0) || (marked.side === 'short' && signal.score > 0)))
+      .catch(() => false)) {
       await closePosition(env, marked, 'signal_reversal')
     }
   }
@@ -747,16 +740,18 @@ async function runStrategy(
     )
     if (!candidate || state.allow_long !== 1) return
   } else {
-    const params = {
-      ...DEFAULT_PARAMS,
-      ...parseObject(state.strategy_params_json),
+    let scored: Awaited<ReturnType<typeof scoreQuote>> | undefined
+    for (const quote of quotes.slice(0, 12)) {
+      if (held.has(quote.symbol)) continue
+      try {
+        const output = await scoreQuote(quote, params, klineCache)
+        if (Math.abs(output.score) >= params.threshold) {
+          candidate = quote; scored = output; break
+        }
+      } catch { /* 单币种数据故障不阻塞其他候选 */ }
     }
-    const threshold = Number(params.threshold ?? DEFAULT_PARAMS.threshold)
-    candidate = quotes.find(
-      (quote) => Math.abs(quote.change_pct) >= threshold && !held.has(quote.symbol),
-    )
-    if (!candidate) return
-    side = candidate.change_pct >= 0 ? 'long' : 'short'
+    if (!candidate || !scored) return
+    side = scored.score >= 0 ? 'long' : 'short'
     if (
       (side === 'long' && state.allow_long !== 1) ||
       (side === 'short' && state.allow_short !== 1)
@@ -764,14 +759,13 @@ async function runStrategy(
   }
   const quantity =
     state.open_margin * state.open_leverage / candidate.last_point
-  const stopDistance = strategy === 'intelligent'
-    ? Math.max(0.01, Math.abs(candidate.change_pct) / 100) * candidate.last_point
-    : 0
+  const scored = strategy === 'intelligent' ? await scoreQuote(candidate, params, klineCache) : null
+  const stopDistance = scored ? Math.max(scored.atr * params.atr_stop_mult, candidate.last_point * 0.001) : 0
   const stopPrice = strategy === 'intelligent'
     ? candidate.last_point + (side === 'long' ? -stopDistance : stopDistance)
     : null
   const tpPrice = strategy === 'intelligent'
-    ? candidate.last_point + (side === 'long' ? stopDistance * 2 : -stopDistance * 2)
+    ? candidate.last_point + (side === 'long' ? scored!.atr * params.atr_tp_mult : -scored!.atr * params.atr_tp_mult)
     : null
   await env.DB
     .prepare(
@@ -793,8 +787,8 @@ async function runStrategy(
       tpPrice,
       JSON.stringify({
         bias: side === 'long' ? '偏多' : '偏空',
-        score: Math.abs(candidate.change_pct),
-        contributions: { daily_change: candidate.change_pct },
+        score: scored?.score ?? candidate.change_pct,
+        contributions: scored?.contributions ?? { daily_change: candidate.change_pct },
       }),
       Date.now(),
     )
@@ -811,9 +805,10 @@ export async function runVirtualTradingCron(env: Env): Promise<void> {
     )
     .all<Quote>()
   if (quotes.results.length === 0) return
+  const klineCache = new Map<string, Promise<import('./market').Kline[]>>()
   await refreshMarks(env, quotes.results)
-  await runStrategy(env, 'managed', quotes.results)
-  await runStrategy(env, 'intelligent', quotes.results)
+  await runStrategy(env, 'managed', quotes.results, klineCache)
+  await runStrategy(env, 'intelligent', quotes.results, klineCache)
 }
 
 export async function handleAdminTradingRoute(

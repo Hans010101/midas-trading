@@ -91,6 +91,15 @@ describe('independent professional trading tools', () => {
          WHERE strategy='intelligent' AND user_id IN (?,?)`,
       ).bind(first.userId, second.userId).first<{ count: number }>(),
     ).resolves.toMatchObject({ count: 2 })
+
+    const indicators = await exports.default.fetch(request(
+      '/api/v1/alert-rules/indicators', first.token,
+    ))
+    const indicatorBody = await indicators.json() as Array<{ key: string }>
+    expect(indicatorBody.map((item) => item.key)).toEqual(expect.arrayContaining([
+      'chan_buy', 'chan_sell', 'fear_greed', 'btc_dominance',
+      'cn_breadth_up_ratio', 'hk_breadth_up_ratio', 'sector_change_pct', 'index_change_pct',
+    ]))
   })
 
   it('delivers economic-event reminders once through the notification inbox', async () => {
@@ -250,7 +259,7 @@ describe('independent professional trading tools', () => {
       status: 'done',
       metrics_json: { final_value: expect.any(Number) },
       run_card_json: {
-        engine: 'cloudflare-sma-cross-v2',
+        engine: 'cloudflare-multi-strategy-v1',
         assumptions: { commission_included: true },
       },
     })

@@ -1,6 +1,7 @@
 import { fetchMarketKlines, type Kline } from './market'
 import { deliverUserNotification } from './notifications'
-import { fetchCryptoAiContext } from './crypto-market'
+import { fetchCryptoAiContext, fetchCryptoGlobal, fetchFearGreed } from './crypto-market'
+import { analyzeChanItems } from './chan-analysis'
 
 type AlertRule = Readonly<{
   id: number
@@ -97,6 +98,51 @@ function compare(value: number, operator: string, threshold: number): boolean {
   return value <= threshold
 }
 
+type BoardRow = Readonly<{ symbol: string; sector: string; change_pct: number }>
+
+async function boardRows(
+  env: Env,
+  market: string,
+  cache: Map<string, Promise<BoardRow[]>>,
+): Promise<BoardRow[]> {
+  let pending = cache.get(market)
+  if (!pending) {
+    pending = env.DB.prepare(
+      'SELECT payload_json FROM market_home_boards WHERE market = ?',
+    ).bind(market).first<{ payload_json: string }>().then((row) => {
+      if (!row) return []
+      const payload = JSON.parse(row.payload_json) as { rows?: BoardRow[] }
+      return payload.rows ?? []
+    })
+    cache.set(market, pending)
+  }
+  return pending
+}
+
+async function structureIndicator(
+  env: Env,
+  rule: AlertRule,
+  cache: Map<string, Promise<BoardRow[]>>,
+): Promise<number | null> {
+  if (rule.indicator === 'index_change_pct') {
+    const row = await env.DB.prepare(
+      `SELECT change_pct FROM market_overview_quotes
+       WHERE category = 'index' AND market = ? AND symbol = ?`,
+    ).bind(rule.market, rule.symbol).first<{ change_pct: number }>()
+    return row?.change_pct ?? null
+  }
+  const rows = await boardRows(env, rule.market, cache)
+  if (rule.indicator === 'sector_change_pct') {
+    const selected = rows.filter((row) => row.sector === rule.symbol)
+    return selected.length
+      ? mean(selected.map((row) => row.change_pct))
+      : null
+  }
+  const advancing = rows.filter((row) => row.change_pct > 0.01).length
+  const declining = rows.filter((row) => row.change_pct < -0.01).length
+  return advancing + declining > 0 ? advancing / (advancing + declining) * 100 : null
+}
+
 export async function runAlertScan(env: Env): Promise<void> {
   const rows = await env.DB
     .prepare(
@@ -112,13 +158,24 @@ export async function runAlertScan(env: Env): Promise<void> {
     .all<AlertRule>()
   const cache = new Map<string, Promise<Kline[]>>()
   const derivativeCache = new Map<string, ReturnType<typeof fetchCryptoAiContext>>()
+  const boardCache = new Map<string, Promise<BoardRow[]>>()
+  let globalPromise: ReturnType<typeof fetchCryptoGlobal> | undefined
+  let fearGreedPromise: ReturnType<typeof fetchFearGreed> | undefined
   const now = Date.now()
   for (const rule of rows.results) {
     let value: number | null = null
     let error: string | null = null
     try {
-      if (!rule.symbol) throw new Error('该规则需要指定标的')
-      if (['funding_rate', 'open_interest_usd', 'long_short_ratio', 'basis_pct'].includes(rule.indicator)) {
+      if (rule.indicator === 'fear_greed') {
+        fearGreedPromise ??= fetchFearGreed()
+        value = (await fearGreedPromise).value
+      } else if (rule.indicator === 'btc_dominance') {
+        globalPromise ??= fetchCryptoGlobal()
+        value = (await globalPromise).btc_dominance
+      } else if (['cn_breadth_up_ratio', 'hk_breadth_up_ratio', 'sector_change_pct', 'index_change_pct'].includes(rule.indicator)) {
+        value = await structureIndicator(env, rule, boardCache)
+      } else if (['funding_rate', 'open_interest_usd', 'long_short_ratio', 'basis_pct'].includes(rule.indicator)) {
+        if (!rule.symbol) throw new Error('该规则需要指定标的')
         let pending = derivativeCache.get(rule.symbol)
         if (!pending) {
           pending = fetchCryptoAiContext(rule.symbol)
@@ -133,6 +190,7 @@ export async function runAlertScan(env: Env): Promise<void> {
               ? metrics.account_long_short_ratio
               : metrics.basis_pct
       } else {
+        if (!rule.symbol) throw new Error('该规则需要指定标的')
         const period = rule.timeframe ?? '1h'
         const key = `${rule.market}|${rule.symbol}|${period}`
         let pending = cache.get(key)
@@ -146,7 +204,11 @@ export async function runAlertScan(env: Env): Promise<void> {
           }).then((result) => result.items)
           cache.set(key, pending)
         }
-        value = technicalIndicator(rule.indicator, await pending)
+        const items = await pending
+        if (rule.indicator === 'chan_buy' || rule.indicator === 'chan_sell') {
+          const latest = analyzeChanItems(items).buy_sell_points.at(-1)?.kind
+          value = latest?.startsWith(rule.indicator === 'chan_buy' ? 'B' : 'S') ? 1 : 0
+        } else value = technicalIndicator(rule.indicator, items)
       }
       if (value === null) throw new Error(`指标 ${rule.indicator} 暂无可计算数据`)
       const condition = compare(value, rule.operator, Number(rule.threshold))
@@ -158,7 +220,7 @@ export async function runAlertScan(env: Env): Promise<void> {
         await deliverUserNotification(env, {
           userId: rule.user_id,
           category: 'price_alert',
-          title: `${rule.symbol} 提醒已触发`,
+          title: `${rule.symbol ?? rule.market.toUpperCase()} 提醒已触发`,
           body: `${rule.indicator} 当前值 ${value.toFixed(6)} ${operatorText} ${rule.threshold}`,
           dedupeKey: `alert:${rule.id}:${Math.floor(now / (rule.cooldown_sec * 1_000))}`,
         })

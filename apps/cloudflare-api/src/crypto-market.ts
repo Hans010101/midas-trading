@@ -273,7 +273,7 @@ async function fetchCoinPaprikaGlobal(): Promise<CryptoGlobal> {
   return result
 }
 
-async function fetchCryptoGlobal(): Promise<CryptoGlobal> {
+export async function fetchCryptoGlobal(): Promise<CryptoGlobal> {
   try {
     return await fetchCoinGeckoGlobal()
   } catch {
@@ -317,7 +317,7 @@ async function fetchCryptoGlobal(): Promise<CryptoGlobal> {
   }
 }
 
-async function fetchFearGreed(): Promise<Readonly<{
+export async function fetchFearGreed(): Promise<Readonly<{
   value: number
   classification: string
 }>> {

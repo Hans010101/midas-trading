@@ -1,8 +1,10 @@
 import { authenticate } from './auth'
 import { HttpError, jsonResponse, readJsonObject } from './http'
 import { fetchMarketKlines, type Kline } from './market'
+import { scanStrategy } from './analysis'
 
 const PERIODS = new Set(['1m', '5m', '15m', '30m', '1h', '1d', '1w'])
+const STRATEGIES = new Set(['sma_cross', 'macd_cross', 'rsi_reversal', 'boll_reversion', 'kdj_cross'])
 
 type BacktestRow = Readonly<{
   id: number
@@ -29,11 +31,13 @@ function asObject(value: string | null): unknown {
 }
 
 function serialize(row: BacktestRow, full: boolean) {
+  const params = asObject(row.params_json) as Record<string, unknown> | null
   const base = {
     id: row.id,
     symbol: row.symbol,
     market: row.market,
     period: row.period,
+    strategy: String(params?.strategy ?? 'sma_cross'),
     start_date: row.start_date,
     end_date: row.end_date,
     status: row.status,
@@ -42,7 +46,7 @@ function serialize(row: BacktestRow, full: boolean) {
   return full
     ? {
         ...base,
-        params_json: asObject(row.params_json),
+        params_json: params,
         metrics_json: asObject(row.metrics_json),
         equity_json: asObject(row.equity_json),
         trades_json: asObject(row.trades_json),
@@ -80,10 +84,11 @@ function maxConsecutiveLoss(values: number[]): number {
   return maximum
 }
 
-function runSmaBacktest(
+export function runBacktest(
   items: Kline[],
   input: Readonly<{
     symbol: string
+    strategy: string
     initialCash: number
     fast: number
     slow: number
@@ -104,6 +109,9 @@ function runSmaBacktest(
   const dailyReturns: number[] = []
   let previousEquity = input.initialCash
   const benchmarkStart = items[0]!.close
+  const signals = input.strategy === 'sma_cross'
+    ? new Map<string, { kind: 'buy' | 'sell'; reason: string }>()
+    : new Map(scanStrategy(items, input.strategy).map((item) => [item.ts, item]))
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index]!
     const fastWindow = items.slice(Math.max(0, index - input.fast + 1), index + 1)
@@ -116,8 +124,13 @@ function runSmaBacktest(
     const previousSlow = index > 0
       ? mean(items.slice(Math.max(0, index - input.slow), index).map((entry) => entry.close))
       : slow
-    const crossUp = index >= input.slow && previousFast <= previousSlow && fast > slow
-    const crossDown = index >= input.slow && previousFast >= previousSlow && fast < slow
+    const currentSignal = signals.get(item.ts)
+    const crossUp = input.strategy === 'sma_cross'
+      ? index >= input.slow && previousFast <= previousSlow && fast > slow
+      : currentSignal?.kind === 'buy'
+    const crossDown = input.strategy === 'sma_cross'
+      ? index >= input.slow && previousFast >= previousSlow && fast < slow
+      : currentSignal?.kind === 'sell'
     if (crossUp && quantity === 0) {
       const slippage = input.slippageBps / 10_000
       entryPrice = item.close * (1 + slippage)
@@ -130,7 +143,7 @@ function runSmaBacktest(
         side: 'buy',
         price: entryPrice,
         qty: quantity,
-        reason: 'SMA golden cross',
+        reason: currentSignal?.reason ?? 'SMA golden cross',
         pnl: 0,
         holding_days: 0,
         return_pct: 0,
@@ -154,7 +167,7 @@ function runSmaBacktest(
         side: 'sell',
         price: exitPrice,
         qty: quantity,
-        reason: 'SMA death cross',
+        reason: currentSignal?.reason ?? 'SMA death cross',
         pnl,
         holding_days: holdingDays,
         return_pct: returnPct,
@@ -222,9 +235,10 @@ async function create(request: Request, env: Env, requestId: string) {
   const symbol = String(body.symbol ?? '').trim().toUpperCase()
   const market = body.market === undefined ? 'crypto' : String(body.market)
   const period = String(body.period ?? '1d')
+  const strategy = String(body.strategy ?? 'sma_cross')
   const start = String(body.start ?? '')
   const end = String(body.end ?? '')
-  if (!symbol || market !== 'crypto' || !PERIODS.has(period)) {
+  if (!symbol || market !== 'crypto' || !PERIODS.has(period) || !STRATEGIES.has(strategy)) {
     throw new HttpError(400, '当前回测仅支持 crypto 市场及有效周期')
   }
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(start) || !/^\d{4}-\d{2}-\d{2}$/u.test(end) || start >= end) {
@@ -238,7 +252,7 @@ async function create(request: Request, env: Env, requestId: string) {
   const commissionRate = finite(body.commission_rate, 0.0005, 0, 0.02)
   const slippageBps = finite(body.slippage_bps, 5, 0, 200)
   const params = {
-    sma_fast: fast, sma_slow: slow, initial_cash: initialCash, leverage,
+    strategy, sma_fast: fast, sma_slow: slow, initial_cash: initialCash, leverage,
     commission_rate: commissionRate, slippage_bps: slippageBps,
   }
   const now = Date.now()
@@ -264,8 +278,8 @@ async function create(request: Request, env: Env, requestId: string) {
       return timestamp >= startAt && timestamp <= endAt
     })
     if (items.length < slow + 5) throw new Error('所选区间有效 K 线不足，请扩大日期范围')
-    const output = runSmaBacktest(items, {
-      symbol, initialCash, fast, slow, leverage, commissionRate, slippageBps,
+    const output = runBacktest(items, {
+      symbol, strategy, initialCash, fast, slow, leverage, commissionRate, slippageBps,
     })
     await env.DB.prepare(
       `UPDATE backtest_runs SET status = 'done', metrics_json = ?, equity_json = ?,
@@ -274,7 +288,8 @@ async function create(request: Request, env: Env, requestId: string) {
       JSON.stringify(output.metrics), JSON.stringify(output.equity),
       JSON.stringify(output.trades),
       JSON.stringify({
-        engine: 'cloudflare-sma-cross-v2',
+        engine: 'cloudflare-multi-strategy-v1',
+        strategy,
         source: result.source,
         bars: items.length,
         assumptions: { commission_included: true, commission_rate: commissionRate, slippage_bps: slippageBps },

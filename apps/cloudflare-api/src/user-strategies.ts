@@ -1,5 +1,10 @@
 import { authenticate } from './auth'
 import { HttpError, jsonResponse, readJsonObject } from './http'
+import {
+  DEFAULT_STRATEGY_PARAMS as DEFAULT_PARAMS,
+  normalizeStrategyParams,
+  scoreQuote,
+} from './strategy-score'
 
 type Strategy = 'managed' | 'intelligent'
 
@@ -48,13 +53,6 @@ type Trade = Readonly<{
   opened_at: number
   closed_at: number
 }>
-
-const DEFAULT_PARAMS = {
-  threshold: 3,
-  weights: { boll: 1, macd: 1, ma: 1, rsi: 1, kdj: 1, extreme: 1 },
-  atr_stop_mult: 2,
-  atr_tp_mult: 4,
-}
 
 function parseObject(value: string): Record<string, unknown> {
   try {
@@ -313,7 +311,9 @@ export async function runUserStrategiesCron(env: Env): Promise<void> {
     ).all<Quote>(),
   ])
   if (!quotes.results.length) return
+  const klineCache = new Map<string, Promise<import('./market').Kline[]>>()
   for (const account of accounts.results) {
+    const params = normalizeStrategyParams(parseObject(account.strategy_params_json))
     const positions = await ownedPositions(env, account.user_id, account.strategy)
     const quoteMap = new Map(quotes.results.map((item) => [item.symbol, item]))
     for (const position of positions) {
@@ -331,18 +331,33 @@ export async function runUserStrategiesCron(env: Env): Promise<void> {
         (marked.side === 'long' && marked.tp_price !== null && quote.last_point >= marked.tp_price) ||
         (marked.side === 'short' && marked.tp_price !== null && quote.last_point <= marked.tp_price)
       )) await closePosition(env, marked, pnlPct > 0 ? 'take_profit' : 'stop_loss')
+      else if (account.strategy === 'intelligent' && await scoreQuote(quote, params, klineCache)
+        .then((signal) => Math.abs(signal.score) >= params.threshold &&
+          ((marked.side === 'long' && signal.score < 0) || (marked.side === 'short' && signal.score > 0)))
+        .catch(() => false)) await closePosition(env, marked, 'signal_reversal')
     }
     const remaining = await ownedPositions(env, account.user_id, account.strategy)
     if (remaining.length >= account.max_positions) continue
     const held = new Set(remaining.map((item) => item.symbol))
-    const threshold = account.strategy === 'intelligent'
-      ? Number(parseObject(account.strategy_params_json).threshold ?? 3)
-      : 0.3
-    const candidate = quotes.results.find((item) => Math.abs(item.change_pct) >= threshold && !held.has(item.symbol))
+    let candidate: Quote | undefined
+    let scored: Awaited<ReturnType<typeof scoreQuote>> | null = null
+    if (account.strategy === 'managed') {
+      candidate = quotes.results.find((item) => item.change_pct >= 0.3 && !held.has(item.symbol))
+    } else {
+      for (const quote of quotes.results.slice(0, 12)) {
+        if (held.has(quote.symbol)) continue
+        try {
+          const output = await scoreQuote(quote, params, klineCache)
+          if (Math.abs(output.score) >= params.threshold) {
+            candidate = quote; scored = output; break
+          }
+        } catch { /* 单币种数据故障不阻塞其他候选 */ }
+      }
+    }
     if (!candidate) continue
-    const side = account.strategy === 'managed' || candidate.change_pct >= 0 ? 'long' : 'short'
+    const side = account.strategy === 'managed' || (scored?.score ?? 0) >= 0 ? 'long' : 'short'
     if ((side === 'long' && !account.allow_long) || (side === 'short' && !account.allow_short)) continue
-    const distance = Math.max(0.01, Math.abs(candidate.change_pct) / 100) * candidate.last_point
+    const stopDistance = scored ? Math.max(scored.atr * params.atr_stop_mult, candidate.last_point * 0.001) : 0
     await env.DB.prepare(
       `INSERT OR IGNORE INTO user_strategy_positions
         (user_id,strategy,symbol,side,leverage,entry_price,quantity,margin,
@@ -351,9 +366,9 @@ export async function runUserStrategiesCron(env: Env): Promise<void> {
     ).bind(account.user_id, account.strategy, candidate.symbol, side, account.open_leverage,
       candidate.last_point, account.open_margin * account.open_leverage / candidate.last_point,
       account.open_margin, candidate.last_point,
-      account.strategy === 'intelligent' ? candidate.last_point + (side === 'long' ? -distance : distance) : null,
-      account.strategy === 'intelligent' ? candidate.last_point + (side === 'long' ? distance * 2 : -distance * 2) : null,
-      JSON.stringify({ bias: side === 'long' ? '偏多' : '偏空', score: Math.abs(candidate.change_pct), contributions: { daily_change: candidate.change_pct } }),
+      account.strategy === 'intelligent' ? candidate.last_point + (side === 'long' ? -stopDistance : stopDistance) : null,
+      account.strategy === 'intelligent' ? candidate.last_point + (side === 'long' ? scored!.atr * params.atr_tp_mult : -scored!.atr * params.atr_tp_mult) : null,
+      JSON.stringify({ bias: side === 'long' ? '偏多' : '偏空', score: scored?.score ?? candidate.change_pct, contributions: scored?.contributions ?? { daily_change: candidate.change_pct } }),
       Date.now()).run()
   }
 }

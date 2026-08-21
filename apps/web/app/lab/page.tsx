@@ -24,7 +24,7 @@ import { isExhausted, parseQuotaDetail, quotaErrorMessage, quotaItemFor } from '
 import { Input } from '@/components/ui/input'
 import { EmptyState, LoadingNote } from '@/components/ui/state'
 import { useBacktestList, useCreateBacktest } from '@/hooks/use-backtest'
-import type { BacktestStatus } from '@/lib/api/backtest'
+import type { BacktestStatus, BacktestStrategy } from '@/lib/api/backtest'
 import { cn } from '@/lib/utils'
 
 const STATUS_LABEL: Record<BacktestStatus, { zh: string; en: string }> = {
@@ -42,6 +42,13 @@ const LAB_PERIODS = [
   { value: '1d', zh: '1d · 日线', en: '1d · Daily' },
 ] as const
 type LabPeriod = (typeof LAB_PERIODS)[number]['value']
+const LAB_STRATEGIES: Array<{ value: BacktestStrategy; zh: string; en: string }> = [
+  { value: 'sma_cross', zh: '双均线交叉', en: 'SMA crossover' },
+  { value: 'macd_cross', zh: 'MACD 交叉', en: 'MACD crossover' },
+  { value: 'rsi_reversal', zh: 'RSI 反转', en: 'RSI reversal' },
+  { value: 'boll_reversion', zh: '布林回归', en: 'Bollinger reversion' },
+  { value: 'kdj_cross', zh: 'KDJ 交叉', en: 'KDJ crossover' },
+]
 
 export default function LabPage() {
   const { locale } = useRuntimeLocale()
@@ -61,6 +68,7 @@ export default function LabPage() {
   const exhausted = backtestQuota !== null && isExhausted(backtestQuota)
 
   const [symbol, setSymbol] = useState('BTCUSDT')
+  const [strategy, setStrategy] = useState<BacktestStrategy>('sma_cross')
   const [start, setStart] = useState('2025-01-17')
   const [end, setEnd] = useState('2026-05-31')
   const [smaFast, setSmaFast] = useState(5)
@@ -84,6 +92,7 @@ export default function LabPage() {
         end,
         market: 'crypto', // 红线:锁 crypto perp,不从表单取
         period, // P2-period:1h / 1d 从段控件取(LabPeriod 仅两档)
+        strategy,
         sma_fast: smaFast,
         sma_slow: smaSlow,
         commission_rate: commissionRate,
@@ -129,6 +138,17 @@ export default function LabPage() {
                 {locale === 'en' ? 'Run a backtest' : '发起回测'}
               </h2>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <Field label={locale === 'en' ? 'Strategy' : '策略'}>
+                  <select
+                    value={strategy}
+                    onChange={(event) => setStrategy(event.target.value as BacktestStrategy)}
+                    className="h-10 w-full rounded-md border border-paper bg-background px-3 text-sm"
+                  >
+                    {LAB_STRATEGIES.map((item) => (
+                      <option key={item.value} value={item.value}>{item[locale]}</option>
+                    ))}
+                  </select>
+                </Field>
                 <Field label={locale === 'en' ? 'Instrument (crypto perpetual)' : '标的(crypto perp)'}>
                   <Input
                     value={symbol}
@@ -176,7 +196,7 @@ export default function LabPage() {
                 <Field label={locale === 'en' ? 'End date' : '结束日期'}>
                   <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
                 </Field>
-                <div className="grid grid-cols-2 gap-3">
+                {strategy === 'sma_cross' && <div className="grid grid-cols-2 gap-3">
                   <Field label={locale === 'en' ? 'Fast SMA' : 'SMA 快线'}>
                     <Input
                       type="number"
@@ -193,7 +213,7 @@ export default function LabPage() {
                       onChange={(e) => setSmaSlow(Number(e.target.value))}
                     />
                   </Field>
-                </div>
+                </div>}
                 <div className="grid grid-cols-2 gap-3">
                   <Field label={locale === 'en' ? 'Commission rate' : '手续费率'}>
                     <Input
@@ -233,8 +253,8 @@ export default function LabPage() {
               </div>
               <p className="mt-3 text-xs text-faint">
                 {locale === 'en'
-                  ? 'Deterministic dual-SMA crossover with configurable commission and slippage.'
-                  : 'SMA 双均线确定性回测，手续费和滑点均可配置并计入收益。'}
+                  ? 'Five deterministic strategies with configurable commission and slippage.'
+                  : '五种确定性策略，手续费和滑点均可配置并计入收益。'}
               </p>
             </section>
 
@@ -267,6 +287,9 @@ export default function LabPage() {
                             {locale === 'en' ? 'Instrument' : '标的'}
                           </th>
                           <th className="px-3 py-2 text-left font-medium">
+                            {locale === 'en' ? 'Strategy' : '策略'}
+                          </th>
+                          <th className="px-3 py-2 text-left font-medium">
                             {locale === 'en' ? 'Period' : '区间'}
                           </th>
                           <th className="px-3 py-2 text-left font-medium">
@@ -288,6 +311,9 @@ export default function LabPage() {
                               {r.id}
                             </td>
                             <td className="px-3 py-2.5 font-mono font-bold">{r.symbol}</td>
+                            <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                              {LAB_STRATEGIES.find((item) => item.value === r.strategy)?.[locale] ?? r.strategy}
+                            </td>
                             <td className="px-3 py-2.5 text-xs text-muted-foreground">
                               {r.start_date} → {r.end_date}
                             </td>

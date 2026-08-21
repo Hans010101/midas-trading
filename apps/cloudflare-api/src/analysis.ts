@@ -90,7 +90,7 @@ function compositeLabel(score: number) {
   return '中性'
 }
 
-type StrategySignal = {
+export type StrategySignal = {
   ts: string
   price: number
   kind: 'buy' | 'sell'
@@ -159,7 +159,7 @@ function signal(
   }
 }
 
-function scanStrategy(
+export function scanStrategy(
   items: readonly Kline[],
   strategy: string,
 ): StrategySignal[] {

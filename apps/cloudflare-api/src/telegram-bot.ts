@@ -349,6 +349,9 @@ const INDICATOR_LABELS: Readonly<Record<string, string>> = {
   price: '最新价', price_change_pct: '涨跌幅', volume: '成交量', ma_5: 'MA5', ma_20: 'MA20', ma_60: 'MA60',
   macd_hist: 'MACD柱', rsi_14: 'RSI(14)', boll_pctb: '布林%B', funding_rate: '资金费率',
   open_interest_usd: '合约持仓额', long_short_ratio: '账户多空比', basis_pct: '合约基差',
+  chan_buy: '缠论买点', chan_sell: '缠论卖点', fear_greed: '恐贪指数',
+  btc_dominance: 'BTC占比', cn_breadth_up_ratio: 'A股上涨占比',
+  hk_breadth_up_ratio: '港股上涨占比', sector_change_pct: '板块涨跌', index_change_pct: '指数涨跌',
 }
 const OPERATOR_LABELS: Readonly<Record<string, string>> = { gt: '>', gte: '≥', lt: '<', lte: '≤' }
 

@@ -159,7 +159,7 @@ function ReportBody({
         {m && (
           <div className="mt-3 rounded-lg border border-paper bg-cream p-4 shadow-sm">
             <p className="text-sm leading-relaxed text-foreground">
-              {conclusion(run.symbol, m, locale)}
+              {conclusion(run.symbol, String(run.params_json.strategy ?? 'sma_cross'), m, locale)}
             </p>
           </div>
         )}
@@ -458,6 +458,7 @@ function MethodologyFootnote({
   const dataSources = Array.isArray(runCard.data_sources)
     ? (runCard.data_sources as unknown[]).map((x) => String(x)).join(', ')
     : null
+  const strategy = String(runCard.strategy ?? 'sma_cross')
   return (
     <section className="rounded-lg border border-paper bg-surface-subtle p-4">
       <h2 className="mb-2 font-serif text-sm font-bold">
@@ -465,11 +466,11 @@ function MethodologyFootnote({
       </h2>
       <p className="text-xs text-muted-foreground">
         {locale === 'en' ? 'Data source' : '数据源'}:
-        {dataSources ?? (locale === 'en' ? 'Read-only ClickHouse (crypto perpetual)' : '只读 ClickHouse(crypto perp)')}
+        {dataSources ?? (locale === 'en' ? 'Live crypto market API' : '实时加密行情 API')}
         {' · '}
         {locale === 'en'
-          ? 'Strategy: deterministic dual-SMA crossover · No LLM'
-          : '策略:SMA 双均线交叉(确定性 · 零 LLM)'}
+          ? `Strategy: ${strategy.replaceAll('_', ' ')} · deterministic · No LLM`
+          : `策略:${strategy.replaceAll('_', ' ')}(确定性 · 零 LLM)`}
       </p>
       <details className="mt-2">
         <summary className="cursor-pointer text-xs text-muted-foreground/70">
@@ -488,20 +489,22 @@ function MethodologyFootnote({
 // ── 结论先行(从 metrics 动态生成)────────────────────────────────────────────
 function conclusion(
   symbol: string,
+  strategy: string,
   m: BacktestMetrics,
   locale: 'en' | 'zh',
 ): string {
   const beat = m.excess_return >= 0
+  const name = strategy.replaceAll('_', ' ')
   if (locale === 'en') {
     return (
-      `The dual-SMA strategy returned ${fmtPct(m.total_return)} on ${symbol} perpetuals and ` +
+      `The ${name} strategy returned ${fmtPct(m.total_return)} on ${symbol} perpetuals and ` +
       `${beat ? 'outperformed' : 'underperformed'} buy-and-hold by ${fmtPct(m.excess_return)}. ` +
       `Sharpe ${m.sharpe.toFixed(2)}, max drawdown ${fmtPct(m.max_drawdown)}, ` +
       `win rate ${fmtPct(m.win_rate)} across ${fmtInt(m.trade_count)} completed trades.`
     )
   }
   return (
-    `结论:SMA 双均线策略在 ${symbol}(crypto perp)区间内总收益 ${fmtPct(m.total_return)},` +
+    `结论:${name} 策略在 ${symbol}(crypto perp)区间内总收益 ${fmtPct(m.total_return)},` +
     `${beat ? '跑赢' : '跑输'}买入持有基准(超额 ${fmtPct(m.excess_return)});` +
     `夏普 ${m.sharpe.toFixed(2)}、最大回撤 ${fmtPct(m.max_drawdown)}、` +
     `胜率 ${fmtPct(m.win_rate)}(共 ${fmtInt(m.trade_count)} 笔)。`
@@ -519,7 +522,7 @@ function tradeReason(reason: string, locale: 'en' | 'zh'): string {
     .replaceAll('死叉', 'bearish crossover')
     .replaceAll('买入', 'buy')
     .replaceAll('卖出', 'sell')
-  return /[\u3400-\u9fff]/.test(translated) ? 'Dual-SMA crossover signal' : translated
+  return /[\u3400-\u9fff]/.test(translated) ? 'Strategy signal' : translated
 }
 
 function ErrorBox({ text }: { text: ReactNode }) {

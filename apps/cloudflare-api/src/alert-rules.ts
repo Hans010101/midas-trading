@@ -15,10 +15,18 @@ const INDICATORS = [
   ['macd_hist', 'MACD 柱', 'technical', ['cn', 'us', 'hk', 'crypto'], true, true, null],
   ['rsi_14', 'RSI(14)', 'technical', ['cn', 'us', 'hk', 'crypto'], true, true, null],
   ['boll_pctb', '布林 %B', 'technical', ['cn', 'us', 'hk', 'crypto'], true, true, '%'],
+  ['chan_buy', '缠论买点出现', 'chan', ['cn', 'us', 'hk', 'crypto'], true, true, null],
+  ['chan_sell', '缠论卖点出现', 'chan', ['cn', 'us', 'hk', 'crypto'], true, true, null],
   ['funding_rate', '资金费率', 'crypto_deriv', ['crypto'], true, false, '%'],
   ['open_interest_usd', '合约持仓额', 'crypto_deriv', ['crypto'], true, false, 'USD'],
   ['long_short_ratio', '账户多空比', 'crypto_deriv', ['crypto'], true, false, null],
   ['basis_pct', '合约基差', 'crypto_deriv', ['crypto'], true, false, '%'],
+  ['fear_greed', '恐贪指数', 'crypto_global', ['crypto'], false, false, null],
+  ['btc_dominance', 'BTC 占比 %', 'crypto_global', ['crypto'], false, false, '%'],
+  ['cn_breadth_up_ratio', 'A股上涨家数占比 %', 'market_structure', ['cn'], false, false, '%'],
+  ['hk_breadth_up_ratio', '港股上涨家数占比 %', 'market_structure', ['hk'], false, false, '%'],
+  ['sector_change_pct', '板块涨跌 %', 'market_structure', ['cn', 'us', 'hk'], true, false, '%'],
+  ['index_change_pct', '指数涨跌 %', 'market_structure', ['cn', 'us', 'hk'], true, false, '%'],
 ] as const
 
 const META: ReadonlyMap<string, (typeof INDICATORS)[number]> = new Map(
@@ -161,6 +169,9 @@ async function deleteRule(
 async function applyRecommended(request: Request, env: Env, requestId: string) {
   const { user } = await authenticate(request, env)
   const recommendations = [
+    ['crypto', null, 'fear_greed', 'lt', '15', null],
+    ['crypto', null, 'fear_greed', 'gt', '85', null],
+    ['cn', null, 'cn_breadth_up_ratio', 'lt', '25', null],
     ['us', 'NVDA', 'rsi_14', 'gt', '75', '1d'],
     ['us', 'NVDA', 'rsi_14', 'lt', '25', '1d'],
     ['cn', '600519', 'rsi_14', 'gt', '75', '1d'],

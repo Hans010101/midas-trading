@@ -10,6 +10,7 @@ const PREFIX = '/api/v1/backtest'
 
 export type BacktestStatus = 'pending' | 'done' | 'error'
 export type BacktestPeriod = '1m' | '5m' | '15m' | '30m' | '1h' | '1d' | '1w'
+export type BacktestStrategy = 'sma_cross' | 'macd_cross' | 'rsi_reversal' | 'boll_reversion' | 'kdj_cross'
 
 export interface BacktestCreateRequest {
   symbol: string
@@ -17,6 +18,7 @@ export interface BacktestCreateRequest {
   end: string // YYYY-MM-DD
   market?: 'crypto' // 当前仅 crypto(后端 Literal)
   period?: BacktestPeriod
+  strategy?: BacktestStrategy
   sma_fast?: number
   sma_slow?: number
   initial_cash?: number
@@ -35,6 +37,7 @@ export interface BacktestRunListItem {
   symbol: string
   market: string
   period: string
+  strategy: BacktestStrategy
   start_date: string
   end_date: string
   status: BacktestStatus
