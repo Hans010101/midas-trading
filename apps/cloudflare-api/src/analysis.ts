@@ -649,6 +649,56 @@ function factor(
   return { value, window, asof, text }
 }
 
+export function structureDiagnosisFallback(context: Readonly<{
+  account_long_short_ratio: number | null
+  oi_change_pct_24h: number | null
+  funding_rate: number | null
+  basis_pct: number
+}>) {
+  const findings = [
+    context.account_long_short_ratio === null ? null : {
+      factor: 'account_long_short',
+      state: context.account_long_short_ratio >= 1.2
+        ? '偏多'
+        : context.account_long_short_ratio <= 0.8 ? '偏空' : '中性',
+      detail: `多空账户比为 ${context.account_long_short_ratio.toFixed(2)}`,
+      window: 'latest',
+    },
+    context.oi_change_pct_24h === null ? null : {
+      factor: 'open_interest',
+      state: context.oi_change_pct_24h >= 5
+        ? '升温'
+        : context.oi_change_pct_24h <= -5 ? '降温' : '中性',
+      detail: `持仓量 24 小时变化 ${context.oi_change_pct_24h.toFixed(2)}%`,
+      window: '24h',
+    },
+    context.funding_rate === null ? null : {
+      factor: 'funding_rate',
+      state: context.funding_rate >= 0.0001
+        ? '偏多'
+        : context.funding_rate <= -0.0001 ? '偏空' : '中性',
+      detail: `资金费率为 ${(context.funding_rate * 100).toFixed(4)}%`,
+      window: 'latest',
+    },
+    {
+      factor: 'basis',
+      state: context.basis_pct >= 0.2
+        ? '偏多'
+        : context.basis_pct <= -0.2 ? '偏空' : '中性',
+      detail: `永续标记价较指数价基差 ${context.basis_pct.toFixed(3)}%`,
+      window: 'latest',
+    },
+  ].filter((item): item is NonNullable<typeof item> => item !== null)
+  const bullish = findings.filter((item) => item.state === '偏多').length
+  const bearish = findings.filter((item) => item.state === '偏空').length
+  const direction = bullish > bearish ? '偏多' : bearish > bullish ? '偏空' : '中性'
+  const temperature = findings.find((item) => item.factor === 'open_interest')?.state
+  return {
+    conclusion: `当前结构整体${direction}。持仓热度${temperature ?? '暂无明确变化'}，资金费率与基差未显示时不补造结论。建议结合价格关键位确认结构是否延续。`,
+    factor_findings: findings,
+  }
+}
+
 async function diagnoseStructure(
   request: Request,
   env: Env,
@@ -693,17 +743,35 @@ async function diagnoseStructure(
     global_long_short: null,
     depth: null,
   }
-  const ai = await invokeAi(env, {
-    system:
-      '你是面向专业交易员的市场结构分析师。根据输入指标给出直接、精炼的结构判断。只输出 JSON，不添加免责声明、固定风险提示或营销话术。',
-    prompt: `${JSON.stringify({ question, intent, snapshot })}
+  let ai: AiProviderResult
+  let output: Record<string, unknown>
+  try {
+    ai = await invokeAi(env, {
+      system:
+        '你是面向专业交易员的市场结构分析师。根据输入指标给出直接、精炼的结构判断。只输出 JSON，不添加免责声明、固定风险提示或营销话术。',
+      prompt: `${JSON.stringify({ question, intent, snapshot })}
 输出严格 JSON：
 {"conclusion":"3到5句结构结论","factor_findings":[{"factor":"account_long_short|open_interest|funding_rate|basis","state":"偏多|偏空|中性|极端|升温|降温","detail":"一句依据","window":"latest或24h"}]}
 只评价存在的数据，不补造缺失指标，不输出 Markdown。`,
-    maxTokens: 750,
-    temperature: 0.2,
-  })
-  const output = parseAiJson(ai.content)
+      maxTokens: 750,
+      temperature: 0.2,
+    })
+    output = parseAiJson(ai.content)
+  } catch (error) {
+    console.warn(JSON.stringify({
+      event: 'ai.structure_rules_fallback',
+      symbol,
+      error: error instanceof Error ? error.message : String(error),
+    }))
+    ai = {
+      content: '',
+      provider: 'technical-rules',
+      model: 'technical-rules-v1',
+      fallback_used: true,
+      token_usage: 0,
+    }
+    output = structureDiagnosisFallback(context)
+  }
   const conclusion =
     typeof output.conclusion === 'string' && output.conclusion.trim()
       ? output.conclusion.trim()

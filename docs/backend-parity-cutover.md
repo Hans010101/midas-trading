@@ -1,24 +1,31 @@
-# Backend parity and cutover gate
+# 老系统关停前的功能验收
 
-This document applies only to `midas-trading + Cloudflare`. The AliCloud Midas project is a read-only reference until a separately approved cutover.
+本清单只适用于 `Midas Trading + Cloudflare`。阿里云点金 Midas 只作为只读参照和短期回滚环境。
 
-## Implemented production capabilities
+## 已具备的核心能力
 
-- Registered-user automatic strategies: isolated managed and intelligent accounts, independent capital/settings/positions/history/statistics, scheduled mark-to-market and exits.
-- Virtual trading: cash markets, perpetual positions, funding settlement, liquidation/risk scan, conditional orders, account equity curves.
-- Alerts and notifications: user rules, edge-trigger/cooldown state, in-app inbox, Telegram/Feishu delivery, quiet hours and configurable economic-event reminders.
-- Economic calendar: official Fed/BEA schedules plus deterministic central-bank/macroeconomic rules, bilingual display and cached source-health status.
-- Backtesting and Chan analysis: persisted SMA crossover runs with explicit commission/slippage assumptions; fractals, strokes, segments, pivots and structure summary.
-- Administration: users, visits, academy, reports, weekly dispatch, support, migration checks, virtual strategy operations and two independent Binance Square accounts.
+- 回测：SMA、MACD、RSI、布林和 KDJ 五类策略，佣金、滑点、杠杆可配置，结果和交易记录写入 D1。
+- 缠论：分型、笔、线段、中枢，以及 B1/B2/B3、S1/S2/S3 买卖点和图表叠加。
+- 用户策略：托管与智能账户相互隔离，具备资金、参数、持仓、历史和统计；Cron 会真实开平模拟仓，不是静态页面。
+- 模拟交易：中、美、港、加密现货和永续，含资金费、强平、风险扫描、条件单及权益曲线。
+- 提醒与通知：21 类指标、边沿触发、冷却、静默时段、站内信、Telegram、飞书和财经事件提醒。
+- 财经日历：Fed、BEA 官方日程加确定性宏观规则，双语展示、D1 缓存和定时提醒；不伪造实时公布值。
+- AI：Workers AI 主通道；结构诊断、决策卡和内容生成均有本地规则回退。DeepSeek 是可选的第二模型，不再是可用性前提。
+- 管理后台：用户、访问、训练营、报告、周报、客服、迁移检查、虚拟策略和两个独立币安广场账号。
 
-## Cutover blockers still requiring real production evidence
+## 明确不迁移的旧能力
 
-The following are operational gates, not missing menu pages:
+- ClickHouse 长周期历史行情仓库和 Celery 大规模异步回测：按产品决定不背历史数据包袱；当前工具按需拉取行情并缓存到 D1。
+- 会员、支付、邀请和权限门槛：新系统注册登录后全部免费，旧代码保留但产品入口关闭。
 
-1. Run at least seven consecutive days of scheduled jobs without stuck dispatches, duplicate economic reminders or unexplained circuit trips.
-2. Compare calendar event times against their official sources and monitor whether actual/forecast/previous values need a licensed data provider. The current free-source implementation prioritizes reliable schedules; it does not fabricate release values.
-3. Run automatic strategies in forward-test mode long enough to validate signal quality, drawdown and execution assumptions. They are usable simulations, not a promise of strategy profitability.
-4. Install and smoke-test the independent legacy Binance Square credential, then stop only the old Square scheduler before enabling the new legacy account card.
-5. Export and checksum user identities, map Google subject/email identities, rehearse rollback, and only then move the domain. Watchlists and old simulated trades remain optional by product decision.
+## 关停前仍需真实生产证据
 
-Domain migration is permitted only after all five gates have explicit evidence and the old runtime remains available for rollback.
+这些是运营验收，不是缺少功能：
+
+1. 管理员登录生产环境，完成一次提醒创建与触发、永续开平仓、条件单、托管策略启停。
+2. 用户绑定一次飞书并收到测试通知；自动测试已覆盖绑定和发送协议，但当前生产库尚无飞书绑定用户。
+3. 连续观察 72 小时 Cron：无重复提醒、卡住发布、异常熔断或资金结算错误。
+4. 导出用户身份并校验 Google subject/email 映射；旧收藏和模拟记录按产品决定可不迁。
+5. 保留阿里云只读回滚 7 天，再正式释放旧运行资源。
+
+以上五项有记录后可关停。策略可用不等于收益保证，信号质量仍应通过前向模拟持续评估。

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { sha256Hex } from '../src/crypto'
 import { runEconReminderScan } from '../src/econ'
+import { runUserStrategiesCron } from '../src/user-strategies'
 import { runVirtualFundingSettlement } from '../src/virtual-trading'
 
 function request(
@@ -100,6 +101,25 @@ describe('independent professional trading tools', () => {
       'chan_buy', 'chan_sell', 'fear_greed', 'btc_dominance',
       'cn_breadth_up_ratio', 'hk_breadth_up_ratio', 'sector_change_pct', 'index_change_pct',
     ]))
+
+    const managed = await exports.default.fetch(request(
+      '/api/v1/platinum/managed/toggle', first.token, 'POST', { enabled: true },
+    ))
+    expect(managed.status).toBe(200)
+    const now = Date.now()
+    await env.DB.prepare(
+      `INSERT OR REPLACE INTO market_overview_quotes
+        (symbol,market,name,category,unit,quoted_at,last_point,prev_close,
+         change_point,change_pct,source,updated_at)
+       VALUES ('BTC/USDT','crypto','Bitcoin','crypto','price',?,100,99,1,1,'kraken',?)`,
+    ).bind(now, now).run()
+    await runUserStrategiesCron(env)
+    await expect(
+      env.DB.prepare(
+        `SELECT COUNT(*) AS count FROM user_strategy_positions
+         WHERE user_id=? AND strategy='managed'`,
+      ).bind(first.userId).first<{ count: number }>(),
+    ).resolves.toMatchObject({ count: 1 })
   })
 
   it('delivers economic-event reminders once through the notification inbox', async () => {

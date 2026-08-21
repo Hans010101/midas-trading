@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   requestLanguage,
+  structureDiagnosisFallback,
   technicalDecisionFallback,
 } from '../src/analysis'
 
@@ -36,5 +37,20 @@ describe('analysis language', () => {
     expect(`${output.rationale} ${output.plan_note}`).not.toMatch(
       /[\u3400-\u9fff]/u,
     )
+  })
+
+  it('keeps structure diagnosis available when both AI providers fail', () => {
+    const output = structureDiagnosisFallback({
+      account_long_short_ratio: 1.35,
+      oi_change_pct_24h: 8.2,
+      funding_rate: 0.0002,
+      basis_pct: 0.3,
+    })
+    expect(output.conclusion).toContain('整体偏多')
+    expect(output.factor_findings).toHaveLength(4)
+    expect(output.factor_findings).toContainEqual(expect.objectContaining({
+      factor: 'open_interest',
+      state: '升温',
+    }))
   })
 })

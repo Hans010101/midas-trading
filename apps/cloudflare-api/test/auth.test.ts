@@ -234,6 +234,41 @@ describe('independent alerts and notification settings', () => {
     expect(rules).toHaveLength(1)
   })
 
+  it('binds Feishu through its verified event callback', async () => {
+    const { token } = await createTestSession()
+    const created = await exports.default.fetch(
+      apiRequest('/api/v1/feishu/bind-token', { method: 'POST', token }),
+    )
+    expect(created.status).toBe(200)
+    const bind = await created.json() as { token: string }
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input) => new Response(JSON.stringify(
+        String(input).includes('tenant_access_token')
+          ? { code: 0, tenant_access_token: 'test-tenant-token' }
+          : { code: 0 },
+      )))
+
+    const event = await exports.default.fetch(
+      apiRequest('/api/v1/feishu/events', {
+        method: 'POST',
+        body: {
+          header: { token: env.FEISHU_VERIFICATION_TOKEN },
+          event: {
+            sender: { sender_id: { open_id: 'ou_test_user' } },
+            message: { content: JSON.stringify({ text: `/bind ${bind.token}` }) },
+          },
+        },
+      }),
+    )
+
+    expect(event.status).toBe(200)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    const config = await exports.default.fetch(
+      apiRequest('/api/v1/notifications/config', { token }),
+    )
+    await expect(config.json()).resolves.toMatchObject({ has_feishu: true })
+  })
+
   it('lists and marks in-app notifications without crossing user boundaries', async () => {
     const first = await createTestSession()
     const second = await createTestSession()
