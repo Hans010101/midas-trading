@@ -488,8 +488,38 @@ async function telegramWebhook(request: Request, env: Env, requestId: string) {
   return jsonResponse({ ok: true }, 200, requestId, request.method)
 }
 
+async function decryptFeishuEvent(body: Record<string, unknown>, env: Env) {
+  if (typeof body.encrypt !== 'string') return body
+  const encryptKey = (env as Env & { FEISHU_ENCRYPT_KEY?: string })
+    .FEISHU_ENCRYPT_KEY
+  if (!encryptKey) throw new HttpError(403, '飞书事件加密密钥未配置')
+  try {
+    const key = await crypto.subtle.importKey(
+      'raw',
+      await crypto.subtle.digest('SHA-256', new TextEncoder().encode(encryptKey)),
+      { name: 'AES-CBC' },
+      false,
+      ['decrypt'],
+    )
+    const encrypted = Uint8Array.from(atob(body.encrypt), (char) =>
+      char.charCodeAt(0),
+    )
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-CBC', iv: encrypted.slice(0, 16) },
+      key,
+      encrypted.slice(16),
+    )
+    return JSON.parse(new TextDecoder().decode(decrypted)) as Record<
+      string,
+      unknown
+    >
+  } catch {
+    throw new HttpError(403, '飞书事件解密失败')
+  }
+}
+
 async function feishuEvents(request: Request, env: Env, requestId: string) {
-  const body = await readJsonObject(request)
+  const body = await decryptFeishuEvent(await readJsonObject(request), env)
   if (typeof body.challenge === 'string') {
     if (body.token !== env.FEISHU_VERIFICATION_TOKEN) {
       throw new HttpError(403, '飞书验证 Token 不匹配')
