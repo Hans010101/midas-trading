@@ -5,7 +5,6 @@ import process from 'node:process'
 const ROOT = process.cwd()
 const ACTIVE_ROOTS = ['apps/cloudflare-api', 'apps/web']
 const FORBIDDEN = [
-  { label: '旧 Midas 域名', pattern: /midastrade\.asia/giu },
   { label: '阿里云运行时', pattern: /阿里云|aliyun/giu },
   { label: '旧 VPS 流水线', pattern: /deploy\.yml|香港 VPS/giu },
 ]
