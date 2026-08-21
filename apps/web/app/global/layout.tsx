@@ -5,6 +5,8 @@ import type { Metadata } from 'next'
 export const metadata: Metadata = {
   title: '全球市场',
   description: '全球主要市场指数一屏纵览:美股、A股、港股、加密实时指数概览。',
+  alternates: { canonical: '/global' },
+  openGraph: { title: '全球市场 · Midas Trading', url: '/global' },
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {

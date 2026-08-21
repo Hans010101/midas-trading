@@ -79,7 +79,11 @@ const runAuth = auth((req) => {
     return NextResponse.redirect(new URL('/global', req.nextUrl.origin))
   }
 
-  return NextResponse.next()
+  const requestHeaders = new Headers(req.headers)
+  if (url.pathname === '/en' || url.pathname.startsWith('/en/')) {
+    requestHeaders.set('x-midas-locale', 'en')
+  }
+  return NextResponse.next({ request: { headers: requestHeaders } })
 })
 
 function randomVid(): string {

@@ -5,6 +5,8 @@ import type { Metadata } from 'next'
 export const metadata: Metadata = {
   title: 'K 线工作台',
   description: '多市场 K 线工作台:MA/MACD/RSI/布林带指标、多周期图表、缠论自动标注与 AI 决策卡。',
+  alternates: { canonical: '/workbench' },
+  openGraph: { title: 'K 线工作台 · Midas Trading', url: '/workbench' },
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {

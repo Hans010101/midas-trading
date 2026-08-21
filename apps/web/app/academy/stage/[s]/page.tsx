@@ -31,7 +31,14 @@ export async function generateMetadata({
   return {
     title,
     description: stage.desc,
-    alternates: { canonical },
+    alternates: {
+      canonical,
+      languages: {
+        'zh-CN': canonical,
+        en: `/en/academy/stage/${s}`,
+        'x-default': canonical,
+      },
+    },
     openGraph: { title, description: stage.desc, url: canonical },
   }
 }

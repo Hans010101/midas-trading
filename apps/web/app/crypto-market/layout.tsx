@@ -5,6 +5,8 @@ import type { Metadata } from 'next'
 export const metadata: Metadata = {
   title: '加密行情',
   description: '加密货币永续合约市场:主流币种实时价格、资金费率、持仓量与成交额榜单。',
+  alternates: { canonical: '/crypto-market' },
+  openGraph: { title: '加密行情 · Midas Trading', url: '/crypto-market' },
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {

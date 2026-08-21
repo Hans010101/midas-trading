@@ -11,18 +11,21 @@ import { PRODUCTION_WEB_URL } from '@/lib/site'
 const BASE = PRODUCTION_WEB_URL
 export const ORG_ID = `${BASE}/#organization`
 const WEBSITE_ID = `${BASE}/#website`
+export const RESEARCH_TEAM_ID = `${BASE}/research/team#research-team`
 
 /** Organization —— 品牌实体(landing 定义 · about 用同 @id 关联 · 让知识图谱归拢站点)。 */
 export const organizationSchema = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
   '@id': ORG_ID,
-  name: '点金 Midas',
-  alternateName: 'Midas',
+  name: 'Midas Trading',
+  alternateName: ['点金 Midas', 'Midas'],
   url: BASE,
   logo: `${BASE}/brand/seal.png`,
   description:
     '覆盖加密、美股、A 股、港股四大市场的 AI 原生分析终端;全程虚拟资金,分析内容仅供参考,不构成投资建议。',
+  sameAs: ['https://github.com/Hans010101/midas-trading'],
+  knowsAbout: ['加密货币市场', '美股', 'A 股', '港股', '技术分析', '缠论', '策略回测'],
 } as const
 
 /** WebSite —— 站点实体(publisher 指向 Organization)。 */
@@ -30,9 +33,10 @@ export const websiteSchema = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
   '@id': WEBSITE_ID,
-  name: '点金 Midas',
+  name: 'Midas Trading',
+  alternateName: '点金 Midas',
   url: BASE,
-  inLanguage: 'zh-CN',
+  inLanguage: ['zh-CN', 'en'],
   publisher: { '@id': ORG_ID },
 } as const
 
@@ -45,17 +49,19 @@ export function buildArticleSchema(input: {
   stageName: string
   datePublished?: string
   dateModified?: string
+  locale?: 'zh' | 'en'
 }) {
-  const url = `${BASE}/academy/article/${input.slug}`
+  const english = input.locale === 'en'
+  const url = `${BASE}${english ? '/en' : ''}/academy/article/${input.slug}`
   return {
     '@context': 'https://schema.org',
     '@type': 'Article',
     headline: input.title,
-    description: `${input.excerpt}(${input.stageName} · 教学内容,仅供学习参考,不构成投资建议。)`,
-    inLanguage: 'zh-CN',
+    description: input.excerpt,
+    inLanguage: english ? 'en' : 'zh-CN',
     url,
     mainEntityOfPage: url,
-    author: { '@type': 'Organization', name: '点金 Midas 研究团队' },
+    author: { '@id': RESEARCH_TEAM_ID },
     publisher: { '@id': ORG_ID },
     image: `${BASE}/brand/seal.png`,
     // ★date 缺失时【不输出】该字段(保持原「无日期」兜底 · 宁缺毋假,绝不造假日期)。
@@ -70,24 +76,42 @@ export function buildBreadcrumbSchema(input: {
   stageSlug: string
   title: string
   slug: string
+  locale?: 'zh' | 'en'
 }) {
+  const prefix = input.locale === 'en' ? '/en' : ''
   return {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: '训练营', item: `${BASE}/academy` },
+      {
+        '@type': 'ListItem',
+        position: 1,
+        name: input.locale === 'en' ? 'Academy' : '训练营',
+        item: `${BASE}${prefix}/academy`,
+      },
       {
         '@type': 'ListItem',
         position: 2,
         name: input.stageName,
-        item: `${BASE}/academy/stage/${input.stageSlug}`,
+        item: `${BASE}${prefix}/academy/stage/${input.stageSlug}`,
       },
       {
         '@type': 'ListItem',
         position: 3,
         name: input.title,
-        item: `${BASE}/academy/article/${input.slug}`,
+        item: `${BASE}${prefix}/academy/article/${input.slug}`,
       },
     ],
   }
 }
+
+export const researchTeamSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  '@id': RESEARCH_TEAM_ID,
+  name: 'Midas Trading 研究团队',
+  alternateName: 'Midas Trading Research Team',
+  url: `${BASE}/research/team`,
+  parentOrganization: { '@id': ORG_ID },
+  knowsAbout: ['市场数据研究', '技术分析', '缠论结构', '策略回测', '交易教育'],
+} as const

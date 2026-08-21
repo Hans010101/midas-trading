@@ -501,6 +501,16 @@ function Footer() {
                 </Link>
               </li>
               <li>
+                <Link href="/research/methodology" className="text-muted-foreground transition-colors hover:text-midas-red">
+                  研究方法
+                </Link>
+              </li>
+              <li>
+                <Link href="/research/team" className="text-muted-foreground transition-colors hover:text-midas-red">
+                  研究团队
+                </Link>
+              </li>
+              <li>
                 <Link href="/terms" className="text-muted-foreground transition-colors hover:text-midas-red">
                   服务条款
                 </Link>

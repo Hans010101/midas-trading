@@ -34,7 +34,14 @@ export async function generateMetadata(): Promise<Metadata> {
       absolute: english ? `${title} · Midas Trading` : `${title} · 点金 Midas`,
     },
     description,
-    alternates: { canonical: '/academy/glossary' },
+    alternates: {
+      canonical: '/academy/glossary',
+      languages: {
+        'zh-CN': '/academy/glossary',
+        en: '/en/academy/glossary',
+        'x-default': '/academy/glossary',
+      },
+    },
     openGraph: {
       title: english ? `${title} · Midas Trading` : `${title} · 点金 Midas`,
       description: english

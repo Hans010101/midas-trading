@@ -18,7 +18,11 @@ export const metadata = {
   description:
     '点金 Midas 是 AI 原生的跨市场(加密/美股/A股/港股)分析与交易学习终端:全程虚拟资金、不构成投资建议。这里是我们的产品定位、方法论与六条产品原则。',
   // SEO 批3(点金-3 叠加·衔接点):canonical
-  alternates: { canonical: '/about' },
+  alternates: {
+    canonical: '/about',
+    languages: { 'zh-CN': '/about', en: '/en/about', 'x-default': '/about' },
+  },
+  openGraph: { title: '关于 Midas Trading', url: '/about' },
 }
 
 export default function AboutPage() {

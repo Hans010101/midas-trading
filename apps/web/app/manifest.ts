@@ -6,8 +6,8 @@ import type { MetadataRoute } from 'next'
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: '点金 Midas · AI 原生跨市场分析终端',
-    short_name: '点金 Midas',
+    name: 'Midas Trading（点金 Midas）· AI 原生跨市场分析终端',
+    short_name: 'Midas Trading',
     description:
       '覆盖加密、美股、A 股、港股四大市场的 AI 原生分析终端。',
     start_url: '/',

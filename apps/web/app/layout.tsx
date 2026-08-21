@@ -52,30 +52,34 @@ const jetbrainsMono = localFont({
 // + openGraph / twitter 卡(分享到 TG / X 出预览图)
 export const metadata: Metadata = {
   metadataBase: new URL(PRODUCTION_WEB_URL),
-  // SEO 批1:title 模板 —— 子页只写短 title,'%s · 点金 Midas' 统一品牌后缀(防手写漂移);
+  // SEO 批1:title 模板 —— 子页只写短 title,'%s · Midas Trading' 统一品牌后缀(防手写漂移);
   // 未定义 title 的页面用 default(现状不变)。
   title: {
-    template: '%s · 点金 Midas',
-    default: '点金 Midas · AI 原生跨市场分析终端',
+    template: '%s · Midas Trading',
+    default: 'Midas Trading（点金 Midas）· AI 原生跨市场分析终端',
   },
   description:
     '覆盖加密、美股、A 股、港股四大市场的 AI 原生分析终端:11 因子结构沙盘、策略回测研究室、AI 决策卡与缠论自动标注。',
   openGraph: {
-    title: '点金 Midas · AI 原生跨市场分析终端',
+    title: 'Midas Trading（点金 Midas）· AI 原生跨市场分析终端',
     description:
       '加密 · 美股 · A 股 · 港股四市场一屏俯瞰,AI 决策卡与缠论标注研判多空,沙盘看懂结构,研究室回测验证想法。',
     url: '/',
-    siteName: '点金 Midas',
+    siteName: 'Midas Trading',
     images: [{ url: '/marketing/global.png', width: 1528, height: 951 }],
     locale: 'zh_CN',
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: '点金 Midas · AI 原生跨市场分析终端',
+    title: 'Midas Trading（点金 Midas）· AI 原生跨市场分析终端',
     description:
       '加密 · 美股 · A 股 · 港股四市场 AI 分析终端:AI 决策卡 · 缠论标注 · 策略研究。',
     images: ['/marketing/global.png'],
+  },
+  alternates: {
+    canonical: '/',
+    languages: { 'zh-CN': '/', en: '/en', 'x-default': '/' },
   },
 }
 

@@ -27,7 +27,7 @@ export function GET(): Response {
     return `## 训练营 · ${stage.stageLabel} ${stage.name}(${articles.length} 篇)\n\n${stage.desc}\n\n${lines.join('\n')}`
   })
 
-  const body = `# 点金 Midas
+  const body = `# Midas Trading（点金 Midas）
 
 > 点金 Midas 是一款 AI 原生的跨市场(加密货币 / 美股 / A股 / 港股)分析与交易学习终端:
 > 全程使用虚拟资金,不涉及任何真实货币、真实证券或真实数字资产的买卖,不构成投资建议。
@@ -50,10 +50,18 @@ ${sections.join('\n\n')}
 - [交易名词词典](${BASE}/academy/glossary): 覆盖 K线形态、技术指标、缠论、合约与衍生品、
   策略与风控等交易术语;每条 = 一句话定义 + 展开解释 + 关联词条,便于逐条引用。
 
+## English edition
+
+- [English home](${BASE}/en): English product overview and public discovery entry.
+- [Midas Academy in English](${BASE}/en/academy): 118 English lessons across six stages.
+- [English trading glossary](${BASE}/en/academy/glossary): 88 essential terms across 10 categories.
+
 ## 关于与原则
 
 - [关于点金](${BASE}/about): 产品定位、方法论与六条产品原则(全程虚拟 / 不构成投资建议 /
   描述结构而非预测价格 等)。
+- [研究方法与数据透明度](${BASE}/research/methodology): 数据层、确定性计算、AI 使用与修正机制。
+- [Midas Trading 研究团队](${BASE}/research/team): 公开内容的组织署名、研究范围与编辑责任。
 - [风险提示](${BASE}/risk): 平台性质(全程虚拟 · 不涉及真实交易)与免责条款全文。
 - [服务条款](${BASE}/terms) · [隐私政策](${BASE}/privacy)
 

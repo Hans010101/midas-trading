@@ -19,7 +19,7 @@ const BASE = PRODUCTION_WEB_URL
 export function GET(): Response {
   const parts: string[] = []
 
-  parts.push(`# 点金 Midas · 训练营与词典全文(llms-full)
+  parts.push(`# Midas Trading（点金 Midas）· 训练营与词典全文(llms-full)
 
 > Midas Trading(${BASE})是 AI 原生的跨市场(加密 / 美股 / A股 / 港股)分析与交易
 > 学习终端:全程虚拟资金,不涉及任何真实交易。本文件为训练营全部教学文章与名词词典的

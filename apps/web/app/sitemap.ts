@@ -38,6 +38,8 @@ const STATIC_PAGES: Array<[path: string, priority: number]> = [
   ['/academy/glossary', 0.9],
   ['/calendar', 0.6],
   ['/about', 0.5],
+  ['/research/methodology', 0.6],
+  ['/research/team', 0.5],
   ['/privacy', 0.3],
   ['/terms', 0.3],
   ['/risk', 0.3],
@@ -62,6 +64,31 @@ export default function sitemap(): MetadataRoute.Sitemap {
     changeFrequency: 'monthly',
   }))
 
+  const englishStaticEntries: MetadataRoute.Sitemap = ([
+    ['/en', 0.9],
+    ['/en/about', 0.5],
+    ['/en/academy', 0.9],
+    ['/en/academy/glossary', 0.9],
+    ['/en/research/methodology', 0.6],
+    ['/en/research/team', 0.5],
+  ] as Array<[string, number]>).map(([path, priority]) => ({
+    url: `${BASE}${path}`,
+    priority,
+    changeFrequency: 'monthly',
+  }))
+
+  const englishStageEntries: MetadataRoute.Sitemap = ACADEMY_STAGES.map((s) => ({
+    url: `${BASE}/en/academy/stage/${s.slug}`,
+    priority: 0.7,
+    changeFrequency: 'monthly',
+  }))
+
+  const englishArticleEntries: MetadataRoute.Sitemap = ACADEMY_ARTICLES.map((a) => ({
+    url: `${BASE}/en/academy/article/${a.slug}`,
+    priority: 0.8,
+    changeFrequency: 'monthly',
+  }))
+
   // SEO 批7:详情页语义壳(路径段 · curated 有界集 · 4 市场)· 每 symbol 独立静态壳 + 唯一 title。
   // 旧 ?symbol= 空壳仍不进(非 curated 长尾)· curated 的旧 query 由 client redirect 兜到路径段。
   const detailEntries: MetadataRoute.Sitemap = DETAIL_MARKETS.flatMap((market) =>
@@ -72,5 +99,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
     })),
   )
 
-  return [...staticEntries, ...detailEntries, ...stageEntries, ...articleEntries]
+  return [
+    ...staticEntries,
+    ...englishStaticEntries,
+    ...detailEntries,
+    ...stageEntries,
+    ...englishStageEntries,
+    ...articleEntries,
+    ...englishArticleEntries,
+  ]
 }
