@@ -22,7 +22,7 @@
     "ENVIRONMENT": "production",
     "PROJECT_NAME": "midas-trading",
     "API_VERSION": "v1",
-    "PUBLIC_WEB_URL": "https://midastrading.work",
+    "PUBLIC_WEB_URL": "https://midastrade.asia",
     "EMAIL_FROM": "Midas Trading <noreply@midastrade.asia>",
     "GOOGLE_CLIENT_ID": "85423363850-6ot32sau6gffb9k4mgj9ish8bo6el8gu.apps.googleusercontent.com",
     "BINANCE_SQUARE_PUBLISH_MODE": "github"

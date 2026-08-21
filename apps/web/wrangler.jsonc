@@ -21,12 +21,20 @@
   ],
   "routes": [
     {
+      "pattern": "midastrade.asia",
+      "custom_domain": true
+    },
+    {
+      "pattern": "www.midastrade.asia",
+      "custom_domain": true
+    },
+    {
       "pattern": "midastrading.work",
       "custom_domain": true
     }
   ],
   "vars": {
-    "AUTH_URL": "https://midastrading.work",
+    "AUTH_URL": "https://midastrade.asia",
     "AUTH_TRUST_HOST": "true",
     "NEXT_PUBLIC_API_URL": "/api-proxy"
   }

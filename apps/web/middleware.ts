@@ -89,6 +89,15 @@ function randomVid(): string {
 }
 
 export default async function middleware(req: NextRequest, event: NextFetchEvent) {
+  const host = req.headers.get('host')?.split(':', 1)[0]
+  if (host === 'www.midastrade.asia' || host === 'midastrading.work') {
+    const url = req.nextUrl.clone()
+    url.protocol = 'https:'
+    url.hostname = 'midastrade.asia'
+    url.port = ''
+    return NextResponse.redirect(url, 308)
+  }
+
   const res =
     (await (
       runAuth as unknown as (

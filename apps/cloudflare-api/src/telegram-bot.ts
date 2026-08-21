@@ -44,7 +44,7 @@ const MAIN_MENU = {
     [{ text: '📊 行情查询', callback_data: 'menu:quote' }, { text: '📈 K线图', callback_data: 'menu:kline' }],
     [{ text: '⭐ 我的自选', callback_data: 'act:watchlist' }, { text: '💼 我的持仓', callback_data: 'act:positions' }],
     [{ text: '🛒 模拟下单', callback_data: 'menu:order' }, { text: '🔔 告警规则', callback_data: 'menu:rules' }],
-    [{ text: '🌙 安静时段', callback_data: 'menu:quiet' }, { text: '🌐 打开 Midas', url: 'https://midastrading.work' }],
+    [{ text: '🌙 安静时段', callback_data: 'menu:quiet' }, { text: '🌐 打开 Midas', url: 'https://midastrade.asia' }],
   ],
 }
 
@@ -213,7 +213,7 @@ function marketPicker(action: 'quote' | 'kline' | 'order_symbol'): TelegramMarku
 
 function detailUrl(env: Env, market: Market, symbol: string): string {
   const path = market === 'crypto' ? '/crypto-preview' : `/${market}-preview`
-  const url = new URL(path, env.PUBLIC_WEB_URL || 'https://midastrading.work')
+  const url = new URL(path, env.PUBLIC_WEB_URL || 'https://midastrade.asia')
   url.searchParams.set('symbol', symbol)
   return url.toString()
 }
