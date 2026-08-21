@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 
 import { createSquareMedia } from './lib/binance-square-media.mjs'
@@ -39,8 +40,16 @@ function limitCoinPairTags(text, limit = 3) {
   })
 }
 
-function cleanPublishText(text) {
-  return limitCoinPairTags(text).replace(/\*{2,}/gu, '')
+function cleanPublishText(text, accountKey) {
+  const cleaned = limitCoinPairTags(text).replace(/\*{2,}/gu, '')
+  if (accountKey !== 'legacy_midas') return cleaned
+  return cleaned
+    .replace(/(?:仅供参考[，,、\s]*)?不构成投资建议[。.]?/gu, '')
+    .replace(/仅供参考[。.]?/gu, '')
+    .replace(/(?:\n\s*)?(?:(?:#|\$)[\p{L}\p{N}_-]+\s*)+$/gu, '')
+    .replace(/[ \t]+\n/gu, '\n')
+    .replace(/\n{3,}/gu, '\n\n')
+    .trim()
 }
 
 function query(sql) {
@@ -290,7 +299,7 @@ async function main() {
 
   let response
   try {
-    const publishText = cleanPublishText(candidate.tweet_text.trim())
+    const publishText = cleanPublishText(candidate.tweet_text.trim(), accountKey)
     response = await fetch(CONTENT_ENDPOINT, {
       method: 'POST',
       headers: headers(apiKey),
@@ -344,7 +353,20 @@ async function main() {
   console.log(`发布成功：account=${accountKey} draft=${candidate.id}${url ? ` ${url}` : ''}`)
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error))
-  process.exitCode = 1
-})
+if (process.argv.includes('--self-test')) {
+  assert.equal(
+    cleanPublishText('正文。\n\n仅供参考，不构成投资建议。\n#NEIRO #点金Midas', 'legacy_midas'),
+    '正文。',
+  )
+  assert.equal(
+    cleanPublishText('正文。\n\n$NEIRO $BTC', 'legacy_midas'),
+    '正文。',
+  )
+  assert.match(cleanPublishText('正文。\n\n$BTC', 'midas_trading'), /\$BTC/u)
+  console.log('币安广场发布文本清理自检通过')
+} else {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exitCode = 1
+  })
+}
