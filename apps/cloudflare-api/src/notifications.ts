@@ -287,7 +287,6 @@ export async function deliverUserNotification(
     title: string
     body: string
     dedupeKey?: string
-    telegramOnly?: boolean
   }>,
 ): Promise<string> {
   const now = Date.now()
@@ -325,7 +324,7 @@ export async function deliverUserNotification(
         send: () => telegramSend(env, config.tg_chat_id!, `${input.title}\n${input.body}`),
       }
     : { channel: 'telegram', enabled: false })
-  deliveries.push(!input.telegramOnly && config.feishu_open_id
+  deliveries.push(config.feishu_open_id
     ? {
         channel: 'feishu',
         enabled: !isQuietHour(config, now),

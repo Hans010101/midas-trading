@@ -196,7 +196,8 @@ async function subscribers(
   const result = await db
     .prepare(
       `SELECT user_id FROM notification_configs
-       WHERE ${field} = 1 AND tg_chat_id IS NOT NULL
+       WHERE ${field} = 1
+         AND (tg_chat_id IS NOT NULL OR feishu_open_id IS NOT NULL)
        ORDER BY updated_at LIMIT 20`,
     )
     .all<{ user_id: string }>()
@@ -218,7 +219,6 @@ async function notifySubscribers(
       title,
       body,
       dedupeKey: `${dedupe}:${userId}`,
-      telegramOnly: true,
     })
   }
   return userIds.length
