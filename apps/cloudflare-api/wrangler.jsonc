@@ -22,8 +22,8 @@
       "custom_domain": true
     },
     {
-      "pattern": "api.midastrade.asia/*",
-      "zone_name": "midastrade.asia"
+      "pattern": "api.midastrade.asia",
+      "custom_domain": true
     }
   ],
   "vars": {
