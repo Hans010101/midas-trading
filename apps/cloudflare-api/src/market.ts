@@ -332,9 +332,12 @@ async function fetchKrakenKlines(
 
 function cryptoBase(symbol: string): string {
   const normalized = symbol.trim().toUpperCase()
-  const match = normalized.match(/^([A-Z0-9]{2,20})(?:\/(?:USDT|USD))?$/u)
-  if (!match?.[1]) throw new HttpError(400, '数字资产标的格式无效')
-  return match[1]
+  const quoted = normalized.match(/^([A-Z0-9]{2,20})\/?(?:USDT|USD)$/u)
+  if (quoted?.[1]) return quoted[1]
+  if (!/^[A-Z0-9]{2,20}$/u.test(normalized)) {
+    throw new HttpError(400, '数字资产标的格式无效')
+  }
+  return normalized
 }
 
 function okxBar(period: string): string {

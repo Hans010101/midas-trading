@@ -50,6 +50,10 @@ const LAB_STRATEGIES: Array<{ value: BacktestStrategy; zh: string; en: string }>
   { value: 'kdj_cross', zh: 'KDJ 交叉', en: 'KDJ crossover' },
 ]
 
+function dateDaysAgo(days: number): string {
+  return new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10)
+}
+
 export default function LabPage() {
   const { locale } = useRuntimeLocale()
   useRuntimeDocumentTitle({
@@ -69,8 +73,8 @@ export default function LabPage() {
 
   const [symbol, setSymbol] = useState('BTCUSDT')
   const [strategy, setStrategy] = useState<BacktestStrategy>('sma_cross')
-  const [start, setStart] = useState('2025-01-17')
-  const [end, setEnd] = useState('2026-05-31')
+  const [start, setStart] = useState(() => dateDaysAgo(270))
+  const [end, setEnd] = useState(() => dateDaysAgo(1))
   const [smaFast, setSmaFast] = useState(5)
   const [smaSlow, setSmaSlow] = useState(20)
   const [commissionRate, setCommissionRate] = useState(0.0005)

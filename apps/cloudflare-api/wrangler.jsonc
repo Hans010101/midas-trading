@@ -20,6 +20,10 @@
     {
       "pattern": "feishu-api.midastrade.asia",
       "custom_domain": true
+    },
+    {
+      "pattern": "api.midastrade.asia/*",
+      "zone_name": "midastrade.asia"
     }
   ],
   "vars": {

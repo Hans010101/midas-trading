@@ -16,6 +16,22 @@ const okxCandle = {
 }
 
 describe('multi-source market klines', () => {
+  it('normalizes Binance-style symbols before requesting OKX candles', async () => {
+    const upstream = vi.fn(async (_input: RequestInfo | URL) => Response.json(okxCandle))
+    vi.stubGlobal('fetch', upstream)
+
+    const response = await handleMarketRoute(
+      new Request(
+        'https://api.example.test/api/v1/market/kline?symbol=BTCUSDT&market=crypto&period=1d&instrument=spot&limit=100',
+      ),
+      {} as Env,
+      'market-compact-symbol',
+    )
+
+    expect(response?.status).toBe(200)
+    expect(String(upstream.mock.calls[0]?.[0])).toContain('instId=BTC-USDT')
+  })
+
   it('uses OKX perpetual candles for assets missing from Kraken spot', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => Response.json(okxCandle)))
 
