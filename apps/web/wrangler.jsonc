@@ -27,10 +27,6 @@
     {
       "pattern": "www.midastrade.asia",
       "custom_domain": true
-    },
-    {
-      "pattern": "midastrading.work",
-      "custom_domain": true
     }
   ],
   "vars": {

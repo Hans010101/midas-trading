@@ -94,7 +94,7 @@ function randomVid(): string {
 
 export default async function middleware(req: NextRequest, event: NextFetchEvent) {
   const host = req.headers.get('host')?.split(':', 1)[0]
-  if (host === 'www.midastrade.asia' || host === 'midastrading.work') {
+  if (host === 'www.midastrade.asia') {
     const url = req.nextUrl.clone()
     url.protocol = 'https:'
     url.hostname = 'midastrade.asia'
