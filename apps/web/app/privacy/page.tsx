@@ -2,18 +2,25 @@
  * 隐私政策(静态页 · force-static)· 内容经产品负责人审定,照搬不改。
  */
 
+import type { Metadata } from 'next'
+
 import { LegalH2, LegalP, LegalPage, LegalUL } from '@/components/legal/legal-page'
 
 export const dynamic = 'force-static'
 
-export const metadata = {
+export const metadata: Metadata = {
   title: '隐私政策',
   description: '点金 Midas 隐私政策:收集哪些信息、如何使用,以及您的权利。',
+  alternates: {
+    canonical: '/privacy',
+    languages: { 'zh-CN': '/privacy', en: '/en/privacy', 'x-default': '/privacy' },
+  },
+  openGraph: { title: '隐私政策 · Midas Trading', url: '/privacy' },
 }
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title="隐私政策">
+    <LegalPage title="隐私政策" alternateHref="/en/privacy">
       <LegalP>
         Midas Trading(以下简称“本平台”)重视您的隐私。本隐私政策说明我们收集哪些信息、如何使用这些信息,以及您对自己信息所享有的权利。
       </LegalP>

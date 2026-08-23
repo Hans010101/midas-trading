@@ -2,18 +2,25 @@
  * 服务条款(静态页 · force-static)· 内容经产品负责人审定,照搬不改。
  */
 
+import type { Metadata } from 'next'
+
 import { LegalH2, LegalP, LegalPage, LegalUL } from '@/components/legal/legal-page'
 
 export const dynamic = 'force-static'
 
-export const metadata = {
+export const metadata: Metadata = {
   title: '服务条款',
   description: '点金 Midas 服务条款:虚拟交易分析与学习工具的使用协议。',
+  alternates: {
+    canonical: '/terms',
+    languages: { 'zh-CN': '/terms', en: '/en/terms', 'x-default': '/terms' },
+  },
+  openGraph: { title: '服务条款 · Midas Trading', url: '/terms' },
 }
 
 export default function TermsPage() {
   return (
-    <LegalPage title="服务条款">
+    <LegalPage title="服务条款" alternateHref="/en/terms">
       <LegalP>
         欢迎使用 Midas
         Trading(以下简称“本平台”)。本服务条款(以下简称“本条款”)是您与本平台运营方之间就使用本平台服务所订立的协议。

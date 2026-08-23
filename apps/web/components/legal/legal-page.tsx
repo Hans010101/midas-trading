@@ -8,24 +8,37 @@
 import Image from 'next/image'
 import Link from 'next/link'
 
-import { LanguageToggle } from '@/components/layout/language-toggle'
-
-export function LegalPage({ title, children }: { title: string; children: React.ReactNode }) {
+export function LegalPage({
+  title,
+  children,
+  english = false,
+  alternateHref,
+}: {
+  title: string
+  children: React.ReactNode
+  english?: boolean
+  alternateHref: string
+}) {
   return (
     <main className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-10 border-b border-paper/80 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-3xl items-center justify-between px-6">
-          <Link href="/" className="flex items-center gap-2">
-            <Image src="/brand/seal.png" alt="点金 Midas 印章" width={32} height={32} />
+          <Link href={english ? '/en' : '/'} className="flex items-center gap-2">
+            <Image src="/brand/seal.png" alt="Midas Trading" width={32} height={32} />
             <span className="font-serif text-lg font-bold text-midas-red">Midas</span>
           </Link>
           <div className="flex items-center gap-3">
-            <LanguageToggle />
             <Link
-              href="/"
+              href={alternateHref}
               className="text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
-              返回首页
+              {english ? '中文' : 'English'}
+            </Link>
+            <Link
+              href={english ? '/en' : '/'}
+              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {english ? 'Back to home' : '返回首页'}
             </Link>
           </div>
         </div>
@@ -38,8 +51,15 @@ export function LegalPage({ title, children }: { title: string; children: React.
 
       <footer className="border-t border-paper bg-surface-card">
         <div className="mx-auto max-w-3xl px-6 py-6 text-xs text-muted-foreground">
-          <p>客服:请登录后通过站内“联系我们”提交工单</p>
-          <p className="mt-1">© 2026 Midas Trading · 仅供模拟交易,不构成投资建议</p>
+          <p>
+            {english
+              ? 'Support: sign in and submit a ticket through Contact Us.'
+              : '客服:请登录后通过站内“联系我们”提交工单'}
+          </p>
+          <p className="mt-1">
+            © 2026 Midas Trading ·{' '}
+            {english ? 'Simulated trading only; not investment advice.' : '仅供模拟交易,不构成投资建议'}
+          </p>
         </div>
       </footer>
     </main>

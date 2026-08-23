@@ -2,18 +2,25 @@
  * 风险提示(静态页 · force-static)· 内容经产品负责人审定,照搬不改。
  */
 
+import type { Metadata } from 'next'
+
 import { LegalH2, LegalP, LegalPage } from '@/components/legal/legal-page'
 
 export const dynamic = 'force-static'
 
-export const metadata = {
+export const metadata: Metadata = {
   title: '风险提示',
   description: '点金 Midas 风险提示:全程虚拟、不涉及真实交易、不构成投资建议。',
+  alternates: {
+    canonical: '/risk',
+    languages: { 'zh-CN': '/risk', en: '/en/risk', 'x-default': '/risk' },
+  },
+  openGraph: { title: '风险提示 · Midas Trading', url: '/risk' },
 }
 
 export default function RiskPage() {
   return (
-    <LegalPage title="风险提示">
+    <LegalPage title="风险提示" alternateHref="/en/risk">
       <LegalP>
         请在使用 Midas
         Trading(以下简称“本平台”)前,仔细阅读并充分理解本风险提示。您使用本平台即表示您已阅读、理解并接受本风险提示的全部内容。

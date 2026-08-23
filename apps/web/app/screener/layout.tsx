@@ -5,6 +5,12 @@ import type { Metadata } from 'next'
 export const metadata: Metadata = {
   title: '选股筛选器',
   description: '按价格、涨跌幅、RSI、均线金叉等条件筛选 A股/美股/港股标的。',
+  alternates: { canonical: '/screener' },
+  openGraph: {
+    title: '跨市场选股筛选器 · Midas Trading',
+    description: '按价格、涨跌幅、RSI、均线金叉等条件筛选 A股、美股和港股标的。',
+    url: '/screener',
+  },
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {

@@ -2,6 +2,7 @@ import type { MetadataRoute } from 'next'
 
 import { ACADEMY_ARTICLES, ACADEMY_STAGES } from '@/content/academy/manifest'
 import { DETAIL_MARKETS, DETAIL_SYMBOLS } from '@/lib/seo/detail-symbols'
+import { ARTICLE_DATES } from '@/lib/seo/article-dates'
 import { PRODUCTION_WEB_URL } from '@/lib/site'
 
 /**
@@ -14,7 +15,7 @@ import { PRODUCTION_WEB_URL } from '@/lib/site'
  *   login/register/verify-email(noindex 卫生页)· /academy/exam(纯交互)· admin/account(登录墙)。
  * ★文章/阶段 URL 已迁路径段(SEO 批2 · docs/decisions/0045):/academy/article/{slug} ·
  *   /academy/stage/{s} · 旧 ?slug=/?s= 由薄壳 308 兜底。
- * lastModified 不填(无可靠日期源 · D7 git 回填是批3 的事 · 宁缺毋假)。
+ * 文章 lastModified 使用 git 历史回填表;静态壳无可靠修改日期则宁缺毋假。
  */
 
 const BASE = PRODUCTION_WEB_URL
@@ -29,11 +30,8 @@ const STATIC_PAGES: Array<[path: string, priority: number]> = [
   ['/crypto-market', 0.8],
   ['/workbench', 0.7],
   ['/screener', 0.6],
-  ['/watchlist', 0.5],
   ['/lab', 0.6],
   ['/lab/assistant', 0.5],
-  ['/lab/report', 0.5],
-  ['/platinum', 0.5],
   ['/academy', 0.9],
   ['/academy/glossary', 0.9],
   ['/calendar', 0.6],
@@ -43,50 +41,80 @@ const STATIC_PAGES: Array<[path: string, priority: number]> = [
   ['/privacy', 0.3],
   ['/terms', 0.3],
   ['/risk', 0.3],
+  ['/refund', 0.3],
 ]
+
+const BILINGUAL_STATIC_PAGES: Array<[zh: string, en: string, priority: number]> = [
+  ['/', '/en', 1.0],
+  ['/about', '/en/about', 0.5],
+  ['/academy', '/en/academy', 0.9],
+  ['/academy/glossary', '/en/academy/glossary', 0.9],
+  ['/research/methodology', '/en/research/methodology', 0.6],
+  ['/research/team', '/en/research/team', 0.5],
+  ['/privacy', '/en/privacy', 0.3],
+  ['/terms', '/en/terms', 0.3],
+  ['/risk', '/en/risk', 0.3],
+  ['/refund', '/en/refund', 0.3],
+]
+
+function alternates(zh: string, en: string) {
+  return {
+    languages: {
+      'zh-CN': `${BASE}${zh}`,
+      en: `${BASE}${en}`,
+      'x-default': `${BASE}${zh}`,
+    },
+  }
+}
+
+function staticAlternates(path: string) {
+  const pair = BILINGUAL_STATIC_PAGES.find(([zh]) => zh === path)
+  return pair ? { alternates: alternates(pair[0], pair[1]) } : {}
+}
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const staticEntries: MetadataRoute.Sitemap = STATIC_PAGES.map(([path, priority]) => ({
     url: `${BASE}${path}`,
     priority,
     changeFrequency: path === '/' ? 'weekly' : 'monthly',
+    ...staticAlternates(path),
   }))
 
   const stageEntries: MetadataRoute.Sitemap = ACADEMY_STAGES.map((s) => ({
     url: `${BASE}/academy/stage/${s.slug}`,
     priority: 0.7,
     changeFrequency: 'monthly',
+    alternates: alternates(`/academy/stage/${s.slug}`, `/en/academy/stage/${s.slug}`),
   }))
 
   const articleEntries: MetadataRoute.Sitemap = ACADEMY_ARTICLES.map((a) => ({
     url: `${BASE}/academy/article/${a.slug}`,
     priority: 0.8,
     changeFrequency: 'monthly',
+    lastModified: ARTICLE_DATES[a.slug]?.modified,
+    alternates: alternates(`/academy/article/${a.slug}`, `/en/academy/article/${a.slug}`),
   }))
 
-  const englishStaticEntries: MetadataRoute.Sitemap = ([
-    ['/en', 0.9],
-    ['/en/about', 0.5],
-    ['/en/academy', 0.9],
-    ['/en/academy/glossary', 0.9],
-    ['/en/research/methodology', 0.6],
-    ['/en/research/team', 0.5],
-  ] as Array<[string, number]>).map(([path, priority]) => ({
-    url: `${BASE}${path}`,
+  const englishStaticEntries: MetadataRoute.Sitemap = BILINGUAL_STATIC_PAGES.map(([zh, en, priority]) => ({
+    url: `${BASE}${en}`,
     priority,
     changeFrequency: 'monthly',
+    alternates: alternates(zh, en),
   }))
 
   const englishStageEntries: MetadataRoute.Sitemap = ACADEMY_STAGES.map((s) => ({
     url: `${BASE}/en/academy/stage/${s.slug}`,
     priority: 0.7,
     changeFrequency: 'monthly',
+    alternates: alternates(`/academy/stage/${s.slug}`, `/en/academy/stage/${s.slug}`),
   }))
 
   const englishArticleEntries: MetadataRoute.Sitemap = ACADEMY_ARTICLES.map((a) => ({
     url: `${BASE}/en/academy/article/${a.slug}`,
     priority: 0.8,
     changeFrequency: 'monthly',
+    lastModified: ARTICLE_DATES[a.slug]?.modified,
+    alternates: alternates(`/academy/article/${a.slug}`, `/en/academy/article/${a.slug}`),
   }))
 
   // SEO 批7:详情页语义壳(路径段 · curated 有界集 · 4 市场)· 每 symbol 独立静态壳 + 唯一 title。

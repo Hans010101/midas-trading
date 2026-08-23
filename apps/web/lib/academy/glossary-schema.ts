@@ -5,6 +5,7 @@
  *   数据源唯一 = content/academy/glossary.md(与页面同源 · 解析 ### 标题 + `**一句话定义：**` 行)。
  */
 
+import type { AcademyLocale } from '@/content/academy/localized-catalog'
 import { getGlossary } from '@/lib/academy'
 import { PRODUCTION_WEB_URL } from '@/lib/site'
 
@@ -15,19 +16,23 @@ interface GlossaryTerm {
   definition: string
 }
 
-/** 解析 glossary.md:每条 `### N. 术语名 (English)` + 其后 `**一句话定义：** 定义` → {name, definition}。 */
-function parseGlossaryTerms(md: string): GlossaryTerm[] {
+/** 解析中英文 glossary:每个三级标题 + 紧随其后的单句定义 → {name, definition}。 */
+function parseGlossaryTerms(md: string, locale: AcademyLocale): GlossaryTerm[] {
   const terms: GlossaryTerm[] = []
   const lines = md.split('\n')
   for (let i = 0; i < lines.length; i++) {
     const h = lines[i].match(/^###\s+\d+\.\s+(.+?)\s*$/)
     if (!h) continue
     // 去掉标题里的英文括号注释,取中文术语名(如「多头 / 做多 (Long)」→「多头 / 做多」)
-    const name = h[1].replace(/\s*\([^)]*\)\s*$/, '').trim()
+    const name = locale === 'zh' ? h[1].replace(/\s*\([^)]*\)\s*$/, '').trim() : h[1].trim()
     // 向后找最近的「一句话定义」行
     let definition = ''
     for (let j = i + 1; j < Math.min(i + 8, lines.length); j++) {
-      const d = lines[j].match(/\*\*一句话定义：\*\*\s*(.+?)\s*$/)
+      const d = lines[j].match(
+        locale === 'zh'
+          ? /\*\*一句话定义：\*\*\s*(.+?)\s*$/
+          : /\*\*One-sentence definition:\*\*\s*(.+?)\s*$/i,
+      )
       if (d) {
         definition = d[1].trim()
         break
@@ -40,20 +45,23 @@ function parseGlossaryTerms(md: string): GlossaryTerm[] {
 }
 
 /** 构造 DefinedTermSet schema(hasDefinedTerm 每条指向词典页锚点)。 */
-export function buildGlossaryTermSet() {
-  const terms = parseGlossaryTerms(getGlossary())
+export function buildGlossaryTermSet(locale: AcademyLocale = 'zh') {
+  const english = locale === 'en'
+  const path = english ? '/en/academy/glossary' : '/academy/glossary'
+  const termSetId = `${BASE}${path}#termset`
+  const terms = parseGlossaryTerms(getGlossary(locale), locale)
   return {
     '@context': 'https://schema.org',
     '@type': 'DefinedTermSet',
-    '@id': `${BASE}/academy/glossary#termset`,
-    name: '点金训练营 · 交易名词词典',
-    inLanguage: 'zh-CN',
-    url: `${BASE}/academy/glossary`,
+    '@id': termSetId,
+    name: english ? 'Midas Academy · Trading Glossary' : '点金训练营 · 交易名词词典',
+    inLanguage: english ? 'en' : 'zh-CN',
+    url: `${BASE}${path}`,
     hasDefinedTerm: terms.map((t) => ({
       '@type': 'DefinedTerm',
       name: t.name,
       description: t.definition,
-      inDefinedTermSet: `${BASE}/academy/glossary#termset`,
+      inDefinedTermSet: termSetId,
     })),
   }
 }

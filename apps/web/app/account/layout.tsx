@@ -17,6 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: {
       absolute: english ? 'Account Center · Midas Trading' : '账户中心 · 点金 Midas',
     },
+    robots: { index: false, follow: false },
   }
 }
 

@@ -5,6 +5,7 @@ import type { Metadata } from 'next'
 export const metadata: Metadata = {
   title: '自动策略',
   description: '账户工具自助面板。',
+  robots: { index: false, follow: false },
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {

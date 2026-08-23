@@ -27,7 +27,7 @@ export const metadata = {
 
 export default function AboutPage() {
   return (
-    <LegalPage title="关于点金">
+    <LegalPage title="关于点金" alternateHref="/en/about">
       {/* SEO 批3:Organization JSON-LD(与 landing 同 @id · 让知识图谱把 about 归入品牌实体)*/}
       <JsonLd data={organizationSchema} />
       <LegalP>

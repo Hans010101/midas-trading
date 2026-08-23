@@ -9,7 +9,8 @@
  * ★文章 URL 用路径段 /academy/article/{slug}(与 sitemap.ts 一致 · 批2 迁移后规范形式 ·
  *   直接给 AI 爬虫规范 URL,不走 ?slug= 的 308 薄壳重定向)。
  */
-import { ACADEMY_ARTICLES, ACADEMY_STAGES } from '@/content/academy/manifest'
+import { ACADEMY_ARTICLES } from '@/content/academy/manifest'
+import { getAcademyArticles, getAcademyStages } from '@/content/academy/localized-catalog'
 import { PRODUCTION_WEB_URL } from '@/lib/site'
 
 export const dynamic = 'force-static'
@@ -17,14 +18,24 @@ export const dynamic = 'force-static'
 const BASE = PRODUCTION_WEB_URL
 
 export function GET(): Response {
-  const sections = ACADEMY_STAGES.map((stage) => {
-    const articles = ACADEMY_ARTICLES.filter((a) => a.stage === stage.slug).sort(
+  const sections = getAcademyStages('zh').map((stage) => {
+    const articles = getAcademyArticles('zh').filter((a) => a.stage === stage.slug).sort(
       (a, b) => a.order - b.order,
     )
     const lines = articles.map(
       (a) => `- [${a.title}](${BASE}/academy/article/${a.slug}): ${a.excerpt}`,
     )
     return `## 训练营 · ${stage.stageLabel} ${stage.name}(${articles.length} 篇)\n\n${stage.desc}\n\n${lines.join('\n')}`
+  })
+
+  const englishSections = getAcademyStages('en').map((stage) => {
+    const articles = getAcademyArticles('en').filter((a) => a.stage === stage.slug).sort(
+      (a, b) => a.order - b.order,
+    )
+    const lines = articles.map(
+      (a) => `- [${a.title}](${BASE}/en/academy/article/${a.slug}): ${a.excerpt}`,
+    )
+    return `## Academy · ${stage.stageLabel} ${stage.name} (${articles.length} lessons)\n\n${stage.desc}\n\n${lines.join('\n')}`
   })
 
   const body = `# Midas Trading（点金 Midas）
@@ -56,6 +67,23 @@ ${sections.join('\n\n')}
 - [Midas Academy in English](${BASE}/en/academy): 118 English lessons across six stages.
 - [English trading glossary](${BASE}/en/academy/glossary): 88 essential terms across 10 categories.
 
+Midas Trading is an AI-native analysis and trading-education terminal for crypto, U.S., mainland
+China and Hong Kong markets. It combines public market data, deterministic calculations,
+AI-assisted structural summaries, backtests and virtual trading. All trading is simulated, and
+the platform does not provide investment, financial or trading advice.
+
+${englishSections.join('\n\n')}
+
+## English trust and policy pages
+
+- [About Midas Trading](${BASE}/en/about)
+- [Research methodology and data transparency](${BASE}/en/research/methodology)
+- [Research team](${BASE}/en/research/team)
+- [Risk notice](${BASE}/en/risk)
+- [Terms of service](${BASE}/en/terms)
+- [Privacy policy](${BASE}/en/privacy)
+- [Free service notice](${BASE}/en/refund)
+
 ## 关于与原则
 
 - [关于点金](${BASE}/about): 产品定位、方法论与六条产品原则(全程虚拟 / 不构成投资建议 /
@@ -63,12 +91,12 @@ ${sections.join('\n\n')}
 - [研究方法与数据透明度](${BASE}/research/methodology): 数据层、确定性计算、AI 使用与修正机制。
 - [Midas Trading 研究团队](${BASE}/research/team): 公开内容的组织署名、研究范围与编辑责任。
 - [风险提示](${BASE}/risk): 平台性质(全程虚拟 · 不涉及真实交易)与免责条款全文。
-- [服务条款](${BASE}/terms) · [隐私政策](${BASE}/privacy)
+- [服务条款](${BASE}/terms) · [隐私政策](${BASE}/privacy) · [免费服务说明](${BASE}/refund)
 
 ## Optional
 
-- [llms-full.txt](${BASE}/llms-full.txt): 训练营全部 ${ACADEMY_ARTICLES.length} 篇文章
-  与名词词典的完整正文(约 0.7MB 纯文本,供需要全文语料的引擎一次抓取)。
+- [llms-full.txt](${BASE}/llms-full.txt): 中英文训练营全部 ${ACADEMY_ARTICLES.length} 篇文章
+  与双语名词词典的完整正文,供需要全文语料的引擎一次抓取。
 `
 
   return new Response(body, {
