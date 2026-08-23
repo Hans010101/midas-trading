@@ -22,7 +22,7 @@ export function AdminNav() {
   const pathname = usePathname()
   return (
     <nav
-      className="mb-6 flex gap-2 overflow-x-auto border-b border-paper"
+      className="mb-6 flex gap-2 overflow-x-auto border-b border-paper [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       aria-label="管理导航"
     >
       {ADMIN_TABS.map((t) => {
