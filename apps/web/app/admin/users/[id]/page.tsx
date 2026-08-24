@@ -106,7 +106,7 @@ export default function AdminUserDetailPage() {
                 <Row label="注册时间">{createdAtText(d.created_at)}</Row>
                 <Row label="最后登录">{lastActiveText(d.last_login_at)}</Row>
                 <Row label="近 7 天活跃">{lastActiveText(d.last_active_7d)}</Row>
-                <Row label="邮箱验证">
+                <Row label="账号验证">
                   {d.email_verified ? <span className="text-up">已验证</span> : <span className="text-muted-foreground/60">未验证</span>}
                 </Row>
               </dl>

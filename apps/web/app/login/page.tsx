@@ -8,6 +8,7 @@ import { signIn } from 'next-auth/react'
 import { Suspense, useState } from 'react'
 
 import { AuthShell } from '@/components/auth/auth-shell'
+import { SmsAuthForm } from '@/components/auth/sms-auth-form'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -129,7 +130,13 @@ function LoginInner() {
         </button>
       </form>
 
-      {/* 分隔线 + Google OAuth(M1 第三波 · 邮箱密码保留并存)*/}
+      <div className="relative my-5 flex items-center">
+        <div className="flex-1 border-t border-paper" />
+        <span className="px-3 text-xs text-muted-foreground">短信验证码登录</span>
+        <div className="flex-1 border-t border-paper" />
+      </div>
+      <SmsAuthForm mode="login" nextPath={nextPath} />
+
       <div className="relative my-5 flex items-center">
         <div className="flex-1 border-t border-paper" />
         <span className="px-3 text-xs text-muted-foreground">或</span>

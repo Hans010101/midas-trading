@@ -10,8 +10,10 @@ export interface MeResponse {
   user_id: string
   email: string
   email_verified: boolean
+  phone: string | null
+  phone_verified: boolean
   role: string
-  has_password: boolean // false = OAuth-only(无密码)→ 不显示改密码表单
+  has_password: boolean // false = Google/短信免密码账号
   avatar_id: number | null // NULL/0=首字母 · 1-16=预设头像
   is_platinum: boolean // 铂金标记 · 前端据此显/隐铂金自助入口(PR-6 · 真边界在后端 PlatinumDep)
   language_pref: string | null // 'zh' | 'en' | null(未设)· i18n 跨设备同步用(后端 resolve_lang level②)

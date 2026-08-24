@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Suspense, useState } from 'react'
 
 import { AuthShell } from '@/components/auth/auth-shell'
+import { SmsAuthForm } from '@/components/auth/sms-auth-form'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
@@ -177,6 +178,13 @@ function RegisterForm() {
         </Button>
 
       </form>
+
+      <div className="relative my-5 flex items-center">
+        <div className="flex-1 border-t border-paper" />
+        <span className="px-3 text-xs text-muted-foreground">手机注册</span>
+        <div className="flex-1 border-t border-paper" />
+      </div>
+      <SmsAuthForm mode="register" />
     </AuthShell>
   )
 }

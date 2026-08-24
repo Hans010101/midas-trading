@@ -2,7 +2,7 @@
  * NextAuth v5(Auth.js)配置。
  *
  * Providers:
- *   1. Credentials · 邮箱密码登录 · 调后端 POST /api/v1/auth/login(0006 ADR · M1)
+ *   1. Credentials · 邮箱密码或短信验证码登录
  *   2. Google · OAuth · 调后端 POST /api/v1/auth/oauth/google(M1 第三波)
  *
  * 0006 ADR 2026-05-21 回归后,后端 access_token 字段仍是这个名字,
@@ -53,10 +53,44 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     Credentials({
       name: 'credentials',
       credentials: {
+        mode: { type: 'text' },
         email: { type: 'email' },
         password: { type: 'password' },
+        phone: { type: 'tel' },
+        code: { type: 'text' },
+        create: { type: 'text' },
+        age_confirmed: { type: 'text' },
       },
       async authorize(credentials) {
+        if (credentials?.mode === 'sms') {
+          const phone = credentials.phone as string | undefined
+          const code = credentials.code as string | undefined
+          if (!phone || !code) return null
+          const r = await midasTradingApiFetch('/api/v1/auth/sms/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              phone,
+              code,
+              create: credentials.create === 'true',
+              age_confirmed: credentials.age_confirmed === 'true',
+            }),
+          })
+          if (!r.ok) return null
+          const data = (await r.json()) as {
+            access_token: string
+            user_id: string
+            identity: string
+            role: string
+          }
+          return {
+            id: data.user_id,
+            email: data.identity,
+            accessToken: data.access_token,
+            role: data.role,
+          }
+        }
+
         const email = credentials?.email as string | undefined
         const password = credentials?.password as string | undefined
         if (!email || !password) return null

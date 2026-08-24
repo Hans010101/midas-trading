@@ -20,7 +20,7 @@ export default function EnglishPrivacyPage() {
       <LegalP>This policy explains what Midas Trading collects, why we use it and the rights available to you. Using the platform means that you understand these practices.</LegalP>
       <LegalH2>1. Information we collect</LegalH2>
       <LegalUL>
-        <li>Account data such as your email address and basic information authorized by a sign-in provider such as Google.</li>
+        <li>Account data such as your email address or mobile number, plus basic information authorized by a sign-in provider such as Google.</li>
         <li>Hashed passwords for email registration; we do not store or know your plaintext password.</li>
         <li>Support messages and attachments that you choose to submit.</li>
         <li>Virtual trades, virtual positions, watchlists, backtests, preferences and security logs needed to operate the service.</li>
@@ -29,7 +29,7 @@ export default function EnglishPrivacyPage() {
       <LegalH2>2. How we use information</LegalH2>
       <LegalP>We use data to create and secure accounts, provide virtual-trading and analysis features, maintain service reliability, answer support requests and improve the product. We do not sell personal information.</LegalP>
       <LegalH2>3. Service providers</LegalH2>
-      <LegalP>Resend processes email delivery, Google processes Google sign-in, and cloud and market-data providers support infrastructure and quotes. We share only what is necessary to provide the service or comply with applicable law.</LegalP>
+      <LegalP>Resend processes email delivery, Google processes Google sign-in, and Alibaba Cloud processes mobile numbers when sending SMS verification codes. Cloud and market-data providers support infrastructure and quotes. We share only what is necessary to provide the service or comply with applicable law.</LegalP>
       <LegalH2>4. Storage and security</LegalH2>
       <LegalP>Account, preference, alert and notification data is stored in this project’s independent Cloudflare D1 database. We use reasonable safeguards including password hashing and access controls, but no internet system can guarantee absolute security.</LegalP>
       <LegalH2>5. Your choices</LegalH2>

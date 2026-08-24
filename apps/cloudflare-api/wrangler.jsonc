@@ -33,7 +33,9 @@
     "PUBLIC_WEB_URL": "https://midastrade.asia",
     "EMAIL_FROM": "Midas Trading <noreply@midastrade.asia>",
     "GOOGLE_CLIENT_ID": "85423363850-6ot32sau6gffb9k4mgj9ish8bo6el8gu.apps.googleusercontent.com",
-    "BINANCE_SQUARE_PUBLISH_MODE": "github"
+    "BINANCE_SQUARE_PUBLISH_MODE": "github",
+    "ALIYUN_SMS_SIGN_NAME": "恒创联众",
+    "ALIYUN_SMS_TEMPLATE_CODE": "100001"
   },
   "d1_databases": [
     {

@@ -93,7 +93,7 @@ export default function AdminUsersPage() {
               <table className="w-full min-w-[820px] text-sm">
                 <thead>
                   <tr className="border-b border-paper text-left text-xs text-muted-foreground">
-                    <th className="px-4 py-2.5 font-normal">邮箱</th>
+                    <th className="px-4 py-2.5 font-normal">账号</th>
                     <th className="px-4 py-2.5 font-normal">注册时间</th>
                     <th className="px-4 py-2.5 font-normal">验证</th>
                     <th className="px-4 py-2.5 font-normal">注册方式</th>

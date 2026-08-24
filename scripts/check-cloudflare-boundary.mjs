@@ -15,6 +15,12 @@ const ALLOWED_FILES = new Set([
   'apps/web/cloudflare-env.d.ts',
   // 独立 Resend Key 使用的已验证发件域，不代表旧项目运行时依赖。
   'apps/cloudflare-api/wrangler.jsonc',
+  // 新系统独立使用阿里云短信认证；仅放行短信实现、配置类型与法务披露。
+  'apps/cloudflare-api/src/sms.ts',
+  'apps/cloudflare-api/vitest.config.ts',
+  'apps/cloudflare-api/worker-configuration.d.ts',
+  'apps/cloudflare-api/wrangler.test.jsonc',
+  'apps/web/app/privacy/page.tsx',
 ])
 
 async function listFiles(directory) {

@@ -21,7 +21,7 @@ export default function EnglishTermsPage() {
       <LegalH2>1. Service</LegalH2>
       <LegalP>Midas Trading is an AI-native market-analysis, education and virtual-trading tool covering crypto, U.S., mainland China and Hong Kong markets. Every trade uses virtual funds. The platform is not a broker, exchange, custodian or real-trading service, and its content is not investment advice.</LegalP>
       <LegalH2>2. Accounts</LegalH2>
-      <LegalP>You must provide accurate registration information, secure your credentials, meet the legal age requirements in your location and notify us of unauthorized access. We may suspend accounts that violate these terms.</LegalP>
+      <LegalP>You may create and access an account by email, SMS or a third-party provider such as Google. You must provide accurate registration information, secure your credentials, meet the legal age requirements in your location and notify us of unauthorized access. We may suspend accounts that violate these terms.</LegalP>
       <LegalH2>3. Access and availability</LegalH2>
       <LegalP>Registered users may currently use all available features free of charge. We may apply uniform technical limits to protect reliability and may change, pause or restore features as operational needs require.</LegalP>
       <LegalH2>4. Acceptable use</LegalH2>

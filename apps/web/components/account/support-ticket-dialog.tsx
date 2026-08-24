@@ -41,7 +41,9 @@ export function SupportTicketDialog({ onClose }: { onClose: () => void }) {
 
   // 联系邮箱默认填充账号邮箱(用户未手动改时)
   useEffect(() => {
-    if (!emailEdited && session?.user?.email) setContactEmail(session.user.email)
+    if (!emailEdited && session?.user?.email?.includes('@')) {
+      setContactEmail(session.user.email)
+    }
   }, [session, emailEdited])
 
   // 图片预览(对象 URL · 卸载/变更时回收防内存泄漏)

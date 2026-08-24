@@ -7,7 +7,7 @@
  * 选头像 = 选中即保存 + 自动收起;改密码保存成功亦收起。
  *
  * 🔴 红线:头像零图片存储(只选预设编号 · 不上传)· 密码明文不持久化 ·
- * OAuth-only 用户(has_password=false)不显示改密码按钮(显示 Google 提示)。
+ * 免密码用户(has_password=false)不显示改密码按钮。
  */
 
 import { Loader2 } from 'lucide-react'
@@ -67,10 +67,10 @@ export function AccountIdentitySection() {
           </div>
         </div>
 
-        {/* OAuth-only 提示(无密码用户)*/}
+        {/* 免密码账号提示 */}
         {me && !me.has_password && (
           <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-            你通过 Google 登录,账户安全由 Google 管理(无需在此设置密码)。
+            当前账号使用免密码登录，无需在此设置密码。
           </p>
         )}
 

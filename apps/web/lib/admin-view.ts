@@ -9,6 +9,7 @@ export const REGISTER_METHOD_LABEL: Record<RegisterMethod, string> = {
   google: 'Google',
   password: '邮箱',
   both: 'Google+邮箱',
+  sms: '短信',
 }
 
 export function registerMethodLabel(method: string): string {

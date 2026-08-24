@@ -7,7 +7,7 @@
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
-export type RegisterMethod = 'google' | 'password' | 'both'
+export type RegisterMethod = 'google' | 'password' | 'both' | 'sms'
 
 export interface AdminUserItem {
   id: string

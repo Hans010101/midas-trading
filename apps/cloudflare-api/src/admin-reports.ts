@@ -243,7 +243,9 @@ async function sendReport(
   const recipients = await env.DB.prepare(
     `SELECT u.id, u.email FROM users u
      JOIN notification_configs c ON c.user_id = u.id
-     WHERE u.banned_at IS NULL AND c.weekly_report_enabled = 1`,
+     WHERE u.banned_at IS NULL
+       AND u.email_verified_at IS NOT NULL
+       AND c.weekly_report_enabled = 1`,
   ).all<{ id: string; email: string }>()
   let emailSent = 0
   let emailFailed = 0

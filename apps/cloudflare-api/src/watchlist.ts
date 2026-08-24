@@ -54,7 +54,10 @@ async function listWatchlist(
 ): Promise<Response> {
   const { user } = await authenticate(request, env)
   let rows = await listRows(env.DB, user.id)
-  if (rows.length === 0 && user.email_verified_at !== null) {
+  if (
+    rows.length === 0 &&
+    (user.email_verified_at !== null || user.phone_verified_at !== null)
+  ) {
     const state = await env.DB
       .prepare(
         'SELECT demo_watchlist_prefilled FROM users WHERE id = ?',

@@ -27,6 +27,8 @@ export default defineConfig({
           SUPPORT_EMAIL_TO: 'support@example.test',
           PASSWORD_PEPPER: 'test-password-pepper-with-sufficient-entropy',
           BINANCE_SQUARE_API_KEY: 'test-square-key',
+          ALIBABA_CLOUD_ACCESS_KEY_ID: 'test-aliyun-key-id',
+          ALIBABA_CLOUD_ACCESS_KEY_SECRET: 'test-aliyun-key-secret',
           TELEGRAM_BOT_TOKEN: 'test-telegram-token',
           TELEGRAM_BOT_USERNAME: 'test_midas_bot',
           TELEGRAM_WEBHOOK_SECRET: 'test-telegram-webhook-secret',

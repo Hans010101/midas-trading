@@ -6,6 +6,7 @@ import examBankEn from '../../api/app/services/academy/exam_questions.en.json'
 import { sha256Hex } from '../src/crypto'
 import { ensureTelegramWebhook } from '../src/notifications'
 import { hashPassword, verifyPassword } from '../src/password'
+import { normalizeChinaMobile } from '../src/sms'
 import { handleTelegramBotUpdate } from '../src/telegram-bot'
 
 function apiRequest(
@@ -91,6 +92,59 @@ describe('password storage', () => {
     await expect(
       verifyPassword('wrong password', stored, env.PASSWORD_PEPPER),
     ).resolves.toBe(false)
+  })
+})
+
+describe('SMS authentication', () => {
+  it('creates a verified phone account and consumes the code once', async () => {
+    expect(normalizeChinaMobile('138 0013 8000')).toBe('+8613800138000')
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      const action = new Headers(init?.headers).get('x-acs-action')
+      return new Response(JSON.stringify(action === 'CheckSmsVerifyCode'
+        ? { Code: 'OK', Success: true, Model: { VerifyResult: 'PASS' } }
+        : { Code: 'OK', Success: true }))
+    })
+
+    const requested = await exports.default.fetch(apiRequest(
+      '/api/v1/auth/sms/request',
+      { method: 'POST', body: { phone: '13800138000' } },
+    ))
+    expect(requested.status).toBe(202)
+
+    const verified = await exports.default.fetch(apiRequest(
+      '/api/v1/auth/sms/verify',
+      {
+        method: 'POST',
+        body: {
+          phone: '13800138000',
+          code: '123456',
+          create: true,
+          age_confirmed: true,
+        },
+      },
+    ))
+    expect(verified.status).toBe(200)
+    const session = (await verified.json()) as { access_token: string }
+
+    const me = await exports.default.fetch(apiRequest('/api/v1/auth/me', {
+      token: session.access_token,
+    }))
+    await expect(me.json()).resolves.toMatchObject({
+      email: '+8613800138000',
+      phone: '+8613800138000',
+      email_verified: false,
+      phone_verified: true,
+      has_password: false,
+    })
+
+    const reused = await exports.default.fetch(apiRequest(
+      '/api/v1/auth/sms/verify',
+      {
+        method: 'POST',
+        body: { phone: '13800138000', code: '123456', create: false },
+      },
+    ))
+    expect(reused.status).toBe(400)
   })
 })
 

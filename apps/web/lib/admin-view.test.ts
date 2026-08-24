@@ -9,6 +9,7 @@ describe('registerMethodLabel(注册方式徽标)', () => {
     expect(registerMethodLabel('google')).toBe('Google')
     expect(registerMethodLabel('password')).toBe('邮箱')
     expect(registerMethodLabel('both')).toBe('Google+邮箱')
+    expect(registerMethodLabel('sms')).toBe('短信')
   })
 
   it('未知值原样透出(后端新增方式不至于显示空白)', () => {

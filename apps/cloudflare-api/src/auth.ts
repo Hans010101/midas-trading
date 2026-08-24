@@ -1,4 +1,9 @@
-import { base64UrlEncode, hmacSha256, randomToken, sha256Hex } from './crypto'
+import {
+  base64UrlEncode,
+  hmacSha256,
+  randomToken,
+  sha256Hex,
+} from './crypto'
 import { isLockedAdminEmail, roleForEmail } from './admin-policy'
 import { sendVerificationEmail } from './email'
 import { COMMERCIAL_MEMBERSHIP_ENABLED } from './features'
@@ -17,10 +22,18 @@ import {
   requireString,
 } from './http'
 import { hashPassword, verifyPassword } from './password'
+import { checkSmsCode, normalizeChinaMobile, sendSmsCode } from './sms'
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1_000
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1_000
 const MAX_ACTIVE_SESSIONS = 5
+const SMS_CODE_TTL_MS = 5 * 60 * 1_000
+const SMS_COOLDOWN_MS = 60 * 1_000
+const SMS_DAY_MS = 24 * 60 * 60 * 1_000
+const SMS_MAX_PHONE_PER_DAY = 10
+const SMS_MAX_IP_PER_DAY = 30
+const SMS_MAX_ATTEMPTS = 5
+const SMS_ONLY_PASSWORD_HASH = 'sms-only'
 
 type UserRow = Readonly<{
   id: string
@@ -33,6 +46,8 @@ type UserRow = Readonly<{
   banned_at: number | null
   age_confirmed: number
   email_verified_at: number | null
+  phone_e164: string | null
+  phone_verified_at: number | null
 }>
 
 export type AuthenticatedUser = Readonly<{
@@ -42,6 +57,14 @@ export type AuthenticatedUser = Readonly<{
 
 function nowMs(): number {
   return Date.now()
+}
+
+function publicIdentity(user: UserRow): string {
+  return user.phone_e164 ?? user.email
+}
+
+function smsAccountEmail(phoneE164: string): string {
+  return `sms+${phoneE164.slice(1)}@accounts.invalid`
 }
 
 function userAgent(request: Request): string | null {
@@ -98,11 +121,28 @@ async function findUserByEmail(
   return db
     .prepare(
       `SELECT id, email, password_hash, google_sub, display_name, avatar_url,
-              role, banned_at, age_confirmed, email_verified_at
+              role, banned_at, age_confirmed, email_verified_at,
+              phone_e164, phone_verified_at
        FROM users
        WHERE ${whereClause}`,
     )
     .bind(isLockedAdminEmail(email) ? 'hanspan007' : email)
+    .first<UserRow>()
+}
+
+async function findUserByPhone(
+  db: D1Database,
+  phoneE164: string,
+): Promise<UserRow | null> {
+  return db
+    .prepare(
+      `SELECT id, email, password_hash, google_sub, display_name, avatar_url,
+              role, banned_at, age_confirmed, email_verified_at,
+              phone_e164, phone_verified_at
+       FROM users
+       WHERE phone_e164 = ?`,
+    )
+    .bind(phoneE164)
     .first<UserRow>()
 }
 
@@ -197,7 +237,9 @@ export async function authenticate(
          u.role,
          u.banned_at,
          u.age_confirmed,
-         u.email_verified_at
+         u.email_verified_at,
+         u.phone_e164,
+         u.phone_verified_at
        FROM sessions s
        JOIN users u ON u.id = s.user_id
        WHERE s.token_hash = ?
@@ -230,6 +272,8 @@ export async function authenticate(
       banned_at: row.banned_at,
       age_confirmed: row.age_confirmed,
       email_verified_at: row.email_verified_at,
+      phone_e164: row.phone_e164,
+      phone_verified_at: row.phone_verified_at,
     },
   }
 }
@@ -352,7 +396,9 @@ async function login(
   const user = await findUserByEmail(env.DB, email)
 
   const validPassword =
-    user?.password_hash !== null && user?.password_hash !== undefined
+    user?.password_hash !== null &&
+    user?.password_hash !== undefined &&
+    user.password_hash !== SMS_ONLY_PASSWORD_HASH
       ? await verifyPassword(
           password,
           user.password_hash,
@@ -394,6 +440,197 @@ async function login(
       user_id: user.id,
       email: user.email,
       role: user.role,
+    },
+    200,
+    requestId,
+    request.method,
+  )
+}
+
+async function requestSmsCode(
+  request: Request,
+  env: Env,
+  requestId: string,
+): Promise<Response> {
+  const body = await readJsonObject(request)
+  const phone = normalizeChinaMobile(
+    requireString(body, 'phone', { min: 11, max: 30 }),
+  )
+  const timestamp = nowMs()
+  const ipHash = await requestIpHash(request, env.PASSWORD_PEPPER)
+  const [phoneStats, ipStats] = await env.DB.batch([
+    env.DB
+      .prepare(
+        `SELECT MAX(created_at) AS latest,
+                SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS daily
+         FROM sms_challenges WHERE phone_e164 = ?`,
+      )
+      .bind(timestamp - SMS_DAY_MS, phone),
+    env.DB
+      .prepare(
+        `SELECT SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS daily
+         FROM sms_challenges WHERE ip_hash = ?`,
+      )
+      .bind(timestamp - SMS_DAY_MS, ipHash),
+  ])
+  const phoneRow = phoneStats?.results[0] as
+    | { latest?: number | null; daily?: number | null }
+    | undefined
+  const ipRow = ipStats?.results[0] as { daily?: number | null } | undefined
+  if (
+    (phoneRow?.latest ?? 0) > timestamp - SMS_COOLDOWN_MS ||
+    Number(phoneRow?.daily ?? 0) >= SMS_MAX_PHONE_PER_DAY ||
+    (ipHash !== null && Number(ipRow?.daily ?? 0) >= SMS_MAX_IP_PER_DAY)
+  ) {
+    throw new HttpError(429, '请求过于频繁，请稍后再试')
+  }
+
+  const challengeId = crypto.randomUUID()
+  await env.DB
+    .prepare(
+      `INSERT INTO sms_challenges
+        (id, phone_e164, ip_hash, expires_at, created_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      challengeId,
+      phone,
+      ipHash,
+      timestamp + SMS_CODE_TTL_MS,
+      timestamp,
+    )
+    .run()
+  try {
+    await sendSmsCode(env, phone)
+  } catch (error) {
+    await env.DB
+      .prepare('DELETE FROM sms_challenges WHERE id = ?')
+      .bind(challengeId)
+      .run()
+    throw error
+  }
+
+  await authEventStatement(env.DB, {
+    userId: null,
+    eventType: 'auth.sms_requested',
+    requestId,
+    ipHash,
+    userAgent: userAgent(request),
+    metadata: { phoneHash: await sha256Hex(phone) },
+    createdAt: timestamp,
+  }).run()
+  return jsonResponse(
+    { status: 'ok', expires_in: SMS_CODE_TTL_MS / 1_000 },
+    202,
+    requestId,
+    request.method,
+  )
+}
+
+async function verifySmsCode(
+  request: Request,
+  env: Env,
+  requestId: string,
+): Promise<Response> {
+  const body = await readJsonObject(request)
+  const phone = normalizeChinaMobile(
+    requireString(body, 'phone', { min: 11, max: 30 }),
+  )
+  const code = requireString(body, 'code', { min: 6, max: 6 })
+  if (!/^\d{6}$/u.test(code)) throw new HttpError(422, '验证码格式不正确')
+  const create = body.create === true
+  const timestamp = nowMs()
+  const challenge = await env.DB
+    .prepare(
+      `SELECT id, attempts
+       FROM sms_challenges
+       WHERE phone_e164 = ? AND consumed_at IS NULL AND expires_at > ?
+       ORDER BY created_at DESC LIMIT 1`,
+    )
+    .bind(phone, timestamp)
+    .first<{ id: string; attempts: number }>()
+  if (!challenge || challenge.attempts >= SMS_MAX_ATTEMPTS) {
+    throw new HttpError(400, '验证码无效或已过期')
+  }
+  const valid = await checkSmsCode(env, phone, code)
+  if (!valid) {
+    await env.DB
+      .prepare('UPDATE sms_challenges SET attempts = attempts + 1 WHERE id = ?')
+      .bind(challenge.id)
+      .run()
+    throw new HttpError(400, '验证码无效或已过期')
+  }
+
+  let user = await findUserByPhone(env.DB, phone)
+  if (!user && !create) {
+    throw new HttpError(404, '该手机号尚未注册，请先完成注册')
+  }
+  if (!user && body.age_confirmed !== true) {
+    throw new HttpError(400, '请先确认已达到使用年龄要求')
+  }
+  const consumed = await env.DB
+    .prepare(
+      `UPDATE sms_challenges SET consumed_at = ?
+       WHERE id = ? AND consumed_at IS NULL RETURNING id`,
+    )
+    .bind(timestamp, challenge.id)
+    .first<{ id: string }>()
+  if (!consumed) throw new HttpError(400, '验证码已使用')
+
+  let isNewUser = false
+  if (!user) {
+    const userId = crypto.randomUUID()
+    await env.DB
+      .prepare(
+        `INSERT INTO users
+          (id, email, password_hash, phone_e164, phone_verified_at, role,
+           age_confirmed, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'user', 1, ?, ?)`,
+      )
+      .bind(
+        userId,
+        smsAccountEmail(phone),
+        SMS_ONLY_PASSWORD_HASH,
+        phone,
+        timestamp,
+        timestamp,
+        timestamp,
+      )
+      .run()
+    user = await findUserByPhone(env.DB, phone)
+    if (!user) throw new Error('SMS user creation failed')
+    isNewUser = true
+    if (COMMERCIAL_MEMBERSHIP_ENABLED) {
+      try {
+        await activateVerifiedGrowth(env.DB, userId, timestamp)
+      } catch (error) {
+        console.error(JSON.stringify({
+          event: 'growth.activation_failed',
+          requestId,
+          userId,
+          error: error instanceof Error ? error.message : String(error),
+        }))
+      }
+    }
+  }
+  if (user.banned_at !== null) throw new HttpError(403, '账号已停用')
+
+  const token = await issueSession(
+    env,
+    user,
+    request,
+    requestId,
+    'auth.sms_succeeded',
+  )
+  return jsonResponse(
+    {
+      access_token: token,
+      token_type: 'bearer',
+      user_id: user.id,
+      phone,
+      identity: phone,
+      role: user.role,
+      is_new_user: isNewUser,
     },
     200,
     requestId,
@@ -587,7 +824,8 @@ async function googleOauth(
   let user = await env.DB
     .prepare(
       `SELECT id, email, password_hash, google_sub, display_name, avatar_url,
-              role, banned_at, age_confirmed, email_verified_at
+              role, banned_at, age_confirmed, email_verified_at,
+              phone_e164, phone_verified_at
        FROM users
        WHERE google_sub = ?`,
     )
@@ -629,6 +867,8 @@ async function googleOauth(
         display_name: emailUser.display_name ?? identity.name,
         avatar_url: emailUser.avatar_url ?? identity.picture,
         email_verified_at: emailUser.email_verified_at ?? timestamp,
+        phone_e164: emailUser.phone_e164,
+        phone_verified_at: emailUser.phone_verified_at,
       }
     } else {
       const userId = crypto.randomUUID()
@@ -663,6 +903,8 @@ async function googleOauth(
         banned_at: null,
         age_confirmed: 1,
         email_verified_at: timestamp,
+        phone_e164: null,
+        phone_verified_at: null,
       }
       isNewUser = true
       if (COMMERCIAL_MEMBERSHIP_ENABLED) {
@@ -705,7 +947,7 @@ async function googleOauth(
       access_token: token,
       token_type: 'bearer',
       user_id: user.id,
-      email: user.email,
+      email: publicIdentity(user),
       role: user.role,
       is_new_user: isNewUser,
       trial_granted: growth.trialGranted,
@@ -734,10 +976,13 @@ async function me(
   return jsonResponse(
     {
       user_id: user.id,
-      email: user.email,
+      email: publicIdentity(user),
+      phone: user.phone_e164,
       email_verified: user.email_verified_at !== null,
+      phone_verified: user.phone_verified_at !== null,
       role: user.role,
-      has_password: user.password_hash !== null,
+      has_password:
+        user.password_hash !== null && user.password_hash !== SMS_ONLY_PASSWORD_HASH,
       avatar_id: profile?.avatar_id ?? null,
       is_platinum: false,
       language_pref: profile?.language_pref ?? null,
@@ -754,8 +999,8 @@ async function changePassword(
   requestId: string,
 ): Promise<Response> {
   const { user } = await authenticate(request, env)
-  if (!user.password_hash) {
-    throw new HttpError(409, 'Google 登录账号没有可修改的本地密码')
+  if (!user.password_hash || user.password_hash === SMS_ONLY_PASSWORD_HASH) {
+    throw new HttpError(409, '当前账号没有可修改的本地密码')
   }
 
   const body = await readJsonObject(request)
@@ -814,6 +1059,10 @@ export async function handleAuthRoute(
       return register(request, env, requestId)
     case 'POST /api/v1/auth/login':
       return login(request, env, requestId)
+    case 'POST /api/v1/auth/sms/request':
+      return requestSmsCode(request, env, requestId)
+    case 'POST /api/v1/auth/sms/verify':
+      return verifySmsCode(request, env, requestId)
     case 'POST /api/v1/auth/logout':
       return logout(request, env, requestId)
     case 'POST /api/v1/auth/verify':

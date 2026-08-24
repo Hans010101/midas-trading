@@ -37,7 +37,9 @@ export async function requireAdmin(request: Request, env: Env): Promise<AdminAut
 function registerMethod(
   googleSub: string | null,
   passwordHash: string | null,
-): 'google' | 'password' | 'both' {
+  phone: string | null,
+): 'google' | 'password' | 'both' | 'sms' {
+  if (phone) return 'sms'
   if (googleSub && passwordHash) return 'both'
   return googleSub ? 'google' : 'password'
 }
@@ -87,7 +89,8 @@ async function overview(
   ] = await env.DB.batch([
     env.DB.prepare('SELECT COUNT(*) AS count FROM users'),
     env.DB.prepare(
-      'SELECT COUNT(*) AS count FROM users WHERE email_verified_at IS NOT NULL',
+      `SELECT COUNT(*) AS count FROM users
+       WHERE email_verified_at IS NOT NULL OR phone_verified_at IS NOT NULL`,
     ),
     env.DB
       .prepare(
@@ -141,6 +144,8 @@ type AdminUserListRow = Readonly<{
   password_hash: string | null
   google_sub: string | null
   email_verified_at: number | null
+  phone_e164: string | null
+  phone_verified_at: number | null
   last_login_at: number | null
   created_at: number
   last_active: number | null
@@ -158,13 +163,18 @@ async function listUsers(
   const pageSize = integerParam(url, 'page_size', 20, 1, 100)
   const timestamp = Date.now()
   const query = url.searchParams.get('query')?.trim().slice(0, 100) ?? ''
-  const where = query ? 'WHERE LOWER(u.email) LIKE ?' : ''
-  const bindings: unknown[] = query ? [`%${query.toLowerCase()}%`] : []
+  const where = query
+    ? 'WHERE LOWER(u.email) LIKE ? OR u.phone_e164 LIKE ?'
+    : ''
+  const bindings: unknown[] = query
+    ? [`%${query.toLowerCase()}%`, `%${query}%`]
+    : []
   const rows = await env.DB
     .prepare(
       `SELECT
          u.id, u.email, u.display_name, u.role, u.banned_at,
          u.password_hash, u.google_sub, u.email_verified_at,
+         u.phone_e164, u.phone_verified_at,
          u.last_login_at, u.created_at,
          MAX(CASE
            WHEN s.revoked_at IS NULL AND s.expires_at > ? THEN s.last_seen_at
@@ -201,14 +211,19 @@ async function listUsers(
     {
       items: rows.results.map((row) => ({
         id: row.id,
-        email: row.email,
+        email: row.phone_e164 ?? row.email,
         display_name: row.display_name,
         role: row.role,
         locked_admin: isLockedAdminEmail(row.email),
         banned: row.banned_at !== null,
         created_at: iso(row.created_at),
-        email_verified: row.email_verified_at !== null,
-        register_method: registerMethod(row.google_sub, row.password_hash),
+        email_verified:
+          row.email_verified_at !== null || row.phone_verified_at !== null,
+        register_method: registerMethod(
+          row.google_sub,
+          row.password_hash,
+          row.phone_e164,
+        ),
         last_login_at: iso(row.last_login_at),
         last_active_7d: iso(row.last_active),
         active_sessions: Number(row.active_sessions),
@@ -235,7 +250,8 @@ async function getUser(
     .prepare(
       `SELECT
          id, email, display_name, role, banned_at, password_hash, google_sub,
-         email_verified_at, last_login_at, created_at
+         email_verified_at, phone_e164, phone_verified_at,
+         last_login_at, created_at
        FROM users
        WHERE id = ?`,
     )
@@ -301,14 +317,19 @@ async function getUser(
   return jsonResponse(
     {
       id: user.id,
-      email: user.email,
+      email: user.phone_e164 ?? user.email,
       display_name: user.display_name,
       role: user.role,
       locked_admin: isLockedAdminEmail(user.email),
       banned: user.banned_at !== null,
       created_at: iso(user.created_at),
-      email_verified: user.email_verified_at !== null,
-      register_method: registerMethod(user.google_sub, user.password_hash),
+      email_verified:
+        user.email_verified_at !== null || user.phone_verified_at !== null,
+      register_method: registerMethod(
+        user.google_sub,
+        user.password_hash,
+        user.phone_e164,
+      ),
       last_login_at: iso(user.last_login_at),
       last_active_7d: iso(sessionStats?.last_active ?? null),
       active_sessions: Number(sessionStats?.active_sessions ?? 0),

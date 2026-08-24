@@ -11,7 +11,9 @@
     "PUBLIC_WEB_URL": "https://web.example.test",
     "EMAIL_FROM": "Midas Trading <noreply@example.test>",
     "GOOGLE_CLIENT_ID": "test-google-client-id",
-    "BINANCE_SQUARE_PUBLISH_MODE": "direct"
+    "BINANCE_SQUARE_PUBLISH_MODE": "direct",
+    "ALIYUN_SMS_SIGN_NAME": "Midas",
+    "ALIYUN_SMS_TEMPLATE_CODE": "SMS_TEST"
   },
   "d1_databases": [
     {
