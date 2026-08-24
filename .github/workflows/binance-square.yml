@@ -49,3 +49,7 @@ jobs:
 
       - name: 检查队列并发布一条合规草稿
         run: node scripts/binance-square-publisher.mjs
+
+      - name: 同步互动与关注数据
+        if: matrix.account_key == 'midas_trading'
+        run: node scripts/binance-square-metrics.mjs

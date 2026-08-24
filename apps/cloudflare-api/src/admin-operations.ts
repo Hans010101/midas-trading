@@ -603,7 +603,9 @@ async function listSocialDrafts(
       .all<SocialDraftRow>(),
     env.DB
       .prepare(
-        `SELECT id, draft_id, platform, status, url, error, source, account_key
+        `SELECT id, draft_id, platform, status, url, error, source, account_key,
+                platform_post_id, view_count, like_count, comment_count,
+                share_count, metrics_updated_at
          FROM social_dispatches
          WHERE created_at >= ?
          ORDER BY created_at DESC`,
@@ -618,6 +620,12 @@ async function listSocialDrafts(
         error: string | null
         source: string
         account_key: BinanceSquareAccountKey
+        platform_post_id: string | null
+        view_count: number | null
+        like_count: number | null
+        comment_count: number | null
+        share_count: number | null
+        metrics_updated_at: number | null
       }>(),
   ])
   return jsonResponse(
@@ -647,6 +655,12 @@ async function listSocialDrafts(
             error: item.error,
             source: item.source,
             account_key: item.account_key,
+            platform_post_id: item.platform_post_id,
+            view_count: item.view_count,
+            like_count: item.like_count,
+            comment_count: item.comment_count,
+            share_count: item.share_count,
+            metrics_updated_at: iso(item.metrics_updated_at),
           })),
       })),
       total: drafts.results.length,
@@ -1018,7 +1032,7 @@ async function autoStatus(
     .prepare(
       `SELECT account_key, display_name, enabled, circuit_open, platform_checked,
               daily_limit, failure_count, last_error, content_profile,
-              slot_offset_minutes
+              slot_offset_minutes, follower_count, follower_updated_at
        FROM social_automation_accounts ORDER BY slot_offset_minutes`,
     )
     .all<{
@@ -1032,23 +1046,41 @@ async function autoStatus(
       last_error: string | null
       content_profile: string
       slot_offset_minutes: number
+      follower_count: number | null
+      follower_updated_at: number | null
     }>()
   if (accounts.results.length === 0) throw new HttpError(500, '自动托管配置不存在')
   const today = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Shanghai',
   }).format(new Date())
+  const since = Date.now() - 7 * 24 * 60 * 60 * 1_000
   const used = await env.DB
     .prepare(
-      `SELECT account_key, COUNT(*) AS count
+      `SELECT account_key,
+              SUM(CASE WHEN source = 'auto' AND
+                date(updated_at / 1000, 'unixepoch', '+8 hours') = ?
+                THEN 1 ELSE 0 END) AS count,
+              SUM(CASE WHEN updated_at >= ? THEN COALESCE(view_count, 0) ELSE 0 END) AS views_7d,
+              SUM(CASE WHEN updated_at >= ? THEN COALESCE(like_count, 0) ELSE 0 END) AS likes_7d,
+              SUM(CASE WHEN updated_at >= ? THEN COALESCE(comment_count, 0) ELSE 0 END) AS comments_7d,
+              SUM(CASE WHEN updated_at >= ? THEN COALESCE(share_count, 0) ELSE 0 END) AS shares_7d
        FROM social_dispatches
-       WHERE source = 'auto' AND status = 'success'
-         AND date(updated_at / 1000, 'unixepoch', '+8 hours') = ?
+       WHERE platform = 'binance_square' AND status = 'success'
+         AND updated_at >= ?
        GROUP BY account_key`,
     )
-    .bind(today)
-    .all<{ account_key: BinanceSquareAccountKey; count: number }>()
+    .bind(today, since, since, since, since, since)
+    .all<{
+      account_key: BinanceSquareAccountKey
+      count: number
+      views_7d: number
+      likes_7d: number
+      comments_7d: number
+      shares_7d: number
+    }>()
   const adapter = adapters(env)
   const usage = new Map(used.results.map((item) => [item.account_key, Number(item.count)]))
+  const engagement = new Map(used.results.map((item) => [item.account_key, item]))
   const primary = accounts.results.find((item) => item.account_key === PRIMARY_SQUARE_ACCOUNT) ??
     accounts.results[0]!
   const dailyUsed = usage.get(primary.account_key) ?? 0
@@ -1081,6 +1113,7 @@ async function autoStatus(
       in_window: minute >= 8 * 60 && minute <= 22 * 60,
       accounts: accounts.results.map((account) => {
         const count = usage.get(account.account_key) ?? 0
+        const metrics = engagement.get(account.account_key)
         return {
           account_key: account.account_key,
           display_name: account.display_name,
@@ -1095,6 +1128,12 @@ async function autoStatus(
           last_error: account.last_error,
           content_profile: account.content_profile,
           slot_offset_minutes: account.slot_offset_minutes,
+          follower_count: account.follower_count,
+          follower_updated_at: iso(account.follower_updated_at),
+          views_7d: Number(metrics?.views_7d ?? 0),
+          likes_7d: Number(metrics?.likes_7d ?? 0),
+          comments_7d: Number(metrics?.comments_7d ?? 0),
+          shares_7d: Number(metrics?.shares_7d ?? 0),
         }
       }),
       sources: sourceHealth.results.map((source) => ({
@@ -1482,9 +1521,9 @@ async function dispatchSocialDraft(
     env.DB
       .prepare(
         `UPDATE social_dispatches
-         SET status = ?, url = ?, error = ?, updated_at = ? WHERE id = ?`,
+         SET status = ?, url = ?, platform_post_id = ?, error = ?, updated_at = ? WHERE id = ?`,
       )
-      .bind(status, published.url, published.error, Date.now(), dispatch.id),
+      .bind(status, published.url, published.postId, published.error, Date.now(), dispatch.id),
     env.DB
       .prepare('UPDATE social_drafts SET status = ?, image_key = COALESCE(?, image_key) WHERE id = ?')
       .bind(published.success ? 'published' : 'failed', published.imageUrl, draftId),

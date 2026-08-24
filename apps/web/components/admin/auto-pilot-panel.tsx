@@ -40,6 +40,13 @@ function StatChip({ label, value, tone }: { label: string; value: string; tone: 
   )
 }
 
+function compact(value: number | null): string {
+  return value === null ? '—' : new Intl.NumberFormat('zh-CN', {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(value)
+}
+
 export function AutoPilotPanel({ token }: { token: string }) {
   const qc = useQueryClient()
   const [note, setNote] = useState('')
@@ -153,6 +160,13 @@ export function AutoPilotPanel({ token }: { token: string }) {
                   <StatChip label="今日配额" value={`${account.daily_used} / ${account.daily_limit}`} tone="text-gold" />
                   <StatChip label="发布错峰" value={`每 10 分钟 · +${account.slot_offset_minutes}分`} tone="text-foreground" />
                   <StatChip label="独立凭证" value={account.adapter_enabled ? '已配置' : '待配置'} tone={account.adapter_enabled ? 'text-green-700' : 'text-amber-700'} />
+                </div>
+                <div className="mt-3 grid grid-cols-5 gap-2 border-t border-paper pt-3">
+                  <StatChip label="关注人数" value={compact(account.follower_count)} tone="text-foreground" />
+                  <StatChip label="近7日阅读" value={compact(account.views_7d)} tone="text-foreground" />
+                  <StatChip label="近7日点赞" value={compact(account.likes_7d)} tone="text-foreground" />
+                  <StatChip label="评论" value={compact(account.comments_7d)} tone="text-foreground" />
+                  <StatChip label="分享" value={compact(account.shares_7d)} tone="text-foreground" />
                 </div>
                 {account.last_error && (
                   <p className="mt-2 rounded bg-red-50 px-2 py-1.5 text-xs text-red-700">

@@ -317,6 +317,7 @@ async function main() {
   }
 
   let url = null
+  let postId = null
   if (response.status !== 504) {
     const raw = await response.text()
     let body
@@ -335,12 +336,13 @@ async function main() {
     url = body.data?.shareLink ?? (
       body.data?.id ? `https://www.binance.com/square/post/${body.data.id}` : null
     )
+    postId = body.data?.id ? String(body.data.id) : null
   }
 
   const completedAt = Date.now()
   query(
     `UPDATE social_dispatches
-     SET status='success',url=${quote(url)},error=NULL,source=${quote(dispatchSource)},updated_at=${completedAt}
+     SET status='success',url=${quote(url)},platform_post_id=${quote(postId)},error=NULL,source=${quote(dispatchSource)},updated_at=${completedAt}
      WHERE id=${dispatch.id};
      UPDATE social_drafts SET status='published' WHERE id=${candidate.id};
      UPDATE social_auto_runs

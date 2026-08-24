@@ -17,6 +17,12 @@ export interface XTweetDispatchItem {
   url: string | null
   error: string | null
   source: string // 发布来源 · manual 人工 / auto 自动托管(自动托管 PR-4 审计)
+  platform_post_id: string | null
+  view_count: number | null
+  like_count: number | null
+  comment_count: number | null
+  share_count: number | null
+  metrics_updated_at: string | null
 }
 
 export interface XTweetItem {

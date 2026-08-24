@@ -34,6 +34,13 @@ function fmtTime(iso: string): string {
   ).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+function compact(value: number | null): string {
+  return value === null ? '—' : new Intl.NumberFormat('zh-CN', {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(value)
+}
+
 function BiasBadge({ bias }: { bias: string }) {
   return (
     <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{bias}</span>
@@ -133,14 +140,21 @@ function PublishRow({
       <span className="text-xs text-muted-foreground">发布到:</span>
       {sourceBadge}
       {!isX && (binance?.status === 'success' ? (
-        <span className="rounded bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
-          ✓ 币安广场
-          {binance.url && (
-            <a href={binance.url} target="_blank" rel="noopener noreferrer" className="ml-1 underline">
-              查看
-            </a>
-          )}
-        </span>
+        <>
+          <span className="rounded bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+            ✓ 币安广场
+            {binance.url && (
+              <a href={binance.url} target="_blank" rel="noopener noreferrer" className="ml-1 underline">
+                查看
+              </a>
+            )}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {binance.metrics_updated_at
+              ? `阅读 ${compact(binance.view_count)} · 点赞 ${compact(binance.like_count)} · 评论 ${compact(binance.comment_count)} · 分享 ${compact(binance.share_count)}`
+              : '互动数据待首次同步'}
+          </span>
+        </>
       ) : binanceSending ? (
         <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
           币安广场 发布中…
