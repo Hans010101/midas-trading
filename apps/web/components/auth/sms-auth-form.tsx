@@ -17,7 +17,6 @@ export function SmsAuthForm({
   const router = useRouter()
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
-  const [ageOk, setAgeOk] = useState(false)
   const [busy, setBusy] = useState(false)
   const [cooldown, setCooldown] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -54,10 +53,6 @@ export function SmsAuthForm({
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (mode === 'register' && !ageOk) {
-      setError('必须确认年满 18 周岁')
-      return
-    }
     setBusy(true)
     setError(null)
     const result = await signIn('credentials', {
@@ -65,7 +60,6 @@ export function SmsAuthForm({
       phone,
       code,
       create: String(mode === 'register'),
-      age_confirmed: String(ageOk),
       redirect: false,
     })
     setBusy(false)
@@ -123,17 +117,6 @@ export function SmsAuthForm({
           {cooldown ? '60 秒后重发' : '发送验证码'}
         </Button>
       </div>
-      {mode === 'register' && (
-        <label className="flex items-start gap-2 text-sm text-foreground">
-          <input
-            type="checkbox"
-            className="mt-1 h-4 w-4 accent-midas-red"
-            checked={ageOk}
-            onChange={(event) => setAgeOk(event.target.checked)}
-          />
-          <span>我已年满 <strong>18 周岁</strong></span>
-        </label>
-      )}
       {error && (
         <p className="rounded-md bg-midas-red-glow px-3 py-2 text-sm text-midas-red">
           {error}

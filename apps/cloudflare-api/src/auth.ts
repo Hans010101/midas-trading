@@ -288,9 +288,6 @@ async function register(
     requireString(body, 'email', { min: 3, max: 254 }),
   )
   const password = requireString(body, 'password', { min: 8, max: 128 })
-  if (body.age_confirmed !== true) {
-    throw new HttpError(400, '请先确认已达到使用年龄要求')
-  }
 
   if (await findUserByEmail(env.DB, email)) {
     throw new HttpError(409, '该邮箱已注册')
@@ -307,8 +304,8 @@ async function register(
     env.DB
       .prepare(
         `INSERT INTO users
-          (id, email, password_hash, role, age_confirmed, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 1, ?, ?)`,
+          (id, email, password_hash, role, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
       .bind(userId, email, passwordHash, role, timestamp, timestamp),
     env.DB
@@ -565,9 +562,6 @@ async function verifySmsCode(
   if (!user && !create) {
     throw new HttpError(404, '该手机号尚未注册，请先完成注册')
   }
-  if (!user && body.age_confirmed !== true) {
-    throw new HttpError(400, '请先确认已达到使用年龄要求')
-  }
   const consumed = await env.DB
     .prepare(
       `UPDATE sms_challenges SET consumed_at = ?
@@ -584,8 +578,8 @@ async function verifySmsCode(
       .prepare(
         `INSERT INTO users
           (id, email, password_hash, phone_e164, phone_verified_at, role,
-           age_confirmed, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'user', 1, ?, ?)`,
+           created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'user', ?, ?)`,
       )
       .bind(
         userId,

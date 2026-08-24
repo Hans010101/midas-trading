@@ -119,7 +119,6 @@ describe('SMS authentication', () => {
           phone: '13800138000',
           code: '123456',
           create: true,
-          age_confirmed: true,
         },
       },
     ))
@@ -826,7 +825,7 @@ describe('email authentication lifecycle', () => {
     const registerResponse = await exports.default.fetch(
       apiRequest('/api/v1/auth/register', {
         method: 'POST',
-        body: { email, password, age_confirmed: true },
+        body: { email, password },
       }),
     )
     expect(registerResponse.status).toBe(201)

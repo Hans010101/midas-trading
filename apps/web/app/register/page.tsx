@@ -12,7 +12,6 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 function RegisterForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [ageOk, setAgeOk] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [success, setSuccess] = useState<string | null>(null)
@@ -44,10 +43,6 @@ function RegisterForm() {
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(null)
-    if (!ageOk) {
-      setError('必须确认年满 18 周岁')
-      return
-    }
     if (password.length < 8) {
       setError('密码至少 8 个字符')
       return
@@ -57,7 +52,7 @@ function RegisterForm() {
       const r = await fetch(`${API_BASE}/api/v1/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, age_confirmed: true }),
+        body: JSON.stringify({ email, password }),
       })
       if (!r.ok) {
         const body = (await r.json().catch(() => null)) as { detail?: string } | null
@@ -155,18 +150,6 @@ function RegisterForm() {
             onChange={(e) => setPassword(e.target.value)}
           />
         </div>
-        <label className="flex items-start gap-2 text-sm text-foreground">
-          <input
-            type="checkbox"
-            className="mt-1 h-4 w-4 accent-midas-red"
-            checked={ageOk}
-            onChange={(e) => setAgeOk(e.target.checked)}
-          />
-          <span>
-            我已年满 <strong>18 周岁</strong>
-          </span>
-        </label>
-
         {error && (
           <p className="rounded-md bg-midas-red-glow px-3 py-2 text-sm text-midas-red">
             {error}

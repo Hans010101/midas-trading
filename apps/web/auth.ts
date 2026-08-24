@@ -59,7 +59,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         phone: { type: 'tel' },
         code: { type: 'text' },
         create: { type: 'text' },
-        age_confirmed: { type: 'text' },
       },
       async authorize(credentials) {
         if (credentials?.mode === 'sms') {
@@ -73,7 +72,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               phone,
               code,
               create: credentials.create === 'true',
-              age_confirmed: credentials.age_confirmed === 'true',
             }),
           })
           if (!r.ok) return null
