@@ -779,6 +779,7 @@ describe('email authentication lifecycle', () => {
     await expect(registerResponse.json()).resolves.toMatchObject({
       email,
       needs_verification: true,
+      email_sent: true,
     })
 
     const emailRequest = resendFetch.mock.calls[0]?.[1]
@@ -907,5 +908,72 @@ describe('email authentication lifecycle', () => {
       apiRequest('/api/v1/auth/me', { token: login.access_token }),
     )
     expect(afterLogout.status).toBe(401)
+  })
+
+  it('reports delivery failures and keeps the previous verification link valid', async () => {
+    const email = `worker-test-${crypto.randomUUID()}@example.com`
+    const password = 'Independent-Cloudflare-Password-2026'
+    const resendFetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementationOnce(async () =>
+        Response.json({ id: crypto.randomUUID() }, { status: 200 }),
+      )
+      .mockImplementationOnce(
+        async () => new Response('resend unavailable', { status: 503 }),
+      )
+
+    const registerResponse = await exports.default.fetch(
+      apiRequest('/api/v1/auth/register', {
+        method: 'POST',
+        body: { email, password, age_confirmed: true },
+      }),
+    )
+    expect(registerResponse.status).toBe(201)
+    const firstEmail = JSON.parse(
+      String(resendFetch.mock.calls[0]?.[1]?.body),
+    ) as { html: string }
+    const firstToken = /token=([^"&<\s]+)/u.exec(firstEmail.html)?.[1]
+    expect(firstToken).toBeTruthy()
+
+    const resendResponse = await exports.default.fetch(
+      apiRequest('/api/v1/auth/resend-verification', {
+        method: 'POST',
+        body: { email },
+      }),
+    )
+    expect(resendResponse.status).toBe(502)
+
+    const verifyResponse = await exports.default.fetch(
+      apiRequest('/api/v1/auth/verify', {
+        method: 'POST',
+        body: { token: decodeURIComponent(firstToken ?? '') },
+      }),
+    )
+    expect(verifyResponse.status).toBe(200)
+  })
+
+  it('reports when the initial verification email was not sent', async () => {
+    const email = `worker-test-${crypto.randomUUID()}@example.com`
+    vi.spyOn(globalThis, 'fetch').mockImplementationOnce(
+      async () => new Response('resend unavailable', { status: 503 }),
+    )
+
+    const registerResponse = await exports.default.fetch(
+      apiRequest('/api/v1/auth/register', {
+        method: 'POST',
+        body: {
+          email,
+          password: 'Independent-Cloudflare-Password-2026',
+          age_confirmed: true,
+        },
+      }),
+    )
+
+    expect(registerResponse.status).toBe(201)
+    await expect(registerResponse.json()).resolves.toMatchObject({
+      email,
+      needs_verification: true,
+      email_sent: false,
+    })
   })
 })

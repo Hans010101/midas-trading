@@ -15,10 +15,38 @@ function LoginInner() {
   const router = useRouter()
   const params = useSearchParams()
   const nextPath = params.get('next') ?? '/global'
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(() => params.get('email') ?? '')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [resendNotice, setResendNotice] = useState<string | null>(null)
+
+  async function resendVerification() {
+    if (!email) {
+      setError('请先填写邮箱')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setResendNotice(null)
+    try {
+      const r = await fetch('/api-proxy/api/v1/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      if (!r.ok) {
+        const body = (await r.json().catch(() => null)) as { detail?: string } | null
+        setError(body?.detail ?? `发送失败:HTTP ${r.status}`)
+        return
+      }
+      setResendNotice('如果该邮箱尚未验证，验证邮件已重新发送。')
+    } catch {
+      setError('网络异常，请稍后重试。')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -84,10 +112,21 @@ function LoginInner() {
             {error}
           </p>
         )}
+        {resendNotice && (
+          <p className="text-sm text-foreground">{resendNotice}</p>
+        )}
 
         <Button type="submit" className="w-full" size="lg" disabled={busy}>
           {busy ? '登录中…' : '登录'}
         </Button>
+        <button
+          type="button"
+          className="w-full text-sm text-midas-red hover:underline disabled:opacity-50"
+          disabled={busy}
+          onClick={resendVerification}
+        >
+          邮箱未验证或没收到邮件？重新发送验证邮件
+        </button>
       </form>
 
       {/* 分隔线 + Google OAuth(M1 第三波 · 邮箱密码保留并存)*/}

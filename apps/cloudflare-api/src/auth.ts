@@ -311,9 +311,11 @@ async function register(
     throw error
   }
 
+  let emailSent = true
   try {
     await sendVerificationEmail(env, email, token)
   } catch (error) {
+    emailSent = false
     console.error(
       JSON.stringify({
         event: 'auth.register.email_deferred',
@@ -329,6 +331,7 @@ async function register(
       user_id: userId,
       email,
       needs_verification: true,
+      email_sent: emailSent,
     },
     201,
     requestId,
@@ -513,32 +516,29 @@ async function resendVerification(
     const timestamp = nowMs()
     const token = randomToken(48)
     const tokenHash = await sha256Hex(token)
-    await env.DB.batch([
-      env.DB
-        .prepare(
-          `UPDATE verification_tokens
-           SET used_at = ?
-           WHERE user_id = ? AND purpose = 'verify_email' AND used_at IS NULL`,
-        )
-        .bind(timestamp, user.id),
-      env.DB
-        .prepare(
-          `INSERT INTO verification_tokens
-            (id, user_id, token_hash, purpose, expires_at, created_at)
-           VALUES (?, ?, ?, 'verify_email', ?, ?)`,
-        )
-        .bind(
-          crypto.randomUUID(),
-          user.id,
-          tokenHash,
-          timestamp + VERIFICATION_TTL_MS,
-          timestamp,
-        ),
-    ])
+    const tokenId = crypto.randomUUID()
+    await env.DB
+      .prepare(
+        `INSERT INTO verification_tokens
+          (id, user_id, token_hash, purpose, expires_at, created_at)
+         VALUES (?, ?, ?, 'verify_email', ?, ?)`,
+      )
+      .bind(
+        tokenId,
+        user.id,
+        tokenHash,
+        timestamp + VERIFICATION_TTL_MS,
+        timestamp,
+      )
+      .run()
 
     try {
       await sendVerificationEmail(env, email, token)
     } catch (error) {
+      await env.DB
+        .prepare('DELETE FROM verification_tokens WHERE id = ?')
+        .bind(tokenId)
+        .run()
       console.error(
         JSON.stringify({
           event: 'auth.resend.email_deferred',
@@ -547,7 +547,18 @@ async function resendVerification(
           error: error instanceof Error ? error.message : String(error),
         }),
       )
+      throw error
     }
+
+    await env.DB
+      .prepare(
+        `UPDATE verification_tokens
+         SET used_at = ?
+         WHERE user_id = ? AND purpose = 'verify_email'
+           AND used_at IS NULL AND id != ?`,
+      )
+      .bind(timestamp, user.id, tokenId)
+      .run()
   }
 
   return jsonResponse(

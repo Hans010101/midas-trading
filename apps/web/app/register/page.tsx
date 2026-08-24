@@ -1,7 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { Suspense, useState } from 'react'
 
 import { AuthShell } from '@/components/auth/auth-shell'
@@ -10,13 +9,36 @@ import { Input } from '@/components/ui/input'
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 function RegisterForm() {
-  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [ageOk, setAgeOk] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [success, setSuccess] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  async function resendVerification() {
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const r = await fetch(`${API_BASE}/api/v1/auth/resend-verification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      if (!r.ok) {
+        const body = (await r.json().catch(() => null)) as { detail?: string } | null
+        setError(body?.detail ?? `发送失败:HTTP ${r.status}`)
+        return
+      }
+      setNotice('验证邮件已重新发送，请检查收件箱和垃圾邮件。')
+    } catch {
+      setError('网络异常，请稍后重试。')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -41,7 +63,12 @@ function RegisterForm() {
         setError(body?.detail ?? `注册失败:HTTP ${r.status}`)
         return
       }
-      setSuccess('注册成功!验证邮件已发送到你的邮箱,点击邮件中链接完成验证后即可登录。')
+      const body = (await r.json()) as { email_sent?: boolean }
+      setSuccess(
+        body.email_sent === false
+          ? '账号已创建，但验证邮件发送失败。请点击下方按钮重试。'
+          : '注册成功!验证邮件已发送到你的邮箱,点击邮件中链接完成验证后即可登录。',
+      )
     } catch (err) {
       // 网络错 / CORS / DNS / 证书 — fetch 直接 throw · 之前没 catch 就静默了(0016 教训)
       const msg = err instanceof Error ? err.message : String(err)
@@ -57,20 +84,31 @@ function RegisterForm() {
       <AuthShell
         title="请查收邮件"
         subtitle="验证链接 24 小时内有效"
-        footer={
-          <span className="text-muted-foreground">
-            没收到邮件?
-            <button
-              type="button"
-              className="ml-1 text-midas-red hover:underline"
-              onClick={() => router.push(`/login?email=${encodeURIComponent(email)}`)}
-            >
-              到登录页重发
-            </button>
-          </span>
-        }
       >
-        <p className="text-sm text-foreground leading-relaxed">{success}</p>
+        <div className="space-y-4">
+          <p className="text-sm text-foreground leading-relaxed">{success}</p>
+          {error && (
+            <p className="rounded-md bg-midas-red-glow px-3 py-2 text-sm text-midas-red">
+              {error}
+            </p>
+          )}
+          {notice && <p className="text-sm text-foreground">{notice}</p>}
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            disabled={busy}
+            onClick={resendVerification}
+          >
+            {busy ? '发送中…' : '重新发送验证邮件'}
+          </Button>
+          <Link
+            href={`/login?email=${encodeURIComponent(email)}`}
+            className="block text-center text-sm text-midas-red hover:underline"
+          >
+            返回登录
+          </Link>
+        </div>
       </AuthShell>
     )
   }
