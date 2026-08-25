@@ -1032,7 +1032,8 @@ async function autoStatus(
     .prepare(
       `SELECT account_key, display_name, enabled, circuit_open, platform_checked,
               daily_limit, failure_count, last_error, content_profile,
-              slot_offset_minutes, follower_count, follower_updated_at
+              slot_offset_minutes, follower_count, follower_updated_at,
+              historical_view_count, historical_views_7d
        FROM social_automation_accounts ORDER BY slot_offset_minutes`,
     )
     .all<{
@@ -1048,6 +1049,8 @@ async function autoStatus(
       slot_offset_minutes: number
       follower_count: number | null
       follower_updated_at: number | null
+      historical_view_count: number
+      historical_views_7d: number
     }>()
   if (accounts.results.length === 0) throw new HttpError(500, '自动托管配置不存在')
   const today = new Intl.DateTimeFormat('en-CA', {
@@ -1129,8 +1132,8 @@ async function autoStatus(
           slot_offset_minutes: account.slot_offset_minutes,
           follower_count: account.follower_count,
           follower_updated_at: iso(account.follower_updated_at),
-          total_views: Number(metrics?.total_views ?? 0),
-          views_7d: Number(metrics?.views_7d ?? 0),
+          total_views: Number(metrics?.total_views ?? 0) + account.historical_view_count,
+          views_7d: Number(metrics?.views_7d ?? 0) + account.historical_views_7d,
           likes_7d: Number(metrics?.likes_7d ?? 0),
           comments_7d: Number(metrics?.comments_7d ?? 0),
         }
