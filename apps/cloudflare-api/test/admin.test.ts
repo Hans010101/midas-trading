@@ -447,6 +447,9 @@ describe('independent Cloudflare administrator controls', () => {
     await expect(auto.json()).resolves.toMatchObject({
       enabled: false,
       circuit_open: false,
+      accounts: expect.arrayContaining([
+        expect.objectContaining({ total_views: expect.any(Number) }),
+      ]),
       platforms: expect.arrayContaining([
         expect.objectContaining({ platform: 'binance_square' }),
         expect.objectContaining({ platform: 'x' }),

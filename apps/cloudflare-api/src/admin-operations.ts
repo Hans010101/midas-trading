@@ -1060,23 +1060,22 @@ async function autoStatus(
               SUM(CASE WHEN source = 'auto' AND
                 date(updated_at / 1000, 'unixepoch', '+8 hours') = ?
                 THEN 1 ELSE 0 END) AS count,
+              SUM(COALESCE(view_count, 0)) AS total_views,
               SUM(CASE WHEN updated_at >= ? THEN COALESCE(view_count, 0) ELSE 0 END) AS views_7d,
               SUM(CASE WHEN updated_at >= ? THEN COALESCE(like_count, 0) ELSE 0 END) AS likes_7d,
-              SUM(CASE WHEN updated_at >= ? THEN COALESCE(comment_count, 0) ELSE 0 END) AS comments_7d,
-              SUM(CASE WHEN updated_at >= ? THEN COALESCE(share_count, 0) ELSE 0 END) AS shares_7d
+              SUM(CASE WHEN updated_at >= ? THEN COALESCE(comment_count, 0) ELSE 0 END) AS comments_7d
        FROM social_dispatches
        WHERE platform = 'binance_square' AND status = 'success'
-         AND updated_at >= ?
        GROUP BY account_key`,
     )
-    .bind(today, since, since, since, since, since)
+    .bind(today, since, since, since)
     .all<{
       account_key: BinanceSquareAccountKey
       count: number
+      total_views: number
       views_7d: number
       likes_7d: number
       comments_7d: number
-      shares_7d: number
     }>()
   const adapter = adapters(env)
   const usage = new Map(used.results.map((item) => [item.account_key, Number(item.count)]))
@@ -1130,10 +1129,10 @@ async function autoStatus(
           slot_offset_minutes: account.slot_offset_minutes,
           follower_count: account.follower_count,
           follower_updated_at: iso(account.follower_updated_at),
+          total_views: Number(metrics?.total_views ?? 0),
           views_7d: Number(metrics?.views_7d ?? 0),
           likes_7d: Number(metrics?.likes_7d ?? 0),
           comments_7d: Number(metrics?.comments_7d ?? 0),
-          shares_7d: Number(metrics?.shares_7d ?? 0),
         }
       }),
       sources: sourceHealth.results.map((source) => ({

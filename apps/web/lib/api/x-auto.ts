@@ -58,10 +58,10 @@ export interface AutoPilotAccountItem {
   slot_offset_minutes: number
   follower_count: number | null
   follower_updated_at: string | null
+  total_views: number
   views_7d: number
   likes_7d: number
   comments_7d: number
-  shares_7d: number
 }
 
 export interface AutoPilotStopOut {

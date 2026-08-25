@@ -151,7 +151,7 @@ function PublishRow({
           </span>
           <span className="text-xs text-muted-foreground">
             {binance.metrics_updated_at
-              ? `阅读 ${compact(binance.view_count)} · 点赞 ${compact(binance.like_count)} · 评论 ${compact(binance.comment_count)} · 分享 ${compact(binance.share_count)}`
+              ? `阅读 ${compact(binance.view_count)} · 点赞 ${compact(binance.like_count)} · 评论 ${compact(binance.comment_count)}`
               : '互动数据待首次同步'}
           </span>
         </>
