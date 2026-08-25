@@ -332,12 +332,79 @@ async function fetchKrakenKlines(
 
 function cryptoBase(symbol: string): string {
   const normalized = symbol.trim().toUpperCase()
-  const quoted = normalized.match(/^([A-Z0-9]{2,20})\/?(?:USDT|USD)$/u)
+  const quoted = normalized.match(/^([A-Z0-9]{1,20})\/?(?:USDT|USD)$/u)
   if (quoted?.[1]) return quoted[1]
-  if (!/^[A-Z0-9]{2,20}$/u.test(normalized)) {
+  if (!/^[A-Z0-9]{1,20}$/u.test(normalized)) {
     throw new HttpError(400, '数字资产标的格式无效')
   }
   return normalized
+}
+
+function bybitInterval(period: string): string {
+  const intervals: Readonly<Record<string, string>> = {
+    '1m': '1',
+    '5m': '5',
+    '15m': '15',
+    '30m': '30',
+    '1h': '60',
+    '4h': '240',
+    '1d': 'D',
+    '1w': 'W',
+  }
+  const interval = intervals[period]
+  if (!interval) throw new HttpError(400, '周期不受支持')
+  return interval
+}
+
+async function fetchBybitKlines(
+  symbol: string,
+  period: string,
+  limit: number,
+): Promise<Kline[]> {
+  const url = new URL('https://api.bybit.com/v5/market/kline')
+  url.searchParams.set('category', 'linear')
+  url.searchParams.set('symbol', `${cryptoBase(symbol)}USDT`)
+  url.searchParams.set('interval', bybitInterval(period))
+  url.searchParams.set('limit', String(Math.min(limit, 1_000)))
+  const response = await fetch(url, {
+    headers: {
+      accept: 'application/json',
+      'user-agent': 'Midas-Trading-Cloudflare/1.0',
+    },
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (!response.ok) {
+    throw new HttpError(503, `Bybit 合约 K 线暂不可用（HTTP ${response.status}）`)
+  }
+  const payload = (await response.json()) as {
+    retCode?: number
+    retMsg?: string
+    result?: { list?: unknown[][] }
+  }
+  if (payload.retCode !== 0) {
+    throw new HttpError(503, payload.retMsg || 'Bybit 合约 K 线返回异常')
+  }
+  return (payload.result?.list ?? []).flatMap((row) => {
+    const timestamp = Number(row[0])
+    const open = Number(row[1])
+    const high = Number(row[2])
+    const low = Number(row[3])
+    const close = Number(row[4])
+    const volume = Number(row[5])
+    const amount = Number(row[6])
+    if (!Number.isFinite(timestamp) || !validOhlc(open, high, low, close)) {
+      return []
+    }
+    return [{
+      ts: new Date(timestamp).toISOString(),
+      open,
+      high,
+      low,
+      close,
+      volume: Number.isFinite(volume) && volume >= 0 ? volume : 0,
+      amount: Number.isFinite(amount) && amount >= 0 ? amount : null,
+    }]
+  }).sort((left, right) => left.ts.localeCompare(right.ts)).slice(-limit)
 }
 
 function okxBar(period: string): string {
@@ -473,6 +540,10 @@ async function fetchCryptoKlines(
     fetcher: () => Promise<Kline[]>
   }>> = instrument === 'perp'
     ? [
+        {
+          source: 'Bybit public linear candles',
+          fetcher: () => fetchBybitKlines(symbol, period, limit),
+        },
         {
           source: 'OKX public perpetual candles',
           fetcher: () => fetchOkxKlines(symbol, period, instrument, limit),

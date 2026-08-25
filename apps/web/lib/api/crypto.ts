@@ -10,8 +10,7 @@
  * symbol 用 Binance Futures 风格 `BTCUSDT`(无斜杠)· 跟现货 kline 的
  * ccxt 风格 `BTC/USDT` 不同 · 调用方负责转换。
  *
- * 数据缺口:已全部补齐 —— basis(M2-C.2.4)· globalLongShortAccountRatio(刀C)。
- * 原则不变:接不上 = 前端占位/空态 · 绝不硬编假数据(CLAUDE.md 红线)。
+ * 原则:上游未提供的维度不编造，由前端隐藏对应空卡片。
  */
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
@@ -88,6 +87,7 @@ export interface FundingRatePoint {
 export interface FundingRateResponse {
   symbol: string
   items: FundingRatePoint[]
+  source?: string
 }
 
 export interface FuturesSymbolInfo {

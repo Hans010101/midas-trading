@@ -15,6 +15,16 @@ const okxCandle = {
   ],
 }
 
+const bybitCandle = {
+  retCode: 0,
+  result: {
+    list: [
+      ['1785225600000', '0.1461', '0.1471', '0.1458', '0.147', '158240', '23159.3986'],
+      ['1785222000000', '0.1462', '0.1467', '0.1445', '0.1461', '870273', '126693.8023'],
+    ],
+  },
+}
+
 describe('multi-source market klines', () => {
   it('normalizes Binance-style symbols before requesting OKX candles', async () => {
     const upstream = vi.fn(async (_input: RequestInfo | URL) => Response.json(okxCandle))
@@ -32,22 +42,22 @@ describe('multi-source market klines', () => {
     expect(String(upstream.mock.calls[0]?.[0])).toContain('instId=BTC-USDT')
   })
 
-  it('uses OKX perpetual candles for assets missing from Kraken spot', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => Response.json(okxCandle)))
+  it('uses Bybit perpetual candles for the full linear contract universe', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(bybitCandle)))
 
     const response = await handleMarketRoute(
       new Request(
         'https://api.example.test/api/v1/market/kline?symbol=AGLD%2FUSDT&market=crypto&period=1h&instrument=perp&limit=100',
       ),
       {} as Env,
-      'market-okx',
+      'market-bybit',
     )
 
     expect(response?.status).toBe(200)
     await expect(response?.json()).resolves.toMatchObject({
       symbol: 'AGLD/USDT',
       instrument: 'perp',
-      source: 'OKX public perpetual candles',
+      source: 'Bybit public linear candles',
       fallback_used: false,
       items: [
         { ts: '2026-07-28T07:00:00.000Z', close: 0.1461 },
@@ -56,10 +66,10 @@ describe('multi-source market klines', () => {
     })
   })
 
-  it('falls back from OKX to Kraken Futures without returning an empty chart', async () => {
+  it('falls back from Bybit and OKX to Kraken Futures without returning an empty chart', async () => {
     const upstream = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
-      if (url.includes('okx.com')) {
+      if (url.includes('bybit.com') || url.includes('okx.com')) {
         return new Response('unavailable', { status: 503 })
       }
       return Response.json({
@@ -90,7 +100,7 @@ describe('multi-source market klines', () => {
       fallback_used: true,
       items: [{ close: 0.1518 }],
     })
-    expect(upstream).toHaveBeenCalledTimes(2)
+    expect(upstream).toHaveBeenCalledTimes(3)
   })
 
   it('falls back to Yahoo query2 for stock markets', async () => {

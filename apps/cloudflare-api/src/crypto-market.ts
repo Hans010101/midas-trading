@@ -60,7 +60,9 @@ type BybitFutureTicker = Readonly<{
   turnover24h?: string
   openInterest?: string
   markPrice?: string
+  indexPrice?: string
   fundingRate?: string
+  nextFundingTime?: string
 }>
 
 type Ticker24h = Readonly<{
@@ -685,7 +687,13 @@ type FuturesMetricItem = Readonly<{
 }>
 
 async function bybitMarketRows<T>(
-  path: 'account-ratio' | 'open-interest',
+  path:
+    | 'account-ratio'
+    | 'open-interest'
+    | 'funding/history'
+    | 'mark-price-kline'
+    | 'index-price-kline'
+    | 'recent-trade',
   params: Readonly<Record<string, string>>,
 ): Promise<T[]> {
   const url = new URL(`${BYBIT_MARKET_URL}/${path}`)
@@ -853,6 +861,29 @@ export async function fetchCryptoAiContext(symbol: string): Promise<Readonly<{
   as_of: string
 }>> {
   const parsed = parsePublicSymbol(symbol)
+  try {
+    const ticker = (await bybitLinearTickers()).list.find(
+      (item) => item.symbol === parsed.publicSymbol,
+    )
+    if (ticker) {
+      const metrics = await bybitMetricsItem(parsed.publicSymbol, ticker)
+      const mark = numeric(ticker.markPrice)
+      const index = numeric(ticker.indexPrice)
+      return {
+        symbol: parsed.publicSymbol,
+        mark_price: mark,
+        index_price: index,
+        basis_pct: index > 0 ? ((mark - index) / index) * 100 : 0,
+        open_interest_usd: numeric(ticker.openInterest) * mark,
+        funding_rate: metrics.funding_rate,
+        account_long_short_ratio: metrics.account_long_short_ratio,
+        oi_change_pct_24h: metrics.oi_change_pct_24h,
+        as_of: new Date().toISOString(),
+      }
+    }
+  } catch {
+    // Kraken remains the fallback when Bybit is unavailable.
+  }
   const [metrics, tickers] = await Promise.all([
     metricsItem(parsed.publicSymbol),
     futuresTickers(),
@@ -1079,6 +1110,36 @@ async function getFuturesInfo(
   symbol: string,
 ): Promise<Response> {
   const parsed = parsePublicSymbol(symbol)
+  try {
+    const ticker = (await bybitLinearTickers()).list.find(
+      (item) => item.symbol === parsed.publicSymbol,
+    )
+    if (ticker) {
+      const mark = numeric(ticker.markPrice)
+      const index = numeric(ticker.indexPrice)
+      const nextFundingMs = numeric(ticker.nextFundingTime)
+      return cachedJson(
+        {
+          symbol: parsed.publicSymbol,
+          base_asset: parsed.base,
+          quote_asset: 'USDT',
+          contract_type: 'perpetual',
+          mark_price: mark,
+          index_price: index,
+          last_funding_rate: numeric(ticker.fundingRate),
+          next_funding_time: new Date(nextFundingMs || Date.now() + 3_600_000).toISOString(),
+          max_leverage: 0,
+          open_interest_coin: numeric(ticker.openInterest),
+          open_interest_usd: numeric(ticker.openInterest) * mark,
+          source: 'Bybit linear perpetual',
+        },
+        requestId,
+        request.method,
+      )
+    }
+  } catch {
+    // Kraken remains the fallback when Bybit is unavailable.
+  }
   const ticker = (await futuresTickers()).find(
     (item) => item.symbol === parsed.futuresSymbol,
   )
@@ -1119,6 +1180,47 @@ async function getOpenInterest(
   const url = new URL(request.url)
   const limit = boundedLimit(url, 96, 500)
   try {
+    const [rows, tickers] = await Promise.all([
+      bybitMarketRows<{ openInterest?: string; timestamp?: string }>(
+        'open-interest',
+        {
+          category: 'linear',
+          symbol: parsed.publicSymbol,
+          intervalTime: '5min',
+          limit: String(Math.min(limit, 200)),
+        },
+      ),
+      bybitLinearTickers(),
+    ])
+    const mark = numeric(
+      tickers.list.find((item) => item.symbol === parsed.publicSymbol)?.markPrice,
+    )
+    const items = rows.flatMap((row) => {
+      const timestamp = numeric(row.timestamp)
+      const oiCoin = numeric(row.openInterest)
+      return timestamp > 0 && oiCoin > 0
+        ? [{
+            symbol: parsed.publicSymbol,
+            ts: new Date(timestamp).toISOString(),
+            oi_coin: oiCoin,
+            oi_usd: oiCoin * mark,
+          }]
+        : []
+    }).sort((left, right) => left.ts.localeCompare(right.ts))
+    if (items.length === 0) throw new Error('Bybit returned no valid OI rows')
+    return cachedJson(
+      {
+        symbol: parsed.publicSymbol,
+        items,
+        source: 'Bybit linear open interest',
+      },
+      requestId,
+      request.method,
+    )
+  } catch {
+    // Preserve the existing provider chain when Bybit is unavailable.
+  }
+  try {
     const rows = await gateContractStats(parsed.base, limit)
     const items = rows.flatMap((row) => {
       const timestamp = numeric(row.time)
@@ -1151,7 +1253,7 @@ async function getOpenInterest(
       request.method,
     )
   } catch {
-    // Binance remains the first fallback for symbols unavailable on Gate.
+    // Binance remains the next fallback for symbols unavailable on Gate.
   }
   try {
     const binanceUrl = new URL(
@@ -1310,7 +1412,84 @@ async function getLongShortRatio(
       request.method,
     )
   } catch {
-    // Binance remains the first fallback for symbols unavailable on Gate.
+    // Bybit covers the full linear universe when Gate has no rich statistics.
+  }
+  try {
+    type RatioRow = {
+      timestamp?: string
+      buyRatio?: string
+      sellRatio?: string
+    }
+    type TradeRow = {
+      time?: string
+      side?: string
+      size?: string
+    }
+    const [ratios, trades] = await Promise.all([
+      bybitMarketRows<RatioRow>('account-ratio', {
+        category: 'linear',
+        symbol: parsed.publicSymbol,
+        period: '5min',
+        limit: String(Math.min(limit, 500)),
+      }),
+      bybitMarketRows<TradeRow>('recent-trade', {
+        category: 'linear',
+        symbol: parsed.publicSymbol,
+        limit: '1000',
+      }),
+    ])
+    const tradeByBucket = new Map<number, { buy: number; sell: number }>()
+    for (const trade of trades) {
+      const timestamp = numeric(trade.time)
+      const bucket = Math.floor(timestamp / 300_000) * 300_000
+      if (bucket <= 0) continue
+      const item = tradeByBucket.get(bucket) ?? { buy: 0, sell: 0 }
+      if (trade.side === 'Buy') item.buy += numeric(trade.size)
+      if (trade.side === 'Sell') item.sell += numeric(trade.size)
+      tradeByBucket.set(bucket, item)
+    }
+    const items = ratios.flatMap((row) => {
+      const timestamp = numeric(row.timestamp)
+      const buy = numeric(row.buyRatio)
+      const sell = numeric(row.sellRatio)
+      if (timestamp <= 0 || buy <= 0 || sell <= 0) return []
+      const taker = tradeByBucket.get(Math.floor(timestamp / 300_000) * 300_000)
+      return [{
+        symbol: parsed.publicSymbol,
+        ts: new Date(timestamp).toISOString(),
+        top_account_long: 0,
+        top_account_short: 0,
+        top_account_ratio: 0,
+        top_position_long: 0,
+        top_position_short: 0,
+        top_position_ratio: 0,
+        taker_buy_vol: taker?.buy ?? 0,
+        taker_sell_vol: taker?.sell ?? 0,
+        taker_ratio: taker?.sell ? taker.buy / taker.sell : 0,
+        global_account_long: buy,
+        global_account_short: sell,
+        global_account_ratio: buy / sell,
+      }]
+    }).sort((left, right) => left.ts.localeCompare(right.ts))
+    if (items.length === 0) throw new Error('Bybit returned no valid ratio rows')
+    return cachedJson(
+      {
+        symbol: parsed.publicSymbol,
+        items,
+        source: 'Bybit global positioning and recent taker flow',
+        unavailable_fields: [
+          'top_account_ratio',
+          'top_position_ratio',
+          ...(items.some((item) => item.taker_buy_vol > 0 || item.taker_sell_vol > 0)
+            ? []
+            : ['taker_ratio']),
+        ],
+      },
+      requestId,
+      request.method,
+    )
+  } catch {
+    // Preserve Binance and OKX as fallbacks if Bybit is unavailable.
   }
   try {
     const endpoint = async <T>(path: string): Promise<T> => {
@@ -1498,6 +1677,46 @@ async function getFundingRate(
 ): Promise<Response> {
   const parsed = parsePublicSymbol(symbol)
   const limit = boundedLimit(new URL(request.url), 100, 500)
+  try {
+    const [rows, tickers] = await Promise.all([
+      bybitMarketRows<{
+        fundingRate?: string
+        fundingRateTimestamp?: string
+      }>('funding/history', {
+        category: 'linear',
+        symbol: parsed.publicSymbol,
+        limit: String(Math.min(limit, 200)),
+      }),
+      bybitLinearTickers(),
+    ])
+    const mark = numeric(
+      tickers.list.find((item) => item.symbol === parsed.publicSymbol)?.markPrice,
+    )
+    const items = rows.flatMap((row) => {
+      const timestamp = numeric(row.fundingRateTimestamp)
+      const rate = nullableNumeric(row.fundingRate)
+      return timestamp > 0 && rate !== null
+        ? [{
+            symbol: parsed.publicSymbol,
+            ts: new Date(timestamp).toISOString(),
+            rate,
+            mark_price: mark,
+          }]
+        : []
+    }).sort((left, right) => left.ts.localeCompare(right.ts))
+    if (items.length === 0) throw new Error('Bybit returned no funding rows')
+    return cachedJson(
+      {
+        symbol: parsed.publicSymbol,
+        items,
+        source: 'Bybit funding history',
+      },
+      requestId,
+      request.method,
+    )
+  } catch {
+    // Kraken remains the funding fallback.
+  }
   const [series, tickers] = await Promise.all([
     analytics(parsed.futuresSymbol, 'funding', Math.max(limit, 24)),
     futuresTickers(),
@@ -1530,6 +1749,46 @@ async function getBasis(
 ): Promise<Response> {
   const parsed = parsePublicSymbol(symbol)
   const limit = boundedLimit(new URL(request.url), 288, 500)
+  try {
+    const params = {
+      category: 'linear',
+      symbol: parsed.publicSymbol,
+      interval: '5',
+      limit: String(Math.min(limit, 1_000)),
+    }
+    const [markRows, indexRows] = await Promise.all([
+      bybitMarketRows<unknown[]>('mark-price-kline', params),
+      bybitMarketRows<unknown[]>('index-price-kline', params),
+    ])
+    const indexByTimestamp = new Map(
+      indexRows.map((row) => [numeric(row[0]), numeric(row[4])]),
+    )
+    const items = markRows.flatMap((row) => {
+      const timestamp = numeric(row[0])
+      const mark = numeric(row[4])
+      const index = indexByTimestamp.get(timestamp) ?? 0
+      return timestamp > 0 && mark > 0 && index > 0
+        ? [{
+            ts: new Date(timestamp).toISOString(),
+            mark_price: mark,
+            index_price: index,
+            basis_pct: ((mark - index) / index) * 100,
+          }]
+        : []
+    }).sort((left, right) => left.ts.localeCompare(right.ts))
+    if (items.length < 2) throw new Error('Bybit returned insufficient basis rows')
+    return cachedJson(
+      {
+        symbol: parsed.publicSymbol,
+        items,
+        source: 'Bybit mark/index candles',
+      },
+      requestId,
+      request.method,
+    )
+  } catch {
+    // Gate and Kraken remain basis fallbacks.
+  }
   try {
     const candlesUrl = (kind: 'mark' | 'index') => {
       const url = new URL(`${GATE_FUTURES_URL}/candlesticks`)

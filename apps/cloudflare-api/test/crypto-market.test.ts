@@ -208,7 +208,111 @@ describe('independent crypto market routes', () => {
         oi_usd: 1_677_915.85625,
       }],
     })
-    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('serves every supported detail metric for a Bybit-only contract', async () => {
+    const timestamp = 1_785_243_600_000
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/market/tickers')) {
+        return Response.json({
+          retCode: 0,
+          time: timestamp,
+          result: { list: [{
+            symbol: 'CASHCATUSDT',
+            markPrice: '0.2156',
+            indexPrice: '0.2154',
+            openInterest: '2000000',
+            fundingRate: '0.0001',
+            nextFundingTime: String(timestamp + 28_800_000),
+          }] },
+        })
+      }
+      if (url.includes('/open-interest')) {
+        return Response.json({
+          retCode: 0,
+          result: { list: [{ openInterest: '2000000', timestamp: String(timestamp) }] },
+        })
+      }
+      if (url.includes('/account-ratio')) {
+        return Response.json({
+          retCode: 0,
+          result: { list: [{ buyRatio: '0.55', sellRatio: '0.45', timestamp: String(timestamp) }] },
+        })
+      }
+      if (url.includes('/recent-trade')) {
+        return Response.json({
+          retCode: 0,
+          result: { list: [
+            { time: String(timestamp), side: 'Buy', size: '120' },
+            { time: String(timestamp), side: 'Sell', size: '80' },
+          ] },
+        })
+      }
+      if (url.includes('/funding/history')) {
+        return Response.json({
+          retCode: 0,
+          result: { list: [{ fundingRate: '0.0001', fundingRateTimestamp: String(timestamp) }] },
+        })
+      }
+      if (url.includes('/mark-price-kline')) {
+        return Response.json({
+          retCode: 0,
+          result: { list: [
+            [String(timestamp), '0.2155', '0.2158', '0.2154', '0.2156'],
+            [String(timestamp - 300_000), '0.2151', '0.2156', '0.2150', '0.2154'],
+          ] },
+        })
+      }
+      if (url.includes('/index-price-kline')) {
+        return Response.json({
+          retCode: 0,
+          result: { list: [
+            [String(timestamp), '0.2153', '0.2156', '0.2152', '0.2154'],
+            [String(timestamp - 300_000), '0.2149', '0.2154', '0.2148', '0.2152'],
+          ] },
+        })
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    }))
+
+    const request = (path: string) => handleCryptoMarketRoute(
+      new Request(`https://api.example.test/api/v1/crypto/futures/CASHCATUSDT/${path}`),
+      `cashcat-${path}`,
+    )
+    const [info, oi, ratio, funding, basis] = await Promise.all([
+      request('info'),
+      request('open-interest?limit=96'),
+      request('long-short-ratio?limit=96'),
+      request('funding-rate?limit=96'),
+      request('basis?limit=96'),
+    ])
+
+    await expect(info?.json()).resolves.toMatchObject({
+      source: 'Bybit linear perpetual',
+      mark_price: 0.2156,
+      index_price: 0.2154,
+    })
+    await expect(oi?.json()).resolves.toMatchObject({
+      source: 'Bybit linear open interest',
+      items: [{ oi_coin: 2_000_000, oi_usd: 431_200 }],
+    })
+    await expect(ratio?.json()).resolves.toMatchObject({
+      source: 'Bybit global positioning and recent taker flow',
+      unavailable_fields: ['top_account_ratio', 'top_position_ratio'],
+      items: [{ global_account_ratio: 0.55 / 0.45, taker_ratio: 1.5 }],
+    })
+    await expect(funding?.json()).resolves.toMatchObject({
+      source: 'Bybit funding history',
+      items: [{ rate: 0.0001 }],
+    })
+    await expect(basis?.json()).resolves.toMatchObject({
+      source: 'Bybit mark/index candles',
+      items: expect.arrayContaining([
+        expect.objectContaining({ mark_price: 0.2156, index_price: 0.2154 }),
+      ]),
+    })
   })
 
   it('maps all Gate positioning dimensions into one complete response', async () => {

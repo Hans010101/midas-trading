@@ -30,7 +30,7 @@ import {
   YAxis,
 } from 'recharts'
 
-import { useBasisSeries, useLongShortRatio, useOpenInterest } from '@/hooks/use-crypto'
+import { useBasisSeries, useFundingRate, useLongShortRatio, useOpenInterest } from '@/hooks/use-crypto'
 import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import type { Locale } from '@/i18n/routing'
 import { type ChartColors, useChartColors } from '@/lib/chart-colors'
@@ -65,6 +65,7 @@ function sourceLabel(source: string | undefined, locale: Locale): string {
   const suffix = locale === 'en' ? 'Perpetuals' : '永续'
   if (!source) return locale === 'en' ? 'Perpetuals' : '永续合约'
   if (source.startsWith('Gate')) return `Gate ${suffix}`
+  if (source.startsWith('Bybit')) return `Bybit ${suffix}`
   if (source.startsWith('Binance')) return `Binance ${suffix}`
   if (source.startsWith('OKX')) return `OKX ${suffix}`
   if (source.startsWith('Kraken')) return `Kraken ${suffix}`
@@ -105,10 +106,11 @@ export function DimensionSection({ futuresSymbol }: DimensionSectionProps) {
   // 288 点 = 24h @ 5min(任务4:数据点加密,曲线更细腻;采集 top100 扩容后历史变密)
   const oi = useOpenInterest(futuresSymbol, 288)
   const lsr = useLongShortRatio(futuresSymbol, 288)
-  // ⑥ 基差(M2-C.2.4)· 标记价/指数价 5 分钟线 · 288 点 = 近 24h
+  const funding = useFundingRate(futuresSymbol, 100)
   const basis = useBasisSeries(futuresSymbol, 288)
   const oiSource = sourceLabel(oi.data?.source, locale)
   const ratioSource = sourceLabel(lsr.data?.source, locale)
+  const fundingSource = sourceLabel(funding.data?.source, locale)
   const basisSource = sourceLabel(basis.data?.source, locale)
 
   const oiData = (oi.data?.items ?? []).map((p) => ({
@@ -147,6 +149,13 @@ export function DimensionSection({ futuresSymbol }: DimensionSectionProps) {
     t: hhmm(p.ts), full: mmddhhmm(p.ts),
     mark: p.mark_price, index: p.index_price, basisPct: +p.basis_pct.toFixed(3),
   }))
+  const fundingData = (funding.data?.items ?? []).map((p) => ({
+    t: mmddhhmm(p.ts), full: mmddhhmm(p.ts), rate: p.rate * 100,
+  }))
+  const unavailable = new Set(lsr.data?.unavailable_fields ?? [])
+  const showTopAccount = !lsr.isSuccess || !unavailable.has('top_account_ratio')
+  const showTopPosition = !lsr.isSuccess || !unavailable.has('top_position_ratio')
+  const showTaker = !lsr.isSuccess || !unavailable.has('taker_ratio')
 
   return (
     <div>
@@ -157,7 +166,7 @@ export function DimensionSection({ futuresSymbol }: DimensionSectionProps) {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* ① OI · 双指标双 Y 轴 */}
         <ChartCard
-          title={en ? '① Open interest (OI)' : '① 合约持仓量(OI)'}
+          title={en ? 'Open interest (OI)' : '合约持仓量(OI)'}
           sub={en
             ? `${oiSource} · units (solid) / USD value (dashed) · 5 min`
             : `${oiSource} · 持仓量(币)实线 / 持仓价值(USD)虚线 · 5min`}
@@ -167,9 +176,8 @@ export function DimensionSection({ futuresSymbol }: DimensionSectionProps) {
           </ChartState>
         </ChartCard>
 
-        {/* ② 大户多空比 · 账户数 */}
-        <ChartCard
-          title={en ? '② Top traders · accounts' : '② 大户多空比 · 账户数'}
+        {showTopAccount && <ChartCard
+          title={en ? 'Top traders · accounts' : '大户多空比 · 账户数'}
           sub={en
             ? `${ratioSource} · account long/short shares + ratio · 5 min`
             : `${ratioSource} · 大户账户多空占比 + 比值 · 5min`}
@@ -177,11 +185,11 @@ export function DimensionSection({ futuresSymbol }: DimensionSectionProps) {
           <ChartState locale={locale} isLoading={lsr.isPending} isError={lsr.isError} isEmpty={lsr.isSuccess && accData.length === 0}>
             <RatioStackChart data={accData} locale={locale} />
           </ChartState>
-        </ChartCard>
+        </ChartCard>}
 
         {/* ③ 大户多空比 · 持仓量 */}
-        <ChartCard
-          title={en ? '③ Top traders · positions' : '③ 大户多空比 · 持仓量'}
+        {showTopPosition && <ChartCard
+          title={en ? 'Top traders · positions' : '大户多空比 · 持仓量'}
           sub={en
             ? `${ratioSource} · position long/short shares + ratio · 5 min`
             : `${ratioSource} · 大户持仓多空占比 + 比值 · 5min`}
@@ -189,11 +197,11 @@ export function DimensionSection({ futuresSymbol }: DimensionSectionProps) {
           <ChartState locale={locale} isLoading={lsr.isPending} isError={lsr.isError} isEmpty={lsr.isSuccess && posData.length === 0}>
             <RatioStackChart data={posData} locale={locale} />
           </ChartState>
-        </ChartCard>
+        </ChartCard>}
 
         {/* ④ 多空人数比值 · 真实数据(刀C · globalLongShortAccountRatio 全市场人数比) */}
         <ChartCard
-          title={en ? '④ Global account ratio' : '④ 多空人数比值'}
+          title={en ? 'Global account ratio' : '多空人数比值'}
           sub={en
             ? `${ratioSource} · market-wide long/short shares + ratio · 5 min`
             : `${ratioSource} · 全市场人数多空占比 + 比值 · 5min`}
@@ -204,8 +212,8 @@ export function DimensionSection({ futuresSymbol }: DimensionSectionProps) {
         </ChartCard>
 
         {/* ⑤ 合约主动买卖量 · 对称双色柱 */}
-        <ChartCard
-          title={en ? '⑤ Taker buy / sell volume' : '⑤ 合约主动买卖量'}
+        {showTaker && <ChartCard
+          title={en ? 'Taker buy / sell volume' : '合约主动买卖量'}
           sub={en
             ? `${ratioSource} · taker buys (up) / sells (down) · 5 min`
             : `${ratioSource} · taker 主买(青绿,上)/ 主卖(浅红,下) · 5min`}
@@ -213,11 +221,22 @@ export function DimensionSection({ futuresSymbol }: DimensionSectionProps) {
           <ChartState locale={locale} isLoading={lsr.isPending} isError={lsr.isError} isEmpty={lsr.isSuccess && takerData.length === 0}>
             <TakerChart data={takerData} locale={locale} />
           </ChartState>
+        </ChartCard>}
+
+        <ChartCard
+          title={en ? 'Funding rate' : '资金费率'}
+          sub={en
+            ? `${fundingSource} · settlement history`
+            : `${fundingSource} · 历史结算费率`}
+        >
+          <ChartState locale={locale} isLoading={funding.isPending} isError={funding.isError} isEmpty={funding.isSuccess && fundingData.length === 0}>
+            <FundingChart data={fundingData} locale={locale} />
+          </ChartState>
         </ChartCard>
 
         {/* ⑥ 基差 · 真实(M2-C.2.4)· 标记价/指数价 5 分钟时序 */}
         <ChartCard
-          title={en ? '⑥ Basis' : '⑥ 基差(basis)'}
+          title={en ? 'Basis' : '基差(basis)'}
           sub={en
             ? `${basisSource} · mark / index / basis rate · 5 min`
             : `${basisSource} · 标记价 / 指数价 / 基差率 · 5min`}
@@ -302,6 +321,23 @@ function TakerChart({ data, locale }: { data: { t: string; full: string; buy: nu
         <ReferenceLine y={0} stroke={c.axisText} />
         <Bar dataKey="buy" name={locale === 'en' ? 'Taker buy' : '主买'} fill={C_LONG} stackId="taker" />
         <Bar dataKey="sell" name={locale === 'en' ? 'Taker sell' : '主卖'} fill={C_SHORT} stackId="taker" />
+      </ComposedChart>
+    </ResponsiveContainer>
+  )
+}
+
+function FundingChart({ data, locale }: { data: { t: string; full: string; rate: number }[]; locale: Locale }) {
+  const c = useChartColors()
+  const label = locale === 'en' ? 'Funding rate' : '资金费率'
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <ComposedChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+        <CartesianGrid stroke={c.grid} vertical={false} />
+        <XAxis dataKey="t" tick={{ fontSize: 9, fill: c.axisText }} interval={xInterval(data.length)} minTickGap={36} tickLine={false} />
+        <YAxis width={44} tick={{ fontSize: 9, fill: c.axisText }} domain={TIGHT_DOMAIN} tickFormatter={(v: number) => `${v.toFixed(3)}%`} />
+        <Tooltip contentStyle={tipStyle(c)} labelFormatter={(_l, p) => (p?.[0]?.payload?.full ?? '')} formatter={(v) => [`${Number(v).toFixed(4)}%`, label]} />
+        <ReferenceLine y={0} stroke={c.axisText} strokeDasharray="3 3" />
+        <Line type="monotone" dataKey="rate" name={label} stroke={C_ORANGE} strokeWidth={1.2} dot={false} />
       </ComposedChart>
     </ResponsiveContainer>
   )
