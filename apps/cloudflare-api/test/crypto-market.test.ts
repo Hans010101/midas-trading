@@ -120,41 +120,43 @@ describe('independent crypto market routes', () => {
     expect(body.open_interest_usd).toBeGreaterThan(0)
   })
 
-  it('keeps a metrics row when one analytics series is unavailable', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
+  it('uses Bybit metrics for contracts outside the legacy Kraken universe', async () => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL) => {
         const url = String(input)
-        if (url.includes('/derivatives/api/v3/tickers')) {
-          return Response.json({ result: 'success', tickers: [futureTicker] })
+        if (url.includes('/v5/market/tickers')) {
+          return Response.json({
+            retCode: 0,
+            time: 1_785_243_600_000,
+            result: { list: [{ symbol: 'HUSDT', fundingRate: '-0.0044' }] },
+          })
         }
-        if (url.includes('/long-short-ratio')) {
-          return new Response('temporarily unavailable', { status: 503 })
+        if (url.includes('/account-ratio')) {
+          return Response.json({
+            retCode: 0,
+            result: { list: [{ buyRatio: '0.55', sellRatio: '0.45', timestamp: '2000' }] },
+          })
         }
         if (url.includes('/open-interest')) {
-          return new Response('temporarily unavailable', { status: 503 })
-        }
-        if (url.includes('/contract_stats')) {
-          return Response.json([
-            {
-              time: 1_785_157_200,
-              lsr_account: '0.60',
-              open_interest_usd: '100',
-            },
-            {
-              time: 1_785_243_600,
-              lsr_account: '0.75',
-              open_interest_usd: '125',
-            },
-          ])
+          return Response.json({
+            retCode: 0,
+            result: { list: [
+              { openInterest: '125', timestamp: '2000' },
+              { openInterest: '100', timestamp: '1000' },
+            ] },
+          })
         }
         throw new Error(`Unexpected request: ${url}`)
-      }),
+      },
+    )
+    vi.stubGlobal(
+      'fetch',
+      fetchMock,
     )
 
     const response = await handleCryptoMarketRoute(
       new Request(
-        'https://api.example.test/api/v1/crypto/futures/metrics-batch?symbols=BTCUSDT',
+        'https://api.example.test/api/v1/crypto/futures/metrics-batch?symbols=HUSDT',
       ),
       'crypto-metrics-partial',
     )
@@ -165,12 +167,13 @@ describe('independent crypto market routes', () => {
       processed: 1,
       truncated: false,
       items: [{
-        symbol: 'BTCUSDT',
-        funding_rate: 0.6672 / 64_447.8,
-        account_long_short_ratio: 0.75,
+        symbol: 'HUSDT',
+        funding_rate: -0.0044,
+        account_long_short_ratio: 0.55 / 0.45,
         oi_change_pct_24h: 25,
       }],
     })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
   it('uses Gate contract statistics for complete OI history', async () => {

@@ -115,8 +115,8 @@ export interface FuturesMetricsBatchResponse {
 
 /**
  * Cloudflare Free allows at most 50 external subrequests per Worker invocation.
- * The independent API resolves two Kraken analytics series per symbol plus one
- * shared ticker request, so 15 symbols keeps every batch safely below the cap.
+ * The API resolves two Bybit series per symbol plus one shared ticker request;
+ * 15 symbols also leaves room for one Gate fallback request per symbol.
  */
 export const FUTURES_METRICS_BATCH_LIMIT = 15
 

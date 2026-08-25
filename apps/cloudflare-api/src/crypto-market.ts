@@ -4,6 +4,7 @@ const FUTURES_TICKERS_URL =
   'https://futures.kraken.com/derivatives/api/v3/tickers'
 const BYBIT_TICKERS_URL =
   'https://api.bybit.com/v5/market/tickers?category=linear'
+const BYBIT_MARKET_URL = 'https://api.bybit.com/v5/market'
 const FUTURES_ANALYTICS_URL =
   'https://futures.kraken.com/api/charts/v1/analytics'
 const SPOT_TICKER_URL = 'https://api.kraken.com/0/public/Ticker'
@@ -11,9 +12,9 @@ const BINANCE_FUTURES_URL = 'https://fapi.binance.com'
 const OKX_PUBLIC_URL = 'https://www.okx.com/api/v5'
 const GATE_FUTURES_URL = 'https://api.gateio.ws/api/v4/futures/usdt'
 const CACHE_CONTROL = 'public, max-age=15, s-maxage=60'
-// Each symbol needs two analytics requests; funding comes from one shared Kraken
-// ticker snapshot. Keep the Worker invocation below Cloudflare Free's 50
-// external-subrequest ceiling, including the shared ticker request.
+// Each symbol needs two Bybit requests; funding comes from one shared ticker
+// snapshot. Gate can add one fallback request per symbol, keeping the worst-case
+// batch at 46 external subrequests under Cloudflare Free's 50-request ceiling.
 const MAX_METRICS_SYMBOLS = 15
 const SOCIAL_SCAN_MIN_QUOTE_VOLUME_USD = 100_000
 const SOCIAL_SCAN_EXCLUDED_BASES = new Set([
@@ -59,6 +60,7 @@ type BybitFutureTicker = Readonly<{
   turnover24h?: string
   openInterest?: string
   markPrice?: string
+  fundingRate?: string
 }>
 
 type Ticker24h = Readonly<{
@@ -98,6 +100,12 @@ function finite(value: unknown, fallback = 0): number {
 function numeric(value: unknown, fallback = 0): number {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function nullableNumeric(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 type GateContractStat = Readonly<{
@@ -385,7 +393,7 @@ function parsePublicSymbol(symbol: string): {
   base: string
 } {
   const normalized = symbol.trim().toUpperCase()
-  if (!/^[A-Z0-9]{2,20}USDT$/u.test(normalized)) {
+  if (!/^[A-Z0-9]{1,30}USDT$/u.test(normalized)) {
     throw new HttpError(400, '数字资产合约标的格式无效')
   }
   const base = normalized.slice(0, -4)
@@ -448,6 +456,28 @@ function toBybitPerpTicker(ticker: BybitFutureTicker, ts: string): Ticker24h | n
 }
 
 async function bybitPerpTickerFeed(): Promise<PerpTickerFeed> {
+  const payload = await bybitLinearTickers()
+  const ts = new Date(payload.time).toISOString()
+  const items = payload.list.flatMap((ticker) => {
+    const item = toBybitPerpTicker(ticker, ts)
+    return item ? [item] : []
+  })
+  if (items.length === 0) throw new Error('Bybit Linear returned no USDT perpetuals')
+  return {
+    items,
+    open_interest_usd: payload.list.reduce(
+      (sum, ticker) => sum + numeric(ticker.openInterest) * numeric(ticker.markPrice),
+      0,
+    ),
+    source: 'Bybit public linear market data',
+    source_name: 'bybit_futures',
+  }
+}
+
+async function bybitLinearTickers(): Promise<{
+  time: number
+  list: BybitFutureTicker[]
+}> {
   const payload = await fetchPublicJson<{
     retCode?: number
     time?: number
@@ -456,20 +486,9 @@ async function bybitPerpTickerFeed(): Promise<PerpTickerFeed> {
   if (payload.retCode !== 0 || !Array.isArray(payload.result?.list)) {
     throw new Error('Bybit Linear returned an invalid payload')
   }
-  const ts = new Date(numeric(payload.time, Date.now())).toISOString()
-  const items = payload.result.list.flatMap((ticker) => {
-    const item = toBybitPerpTicker(ticker, ts)
-    return item ? [item] : []
-  })
-  if (items.length === 0) throw new Error('Bybit Linear returned no USDT perpetuals')
   return {
-    items,
-    open_interest_usd: payload.result.list.reduce(
-      (sum, ticker) => sum + numeric(ticker.openInterest) * numeric(ticker.markPrice),
-      0,
-    ),
-    source: 'Bybit public linear market data',
-    source_name: 'bybit_futures',
+    time: numeric(payload.time, Date.now()),
+    list: payload.result.list,
   }
 }
 
@@ -658,15 +677,88 @@ function closeValue(row: unknown): number {
   return Array.isArray(row) ? numeric(row[3]) : numeric(row)
 }
 
-async function metricsItem(
-  symbol: string,
-  ticker?: KrakenFutureTicker,
-): Promise<{
+type FuturesMetricItem = Readonly<{
   symbol: string
   funding_rate: number | null
   account_long_short_ratio: number | null
   oi_change_pct_24h: number | null
-}> {
+}>
+
+async function bybitMarketRows<T>(
+  path: 'account-ratio' | 'open-interest',
+  params: Readonly<Record<string, string>>,
+): Promise<T[]> {
+  const url = new URL(`${BYBIT_MARKET_URL}/${path}`)
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value)
+  }
+  const payload = await fetchPublicJson<{
+    retCode?: number
+    result?: { list?: T[] }
+  }>(url, 'Bybit Linear')
+  if (payload.retCode !== 0 || !Array.isArray(payload.result?.list)) {
+    throw new Error(`Bybit Linear returned invalid ${path} data`)
+  }
+  return payload.result.list
+}
+
+async function bybitMetricsItem(
+  symbol: string,
+  ticker?: BybitFutureTicker,
+): Promise<FuturesMetricItem> {
+  const parsed = parsePublicSymbol(symbol)
+  const [ratioResult, oiResult] = await Promise.allSettled([
+    bybitMarketRows<{ buyRatio?: string; sellRatio?: string; timestamp?: string }>(
+      'account-ratio',
+      { category: 'linear', symbol: parsed.publicSymbol, period: '5min', limit: '1' },
+    ),
+    bybitMarketRows<{ openInterest?: string; timestamp?: string }>(
+      'open-interest',
+      {
+        category: 'linear',
+        symbol: parsed.publicSymbol,
+        intervalTime: '15min',
+        limit: '97',
+      },
+    ),
+  ])
+  const latestRatio = ratioResult.status === 'fulfilled'
+    ? ratioResult.value
+        .map((row) => ({
+          timestamp: numeric(row.timestamp),
+          buy: nullableNumeric(row.buyRatio),
+          sell: nullableNumeric(row.sellRatio),
+        }))
+        .filter((row) => row.buy !== null && row.sell !== null && row.sell > 0)
+        .sort((left, right) => right.timestamp - left.timestamp)[0]
+    : undefined
+  const oi = oiResult.status === 'fulfilled'
+    ? oiResult.value
+        .map((row) => ({
+          timestamp: numeric(row.timestamp),
+          value: nullableNumeric(row.openInterest),
+        }))
+        .filter((row) => row.value !== null && row.value > 0)
+        .sort((left, right) => left.timestamp - right.timestamp)
+    : []
+  const firstOi = oi[0]?.value ?? null
+  const lastOi = oi.at(-1)?.value ?? null
+  return {
+    symbol: parsed.publicSymbol,
+    funding_rate: nullableNumeric(ticker?.fundingRate),
+    account_long_short_ratio:
+      latestRatio?.buy !== null && latestRatio?.buy !== undefined && latestRatio.sell
+        ? latestRatio.buy / latestRatio.sell
+        : null,
+    oi_change_pct_24h:
+      firstOi && lastOi ? ((lastOi - firstOi) / firstOi) * 100 : null,
+  }
+}
+
+async function metricsItem(
+  symbol: string,
+  ticker?: KrakenFutureTicker,
+): Promise<FuturesMetricItem> {
   const parsed = parsePublicSymbol(symbol)
   const [fundingResult, ratioResult, oiResult] = await Promise.allSettled([
     ticker
@@ -709,8 +801,8 @@ async function metricsItem(
 }
 
 async function fillMetricGapsFromGate(
-  item: Awaited<ReturnType<typeof metricsItem>>,
-): Promise<Awaited<ReturnType<typeof metricsItem>>> {
+  item: FuturesMetricItem,
+): Promise<FuturesMetricItem> {
   if (
     item.funding_rate !== null &&
     item.account_long_short_ratio !== null &&
@@ -928,25 +1020,42 @@ async function getMetrics(
   )]
   if (symbols.length === 0) throw new HttpError(400, 'symbols 不能为空')
   const selected = symbols.slice(0, MAX_METRICS_SYMBOLS)
-  let tickerBySymbol = new Map<string, KrakenFutureTicker>()
+  let source = 'Bybit linear public market data with Gate fallback'
+  let settled: PromiseSettledResult<FuturesMetricItem>[]
   try {
-    tickerBySymbol = new Map(
-      (await futuresTickers())
-        .filter((ticker): ticker is KrakenFutureTicker & { symbol: string } =>
+    const tickerBySymbol = new Map(
+      (await bybitLinearTickers()).list
+        .filter((ticker): ticker is BybitFutureTicker & { symbol: string } =>
           typeof ticker.symbol === 'string',
         )
         .map((ticker) => [ticker.symbol, ticker]),
     )
+    settled = await Promise.allSettled(
+      selected.map((symbol) =>
+        bybitMetricsItem(symbol, tickerBySymbol.get(symbol)),
+      ),
+    )
   } catch {
-    // Analytics still supplies all three fields when the shared ticker request
-    // is temporarily unavailable.
+    source = 'Kraken futures analytics with Gate fallback'
+    let tickerBySymbol = new Map<string, KrakenFutureTicker>()
+    try {
+      tickerBySymbol = new Map(
+        (await futuresTickers())
+          .filter((ticker): ticker is KrakenFutureTicker & { symbol: string } =>
+            typeof ticker.symbol === 'string',
+          )
+          .map((ticker) => [ticker.symbol, ticker]),
+      )
+    } catch {
+      // Kraken analytics can still supply every metric without its ticker feed.
+    }
+    settled = await Promise.allSettled(
+      selected.map((symbol) => {
+        const parsed = parsePublicSymbol(symbol)
+        return metricsItem(symbol, tickerBySymbol.get(parsed.futuresSymbol))
+      }),
+    )
   }
-  const settled = await Promise.allSettled(
-    selected.map((symbol) => {
-      const parsed = parsePublicSymbol(symbol)
-      return metricsItem(symbol, tickerBySymbol.get(parsed.futuresSymbol))
-    }),
-  )
   const baseItems = settled.flatMap((result) =>
     result.status === 'fulfilled' ? [result.value] : [],
   )
@@ -957,7 +1066,7 @@ async function getMetrics(
       requested: symbols.length,
       processed: selected.length,
       truncated: symbols.length > selected.length,
-      source: 'Kraken futures analytics',
+      source,
     },
     requestId,
     request.method,
