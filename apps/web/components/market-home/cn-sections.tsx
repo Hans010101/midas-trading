@@ -115,14 +115,14 @@ export function CnSections() {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-serif text-sm font-bold text-foreground">
             {locale === 'en'
-              ? 'Market breadth · Curated A-share universe'
-              : `市场情绪 · ${q.data?.scope_label ?? '重点标的池'}`}
+              ? 'Market breadth · Full A-share market'
+              : `市场情绪 · ${q.data?.scope_label ?? 'A股全市场'}`}
           </h2>
           {q.data?.pool_size !== undefined && (
             <span className="text-xs text-muted-foreground/70">
               {locale === 'en'
-                ? `${q.data.pool_size} stocks · Curated universe, not the full market`
-                : `池内 ${q.data.pool_size} 只 · 策展非全市场`}
+                ? `${q.data.pool_size} stocks · Full-market universe`
+                : `覆盖 ${q.data.pool_size} 只 A 股`}
             </span>
           )}
         </div>
@@ -166,7 +166,7 @@ export function CnSections() {
             {/* 搜索态隐藏 tab(搜索是全市场,与涨跌/成交额排序无关)*/}
             {isSearching ? (
               <span className="text-sm text-muted-foreground">
-                {locale === 'en' ? 'A-share search results' : '重点标的池搜索结果'}
+                {locale === 'en' ? 'A-share search results' : 'A股全市场搜索结果'}
               </span>
             ) : (
               <div className="flex overflow-hidden rounded-md border border-paper text-sm">
@@ -194,7 +194,7 @@ export function CnSections() {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={locale === 'en' ? 'Search by A-share code' : '搜索重点标的池(代码 / 名称)'}
+                placeholder={locale === 'en' ? 'Search A-shares by code or name' : '搜索 A股全市场(代码 / 名称)'}
                 className="w-52 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
               />
             </div>
@@ -256,10 +256,10 @@ export function CnSections() {
             {isSearching
               ? locale === 'en'
                 ? `${rows.length} matches · Select a row for details`
-                : `池内命中 ${rows.length} 只 · 点击看详情`
+                : `命中 ${rows.length} 只 · 点击看详情`
               : locale === 'en'
-                ? `${q.data?.pool_size ?? rows.length} stocks in the current universe · Auto-refreshing`
-                : `当前重点池 ${q.data?.pool_size ?? rows.length} 只 · 定时更新`}
+                ? `${q.data?.pool_size ?? rows.length} stocks · Full-market snapshot`
+                : `全市场 ${q.data?.pool_size ?? rows.length} 只 · 定时更新`}
           </p>
         </section>
       )}

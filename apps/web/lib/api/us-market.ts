@@ -1,8 +1,7 @@
 /**
  * 美股榜单 / 行业·中概板块 API client(0023 阶段③ · 3.3)。
  *
- * GET /api/v1/us/board · 策展池(重点关注池 · 非全市场)内 涨幅/跌幅/成交额 3 榜 +
- * 行业板块 + 中概股板块。数据 yfinance 批量 · 只读 · 成交额为美元估(close×volume)。
+ * GET /api/v1/us/board · 全市场涨幅/跌幅/成交额 3 榜 + 行业板块。
  */
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
@@ -59,9 +58,17 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
 }
 
 /**
- * 美股重点关注池榜单 + 行业/中概板块(一次取齐)。
- * limit 默认 128 = 取全策展池(每个榜按对应维度排序的全池)· 供本地搜索过滤 + 榜单显示前 100。
+ * 美股全市场榜单 + 行业板块(一次取齐)。
  */
 export function fetchUsBoard(limit = 128, signal?: AbortSignal): Promise<UsBoardResponse> {
   return getJson<UsBoardResponse>(`/api/v1/us/board?limit=${limit}`, signal)
+}
+
+export function searchUsSpot(
+  query: string,
+  limit = 50,
+  signal?: AbortSignal,
+): Promise<UsSpotRow[]> {
+  const params = new URLSearchParams({ q: query, limit: String(limit) })
+  return getJson<UsSpotRow[]>(`/api/v1/us/search?${params.toString()}`, signal)
 }

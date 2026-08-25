@@ -220,12 +220,28 @@ const US_SECTOR_NAME_EN: Record<string, string> = {
   中概股: 'China ADRs',
 }
 
+const US_SECTOR_NAME_ZH: Record<string, string> = {
+  Technology: '科技',
+  'Health Care': '医疗保健',
+  Industrials: '工业',
+  'Consumer Discretionary': '可选消费',
+  Finance: '金融',
+  'Consumer Staples': '必需消费',
+  'Real Estate': '房地产',
+  Utilities: '公用事业',
+  Energy: '能源',
+  Telecommunications: '通信服务',
+  'Basic Materials': '原材料',
+  Miscellaneous: '其他',
+  Other: '其他',
+}
+
 export function usSectorName(
   originalName: string,
   locale: 'en' | 'zh',
   fallbackIndex = 0,
 ): string {
-  if (locale === 'zh') return originalName
+  if (locale === 'zh') return US_SECTOR_NAME_ZH[originalName] ?? originalName
   return US_SECTOR_NAME_EN[originalName]
     ?? (CJK_RE.test(originalName) ? `U.S. Sector ${fallbackIndex + 1}` : originalName)
 }

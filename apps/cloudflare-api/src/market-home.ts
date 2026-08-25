@@ -2,31 +2,42 @@ import { HttpError, jsonResponse } from './http'
 
 type Market = 'cn' | 'us' | 'hk'
 
-type AssetConfig = Readonly<{
+type AssetMeta = Readonly<{
   symbol: string
   name: string
   market: Market
   sector: string
 }>
 
-type SpotQuote = AssetConfig &
-  Readonly<{
-    last_price: number
-    prev_close: number
-    change_amount: number
-    change_pct: number
-    amount: number
-    volume: number
-    quoted_at: number
-  }>
+type SpotQuote = Readonly<{
+  symbol: string
+  name: string
+  sector: string
+  last_price: number
+  prev_close: number
+  change_amount: number
+  change_pct: number
+  amount: number
+  volume: number
+}>
+
+type SectorSummary = Readonly<{
+  name: string
+  change_pct: number
+  stock_count: number
+  total_amount: number
+  leader_name: string
+  leader_change_pct: number
+}>
 
 type BoardSnapshot = Readonly<{
   market: Market
   rows: SpotQuote[]
   quoted_at: number
+  sectors?: SectorSummary[]
 }>
 
-const ASSETS: readonly AssetConfig[] = [
+const KNOWN_ASSETS: readonly AssetMeta[] = [
   { symbol: '600519', name: '贵州茅台', market: 'cn', sector: '消费' },
   { symbol: '601318', name: '中国平安', market: 'cn', sector: '金融' },
   { symbol: '600036', name: '招商银行', market: 'cn', sector: '金融' },
@@ -69,130 +80,192 @@ const ASSETS: readonly AssetConfig[] = [
   { symbol: '09888', name: '百度集团-SW', market: 'hk', sector: '互联网' },
 ]
 
+const KNOWN_ASSET_META = new Map(
+  KNOWN_ASSETS.map((asset) => [`${asset.market}:${asset.symbol}`, asset]),
+)
+
+const CN_SPOT_URL =
+  'https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeDataSimple?page=1&num=10000&sort=symbol&asc=1&node=hs_a&_s_r_a=page'
+const CN_SECTORS_URL =
+  'https://vip.stock.finance.sina.com.cn/q/view/newSinaHy.php'
+const US_SPOT_URL =
+  'https://api.nasdaq.com/api/screener/stocks?tableonly=true&limit=10000&download=true'
+const HK_SPOT_URL =
+  'https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHKStockData'
+
 const INDEX_ORDER: Readonly<Record<Market, string[]>> = {
   cn: ['000001.SS', '399001.SZ', '000300.SS'],
   us: ['^DJI', '^IXIC', '^GSPC', '^RUT'],
   hk: ['^HSI', '^HSCE'],
 }
 
-function yahooSymbol(asset: AssetConfig): string {
-  if (asset.market === 'us') return asset.symbol
-  if (asset.market === 'hk') {
-    return `${asset.symbol.replace(/^0+/u, '').padStart(4, '0')}.HK`
-  }
-  return `${asset.symbol}.${asset.symbol.startsWith('6') ? 'SS' : 'SZ'}`
+function numeric(value: unknown): number {
+  const parsed = Number(String(value ?? '').replaceAll(',', '').replace('$', '').replace('%', ''))
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
-function finitePositive(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
-    ? value
-    : null
-}
-
-async function fetchSpotQuote(asset: AssetConfig): Promise<SpotQuote | null> {
-  const url = new URL(
-    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol(asset))}`,
-  )
-  url.searchParams.set('range', '5d')
-  url.searchParams.set('interval', '1d')
+async function fetchJson<T>(url: URL | string): Promise<T> {
   const response = await fetch(url, {
-    headers: { 'user-agent': 'Midas-Trading-Cloudflare/1.0' },
-    signal: AbortSignal.timeout(8_000),
+    headers: {
+      accept: 'application/json',
+      'user-agent': 'Mozilla/5.0 Midas-Trading-Cloudflare/1.0',
+    },
+    signal: AbortSignal.timeout(30_000),
   })
-  if (!response.ok) throw new Error(`${asset.symbol}: HTTP ${response.status}`)
-  const payload = (await response.json()) as {
-    chart?: {
-      result?: Array<{
-        meta?: {
-          regularMarketPrice?: number
-          chartPreviousClose?: number
-          previousClose?: number
-          regularMarketTime?: number
-        }
-        timestamp?: number[]
-        indicators?: {
-          quote?: Array<{
-            close?: Array<number | null>
-            volume?: Array<number | null>
-          }>
-        }
-      }>
+  if (!response.ok) throw new Error(`market source HTTP ${response.status}`)
+  return (await response.json()) as T
+}
+
+function spotQuote(
+  market: Market,
+  symbol: string,
+  name: string,
+  last: number,
+  previous: number,
+  change: number,
+  changePct: number,
+  volume: number,
+  amount: number,
+  sector = '',
+): SpotQuote | null {
+  if (!symbol || last <= 0 || !Number.isFinite(changePct)) return null
+  const known = KNOWN_ASSET_META.get(`${market}:${symbol}`)
+  return {
+    symbol,
+    name: known?.name ?? name,
+    sector: known?.sector ?? sector,
+    last_price: last,
+    prev_close: previous > 0 ? previous : last - change,
+    change_amount: change,
+    change_pct: changePct,
+    amount: Math.max(amount, 0),
+    volume: Math.max(volume, 0),
+  }
+}
+
+async function fetchCnSnapshot(): Promise<Pick<BoardSnapshot, 'rows' | 'sectors'>> {
+  type SinaRow = Record<string, unknown>
+  const [sourceRows, sectorResponse] = await Promise.all([
+    fetchJson<SinaRow[]>(CN_SPOT_URL),
+    fetch(CN_SECTORS_URL, { signal: AbortSignal.timeout(30_000) }).catch(() => null),
+  ])
+  const rows = sourceRows.flatMap((row) => {
+    const item = spotQuote(
+      'cn',
+      String(row.code ?? ''),
+      String(row.name ?? ''),
+      numeric(row.trade),
+      numeric(row.settlement),
+      numeric(row.pricechange),
+      numeric(row.changepercent),
+      numeric(row.volume),
+      numeric(row.amount),
+    )
+    return item ? [item] : []
+  })
+  let text = ''
+  if (sectorResponse?.ok) {
+    try {
+      text = new TextDecoder('gb18030').decode(await sectorResponse.arrayBuffer())
+    } catch {
+      // Sector data is optional; keep the stock board available if decoding fails.
     }
   }
-  const chart = payload.chart?.result?.[0]
-  const closes =
-    chart?.indicators?.quote?.[0]?.close?.filter(
-      (value): value is number =>
-        typeof value === 'number' && Number.isFinite(value),
-    ) ?? []
-  const volumes =
-    chart?.indicators?.quote?.[0]?.volume?.filter(
-      (value): value is number =>
-        typeof value === 'number' && Number.isFinite(value) && value >= 0,
-    ) ?? []
-  const last =
-    finitePositive(chart?.meta?.regularMarketPrice) ??
-    finitePositive(closes.at(-1))
-  const previous =
-    finitePositive(chart?.meta?.chartPreviousClose) ??
-    finitePositive(chart?.meta?.previousClose) ??
-    finitePositive(closes.at(-2))
-  if (last === null || previous === null) return null
-  const volume = volumes.at(-1) ?? 0
-  const change = last - previous
-  return {
-    ...asset,
-    last_price: last,
-    prev_close: previous,
-    change_amount: change,
-    change_pct: (change / previous) * 100,
-    amount: last * volume,
-    volume,
-    quoted_at:
-      (chart?.meta?.regularMarketTime ??
-        chart?.timestamp?.at(-1) ??
-        Math.floor(Date.now() / 1_000)) * 1_000,
+  const rawSectors = text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)
+  let parsedSectors: Record<string, string> = {}
+  try {
+    parsedSectors = rawSectors ? JSON.parse(rawSectors) as Record<string, string> : {}
+  } catch {
+    parsedSectors = {}
   }
+  const sectors = Object.values(parsedSectors).flatMap((value) => {
+    const fields = value.split(',')
+    const name = fields[1]?.trim() ?? ''
+    if (!name) return []
+    return [{
+      name,
+      change_pct: numeric(fields[5]),
+      stock_count: numeric(fields[2]),
+      total_amount: numeric(fields[7]),
+      leader_name: fields[13]?.trim() ?? '',
+      leader_change_pct: numeric(fields[9]),
+    }]
+  })
+  return { rows, sectors }
 }
 
-async function settledMap<T, R>(
-  input: readonly T[],
-  concurrency: number,
-  operation: (value: T) => Promise<R>,
-): Promise<PromiseSettledResult<R>[]> {
-  const output: PromiseSettledResult<R>[] = new Array(input.length)
-  let cursor = 0
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, input.length) }, async () => {
-      while (cursor < input.length) {
-        const index = cursor
-        cursor += 1
-        try {
-          output[index] = {
-            status: 'fulfilled',
-            value: await operation(input[index]!),
-          }
-        } catch (reason) {
-          output[index] = { status: 'rejected', reason }
-        }
-      }
+async function fetchUsRows(): Promise<SpotQuote[]> {
+  const payload = await fetchJson<{
+    data?: { rows?: Array<Record<string, unknown>> }
+  }>(US_SPOT_URL)
+  return (payload.data?.rows ?? []).flatMap((row) => {
+    const last = numeric(row.lastsale)
+    const change = numeric(row.netchange)
+    const volume = numeric(row.volume)
+    const item = spotQuote(
+      'us',
+      String(row.symbol ?? ''),
+      String(row.name ?? ''),
+      last,
+      last - change,
+      change,
+      numeric(row.pctchange),
+      volume,
+      last * volume,
+      String(row.sector ?? 'Other'),
+    )
+    return item ? [item] : []
+  })
+}
+
+async function fetchHkRows(): Promise<SpotQuote[]> {
+  type SinaRow = Record<string, unknown>
+  const pages = await Promise.all(
+    Array.from({ length: 15 }, (_, index) => {
+      const url = new URL(HK_SPOT_URL)
+      url.search = new URLSearchParams({
+        page: String(index + 1),
+        num: '60',
+        sort: 'symbol',
+        asc: '1',
+        node: 'qbgg_hk',
+        _s_r_a: 'init',
+      }).toString()
+      return fetchJson<SinaRow[]>(url)
     }),
   )
-  return output
+  return pages.flat().flatMap((row) => {
+    const item = spotQuote(
+      'hk',
+      String(row.symbol ?? ''),
+      String(row.name ?? ''),
+      numeric(row.lasttrade),
+      numeric(row.prevclose),
+      numeric(row.pricechange),
+      numeric(row.changepercent),
+      numeric(row.volume),
+      numeric(row.amount),
+    )
+    return item ? [item] : []
+  })
 }
 
 export async function refreshMarketBoard(
   env: Env,
   market: Market,
 ): Promise<BoardSnapshot> {
-  const assets = ASSETS.filter((asset) => asset.market === market)
-  const results = await settledMap(assets, 6, fetchSpotQuote)
-  const rows = results.flatMap((result) =>
-    result.status === 'fulfilled' && result.value ? [result.value] : [],
-  )
+  const source = market === 'cn'
+    ? await fetchCnSnapshot()
+    : { rows: market === 'us' ? await fetchUsRows() : await fetchHkRows() }
+  const rows = source.rows
   if (rows.length === 0) throw new Error(`${market} board refresh returned no data`)
-  const quotedAt = Math.max(...rows.map((row) => row.quoted_at))
-  const snapshot = { market, rows, quoted_at: quotedAt }
+  const quotedAt = Date.now()
+  const snapshot = {
+    market,
+    rows,
+    quoted_at: quotedAt,
+    ...('sectors' in source ? { sectors: source.sectors } : {}),
+  }
   await env.DB
     .prepare(
       `INSERT INTO market_home_boards
@@ -210,7 +283,6 @@ export async function refreshMarketBoard(
       event: 'market_board.refresh_complete',
       market,
       stored: rows.length,
-      failed: results.length - rows.length,
     }),
   )
   return snapshot
@@ -247,6 +319,7 @@ async function readBoard(
 function aggregateSectors(rows: SpotQuote[]) {
   const grouped = new Map<string, SpotQuote[]>()
   for (const row of rows) {
+    if (!row.sector) continue
     const group = grouped.get(row.sector) ?? []
     group.push(row)
     grouped.set(row.sector, group)
@@ -385,11 +458,9 @@ async function overview(
   return response
 }
 
-function breadth(rows: SpotQuote[], market: 'cn' | 'hk') {
+function breadth(rows: SpotQuote[], market: 'cn' | 'hk', quotedAt: number) {
   const output = {
-    ts: new Date(
-      Math.max(...rows.map((row) => row.quoted_at)),
-    ).toISOString(),
+    ts: new Date(quotedAt).toISOString(),
     up_count: rows.filter((row) => row.change_pct > 0.01).length,
     down_count: rows.filter((row) => row.change_pct < -0.01).length,
     flat_count: rows.filter(
@@ -464,15 +535,15 @@ async function board(
       volume: row.volume,
     })
     payload = {
-      breadth: breadth(snapshot.rows, market),
+      breadth: breadth(snapshot.rows, market, snapshot.quoted_at),
       data_as_of: dataAsOf,
       pool_size: snapshot.rows.length,
-      scope_label: market === 'cn' ? '重点标的池' : '活跃精选池',
+      scope_label: market === 'cn' ? 'A股全市场' : '港股活跃池',
       gainers: gainers.map(mapRow),
       losers: losers.map(mapRow),
       top_amount: topAmount.map(mapRow),
       ...(market === 'cn'
-        ? { sectors: aggregateSectors(snapshot.rows) }
+        ? { sectors: snapshot.sectors ?? [] }
         : {}),
     }
   }
@@ -505,10 +576,11 @@ async function hkSectors(
   return response
 }
 
-async function searchCn(
+async function searchMarket(
   request: Request,
   env: Env,
   requestId: string,
+  market: Market,
 ): Promise<Response> {
   const params = new URL(request.url).searchParams
   const query = (params.get('q') ?? '').trim().toLowerCase()
@@ -517,7 +589,7 @@ async function searchCn(
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
     throw new HttpError(422, 'limit 格式无效')
   }
-  const snapshot = await readBoard(env, 'cn')
+  const snapshot = await readBoard(env, market)
   const items = snapshot.rows
     .filter(
       (row) =>
@@ -529,6 +601,7 @@ async function searchCn(
     .map((row) => ({
       symbol: row.symbol,
       name: row.name,
+      sector: row.sector,
       last_price: row.last_price,
       change_pct: row.change_pct,
       change_amount: row.change_amount,
@@ -560,8 +633,9 @@ export async function handleMarketHomeRoute(
   if (path === '/api/v1/hk/sectors' && request.method === 'GET') {
     return hkSectors(request, env, requestId)
   }
-  if (path === '/api/v1/cn/search' && request.method === 'GET') {
-    return searchCn(request, env, requestId)
+  const searchMatch = /^\/api\/v1\/(cn|us|hk)\/search$/u.exec(path)
+  if (searchMatch && request.method === 'GET') {
+    return searchMarket(request, env, requestId, searchMatch[1] as Market)
   }
   return null
 }

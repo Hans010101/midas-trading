@@ -52,11 +52,27 @@ describe('independent crypto market routes', () => {
     ])
   })
 
-  it('maps Kraken perpetual tickers to the existing public contract', async () => {
+  it('maps the full Bybit USDT perpetual feed to the existing public contract', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>
-        Response.json({ result: 'success', tickers: [futureTicker] }),
+        Response.json({
+          retCode: 0,
+          time: 1_785_243_600_000,
+          result: {
+            list: [{
+              symbol: 'BTCUSDT',
+              lastPrice: '64456',
+              price24hPcnt: '0.0078',
+              highPrice24h: '64542',
+              lowPrice24h: '63926',
+              volume24h: '1449.18',
+              turnover24h: '93161640',
+              openInterest: '2138.2',
+              markPrice: '64456.5',
+            }],
+          },
+        }),
       ),
     )
 
@@ -75,7 +91,7 @@ describe('independent crypto market routes', () => {
         last_price: 64_456,
         change_pct_24h: 0.78,
       }],
-      source: 'Kraken public market data',
+      source: 'Bybit public linear market data',
     })
   })
 

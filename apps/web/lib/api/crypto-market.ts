@@ -31,6 +31,7 @@ export interface Tickers24hResponse {
   sort_by: string
   order: string
   items: Ticker24h[]
+  source: string
 }
 
 export interface MarketOverview {
@@ -43,6 +44,7 @@ export interface MarketOverview {
   fear_greed_classification: string
   derivatives_oi_usd: number
   derivatives_volume_24h_usd: number
+  derivatives_source: 'bybit_futures' | 'kraken_futures' | null
 }
 
 export interface CryptoOverviewResponse {

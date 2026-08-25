@@ -2,6 +2,8 @@ import { HttpError, jsonResponse } from './http'
 
 const FUTURES_TICKERS_URL =
   'https://futures.kraken.com/derivatives/api/v3/tickers'
+const BYBIT_TICKERS_URL =
+  'https://api.bybit.com/v5/market/tickers?category=linear'
 const FUTURES_ANALYTICS_URL =
   'https://futures.kraken.com/api/charts/v1/analytics'
 const SPOT_TICKER_URL = 'https://api.kraken.com/0/public/Ticker'
@@ -47,6 +49,18 @@ type KrakenFutureTicker = Readonly<{
   low24h?: number
 }>
 
+type BybitFutureTicker = Readonly<{
+  symbol?: string
+  lastPrice?: string
+  price24hPcnt?: string
+  highPrice24h?: string
+  lowPrice24h?: string
+  volume24h?: string
+  turnover24h?: string
+  openInterest?: string
+  markPrice?: string
+}>
+
 type Ticker24h = Readonly<{
   symbol: string
   instrument: 'spot' | 'perp'
@@ -58,6 +72,13 @@ type Ticker24h = Readonly<{
   volume_24h: number
   quote_volume_24h: number
   count_24h: number
+}>
+
+type PerpTickerFeed = Readonly<{
+  items: Ticker24h[]
+  open_interest_usd: number
+  source: string
+  source_name: 'bybit_futures' | 'kraken_futures'
 }>
 
 export type CryptoMarketScanItem = Readonly<{
@@ -407,16 +428,84 @@ function toPerpTicker(ticker: KrakenFutureTicker): Ticker24h | null {
   }
 }
 
-async function perpTickerItems(): Promise<Ticker24h[]> {
-  return (await futuresTickers()).flatMap((ticker) => {
-    const item = toPerpTicker(ticker)
+function toBybitPerpTicker(ticker: BybitFutureTicker, ts: string): Ticker24h | null {
+  const symbol = ticker.symbol?.toUpperCase() ?? ''
+  if (!symbol.endsWith('USDT')) return null
+  const last = numeric(ticker.lastPrice)
+  if (last <= 0) return null
+  return {
+    symbol: `${symbol.slice(0, -4)}/USDT`,
+    instrument: 'perp',
+    ts,
+    last_price: last,
+    change_pct_24h: Number((numeric(ticker.price24hPcnt) * 100).toFixed(8)),
+    high_24h: numeric(ticker.highPrice24h),
+    low_24h: numeric(ticker.lowPrice24h),
+    volume_24h: numeric(ticker.volume24h),
+    quote_volume_24h: numeric(ticker.turnover24h),
+    count_24h: 0,
+  }
+}
+
+async function bybitPerpTickerFeed(): Promise<PerpTickerFeed> {
+  const payload = await fetchPublicJson<{
+    retCode?: number
+    time?: number
+    result?: { list?: BybitFutureTicker[] }
+  }>(BYBIT_TICKERS_URL, 'Bybit Linear')
+  if (payload.retCode !== 0 || !Array.isArray(payload.result?.list)) {
+    throw new Error('Bybit Linear returned an invalid payload')
+  }
+  const ts = new Date(numeric(payload.time, Date.now())).toISOString()
+  const items = payload.result.list.flatMap((ticker) => {
+    const item = toBybitPerpTicker(ticker, ts)
     return item ? [item] : []
   })
+  if (items.length === 0) throw new Error('Bybit Linear returned no USDT perpetuals')
+  return {
+    items,
+    open_interest_usd: payload.result.list.reduce(
+      (sum, ticker) => sum + numeric(ticker.openInterest) * numeric(ticker.markPrice),
+      0,
+    ),
+    source: 'Bybit public linear market data',
+    source_name: 'bybit_futures',
+  }
+}
+
+async function krakenPerpTickerFeed(): Promise<PerpTickerFeed> {
+  const tickers = await futuresTickers()
+  return {
+    items: tickers.flatMap((ticker) => {
+      const item = toPerpTicker(ticker)
+      return item ? [item] : []
+    }),
+    open_interest_usd: tickers.reduce(
+      (sum, ticker) => ticker.symbol?.startsWith('PF_')
+        ? sum + finite(ticker.openInterest) * finite(ticker.markPrice)
+        : sum,
+      0,
+    ),
+    source: 'Kraken public market data',
+    source_name: 'kraken_futures',
+  }
+}
+
+async function perpTickerFeed(): Promise<PerpTickerFeed> {
+  try {
+    return await bybitPerpTickerFeed()
+  } catch {
+    return krakenPerpTickerFeed()
+  }
+}
+
+async function perpTickerItems(): Promise<Ticker24h[]> {
+  return (await perpTickerFeed()).items
 }
 
 /**
  * Shared Midas Trading volatility scan for automated editorial content.
- * Keep this on the same normalized Kraken feed as the public crypto board so
+ * Keep this on the same normalized feed as the public crypto board so
  * posts and the product UI cannot silently disagree about market values.
  */
 export async function fetchCryptoMarketScan(
@@ -708,15 +797,16 @@ async function getTickers(
   if (!Number.isSafeInteger(top) || top < 1 || top > 1_000) {
     throw new HttpError(400, 'top 必须在 1 到 1000 之间')
   }
-  const items =
-    instrument === 'perp' ? await perpTickerItems() : await spotTickerItems()
+  const feed = instrument === 'perp'
+    ? await perpTickerFeed()
+    : { items: await spotTickerItems(), source: 'Kraken public market data' }
   return cachedJson(
     {
       instrument,
       sort_by: sortBy,
       order,
-      items: sortedItems(items, sortBy, order, top),
-      source: 'Kraken public market data',
+      items: sortedItems(feed.items, sortBy, order, top),
+      source: feed.source,
     },
     requestId,
     request.method,
@@ -729,17 +819,14 @@ async function getOverview(
 ): Promise<Response> {
   const [tickerResult, globalResult, fearGreedResult] =
     await Promise.allSettled([
-      futuresTickers(),
+      perpTickerFeed(),
       fetchCryptoGlobal(),
       fetchFearGreed(),
     ] as const)
-  const rawTickers = tickerResult.status === 'fulfilled'
+  const feed = tickerResult.status === 'fulfilled'
     ? tickerResult.value
-    : []
-  const items = rawTickers.flatMap((ticker) => {
-    const item = toPerpTicker(ticker)
-    return item ? [item] : []
-  })
+    : null
+  const items = feed?.items ?? []
   const byChange = [...items].sort(
     (left, right) => right.change_pct_24h - left.change_pct_24h,
   )
@@ -747,13 +834,7 @@ async function getOverview(
     (left, right) => right.quote_volume_24h - left.quote_volume_24h,
   )
   const now = new Date().toISOString()
-  const derivativesOiUsd = rawTickers.reduce(
-    (sum, ticker) =>
-      ticker.symbol?.startsWith('PF_')
-        ? sum + finite(ticker.openInterest) * finite(ticker.markPrice)
-        : sum,
-    0,
-  )
+  const derivativesOiUsd = feed?.open_interest_usd ?? 0
   const global = globalResult.status === 'fulfilled'
     ? globalResult.value
     : {
@@ -797,13 +878,14 @@ async function getOverview(
           (sum, item) => sum + item.quote_volume_24h,
           0,
         ),
+        derivatives_source: feed?.source_name ?? null,
       },
       top_gainers: byChange.slice(0, 10),
       top_losers: byChange.slice(-10).reverse(),
       top_volume: byVolume.slice(0, 10),
       btc_ticker: items.find((item) => item.symbol === 'BTC/USDT') ?? null,
       eth_ticker: items.find((item) => item.symbol === 'ETH/USDT') ?? null,
-      source: `${global.source ?? 'Global source unavailable'} + Alternative.me + Kraken Futures`,
+      source: `${global.source ?? 'Global source unavailable'} + Alternative.me + ${feed?.source ?? 'Derivatives unavailable'}`,
       sources: [
         {
           name: 'coingecko',
@@ -822,7 +904,7 @@ async function getOverview(
           ok: fearGreedResult.status === 'fulfilled',
         },
         {
-          name: 'kraken_futures',
+          name: feed?.source_name ?? 'derivatives',
           ok: tickerResult.status === 'fulfilled',
         },
       ],

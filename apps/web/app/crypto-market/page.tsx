@@ -5,11 +5,11 @@
  *
  * 数据走 M2-A 已有的只读端点(lib/api/crypto-market.ts):
  *   · GET /api/v1/crypto/overview      → 合约总成交额 + 恐慌贪婪指数 + BTC/ETH 价
- *   · GET /api/v1/crypto/tickers/24h   → 全市场 perp ticker(top=1000 一次取全量 ~623)
+ *   · GET /api/v1/crypto/tickers/24h   → 全市场 USDT perp ticker(top=1000 一次取全量)
  *   · GET /api/v1/crypto/futures/metrics-batch → 资金费率/账户多空比/OI 24H变化(只对可见行分批取)
  *
  * 全域化(取代旧"前100 + 分页"):
- *   · 一次取全市场 ~623 perp 进内存;排序/搜索基于全域;无限滚动(默认 20、续 20、删分页器)。
+ *   · 一次取全市场 USDT perp 进内存;排序/搜索基于全域。
  *   · 全域可排序列:24H 涨跌% / 24H 成交额 / 最新价(都在 ticker 表,前端内存排,即时)。
  *   · 资金费率/多空比/OI 3 列:只展示不排序(全域按这 3 列排序需单独后端工程,本期不做)。
  *   · metrics 受批量接口 200 上限约束 → 只对"已加载/可见行"分批请求(≤100/批 + inFlight 去重 +
@@ -101,7 +101,7 @@ export default function CryptoMarketPage() {
     staleTime: 60_000,
   })
 
-  // 全域:一次取全市场 perp(top=1000 → 实际 ~623),进内存做排序/搜索/无限滚动
+  // 全域:一次取全市场 perp(top=1000),进内存做排序/搜索
   const tickersQ = useQuery({
     queryKey: ['crypto-tickers', 'perp'],
     queryFn: ({ signal }) => fetchTickers24h('perp', 1000, signal),
@@ -185,6 +185,11 @@ export default function CryptoMarketPage() {
   const btc = overviewQ.data?.btc_ticker ?? null
   const eth = overviewQ.data?.eth_ticker ?? null
   const fgiOk = !!ov && ov.fear_greed_value > 0 && ov.fear_greed_classification !== '' && ov.fear_greed_classification !== 'N/A'
+  const derivativesSource = ov?.derivatives_source === 'bybit_futures'
+    ? 'Bybit USDT 永续'
+    : ov?.derivatives_source === 'kraken_futures'
+      ? 'Kraken USD 永续'
+      : '暂无数据'
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -213,7 +218,7 @@ export default function CryptoMarketPage() {
               label="24H 合约总成交额"
               loading={overviewQ.isPending}
               value={ov && ov.derivatives_volume_24h_usd > 0 ? fmtUsd(ov.derivatives_volume_24h_usd) : '—'}
-              sub="Kraken USD 永续"
+              sub={derivativesSource}
             />
             <MetricCard
               label="恐慌贪婪指数"
@@ -262,7 +267,7 @@ export default function CryptoMarketPage() {
               <div className="flex items-center gap-1.5 rounded-md border border-paper bg-surface-card px-3 py-1.5 text-sm">
                 <SearchIcon />
                 <input type="text" value={query} onChange={(e) => setQuery(e.target.value)}
-                  placeholder="搜索全市场 USDT 永续(~623)"
+                  placeholder={`搜索 ${allItems.length || '全市场'} 个 USDT 永续`}
                   className="w-44 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50" />
               </div>
               <button type="button" title="刷新" onClick={() => { void overviewQ.refetch(); void tickersQ.refetch() }}

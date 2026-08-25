@@ -539,7 +539,7 @@ describe('cross-market data', () => {
     expect(board.status).toBe(200)
     await expect(board.json()).resolves.toMatchObject({
       pool_size: 2,
-      scope_label: '重点标的池',
+      scope_label: 'A股全市场',
       breadth: {
         up_count: 1,
         down_count: 1,
