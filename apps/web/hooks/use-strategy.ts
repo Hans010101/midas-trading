@@ -31,8 +31,8 @@ export interface UseStrategySignalsArgs {
 }
 
 export function useStrategySignals(args: UseStrategySignalsArgs) {
-  // ★ Pro 门控:带 session token 后端才识别 Pro · token 并入 queryKey(登录/登出即刷新锁态)
-  const { data: session } = useSession()
+  // 会话恢复完成后再请求，避免已登录用户进页时先收到未登录锁态。
+  const { data: session, status } = useSession()
   const token = session?.accessToken ?? ''
   return useQuery<StrategySignalsResponse>({
     queryKey: [
@@ -50,7 +50,7 @@ export function useStrategySignals(args: UseStrategySignalsArgs) {
         token,
         signal,
       }),
-    enabled: args.enabled ?? true,
+    enabled: (args.enabled ?? true) && status !== 'loading',
     retry: 0,
     staleTime: 60_000,
   })

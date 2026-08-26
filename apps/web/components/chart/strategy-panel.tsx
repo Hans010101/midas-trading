@@ -22,7 +22,6 @@ import { useEffect, useState } from 'react'
 import { ProLock } from '@/components/account/pro-lock'
 import { biasTone } from '@/components/crypto/boll-scan-list'
 import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
-import { useQuota } from '@/hooks/use-quota'
 import { hasFullFeatureAccess } from '@/lib/features'
 import { useStrategyRecommend, useStrategySignals } from '@/hooks/use-strategy'
 import type { BollStructureResponse } from '@/lib/api/crypto-market'
@@ -32,6 +31,7 @@ import { useUiStore } from '@/lib/store/ui-store-provider'
 import { availableStrategies, effectiveOrder } from '@/lib/strategy-order'
 import { cn } from '@/lib/utils'
 import type { Market, Period } from '@midas/shared'
+import { useSession } from 'next-auth/react'
 import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 
 const STRATEGY_LABELS: Record<'zh' | 'en', Record<StrategyKind, string>> = {
@@ -126,10 +126,9 @@ export function StrategyPanel({
   //   view 切「做T结构 / 策略信号」· crypto 默认进做T(常显)· 非 crypto 恒为策略(无做T 标签)。
   const isCrypto = market === 'crypto'
   const [view, setView] = useState<'dott' | 'strategy'>(isCrypto ? 'dott' : 'strategy')
-  // ★布林做T Pro 门控(纯前端 · 对齐 strategy-checklist「公开输入 + 前端门控」范式):
-  //   非 Pro → 结构内容显 ProLock(标签仍在序列、仍可排序)· 不取数(不把 Pro 内容拉到非 Pro 客户端)。
-  const { data: quota } = useQuota()
-  const hasAccess = hasFullFeatureAccess(quota !== undefined, quota?.plan)
+  // 商业会员暂停：已登录用户直接开放；会话恢复期间不显示旧锁态。
+  const { data: session, status: sessionStatus } = useSession()
+  const hasAccess = hasFullFeatureAccess(Boolean(session?.accessToken))
   const bollSymbol = symbol.replace('/', '') // ccxt 'BTC/USDT' → Binance 'BTCUSDT'(B-1 接口契约)
   const bollStructure = useQuery({
     queryKey: ['boll-structure', bollSymbol],
@@ -259,7 +258,11 @@ export function StrategyPanel({
           {/* 内容区 · 做T 视图 → 布林结构(★Pro 门控:非 Pro 显 ProLock · 同策略信号/AI卡)·
               策略视图 → 信号(Pro 门控)· crypto 未开策略信号时选中策略 → 提示开开关 */}
           {view === 'dott' ? (
-            hasAccess ? (
+            sessionStatus === 'loading' ? (
+              <p className="rounded-md border border-paper bg-background/50 px-2.5 py-2 text-[11px] text-muted-foreground/60">
+                {en ? 'Loading…' : '载入中…'}
+              </p>
+            ) : hasAccess ? (
               <DottStructureView query={bollStructure} en={en} />
             ) : (
               <ProLock title={en ? 'Bollinger day-trade structure' : '布林做T结构'} />

@@ -21,11 +21,11 @@ import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { useChan } from '@/hooks/use-chan'
 import { useFuturesInfo } from '@/hooks/use-crypto'
 import { usePerpPositions } from '@/hooks/use-perp'
-import { useQuota } from '@/hooks/use-quota'
 import { hasFullFeatureAccess } from '@/lib/features'
 import { fetchFuturesMetricsBatch } from '@/lib/api/crypto-market'
 import { cn } from '@/lib/utils'
 import type { Period } from '@midas/shared'
+import { useSession } from 'next-auth/react'
 
 type RuleStatus = 'hit' | 'idle' | 'unknown'
 
@@ -49,9 +49,9 @@ interface Props {
 export function StrategyChecklist({ futuresSymbol, klineSymbol, period }: Props) {
   const { locale } = useRuntimeLocale()
   const en = locale === 'en'
-  // ★ Pro 门控:实战策略清单是 Pro 内容(其输入为公开合约指标 · 此处为前端门控 · 两道门遮罩)
-  const { data: quota } = useQuota()
-  const hasAccess = hasFullFeatureAccess(quota !== undefined, quota?.plan)
+  // 商业会员暂停：已登录用户直接开放；会话恢复期间不显示旧锁态。
+  const { data: session, status: sessionStatus } = useSession()
+  const hasAccess = hasFullFeatureAccess(Boolean(session?.accessToken))
   const info = useFuturesInfo(futuresSymbol)
   const metricsQ = useQuery({
     queryKey: ['crypto-strategy-metrics', futuresSymbol],
@@ -136,7 +136,11 @@ export function StrategyChecklist({ futuresSymbol, klineSymbol, period }: Props)
           {en ? 'Live checklist' : '实战策略清单'}
         </span>
       </div>
-      {hasAccess ? (
+      {sessionStatus === 'loading' ? (
+        <p className="py-4 text-center text-xs text-muted-foreground">
+          {en ? 'Loading…' : '载入中…'}
+        </p>
+      ) : hasAccess ? (
         <>
           <ul className="space-y-2">
             {rules.map((r) => (
