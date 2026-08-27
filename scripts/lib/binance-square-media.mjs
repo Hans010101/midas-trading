@@ -24,6 +24,10 @@ function cardLabel(contentType) {
   return ['热点快讯', '📰']
 }
 
+export function requireReadyMarketChart(state) {
+  if (state !== 'ready') throw new Error(`质检未通过：K 线图表状态为 ${state || '未知'}`)
+}
+
 export function newsCardHtml(candidate) {
   const [label, icon] = cardLabel(candidate.content_type)
   const title = compact(candidate.event_title || candidate.tweet_text, 120)
@@ -90,7 +94,15 @@ async function captureMarketChart(page, symbol) {
   await page.goto(url.toString(), { waitUntil: 'domcontentloaded', timeout: 60_000 })
   const chart = page.locator('[data-social-chart="true"]').first()
   await chart.waitFor({ state: 'visible', timeout: 50_000 })
-  await page.waitForTimeout(4_000)
+  const state = chart.locator('[data-kline-state]').first()
+  await state.waitFor({ state: 'attached', timeout: 50_000 })
+  await page.waitForFunction(
+    (element) => element?.getAttribute('data-kline-state') !== 'loading',
+    await state.elementHandle(),
+    { timeout: 50_000 },
+  )
+  requireReadyMarketChart(await state.getAttribute('data-kline-state'))
+  await page.waitForTimeout(1_000)
   return chart.screenshot({ type: 'png' })
 }
 

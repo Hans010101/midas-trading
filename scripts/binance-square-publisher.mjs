@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 
-import { createSquareMedia } from './lib/binance-square-media.mjs'
+import {
+  createSquareMedia,
+  requireReadyMarketChart,
+} from './lib/binance-square-media.mjs'
 
 const DATABASE = 'midas-trading-db'
 const CONTENT_ENDPOINT =
@@ -276,7 +279,8 @@ async function main() {
   )[0]
   if (!dispatch) throw new Error('发布台账认领失败')
 
-  let imageUrl = typeof candidate.image_key === 'string' &&
+  let imageUrl = candidate.content_type !== 'market_analysis' &&
+    typeof candidate.image_key === 'string' &&
     candidate.image_key.startsWith('https://')
     ? candidate.image_key
     : null
@@ -291,9 +295,18 @@ async function main() {
       )
       console.log(`配图已就绪：${media.kind}`)
     } catch (error) {
-      console.error(`配图生成/上传失败，降级为纯文字：${
-        error instanceof Error ? error.message : String(error)
-      }`)
+      const message = error instanceof Error ? error.message : String(error)
+      if (candidate.content_type === 'market_analysis') {
+        query(
+          `UPDATE social_drafts
+           SET compliance_passed=0,compliance_reason=${quote(message.slice(0, 500))},
+               status='failed',image_key=NULL
+           WHERE id=${candidate.id};`,
+        )
+        failDispatch(dispatch.id, accountKey, message)
+        throw new Error(message)
+      }
+      console.error(`配图生成/上传失败，降级为纯文字：${message}`)
     }
   }
 
@@ -365,6 +378,8 @@ if (process.argv.includes('--self-test')) {
     '正文。',
   )
   assert.match(cleanPublishText('正文。\n\n$BTC', 'midas_trading'), /\$BTC/u)
+  assert.doesNotThrow(() => requireReadyMarketChart('ready'))
+  assert.throws(() => requireReadyMarketChart('unavailable'), /质检未通过/u)
   console.log('币安广场发布文本清理自检通过')
 } else {
   main().catch((error) => {

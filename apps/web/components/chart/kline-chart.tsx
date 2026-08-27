@@ -210,17 +210,25 @@ export function KlineChart({
   if (query.status === 'error') {
     const err = query.error
     if (err instanceof MarketApiError) {
-      if (err.kind === 'not-found') return <EmptyKline reason="not-found" />
+      if (err.kind === 'not-found') {
+        return <div data-kline-state="not-found"><EmptyKline reason="not-found" /></div>
+      }
       if (err.kind === 'unavailable' || err.kind === 'bad-gateway') {
-        return <EmptyKline reason="unavailable" onRetry={() => void query.refetch()} />
+        return <div data-kline-state="unavailable"><EmptyKline reason="unavailable" onRetry={() => void query.refetch()} /></div>
       }
     }
-    return <EmptyKline reason="unavailable" onRetry={() => void query.refetch()} />
+    return <div data-kline-state="unavailable"><EmptyKline reason="unavailable" onRetry={() => void query.refetch()} /></div>
   }
 
   if (query.status === 'success' && query.data.items.length === 0) {
-    return <EmptyKline reason="empty" onSwitchToDaily={onSwitchToDaily} />
+    return <div data-kline-state="empty"><EmptyKline reason="empty" onSwitchToDaily={onSwitchToDaily} /></div>
   }
 
-  return <div ref={containerRef} className="h-full w-full min-h-[400px] bg-cream" />
+  return (
+    <div
+      ref={containerRef}
+      data-kline-state={query.status === 'success' ? 'ready' : 'loading'}
+      className="h-full w-full min-h-[400px] bg-cream"
+    />
+  )
 }
