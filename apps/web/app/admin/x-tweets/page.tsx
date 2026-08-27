@@ -223,7 +223,7 @@ function TweetCard({
       <div className="mb-2 flex items-center gap-2">
         <span className="font-mono text-sm font-bold">{t.symbol}</span>
         <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-          {t.account_key === 'legacy_midas' ? '点金' : '点金雷达'}
+          {t.account_key === 'legacy_midas' ? '点金 Midas' : '点金雷达'}
         </span>
         <BiasBadge bias={t.bias} />
         <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-700">
@@ -351,7 +351,7 @@ export default function AdminXTweetsPage() {
               <div className="mb-3 flex items-center gap-1 rounded-md bg-muted p-1">
                 {([
                   ['midas_trading', '点金雷达'],
-                  ['legacy_midas', '点金'],
+                  ['legacy_midas', '点金 Midas'],
                 ] as const).map(([key, label]) => (
                   <button
                     key={key}
