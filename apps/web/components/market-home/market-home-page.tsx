@@ -19,7 +19,7 @@ import { CnSections } from '@/components/market-home/cn-sections'
 import { HkSections } from '@/components/market-home/hk-sections'
 import { QuoteCard } from '@/components/market-home/index-card'
 import { UsSections } from '@/components/market-home/us-sections'
-import { EmptyState, LoadingNote } from '@/components/ui/state'
+import { DataTimestamp, EmptyState, LoadingNote } from '@/components/ui/state'
 import { useRuntimeDocumentTitle } from '@/hooks/use-runtime-document-title'
 import { fetchMarketOverview, type MarketKind } from '@/lib/api/market-home'
 
@@ -50,19 +50,26 @@ export function MarketHomePage({ market }: { market: MarketKind }) {
       <TopNav />
 
       <main className="flex-1">
-        <div className="mx-auto max-w-[1600px] px-6 py-5">
+        <div className="mx-auto max-w-[1600px] px-3 py-4 sm:px-6 sm:py-5">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="font-serif text-sm font-bold text-foreground">
               {locale === 'en' ? 'Market indices' : '大盘指数'}
             </h2>
             {/* 选股入口 · ★MarketKind 类型仅 cn/us/hk(加密是独立页面 crypto-market·不走本组件)→
                 此入口【类型层面】只在股票市场出现,加密天然不含。筛选器第一版只做股票。 */}
-            <Link
-              href="/screener"
-              className="inline-flex items-center gap-1 rounded-md border border-midas-red/40 bg-midas-red/[0.06] px-3 py-1 text-xs font-medium text-midas-red transition-colors hover:bg-midas-red/[0.12]"
-            >
-              {locale === 'en' ? 'Stock screener →' : '选股筛选器 →'}
-            </Link>
+            <div className="flex items-center gap-3">
+              <DataTimestamp
+                value={q.data?.status.data_as_of ?? q.data?.status.as_of}
+                locale={locale}
+                className="hidden sm:inline"
+              />
+              <Link
+                href="/screener"
+                className="inline-flex items-center gap-1 rounded-md border border-midas-red/40 bg-midas-red/[0.06] px-3 py-1 text-xs font-medium text-midas-red transition-colors hover:bg-midas-red/[0.12]"
+              >
+                {locale === 'en' ? 'Stock screener →' : '选股筛选器 →'}
+              </Link>
+            </div>
           </div>
           {q.isPending && <LoadingNote className="py-10" />}
           {q.isError && (
@@ -82,7 +89,7 @@ export function MarketHomePage({ market }: { market: MarketKind }) {
             />
           )}
           {q.isSuccess && indices.length > 0 && (
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
               {indices.map((idx) => (
                 <QuoteCard
                   key={idx.symbol}

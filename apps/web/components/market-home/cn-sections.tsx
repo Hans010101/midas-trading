@@ -17,7 +17,7 @@ import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { SectorHeatmap } from '@/components/market-home/sector-heatmap'
 import { DataTable, TCell, TH, THead, TRow } from '@/components/ui/data-table'
 import { Panel } from '@/components/ui/panel'
-import { EmptyState, LoadingNote } from '@/components/ui/state'
+import { DataTimestamp, EmptyState, LoadingNote } from '@/components/ui/state'
 import { fetchCnBoard, searchCnSpot, type CnBreadth, type CnSpotRow } from '@/lib/api/cn-market'
 import {
   cnCompanyNameFromOriginal,
@@ -118,13 +118,16 @@ export function CnSections() {
               ? 'Market breadth · Full A-share market'
               : `市场情绪 · ${q.data?.scope_label ?? 'A股全市场'}`}
           </h2>
-          {q.data?.pool_size !== undefined && (
-            <span className="text-xs text-muted-foreground/70">
-              {locale === 'en'
-                ? `${q.data.pool_size} stocks · Full-market universe`
-                : `覆盖 ${q.data.pool_size} 只 A 股`}
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            <DataTimestamp value={q.data?.data_as_of} locale={locale} className="hidden sm:inline" />
+            {q.data?.pool_size !== undefined && (
+              <span className="text-xs text-muted-foreground/70">
+                {locale === 'en'
+                  ? `${q.data.pool_size} stocks · Full-market universe`
+                  : `覆盖 ${q.data.pool_size} 只 A 股`}
+              </span>
+            )}
+          </div>
         </div>
         {q.isPending && <LoadingNote className="py-6" />}
         {q.isError && (

@@ -2,24 +2,20 @@
  * 全局命令面板(Cmd+K)· 纯导航逻辑(品种→详情路由 + 功能页 + 市场次序)。
  *
  * 抽成纯模块便于 vitest 单测(不拉 cmdk / Radix / hooks)· 组件 command-palette.tsx import 之。
- * ★零 [id]:品种跳转一律 ?symbol= 查询参数(crypto 无 name · cn/us/hk 带可选 name)。
+ * 品种链接复用详情页单一导航规则:策展品种走语义路径,长尾继续走查询参数。
  */
 
+import { detailHref } from '@/lib/seo/detail-symbols'
 import type { Market } from '@midas/shared'
 
 // 四市场显示次序(★含 hk —— 原 workbench symbol-search-dialog 的 MARKET_ORDER 漏了 hk,泛化时补齐)
 export const MARKET_ORDER: readonly Market[] = ['crypto', 'us', 'cn', 'hk']
 
 /**
- * 品种 → 详情页路由(*-preview?symbol=)。
- *  - crypto → /crypto-preview?symbol=BTCUSDT(crypto-detail 自行派生,不传 name)
- *  - cn/us/hk → /{m}-preview?symbol=XXX&name=YYY(name 可选;spot-detail 读 ?name= 兜底)
+ * 品种 → 详情页路由(统一复用 SEO 语义路径与长尾兜底规则)。
  */
 export function symbolHref(item: { symbol: string; market: Market; name?: string }): string {
-  const s = encodeURIComponent(item.symbol)
-  if (item.market === 'crypto') return `/crypto-preview?symbol=${s}`
-  const n = item.name ? `&name=${encodeURIComponent(item.name)}` : ''
-  return `/${item.market}-preview?symbol=${s}${n}`
+  return detailHref(item)
 }
 
 export interface FuncPage {

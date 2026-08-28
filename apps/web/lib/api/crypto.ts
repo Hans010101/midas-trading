@@ -13,6 +13,8 @@
  * 原则:上游未提供的维度不编造，由前端隐藏对应空卡片。
  */
 
+import { fetchWithRetry } from './fetch-with-retry'
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export class CryptoApiError extends Error {
@@ -26,7 +28,7 @@ export class CryptoApiError extends Error {
 }
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const r = await fetch(`${API_BASE}${path}`, { signal })
+  const r = await fetchWithRetry(`${API_BASE}${path}`, { signal })
   if (!r.ok) {
     let detail = `HTTP ${r.status}`
     try {

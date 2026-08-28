@@ -2,37 +2,25 @@ import { describe, expect, it } from 'vitest'
 
 import { FUNC_PAGES, MARKET_ORDER, symbolHref } from './command-palette-nav'
 
-describe('symbolHref · 品种 → 详情页路由(零 [id] · ?symbol=)', () => {
-  it('crypto → /crypto-preview?symbol=（不带 name）', () => {
+describe('symbolHref · 品种 → 统一详情页路由', () => {
+  it('策展品种走语义路径', () => {
     expect(symbolHref({ symbol: 'BTCUSDT', market: 'crypto', name: '比特币' })).toBe(
-      '/crypto-preview?symbol=BTCUSDT',
+      '/crypto/BTCUSDT',
     )
-  })
-
-  it('cn → /cn-preview?symbol=&name=（带中文名 · URL 编码）', () => {
     expect(symbolHref({ symbol: '600519', market: 'cn', name: '贵州茅台' })).toBe(
-      `/cn-preview?symbol=600519&name=${encodeURIComponent('贵州茅台')}`,
+      '/cn/600519',
     )
+    expect(symbolHref({ symbol: 'NVDA', market: 'us', name: 'NVIDIA' })).toBe('/us/NVDA')
+    expect(symbolHref({ symbol: '00700', market: 'hk', name: '腾讯控股' })).toBe('/hk/00700')
   })
 
-  it('us → /us-preview?symbol=&name=', () => {
-    expect(symbolHref({ symbol: 'NVDA', market: 'us', name: 'NVIDIA' })).toBe(
-      '/us-preview?symbol=NVDA&name=NVIDIA',
+  it('长尾品种保留查询参数兜底并正确编码', () => {
+    expect(symbolHref({ symbol: 'HUSDT', market: 'crypto' })).toBe(
+      '/crypto-preview?symbol=HUSDT',
     )
-  })
-
-  it('hk → /hk-preview?symbol=&name=（★港股也跳对）', () => {
-    expect(symbolHref({ symbol: '00700', market: 'hk', name: '腾讯控股' })).toBe(
-      `/hk-preview?symbol=00700&name=${encodeURIComponent('腾讯控股')}`,
+    expect(symbolHref({ symbol: '688999', market: 'cn', name: '长尾示例' })).toBe(
+      `/cn-preview?symbol=688999&name=${encodeURIComponent('长尾示例')}`,
     )
-  })
-
-  it('无 name 时省略 &name=（cn/us/hk）', () => {
-    expect(symbolHref({ symbol: '600519', market: 'cn' })).toBe('/cn-preview?symbol=600519')
-    expect(symbolHref({ symbol: '00700', market: 'hk' })).toBe('/hk-preview?symbol=00700')
-  })
-
-  it('symbol 含特殊字符也 URL 编码(crypto spot 带斜杠)', () => {
     expect(symbolHref({ symbol: 'BTC/USDT', market: 'crypto' })).toBe(
       `/crypto-preview?symbol=${encodeURIComponent('BTC/USDT')}`,
     )

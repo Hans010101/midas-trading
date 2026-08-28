@@ -98,6 +98,12 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <body className="font-sans antialiased bg-background text-foreground">
+        <a
+          href="#main-content"
+          className="fixed left-3 top-3 z-[100] -translate-y-20 rounded-md bg-midas-red px-3 py-2 text-sm font-medium text-white shadow-lg transition-transform focus:translate-y-0 focus:outline-none focus:ring-2 focus:ring-gold"
+        >
+          跳到主要内容 / Skip to content
+        </a>
         {/* OpenNext/esbuild 会给 next-themes 的首屏内联脚本注入 __name 调用,
             但浏览器内联上下文没有该 helper。先提供等价的 identity helper,
             避免主题初始化抛 ReferenceError；Function 构造器可防止构建器再次改写。 */}
@@ -129,7 +135,10 @@ export default async function RootLayout({
               <QueryProvider>
                 <UiStoreProvider>
                   <LocalePreferenceSync />
-                  <TooltipProvider>{children}</TooltipProvider>
+                  <TooltipProvider>
+                    <span id="main-content" tabIndex={-1} className="sr-only" />
+                    {children}
+                  </TooltipProvider>
                 </UiStoreProvider>
               </QueryProvider>
             </ThemeProvider>

@@ -7,6 +7,8 @@
 
 import type { QuoteUnit } from '@/components/market-home/index-card'
 
+import { fetchWithRetry } from './fetch-with-retry'
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export interface OverviewQuote {
@@ -48,7 +50,7 @@ export function fetchGlobalOverview(signal?: AbortSignal): Promise<GlobalOvervie
 }
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const r = await fetch(`${API_BASE}${path}`, { signal })
+  const r = await fetchWithRetry(`${API_BASE}${path}`, { signal })
   if (!r.ok) {
     let detail = `HTTP ${r.status}`
     try {

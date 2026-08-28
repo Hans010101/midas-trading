@@ -24,6 +24,7 @@ import { useDeleteFromWatchlist, useWatchlist } from '@/hooks/use-watchlist'
 import { useWatchlistQuotes } from '@/hooks/use-watchlist-quotes'
 import { WatchlistApiError } from '@/lib/api/watchlist'
 import { currencyOf, formatMoney } from '@/lib/format-money'
+import { detailHref } from '@/lib/seo/detail-symbols'
 import { cn } from '@/lib/utils'
 import type { Market } from '@midas/shared'
 
@@ -39,19 +40,8 @@ const MARKET_BADGE: Record<Market, string> = {
   crypto: 'border-paper text-muted-foreground',
   hk: 'border-paper text-muted-foreground',
 }
-const PREVIEW_PATH: Record<Market, string> = {
-  cn: '/cn-preview',
-  us: '/us-preview',
-  crypto: '/crypto-preview',
-  hk: '/hk-market', // 港股暂无个股详情页 · 指向占位页(数据 P1-3 后再做 hk-preview)
-}
-
 function openDetail(market: Market, symbol: string) {
-  window.open(
-    `${PREVIEW_PATH[market]}?symbol=${encodeURIComponent(symbol)}`,
-    '_blank',
-    'noopener,noreferrer',
-  )
+  window.open(detailHref({ market, symbol }), '_blank', 'noopener,noreferrer')
 }
 
 function fmtPct(n: number): string {
@@ -138,6 +128,14 @@ export function WatchlistOverview() {
               ? 'Open any market detail page and select Add to watchlist.'
               : '去 A股 / 美股 / 港股 / 加密任一详情页,点「加自选」收藏关注的标的'
           }
+          action={(
+            <Link
+              href="/global"
+              className="inline-flex rounded-md border border-midas-red px-3 py-1.5 text-xs text-midas-red transition-colors hover:bg-midas-red-glow"
+            >
+              {en ? 'Browse all markets' : '开始浏览四大市场'}
+            </Link>
+          )}
         />
       )}
 

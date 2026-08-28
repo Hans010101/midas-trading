@@ -10,6 +10,8 @@
 
 import type { KlineResponse, Market, Period, SymbolMeta } from '@midas/shared'
 
+import { fetchWithRetry } from './fetch-with-retry'
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export type MarketApiErrorKind = 'not-found' | 'unavailable' | 'bad-gateway' | 'unknown'
@@ -60,7 +62,7 @@ export async function fetchKline(opts: FetchKlineOptions): Promise<KlineResponse
   })
   // 仅在显式传 instrument 时附带 · spot 调用方(A股/美股/现货)URL 与改前逐字节一致
   if (opts.instrument) params.set('instrument', opts.instrument)
-  const r = await fetch(`${API_BASE}/api/v1/market/kline?${params.toString()}`, {
+  const r = await fetchWithRetry(`${API_BASE}/api/v1/market/kline?${params.toString()}`, {
     signal: opts.signal,
   })
   if (!r.ok) {
@@ -80,7 +82,7 @@ export async function searchSymbols(opts: SearchSymbolsOptions): Promise<SymbolM
   const params = new URLSearchParams({ q: opts.q })
   if (opts.market) params.set('market', opts.market)
   if (opts.limit !== undefined) params.set('limit', String(opts.limit))
-  const r = await fetch(`${API_BASE}/api/v1/market/symbols?${params.toString()}`, {
+  const r = await fetchWithRetry(`${API_BASE}/api/v1/market/symbols?${params.toString()}`, {
     signal: opts.signal,
   })
   if (!r.ok) {

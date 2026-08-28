@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 
 import { MarketHomePage } from '@/components/market-home/market-home-page'
 
+export const dynamic = 'force-static'
+
 // SEO 批3:市场页独立 metadata · 短 title 由 layout 模板补「· 点金 Midas」。
 export const metadata: Metadata = {
   title: '美股行情',

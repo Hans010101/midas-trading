@@ -12,6 +12,7 @@ type RouteContext = {
 }
 
 async function proxy(request: NextRequest, context: RouteContext) {
+  const startedAt = performance.now()
   const { path } = await context.params
   const pathname = `/${path.join('/')}`
   const incomingUrl = new URL(request.url)
@@ -51,6 +52,7 @@ async function proxy(request: NextRequest, context: RouteContext) {
   const responseHeaders = new Headers(response.headers)
   responseHeaders.delete('access-control-allow-origin')
   responseHeaders.delete('access-control-allow-credentials')
+  responseHeaders.set('server-timing', `midas-api;dur=${(performance.now() - startedAt).toFixed(1)}`)
 
   return new Response(response.body, {
     status: response.status,

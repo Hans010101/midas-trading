@@ -1,14 +1,17 @@
 /**
  * 训练营文章 →「去实战练」入口配置 · 纯数据(可逐篇增量)。
  *
- * 每篇可选配一个实战入口:跳对应市场详情页(?symbol=)或工作台(/workbench · 无 symbol)。
+ * 每篇可选配一个实战入口:跳对应市场详情页或工作台(/workbench · 无 symbol)。
  * buildPracticeHref 统一拼路由;getPractice 取某篇配置(无 → null,不渲染入口)。
- * ⛔ 零 [id] 路由 · 全走 ?symbol= 查询参数(项目零先例规矩,同 manifest 其它入口)。
+ * 详情链接复用站内统一规则:策展品种走语义路径,长尾走查询参数。
  *
  * 目标路由均匿名可访问、不接真实交易(CLAUDE.md 红线:点金永远只用虚拟资金)。
  */
 
-export type PracticeMarket = 'crypto' | 'cn' | 'us' | 'hk' | 'workbench'
+import { detailHref } from '@/lib/seo/detail-symbols'
+import type { Market } from '@midas/shared'
+
+export type PracticeMarket = Market | 'workbench'
 
 export interface PracticeEntry {
   market: PracticeMarket
@@ -31,7 +34,7 @@ const MARKET_ROUTE: Record<PracticeMarket, string> = {
 export function buildPracticeHref(entry: PracticeEntry): string {
   const base = MARKET_ROUTE[entry.market]
   if (entry.market === 'workbench' || !entry.symbol) return base
-  return `${base}?symbol=${encodeURIComponent(entry.symbol)}`
+  return detailHref({ market: entry.market, symbol: entry.symbol })
 }
 
 /**

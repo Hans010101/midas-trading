@@ -9,6 +9,8 @@
  * 红线:接不上的字段交给页面显示「—」/ 空态,绝不在此伪造数据。
  */
 
+import { fetchWithRetry } from './fetch-with-retry'
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api-proxy'
 
 export type Instrument = 'spot' | 'perp'
@@ -68,7 +70,7 @@ export class CryptoMarketApiError extends Error {
 }
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const r = await fetch(`${API_BASE}${path}`, { signal })
+  const r = await fetchWithRetry(`${API_BASE}${path}`, { signal })
   if (!r.ok) {
     let detail = `HTTP ${r.status}`
     try {

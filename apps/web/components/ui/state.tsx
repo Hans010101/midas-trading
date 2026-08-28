@@ -23,6 +23,32 @@ export function LoadingNote({
   )
 }
 
+export function DataTimestamp({
+  value,
+  locale = 'zh',
+  className,
+}: {
+  value?: string | null
+  locale?: 'en' | 'zh'
+  className?: string
+}) {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  const label = date.toLocaleString(locale === 'en' ? 'en-US' : 'zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+  return (
+    <time dateTime={value} className={cn('text-[11px] text-muted-foreground/70', className)}>
+      {locale === 'en' ? `Data ${label}` : `数据 ${label}`}
+    </time>
+  )
+}
+
 export function EmptyState({
   icon,
   title,

@@ -15,7 +15,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { SectorHeatmap } from '@/components/market-home/sector-heatmap'
 import { DataTable, TCell, TH, THead, TRow } from '@/components/ui/data-table'
-import { EmptyState, LoadingNote } from '@/components/ui/state'
+import { DataTimestamp, EmptyState, LoadingNote } from '@/components/ui/state'
 import { fetchUsBoard, searchUsSpot, type UsSpotRow } from '@/lib/api/us-market'
 import { usSectorName, usStockName } from '@/lib/i18n/market-copy'
 import { detailHref } from '@/lib/seo/detail-symbols'
@@ -111,13 +111,16 @@ export function UsSections() {
           <h2 className="font-serif text-sm font-bold text-foreground">
             {en ? 'U.S. stock movers · Full market' : '美股全市场'}
           </h2>
-          {poolSize > 0 && (
-            <span className="text-xs text-muted-foreground/70">
-              {en
-                ? `${poolSize} stocks · Full-market universe`
-                : `覆盖 ${poolSize} 只美股`}
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            <DataTimestamp value={q.data?.data_as_of} locale={locale} className="hidden sm:inline" />
+            {poolSize > 0 && (
+              <span className="text-xs text-muted-foreground/70">
+                {en
+                  ? `${poolSize} stocks · Full-market universe`
+                  : `覆盖 ${poolSize} 只美股`}
+              </span>
+            )}
+          </div>
         </div>
         {q.isPending && <LoadingNote className="py-6" />}
         {q.isError && (

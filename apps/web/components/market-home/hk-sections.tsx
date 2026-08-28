@@ -18,7 +18,7 @@ import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { SectorHeatmap } from '@/components/market-home/sector-heatmap'
 import { DataTable, TCell, TH, THead, TRow } from '@/components/ui/data-table'
 import { Panel } from '@/components/ui/panel'
-import { EmptyState, LoadingNote } from '@/components/ui/state'
+import { DataTimestamp, EmptyState, LoadingNote } from '@/components/ui/state'
 import { fetchHkBoard, fetchHkSectors, type HkBreadth, type HkSpotRow } from '@/lib/api/hk-market'
 import { hkSectorName, hkStockName } from '@/lib/i18n/market-copy'
 import { detailHref } from '@/lib/seo/detail-symbols'
@@ -118,11 +118,14 @@ export function HkSections() {
               ? 'Market breadth · Active HK universe'
               : `市场情绪 · ${q.data?.scope_label ?? '活跃精选池'}`}
           </h2>
-          <span className="text-xs text-muted-foreground/70">
-            {en
-              ? `${q.data?.pool_size ?? 0} stocks · Curated universe, not the full market`
-              : `池内 ${q.data?.pool_size ?? 0} 只 · 策展非全市场`}
-          </span>
+          <div className="flex items-center gap-3">
+            <DataTimestamp value={q.data?.data_as_of} locale={locale} className="hidden sm:inline" />
+            <span className="text-xs text-muted-foreground/70">
+              {en
+                ? `${q.data?.pool_size ?? 0} stocks · Curated universe, not the full market`
+                : `池内 ${q.data?.pool_size ?? 0} 只 · 策展非全市场`}
+            </span>
+          </div>
         </div>
         {q.isPending && <LoadingNote className="py-6" />}
         {q.isError && (
