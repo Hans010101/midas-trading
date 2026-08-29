@@ -836,6 +836,87 @@ describe('independent Cloudflare administrator controls', () => {
     }
   })
 
+  it('moves to the next market after a chart-quality failure', async () => {
+    const scheduledAt = Date.parse('2026-07-30T10:00:00.000Z')
+    vi.useFakeTimers()
+    vi.setSystemTime(scheduledAt)
+    try {
+      await env.DB.batch([
+        env.DB.prepare('DELETE FROM social_auto_runs'),
+        env.DB.prepare('UPDATE social_drafts SET auto_drafted = 0'),
+        env.DB.prepare("UPDATE social_content_events SET status = 'drafted'"),
+        env.DB.prepare('UPDATE social_dispatches SET updated_at = 0'),
+        env.DB
+          .prepare(
+            `UPDATE social_automation_accounts
+             SET enabled = 1, circuit_open = 0, platform_checked = 1,
+                 failure_count = 0, last_error = NULL, updated_at = ?
+             WHERE account_key = 'midas_trading'`,
+          )
+          .bind(scheduledAt),
+        env.DB
+          .prepare(
+            `INSERT OR REPLACE INTO market_overview_quotes
+              (symbol, market, name, category, unit, quoted_at, last_point,
+               prev_close, change_point, change_pct, source, updated_at)
+             VALUES ('ETH/USDT', 'crypto', 'ETH', 'crypto', 'price', ?,
+                     3200, 3000, 200, 20, 'kraken', ?),
+                    ('BTC/USDT', 'crypto', 'BTC', 'crypto', 'price', ?,
+                     80000, 79000, 1000, 10, 'kraken', ?)`,
+          )
+          .bind(scheduledAt, scheduledAt, scheduledAt, scheduledAt),
+      ])
+      const failed = await env.DB
+        .prepare(
+          `INSERT INTO social_drafts
+            (symbol, bias, tweet_text, compliance_passed, compliance_reason,
+             status, auto_drafted, has_url, gen_style, provider, model,
+             content_type, account_key, created_at)
+           VALUES ('ETH/USDT', '中性', 'ETH 图表失败内容', 0,
+                   '质检未通过：K 线图表状态为 unavailable', 'failed', 1, 0,
+                   'default', 'technical-rules', 'test', 'market_analysis',
+                   'midas_trading', ?)
+           RETURNING id`,
+        )
+        .bind(scheduledAt - 60_000)
+        .first<{ id: number }>()
+      await env.DB
+        .prepare(
+          `INSERT INTO social_dispatches
+            (draft_id, platform, source, status, error, account_key, created_at, updated_at)
+           VALUES (?, 'binance_square', 'auto', 'failed',
+                   '质检未通过：K 线图表状态为 unavailable', 'midas_trading', ?, ?)`,
+        )
+        .bind(failed!.id, scheduledAt - 60_000, scheduledAt - 60_000)
+        .run()
+      vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) =>
+        String(input).includes('/pgc/openApi/content/add')
+          ? Response.json({
+              code: '000000',
+              success: true,
+              data: { id: 'square-next-market' },
+            })
+          : new Response('', { status: 503 }),
+      ))
+
+      await runAdminOperationsCron(env, scheduledAt)
+
+      await expect(
+        env.DB
+          .prepare(
+            `SELECT symbol, status FROM social_drafts
+             WHERE account_key = 'midas_trading' AND auto_drafted = 1
+               AND created_at >= ?
+             ORDER BY created_at DESC LIMIT 1`,
+          )
+          .bind(scheduledAt)
+          .first(),
+      ).resolves.toMatchObject({ symbol: 'BTC/USDT', status: 'published' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('opens the automatic publishing circuit after three consecutive failures', async () => {
     const firstSlot = Date.parse('2026-07-30T07:00:00.000Z')
     await env.DB.batch([

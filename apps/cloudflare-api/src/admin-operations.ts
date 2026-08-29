@@ -785,18 +785,21 @@ async function createSocialDrafts(
       }
     }
   }
-  const recentlyPublished = await env.DB
+  const recentlyAttempted = await env.DB
     .prepare(
       `SELECT DISTINCT d.symbol
        FROM social_drafts d
        JOIN social_dispatches sd ON sd.draft_id = d.id
-       WHERE sd.platform = 'binance_square' AND sd.status = 'success'
-         AND sd.account_key = ?
-         AND sd.updated_at >= ?`,
+       WHERE sd.platform = 'binance_square' AND sd.account_key = ?
+         AND sd.updated_at >= ?
+         AND (
+           sd.status = 'success'
+           OR (sd.status = 'failed' AND d.compliance_reason LIKE '质检未通过：K 线图表状态为 %')
+         )`,
     )
     .bind(accountKey, Date.now() - SOCIAL_SYMBOL_COOLDOWN_MS)
     .all<{ symbol: string }>()
-  const recentSymbols = new Set(recentlyPublished.results.map((item) => item.symbol))
+  const recentSymbols = new Set(recentlyAttempted.results.map((item) => item.symbol))
   let quotes: SocialMarketQuote[] = []
   try {
     const scan = await fetchCryptoMarketScan(60)
