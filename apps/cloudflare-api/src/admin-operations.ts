@@ -1216,8 +1216,8 @@ async function updateAutoDailyLimit(
   const admin = await requireAdmin(request, env)
   const body = await readJsonObject(request)
   const dailyLimit = body.daily_limit
-  if (!Number.isInteger(dailyLimit) || Number(dailyLimit) < 1 || Number(dailyLimit) > 50) {
-    throw new HttpError(422, 'daily_limit 必须为 1–50 的整数')
+  if (!Number.isInteger(dailyLimit) || Number(dailyLimit) < 1 || Number(dailyLimit) > 100) {
+    throw new HttpError(422, 'daily_limit 必须为 1–100 的整数')
   }
   const accountKey = squareAccountKey(body.account_key)
   await env.DB

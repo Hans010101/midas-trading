@@ -494,13 +494,13 @@ describe('independent Cloudflare administrator controls', () => {
         request('/api/v1/admin/x-auto/daily-limit', {
           method: 'POST',
           token: owner.token,
-          body: { account_key: 'legacy_midas', daily_limit: 37 },
+          body: { account_key: 'legacy_midas', daily_limit: 100 },
         }),
       )
       expect(updated.status).toBe(200)
       await expect(updated.json()).resolves.toMatchObject({
         accounts: expect.arrayContaining([
-          expect.objectContaining({ account_key: 'legacy_midas', daily_limit: 37 }),
+          expect.objectContaining({ account_key: 'legacy_midas', daily_limit: 100 }),
         ]),
       })
 
@@ -508,7 +508,7 @@ describe('independent Cloudflare administrator controls', () => {
         request('/api/v1/admin/x-auto/daily-limit', {
           method: 'POST',
           token: owner.token,
-          body: { account_key: 'legacy_midas', daily_limit: 51 },
+          body: { account_key: 'legacy_midas', daily_limit: 101 },
         }),
       )
       expect(invalid.status).toBe(422)

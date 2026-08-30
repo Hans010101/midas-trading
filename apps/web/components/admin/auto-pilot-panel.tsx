@@ -203,7 +203,7 @@ export function AutoPilotPanel({ token }: { token: string }) {
                       name="daily_limit"
                       type="number"
                       min={1}
-                      max={50}
+                      max={100}
                       step={1}
                       required
                       defaultValue={account.daily_limit}
