@@ -16,6 +16,7 @@ import {
   stopAutoPilot,
   toggleAutoPilot,
   toggleAutoPlatform,
+  updateAutoDailyLimit,
   type BinanceSquareAccountKey,
 } from '@/lib/api/x-auto'
 
@@ -78,6 +79,18 @@ export function AutoPilotPanel({ token }: { token: string }) {
       invalidate()
     },
     onError: () => setNote('熔断失败,请重试'),
+  })
+
+  const limitMut = useMutation({
+    mutationFn: ({ accountKey, dailyLimit }: {
+      accountKey: BinanceSquareAccountKey
+      dailyLimit: number
+    }) => updateAutoDailyLimit(token, accountKey, dailyLimit),
+    onSuccess: (_s, value) => {
+      setNote(`✓ ${value.accountKey === 'midas_trading' ? '点金雷达' : '点金 Midas'}每日配额已调整为 ${value.dailyLimit} 条`)
+      invalidate()
+    },
+    onError: () => setNote('配额调整失败，请输入 1–50 的整数'),
   })
 
   // ★平台勾选(架子刀 · ADR 0050)· 白名单外(X)后端 400 拒,UI 也灰显不可点
@@ -174,6 +187,36 @@ export function AutoPilotPanel({ token }: { token: string }) {
                   </p>
                 )}
                 <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <form
+                    className="flex items-center gap-1.5"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      const value = Number(new FormData(event.currentTarget).get('daily_limit'))
+                      limitMut.mutate({ accountKey: account.account_key, dailyLimit: value })
+                    }}
+                  >
+                    <label htmlFor={`daily-limit-${account.account_key}`} className="text-xs">
+                      每日上限
+                    </label>
+                    <input
+                      id={`daily-limit-${account.account_key}`}
+                      name="daily_limit"
+                      type="number"
+                      min={1}
+                      max={50}
+                      step={1}
+                      required
+                      defaultValue={account.daily_limit}
+                      className="w-16 rounded border border-paper bg-background px-2 py-1 text-xs"
+                    />
+                    <button
+                      type="submit"
+                      disabled={limitMut.isPending}
+                      className="rounded border border-paper px-2.5 py-1 text-xs disabled:opacity-40"
+                    >
+                      保存
+                    </button>
+                  </form>
                   <label className="flex items-center gap-1.5 text-xs">
                     <input
                       type="checkbox"

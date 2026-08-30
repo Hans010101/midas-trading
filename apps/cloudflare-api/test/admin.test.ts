@@ -488,6 +488,40 @@ describe('independent Cloudflare administrator controls', () => {
     })
   })
 
+  it('updates one social account daily limit from the admin control plane', async () => {
+    try {
+      const updated = await exports.default.fetch(
+        request('/api/v1/admin/x-auto/daily-limit', {
+          method: 'POST',
+          token: owner.token,
+          body: { account_key: 'legacy_midas', daily_limit: 37 },
+        }),
+      )
+      expect(updated.status).toBe(200)
+      await expect(updated.json()).resolves.toMatchObject({
+        accounts: expect.arrayContaining([
+          expect.objectContaining({ account_key: 'legacy_midas', daily_limit: 37 }),
+        ]),
+      })
+
+      const invalid = await exports.default.fetch(
+        request('/api/v1/admin/x-auto/daily-limit', {
+          method: 'POST',
+          token: owner.token,
+          body: { account_key: 'legacy_midas', daily_limit: 51 },
+        }),
+      )
+      expect(invalid.status).toBe(422)
+    } finally {
+      await env.DB
+        .prepare(
+          `UPDATE social_automation_accounts SET daily_limit = 50
+           WHERE account_key = 'legacy_midas'`,
+        )
+        .run()
+    }
+  })
+
   it('publishes an approved social draft to Binance Square and records the ledger', async () => {
     const timestamp = Date.now()
     const draft = await env.DB

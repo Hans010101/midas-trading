@@ -1208,6 +1208,34 @@ async function toggleAuto(
   return autoStatus(request, env, requestId)
 }
 
+async function updateAutoDailyLimit(
+  request: Request,
+  env: Env,
+  requestId: string,
+): Promise<Response> {
+  const admin = await requireAdmin(request, env)
+  const body = await readJsonObject(request)
+  const dailyLimit = body.daily_limit
+  if (!Number.isInteger(dailyLimit) || Number(dailyLimit) < 1 || Number(dailyLimit) > 50) {
+    throw new HttpError(422, 'daily_limit 必须为 1–50 的整数')
+  }
+  const accountKey = squareAccountKey(body.account_key)
+  await env.DB
+    .prepare(
+      `UPDATE social_automation_accounts
+       SET daily_limit = ?, updated_at = ? WHERE account_key = ?`,
+    )
+    .bind(dailyLimit, Date.now(), accountKey)
+    .run()
+  await adminActionStatement(env.DB, {
+    operatorId: admin.user.id,
+    action: 'social.daily_limit_updated',
+    detail: { account_key: accountKey, daily_limit: dailyLimit },
+    createdAt: Date.now(),
+  }).run()
+  return autoStatus(request, env, requestId)
+}
+
 async function toggleAutoPlatform(
   request: Request,
   env: Env,
@@ -1905,6 +1933,9 @@ export async function handleAdminOperationsRoute(
   }
   if (route === 'POST /api/v1/admin/x-auto/toggle') {
     return toggleAuto(request, env, requestId)
+  }
+  if (route === 'POST /api/v1/admin/x-auto/daily-limit') {
+    return updateAutoDailyLimit(request, env, requestId)
   }
   if (route === 'POST /api/v1/admin/x-auto/stop') {
     return stopAuto(request, env, requestId)

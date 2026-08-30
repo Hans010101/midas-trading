@@ -101,6 +101,20 @@ export async function toggleAutoPilot(
   return (await r.json()) as AutoPilotStatus
 }
 
+export async function updateAutoDailyLimit(
+  token: string,
+  accountKey: BinanceSquareAccountKey,
+  dailyLimit: number,
+): Promise<AutoPilotStatus> {
+  const r = await fetch(`${API_BASE}/api/v1/admin/x-auto/daily-limit`, {
+    method: 'POST',
+    headers: { ...(_authHeaders(token) ?? {}), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ account_key: accountKey, daily_limit: dailyLimit }),
+  })
+  if (!r.ok) throw new Error(`更新每日配额失败（HTTP ${r.status}）`)
+  return (await r.json()) as AutoPilotStatus
+}
+
 /** 勾/取消自动发布平台(★白名单外后端 400 拒 · X 现阶段「暂未启用」· ADR 0050)。 */
 export async function toggleAutoPlatform(
   token: string,
