@@ -10,8 +10,6 @@ export const ADMIN_TABS = [
   { href: '/admin/visit-stats', label: '访问看板', exact: false },
   { href: '/admin/academy-stats', label: '训练营统计', exact: false },
   { href: '/admin/weekly-dispatch', label: '周报发送', exact: false },
-  { href: '/admin/reports', label: '市场报告', exact: false },
-  { href: '/admin/migration', label: '迁移中心', exact: false },
   { href: '/admin/x-tweets', label: '每日推文', exact: false },
   { href: '/admin/managed', label: '托管交易', exact: false },
   { href: '/admin/intelligent', label: '智能交易', exact: false },

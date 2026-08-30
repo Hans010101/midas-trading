@@ -10,8 +10,6 @@ import {
   runVirtualTradingCron,
 } from './admin-trading'
 import { handleAdminRoute } from './admin'
-import { handleAdminReportsRoute } from './admin-reports'
-import { handleAdminMigrationRoute } from './admin-migration'
 import { handleAnalysisRoute } from './analysis'
 import { runAlertScan } from './alert-engine'
 import { handleAcademyRoute } from './academy'
@@ -151,8 +149,6 @@ export default {
         (await handleAdminAnalyticsRoute(request, env, requestId)) ??
         (await handleAdminOperationsRoute(request, env, requestId)) ??
         (await handleAdminTradingRoute(request, env, requestId)) ??
-        (await handleAdminMigrationRoute(request, env, requestId)) ??
-        (await handleAdminReportsRoute(request, env, requestId)) ??
         (await handleAdminRoute(request, env, requestId)) ??
         (await handleBacktestRoute(request, env, requestId)) ??
         (await handleChanAnalysisRoute(request, requestId)) ??

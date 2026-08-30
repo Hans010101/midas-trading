@@ -9,8 +9,6 @@ describe('independent administrator navigation', () => {
       '/admin/visit-stats',
       '/admin/academy-stats',
       '/admin/weekly-dispatch',
-      '/admin/reports',
-      '/admin/migration',
       '/admin/x-tweets',
       '/admin/managed',
       '/admin/intelligent',
