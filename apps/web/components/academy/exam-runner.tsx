@@ -31,7 +31,7 @@ export function ExamRunner() {
   const stageSlug = useSearchParams().get('stage') ?? ''
   const stage = getAcademyStages(locale).find((s) => s.slug === stageSlug)
 
-  const { isLoggedIn, passedSet } = useExamResults()
+  const { isLoggedIn, isAuthLoading, passedSet } = useExamResults()
   const alreadyGraduated = passedSet.has(stageSlug)
   const questionsQuery = useExamQuestions(stageSlug, isLoggedIn && !!stage, locale)
   const submit = useSubmitExam()
@@ -96,6 +96,8 @@ export function ExamRunner() {
 
           {!stage ? (
             <Placeholder text={en ? 'Stage not found' : '模块不存在'} en={en} />
+          ) : isAuthLoading ? (
+            <Placeholder text={en ? 'Restoring your session…' : '正在恢复登录状态…'} en={en} />
           ) : !isLoggedIn ? (
             <LoginGate stageName={stage.name} en={en} />
           ) : (

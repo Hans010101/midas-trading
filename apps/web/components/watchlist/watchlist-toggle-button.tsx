@@ -34,7 +34,6 @@ interface Props {
 
 export function WatchlistToggleButton({ symbol, market }: Props) {
   const { status } = useSession()
-  const authed = status === 'authenticated'
   const { data: items } = useWatchlist()
   const add = useAddToWatchlist()
   const del = useDeleteFromWatchlist()
@@ -46,7 +45,20 @@ export function WatchlistToggleButton({ symbol, market }: Props) {
   const inList = Boolean(existing)
   const pending = add.isPending || del.isPending
 
-  if (!authed) {
+  if (status === 'loading') {
+    return (
+      <button
+        type="button"
+        disabled
+        className="inline-flex items-center gap-1 rounded-md border border-paper px-2.5 py-1 text-xs text-muted-foreground/60"
+      >
+        <Star className="h-3.5 w-3.5" />
+        加自选
+      </button>
+    )
+  }
+
+  if (status === 'unauthenticated') {
     return (
       <Link
         href="/login"

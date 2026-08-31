@@ -315,7 +315,11 @@ export function PerpOrderGuidance({ futuresSymbol, klineSymbol }: Props) {
       </dl>
 
       {/* 动作 / 状态 */}
-      {!authed ? (
+      {status === 'loading' ? (
+        <div className="rounded-md border border-paper py-2 text-center text-sm text-muted-foreground/60">
+          {en ? 'Restoring your session…' : '正在恢复登录状态…'}
+        </div>
+      ) : status === 'unauthenticated' ? (
         <Link
           href="/login"
           className="block rounded-md border border-midas-red py-2 text-center text-sm text-midas-red hover:bg-midas-red-glow/40"

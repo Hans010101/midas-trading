@@ -33,7 +33,9 @@ export function useRequireAuth() {
   const requireAuth = useCallback(
     (actionLabel = '此操作'): boolean => {
       if (status === 'authenticated') return true
-      // pending(NextAuth 加载中)· unauthenticated → 引导登录
+      // 会话恢复中只拦下操作，不误报为未登录。
+      if (status === 'loading') return false
+      // unauthenticated → 引导登录
       // 用 window.location 拿当前路径(避免 useSearchParams 触发
       // Next 15 静态导出 bailout · /workbench prerender 时 toast/router 用不到)
       const next =
@@ -52,5 +54,9 @@ export function useRequireAuth() {
     [status, router],
   )
 
-  return { requireAuth, isAuthenticated: status === 'authenticated' }
+  return {
+    requireAuth,
+    isAuthenticated: status === 'authenticated',
+    isAuthLoading: status === 'loading',
+  }
 }

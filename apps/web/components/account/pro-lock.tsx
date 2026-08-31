@@ -28,9 +28,21 @@ export function ProLock({
 }) {
   const { locale } = useRuntimeLocale()
   const en = locale === 'en'
-  const { data: session } = useSession()
+  const { status } = useSession()
   const router = useRouter()
-  const guest = !session?.accessToken
+  const guest = status === 'unauthenticated'
+
+  if (status === 'loading') {
+    return compact ? (
+      <span className={cn('text-xs text-muted-foreground/60', className)}>
+        {en ? 'Restoring your session…' : '正在恢复登录状态…'}
+      </span>
+    ) : (
+      <div className={cn('rounded-md border border-paper bg-cream/70 px-4 py-8 text-center text-xs text-muted-foreground/60', className)}>
+        {en ? 'Restoring your session…' : '正在恢复登录状态…'}
+      </div>
+    )
+  }
 
   const goto = () => {
     if (guest) {

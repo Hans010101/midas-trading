@@ -25,7 +25,7 @@ export function Header() {
   const market = useWorkbenchStore((s) => s.market)
   const symbol = useWorkbenchStore((s) => s.symbol)
 
-  const { requireAuth, isAuthenticated } = useRequireAuth()
+  const { requireAuth, isAuthenticated, isAuthLoading } = useRequireAuth()
   const { data: account } = useAccount(market)
   const { data: portfolio } = usePortfolio()
   const summary = portfolio?.find((s) => s.market === market)
@@ -63,12 +63,22 @@ export function Header() {
           market={market}
           isActivated={isActivated}
           isAuthenticated={isAuthenticated}
+          isAuthLoading={isAuthLoading}
           summary={summary}
         />
 
         {/* 右侧:买卖按钮 */}
         <div className="flex items-center gap-2">
-          {!isAuthenticated ? (
+          {isAuthLoading ? (
+            <>
+              <button type="button" disabled className="rounded-md bg-midas-red/30 px-4 py-1.5 text-sm font-medium text-white/70">
+                买入
+              </button>
+              <button type="button" disabled className="rounded-md border border-midas-red/30 px-4 py-1.5 text-sm font-medium text-midas-red/40">
+                卖出
+              </button>
+            </>
+          ) : !isAuthenticated ? (
             // 未登录 · 按钮可点击 · 触发登录引导(M1 第三波 · 匿名 /workbench)
             <>
               <button
@@ -124,13 +134,17 @@ interface WalletIndicatorProps {
   market: Market
   isActivated: boolean
   isAuthenticated: boolean
+  isAuthLoading: boolean
   summary?: { cash_balance: string; positions_value: string; realized_pnl: string }
 }
 
 function WalletIndicator({
-  market, isActivated, isAuthenticated, summary,
+  market, isActivated, isAuthenticated, isAuthLoading, summary,
 }: WalletIndicatorProps) {
   const currency = currencyOf(market)
+  if (isAuthLoading) {
+    return <div className="text-xs text-muted-foreground/60">正在恢复登录状态…</div>
+  }
   if (!isAuthenticated) {
     return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground/70">

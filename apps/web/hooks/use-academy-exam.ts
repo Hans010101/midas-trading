@@ -24,9 +24,9 @@ import {
 const RESULTS_KEY = ['academy-exam-results']
 
 export function useExamResults() {
-  const { data: session } = useSession()
+  const { data: session, status } = useSession()
   const token = session?.accessToken ?? ''
-  const isLoggedIn = !!token
+  const isLoggedIn = status === 'authenticated' && !!token
 
   const query = useQuery<ExamResultsResponse>({
     queryKey: [...RESULTS_KEY, token],
@@ -42,7 +42,7 @@ export function useExamResults() {
     [query.data],
   )
 
-  return { ...query, passedSet, isLoggedIn }
+  return { ...query, passedSet, isLoggedIn, isAuthLoading: status === 'loading' }
 }
 
 export function useExamQuestions(stage: string, enabled: boolean, locale: 'zh' | 'en' = 'zh') {

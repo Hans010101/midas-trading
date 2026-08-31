@@ -15,11 +15,12 @@ import { toast } from 'sonner'
 import { SupportTicketDialog } from '@/components/account/support-ticket-dialog'
 
 export function ContactUsLink({ className }: { className?: string }) {
-  const { data: session } = useSession()
+  const { data: session, status } = useSession()
   const router = useRouter()
   const [open, setOpen] = useState(false)
 
   function handleClick() {
+    if (status === 'loading') return
     if (session?.accessToken) {
       setOpen(true)
     } else {
@@ -30,7 +31,7 @@ export function ContactUsLink({ className }: { className?: string }) {
 
   return (
     <>
-      <button type="button" onClick={handleClick} className={className}>
+      <button type="button" onClick={handleClick} disabled={status === 'loading'} className={className}>
         联系我们
       </button>
       {open && <SupportTicketDialog onClose={() => setOpen(false)} />}

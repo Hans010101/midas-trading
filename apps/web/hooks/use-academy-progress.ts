@@ -21,9 +21,9 @@ import {
 const PROGRESS_KEY = ['academy-progress']
 
 export function useAcademyProgress() {
-  const { data: session } = useSession()
+  const { data: session, status } = useSession()
   const token = session?.accessToken ?? ''
-  const isLoggedIn = !!token
+  const isLoggedIn = status === 'authenticated' && !!token
 
   const query = useQuery<AcademyProgress>({
     queryKey: [...PROGRESS_KEY, token],
@@ -39,7 +39,7 @@ export function useAcademyProgress() {
     [query.data],
   )
 
-  return { ...query, completedSet, isLoggedIn }
+  return { ...query, completedSet, isLoggedIn, isAuthLoading: status === 'loading' }
 }
 
 /** 标记学完(刀1.5:答完小测自动调 · 幂等由调用方 shouldAutoMark 守)。 */

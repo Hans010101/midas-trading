@@ -37,7 +37,7 @@ export function KlineContextMenu({ children }: Props) {
   const symbol = useWorkbenchStore((s) => s.symbol)
   const market = useWorkbenchStore((s) => s.market)
   const { data: account } = useAccount(market)
-  const { requireAuth, isAuthenticated } = useRequireAuth()
+  const { requireAuth, isAuthenticated, isAuthLoading } = useRequireAuth()
   const isActivated = account !== null && account !== undefined
 
   const [menu, setMenu] = useState<MenuState>({ open: false, x: 0, y: 0 })
@@ -109,7 +109,11 @@ export function KlineContextMenu({ children }: Props) {
           <div className="border-b border-paper px-3 py-2 font-mono text-xs text-muted-foreground">
             {symbol} · {MARKET_LABEL[market]}
           </div>
-          {!isAuthenticated && (
+          {isAuthLoading ? (
+            <div className="border-b border-paper bg-surface-card px-3 py-2 text-[10px] text-muted-foreground">
+              正在恢复登录状态…
+            </div>
+          ) : !isAuthenticated && (
             <div className="border-b border-paper bg-surface-card px-3 py-2 text-[10px] text-warn">
               ⚠ 未登录 · 点击下单将引导登录
             </div>
@@ -121,13 +125,13 @@ export function KlineContextMenu({ children }: Props) {
           )}
           <MenuItem
             // 未登录 · 让用户能点 · 触发引导 / 已登录但未激活 · 禁用
-            disabled={isAuthenticated && !isActivated}
+            disabled={isAuthLoading || (isAuthenticated && !isActivated)}
             onClick={pickBuy}
             icon={<ShoppingCart className="h-3.5 w-3.5" />}
             label={`买入 ${symbol}`}
           />
           <MenuItem
-            disabled={isAuthenticated && !isActivated}
+            disabled={isAuthLoading || (isAuthenticated && !isActivated)}
             onClick={pickSell}
             icon={<TrendingDown className="h-3.5 w-3.5" />}
             label={`卖出 ${symbol}`}

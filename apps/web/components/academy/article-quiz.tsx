@@ -37,7 +37,7 @@ export function ArticleQuiz({ questions, slug }: { questions: QuizQuestion[]; sl
   const { locale } = useRuntimeLocale()
   const en = locale === 'en'
 
-  const { completedSet, isLoggedIn } = useAcademyProgress()
+  const { completedSet, isLoggedIn, isAuthLoading } = useAcademyProgress()
   const mark = useMarkComplete()
 
   const allAnswered = questions.length > 0 && Object.keys(picked).length === questions.length
@@ -57,7 +57,7 @@ export function ArticleQuiz({ questions, slug }: { questions: QuizQuestion[]; sl
   // 完成反馈:已登录且(已完成 OR 刚答完将被标记)→ 显示「已学完本篇」(乐观,标记请求在途也显)
   const showCompleted = isLoggedIn && (alreadyCompleted || allAnswered)
   // 未登录答完 → 引导登录(不强制 · 不报错)
-  const showLoginHint = !isLoggedIn && allAnswered
+  const showLoginHint = !isAuthLoading && !isLoggedIn && allAnswered
 
   return (
     <section

@@ -56,7 +56,6 @@ function defaultQty(market: 'cn' | 'us' | 'hk'): string {
 
 export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
   const { status } = useSession()
-  const authed = status === 'authenticated'
   const account = useAccount(market)
   const positions = usePositions({ market })
   const [tab, setTab] = useState<Tab>('long')
@@ -91,7 +90,14 @@ export function SpotOrderPanel({ symbol, name, market }: SpotOrderPanelProps) {
   const heldQty = heldPosition ? Number(heldPosition.quantity) : 0
 
   // ===== 未登录 / 未激活 网关 =====
-  if (!authed) {
+  if (status === 'loading') {
+    return (
+      <PanelShell>
+        <p className="py-6 text-center text-xs text-muted-foreground/60">正在恢复登录状态…</p>
+      </PanelShell>
+    )
+  }
+  if (status === 'unauthenticated') {
     return (
       <PanelShell>
         <GateNote
