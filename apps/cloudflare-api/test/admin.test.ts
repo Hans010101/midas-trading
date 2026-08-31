@@ -836,7 +836,7 @@ describe('independent Cloudflare administrator controls', () => {
              status, auto_drafted, has_url, gen_style, provider, model,
              content_type, account_key, created_at)
            VALUES ('ETH/USDT', '中性', 'ETH 图表失败内容', 0,
-                   '质检未通过：K 线图表状态为 unavailable', 'failed', 1, 0,
+                   '质检未通过：K 线有效数据不足（1/30）', 'failed', 1, 0,
                    'default', 'technical-rules', 'test', 'market_analysis',
                    'midas_trading', ?)
            RETURNING id`,
@@ -848,7 +848,7 @@ describe('independent Cloudflare administrator controls', () => {
           `INSERT INTO social_dispatches
             (draft_id, platform, source, status, error, account_key, created_at, updated_at)
            VALUES (?, 'binance_square', 'auto', 'failed',
-                   '质检未通过：K 线图表状态为 unavailable', 'midas_trading', ?, ?)`,
+                   '质检未通过：K 线有效数据不足（1/30）', 'midas_trading', ?, ?)`,
         )
         .bind(failed!.id, scheduledAt - 60_000, scheduledAt - 60_000)
         .run()

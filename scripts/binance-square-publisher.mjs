@@ -15,7 +15,7 @@ const IMAGE_STATUS_ENDPOINT =
   'https://www.binance.com/bapi/composite/v2/public/pgc/openApi/image/imageStatus'
 const SYMBOL_COOLDOWN_MS = 45 * 60_000
 const CHART_FAILURE_COOLDOWN_MS = 24 * 60 * 60_000
-const CHART_FAILURE_PREFIX = '质检未通过：K 线图表状态为 '
+const CHART_FAILURE_PREFIX = '质检未通过：K 线'
 const ACCOUNT_KEYS = new Set(['midas_trading', 'legacy_midas'])
 
 function isChartQualityRejection(message) {
@@ -98,14 +98,18 @@ function cstMinute() {
   return value('hour') * 60 + value('minute')
 }
 
-function failDispatch(dispatchId, accountKey, message) {
+function failDispatch(dispatchId, accountKey, message, accountFailure = true) {
   const now = Date.now()
   query(
     `UPDATE social_dispatches
      SET status='failed',error=${quote(message.slice(0, 500))},updated_at=${now}
      WHERE id=${dispatchId};
      UPDATE social_automation_accounts
-     SET last_error=${quote(message.slice(0, 500))},updated_at=${now}
+     SET failure_count=${accountFailure ? 'failure_count + 1' : 'failure_count'},
+         last_error=${accountFailure ? quote(message.slice(0, 500)) : `CASE WHEN failure_count=0 AND instr(last_error,${quote(CHART_FAILURE_PREFIX)})=1 THEN NULL ELSE last_error END`},
+         enabled=${accountFailure ? 'CASE WHEN failure_count + 1 >= 3 THEN 0 ELSE enabled END' : 'enabled'},
+         circuit_open=${accountFailure ? 'CASE WHEN failure_count + 1 >= 3 THEN 1 ELSE circuit_open END' : 'circuit_open'},
+         updated_at=${now}
      WHERE account_key=${quote(accountKey)};`,
   )
 }
@@ -319,7 +323,7 @@ async function main() {
                status='failed',image_key=NULL
            WHERE id=${candidate.id};`,
         )
-        failDispatch(dispatch.id, accountKey, message)
+        failDispatch(dispatch.id, accountKey, message, !isChartQualityRejection(message))
         if (isChartQualityRejection(message)) {
           console.log(`质检拦截，本轮跳过：${candidate.symbol} ${message}`)
           return
@@ -398,9 +402,12 @@ if (process.argv.includes('--self-test')) {
     '正文。',
   )
   assert.match(cleanPublishText('正文。\n\n$BTC', 'midas_trading'), /\$BTC/u)
-  assert.doesNotThrow(() => requireReadyMarketChart('ready'))
-  assert.throws(() => requireReadyMarketChart('unavailable'), /质检未通过/u)
+  assert.doesNotThrow(() => requireReadyMarketChart('ready', 30, 1))
+  assert.throws(() => requireReadyMarketChart('unavailable', 30, 1), /质检未通过/u)
+  assert.throws(() => requireReadyMarketChart('ready', 1, 1), /有效数据不足/u)
+  assert.throws(() => requireReadyMarketChart('ready', 30, 0), /无有效波动/u)
   assert.equal(isChartQualityRejection('质检未通过：K 线图表状态为 unavailable'), true)
+  assert.equal(isChartQualityRejection('质检未通过：K 线有效数据不足（1\/30）'), true)
   assert.equal(isChartQualityRejection('配图上传失败'), false)
   console.log('币安广场发布文本清理自检通过')
 } else {

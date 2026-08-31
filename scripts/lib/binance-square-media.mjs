@@ -24,8 +24,10 @@ function cardLabel(contentType) {
   return ['热点快讯', '📰']
 }
 
-export function requireReadyMarketChart(state) {
+export function requireReadyMarketChart(state, barCount, priceRange) {
   if (state !== 'ready') throw new Error(`质检未通过：K 线图表状态为 ${state || '未知'}`)
+  if (Number(barCount) < 30) throw new Error(`质检未通过：K 线有效数据不足（${Number(barCount) || 0}/30）`)
+  if (!(Number(priceRange) > 0)) throw new Error('质检未通过：K 线价格无有效波动')
 }
 
 export function newsCardHtml(candidate) {
@@ -101,7 +103,11 @@ async function captureMarketChart(page, symbol) {
     await state.elementHandle(),
     { timeout: 50_000 },
   )
-  requireReadyMarketChart(await state.getAttribute('data-kline-state'))
+  requireReadyMarketChart(
+    await state.getAttribute('data-kline-state'),
+    await state.getAttribute('data-kline-bars'),
+    await state.getAttribute('data-kline-range'),
+  )
   await page.waitForTimeout(1_000)
   return chart.screenshot({ type: 'png' })
 }

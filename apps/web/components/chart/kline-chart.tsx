@@ -173,7 +173,10 @@ export function KlineChart({
     const chart = chartRef.current
     if (!chart) return
     if (query.status !== 'success') return
-    chart.setSymbol({ ticker: symbol, pricePrecision: 2, volumePrecision: 4 })
+    const close = query.data.items.at(-1)?.close ?? 0
+    const pricePrecision = Math.min(8, Math.max(2, Math.ceil(-Math.log10(close)) + 3))
+    chart.setSymbol({ ticker: symbol, pricePrecision, volumePrecision: 4 })
+    chart.resetData()
   }, [query.status, query.data, symbol])
 
   // 5. indicators 状态同步到 chart 实例
@@ -228,6 +231,10 @@ export function KlineChart({
     <div
       ref={containerRef}
       data-kline-state={query.status === 'success' ? 'ready' : 'loading'}
+      data-kline-bars={query.status === 'success' ? query.data.items.length : 0}
+      data-kline-range={query.status === 'success' && query.data.items.length > 0
+        ? Math.max(...query.data.items.map((item) => item.high)) - Math.min(...query.data.items.map((item) => item.low))
+        : 0}
       className="h-full w-full min-h-[400px] bg-cream"
     />
   )

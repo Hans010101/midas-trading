@@ -181,7 +181,7 @@ export function AutoPilotPanel({ token }: { token: string }) {
                   <StatChip label="近7日点赞" value={compact(account.likes_7d)} tone="text-foreground" />
                   <StatChip label="评论" value={compact(account.comments_7d)} tone="text-foreground" />
                 </div>
-                {account.last_error && (
+                {account.failure_count > 0 && account.last_error && (
                   <p className="mt-2 rounded bg-red-50 px-2 py-1.5 text-xs text-red-700">
                     连续 {account.failure_count}/3：{account.last_error}
                   </p>

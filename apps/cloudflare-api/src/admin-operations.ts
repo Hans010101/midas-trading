@@ -794,7 +794,7 @@ async function createSocialDrafts(
          AND (
            (sd.status = 'success' AND sd.updated_at >= ?)
            OR (sd.status = 'failed' AND sd.updated_at >= ?
-               AND d.compliance_reason LIKE '质检未通过：K 线图表状态为 %')
+               AND d.compliance_reason LIKE '质检未通过：K 线%')
          )`,
     )
     .bind(
@@ -1670,7 +1670,7 @@ async function autoCandidate(
              AND failed_sd.platform = 'binance_square'
              AND failed_sd.account_key = ?
              AND failed_sd.status = 'failed'
-             AND instr(failed_sd.error, '质检未通过：K 线图表状态为 ') = 1
+             AND instr(failed_sd.error, '质检未通过：K 线') = 1
              AND failed_sd.updated_at >= ?
          )
        ORDER BY d.created_at DESC
@@ -1822,21 +1822,11 @@ async function runSocialAccountAutomation(
       (env as Env & ExternalEnv).BINANCE_SQUARE_PUBLISH_MODE === 'github'
     ) {
       await wakeGithubPublisher(env)
-      await Promise.all([
-        updateAutoRun(env, slot, accountKey, {
-          status: 'skipped',
-          draftId: candidate.id,
-          error: '已唤醒独立币安广场发布执行器',
-        }),
-        env.DB
-          .prepare(
-            `UPDATE social_automation_accounts
-             SET failure_count = 0, last_error = NULL, updated_at = ?
-             WHERE account_key = ?`,
-          )
-          .bind(Date.now(), accountKey)
-          .run(),
-      ])
+      await updateAutoRun(env, slot, accountKey, {
+        status: 'skipped',
+        draftId: candidate.id,
+        error: '已唤醒独立币安广场发布执行器',
+      })
       return
     }
     const result = await dispatchSocialDraft(
