@@ -14,7 +14,13 @@ const IMAGE_PRESIGN_ENDPOINT =
 const IMAGE_STATUS_ENDPOINT =
   'https://www.binance.com/bapi/composite/v2/public/pgc/openApi/image/imageStatus'
 const SYMBOL_COOLDOWN_MS = 45 * 60_000
+const CHART_FAILURE_COOLDOWN_MS = 24 * 60 * 60_000
+const CHART_FAILURE_PREFIX = '质检未通过：K 线图表状态为 '
 const ACCOUNT_KEYS = new Set(['midas_trading', 'legacy_midas'])
+
+function isChartQualityRejection(message) {
+  return message.startsWith(CHART_FAILURE_PREFIX)
+}
 
 function headers(apiKey) {
   return {
@@ -237,6 +243,16 @@ async function main() {
            AND recent_sd.status='success'
            AND recent_sd.updated_at>=${now - SYMBOL_COOLDOWN_MS}
        )
+       AND NOT EXISTS (
+         SELECT 1 FROM social_drafts failed_d
+         JOIN social_dispatches failed_sd ON failed_sd.draft_id=failed_d.id
+         WHERE failed_d.symbol=d.symbol
+           AND failed_sd.platform='binance_square'
+           AND failed_sd.account_key=${quote(accountKey)}
+           AND failed_sd.status='failed'
+           AND instr(failed_sd.error,${quote(CHART_FAILURE_PREFIX)})=1
+           AND failed_sd.updated_at>=${now - CHART_FAILURE_COOLDOWN_MS}
+       )
      ORDER BY d.created_at
      LIMIT 1`,
     )[0]
@@ -304,6 +320,10 @@ async function main() {
            WHERE id=${candidate.id};`,
         )
         failDispatch(dispatch.id, accountKey, message)
+        if (isChartQualityRejection(message)) {
+          console.log(`质检拦截，本轮跳过：${candidate.symbol} ${message}`)
+          return
+        }
         throw new Error(message)
       }
       console.error(`配图生成/上传失败，降级为纯文字：${message}`)
@@ -380,6 +400,8 @@ if (process.argv.includes('--self-test')) {
   assert.match(cleanPublishText('正文。\n\n$BTC', 'midas_trading'), /\$BTC/u)
   assert.doesNotThrow(() => requireReadyMarketChart('ready'))
   assert.throws(() => requireReadyMarketChart('unavailable'), /质检未通过/u)
+  assert.equal(isChartQualityRejection('质检未通过：K 线图表状态为 unavailable'), true)
+  assert.equal(isChartQualityRejection('配图上传失败'), false)
   console.log('币安广场发布文本清理自检通过')
 } else {
   main().catch((error) => {

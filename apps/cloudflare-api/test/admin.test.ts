@@ -852,6 +852,17 @@ describe('independent Cloudflare administrator controls', () => {
         )
         .bind(failed!.id, scheduledAt - 60_000, scheduledAt - 60_000)
         .run()
+      await env.DB
+        .prepare(
+          `INSERT INTO social_drafts
+            (symbol, bias, tweet_text, compliance_passed, status, auto_drafted,
+             has_url, gen_style, provider, model, content_type, account_key, created_at)
+           VALUES ('ETH/USDT', '中性', 'ETH 重复候选', 1, 'draft', 1, 0,
+                   'default', 'technical-rules', 'test', 'market_analysis',
+                   'midas_trading', ?)`,
+        )
+        .bind(scheduledAt - 30_000)
+        .run()
       vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) =>
         String(input).includes('/pgc/openApi/content/add')
           ? Response.json({

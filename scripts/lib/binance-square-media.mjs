@@ -2,7 +2,7 @@ import { chromium } from 'playwright'
 
 const PUBLIC_WEB_URL =
   process.env.MIDAS_PUBLIC_WEB_URL?.trim() ||
-  'https://midas-trading.hans-pan007.workers.dev'
+  'https://midastrade.asia'
 
 function escapeHtml(value) {
   return String(value ?? '')

@@ -791,13 +791,17 @@ async function createSocialDrafts(
        FROM social_drafts d
        JOIN social_dispatches sd ON sd.draft_id = d.id
        WHERE sd.platform = 'binance_square' AND sd.account_key = ?
-         AND sd.updated_at >= ?
          AND (
-           sd.status = 'success'
-           OR (sd.status = 'failed' AND d.compliance_reason LIKE '质检未通过：K 线图表状态为 %')
+           (sd.status = 'success' AND sd.updated_at >= ?)
+           OR (sd.status = 'failed' AND sd.updated_at >= ?
+               AND d.compliance_reason LIKE '质检未通过：K 线图表状态为 %')
          )`,
     )
-    .bind(accountKey, Date.now() - SOCIAL_SYMBOL_COOLDOWN_MS)
+    .bind(
+      accountKey,
+      Date.now() - SOCIAL_SYMBOL_COOLDOWN_MS,
+      Date.now() - SOCIAL_CHART_FAILURE_COOLDOWN_MS,
+    )
     .all<{ symbol: string }>()
   const recentSymbols = new Set(recentlyAttempted.results.map((item) => item.symbol))
   let quotes: SocialMarketQuote[] = []
@@ -966,6 +970,7 @@ type ExternalEnv = Readonly<{
 const GITHUB_PUBLISH_ENDPOINT =
   'https://api.github.com/repos/Hans010101/midas-trading/actions/workflows/binance-square.yml/dispatches'
 const SOCIAL_SYMBOL_COOLDOWN_MS = 45 * 60_000
+const SOCIAL_CHART_FAILURE_COOLDOWN_MS = 24 * 60 * 60_000
 
 async function wakeGithubPublisher(env: Env): Promise<void> {
   const token = (env as Env & ExternalEnv).GITHUB_PUBLISH_TOKEN?.trim()
@@ -1657,6 +1662,17 @@ async function autoCandidate(
              AND recent_sd.status = 'success'
              AND recent_sd.updated_at >= ?
          )
+         AND NOT EXISTS (
+           SELECT 1
+           FROM social_drafts failed_d
+           JOIN social_dispatches failed_sd ON failed_sd.draft_id = failed_d.id
+           WHERE failed_d.symbol = d.symbol
+             AND failed_sd.platform = 'binance_square'
+             AND failed_sd.account_key = ?
+             AND failed_sd.status = 'failed'
+             AND instr(failed_sd.error, '质检未通过：K 线图表状态为 ') = 1
+             AND failed_sd.updated_at >= ?
+         )
        ORDER BY d.created_at DESC
        LIMIT 1`,
     )
@@ -1666,6 +1682,8 @@ async function autoCandidate(
       accountKey,
       accountKey,
       timestamp - SOCIAL_SYMBOL_COOLDOWN_MS,
+      accountKey,
+      timestamp - SOCIAL_CHART_FAILURE_COOLDOWN_MS,
     )
     .first<{
       id: number
