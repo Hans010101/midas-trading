@@ -145,6 +145,82 @@ describe('multi-source market klines', () => {
     })
   })
 
+  it('uses an independent A-share backup when Yahoo is rate limited', async () => {
+    const upstream = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('query1.finance.yahoo.com')) {
+        return new Response('rate limited', { status: 429 })
+      }
+      if (url.includes('push2his.eastmoney.com')) {
+        return Response.json({
+          data: {
+            klines: ['2026-08-31,1500,1510,1520,1490,1000,1510000'],
+          },
+        })
+      }
+      return new Response('unexpected request', { status: 500 })
+    })
+    vi.stubGlobal('fetch', upstream)
+
+    const response = await handleMarketRoute(
+      new Request(
+        'https://api.example.test/api/v1/market/kline?symbol=600519&market=cn&period=1d&limit=10',
+      ),
+      {} as Env,
+      'market-cn-fallback',
+    )
+
+    expect(response?.status).toBe(200)
+    await expect(response?.json()).resolves.toMatchObject({
+      source: 'Eastmoney public market data',
+      fallback_used: true,
+      items: [{ close: 1510, amount: 1_510_000 }],
+    })
+    expect(upstream).toHaveBeenCalledTimes(2)
+  })
+
+  it('never combines four-hour candles across trading days', async () => {
+    const timestamps = [
+      '2026-08-28T14:30:00-04:00',
+      '2026-08-28T15:30:00-04:00',
+      '2026-08-31T09:30:00-04:00',
+      '2026-08-31T10:30:00-04:00',
+    ].map((value) => Date.parse(value) / 1_000)
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+      chart: {
+        error: null,
+        result: [{
+          timestamp: timestamps,
+          indicators: {
+            quote: [{
+              open: [10, 11, 20, 21],
+              high: [11, 12, 21, 22],
+              low: [9, 10, 19, 20],
+              close: [11, 12, 21, 22],
+              volume: [1, 1, 1, 1],
+            }],
+          },
+        }],
+      },
+    })))
+
+    const response = await handleMarketRoute(
+      new Request(
+        'https://api.example.test/api/v1/market/kline?symbol=AAPL&market=us&period=4h&limit=10',
+      ),
+      {} as Env,
+      'market-session-bars',
+    )
+
+    expect(response?.status).toBe(200)
+    await expect(response?.json()).resolves.toMatchObject({
+      items: [
+        { open: 10, close: 12, volume: 2 },
+        { open: 20, close: 22, volume: 2 },
+      ],
+    })
+  })
+
   it('discovers live OKX perpetual instruments beyond the local seed list', async () => {
     vi.stubGlobal(
       'fetch',

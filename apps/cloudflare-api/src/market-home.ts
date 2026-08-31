@@ -289,7 +289,7 @@ export async function refreshMarketBoard(
 }
 
 export async function refreshMarketBoards(env: Env): Promise<void> {
-  for (const market of ['cn', 'us', 'hk'] as const) {
+  await Promise.all((['cn', 'us', 'hk'] as const).map(async (market) => {
     try {
       await refreshMarketBoard(env, market)
     } catch (error) {
@@ -301,7 +301,7 @@ export async function refreshMarketBoards(env: Env): Promise<void> {
         }),
       )
     }
-  }
+  }))
 }
 
 async function readBoard(

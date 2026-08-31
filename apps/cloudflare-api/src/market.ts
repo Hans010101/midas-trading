@@ -92,26 +92,45 @@ function yahooPeriod(period: string): { interval: string; range: string } {
   }
 }
 
-function aggregateBars(items: Kline[], size: number): Kline[] {
+function aggregateBars(
+  items: Kline[],
+  size: number,
+  timeZone: string,
+): Kline[] {
   if (size <= 1) return items
   const result: Kline[] = []
-  for (let index = 0; index < items.length; index += size) {
-    const window = items.slice(index, index + size)
-    const first = window[0]
-    const last = window.at(-1)
-    if (!first || !last || window.length < size) continue
-    const amounts = window.map((item) => item.amount)
-    result.push({
-      ts: first.ts,
-      open: first.open,
-      high: Math.max(...window.map((item) => item.high)),
-      low: Math.min(...window.map((item) => item.low)),
-      close: last.close,
-      volume: window.reduce((total, item) => total + item.volume, 0),
-      amount: amounts.every((amount) => amount !== null)
-        ? amounts.reduce((total, amount) => total + (amount ?? 0), 0)
-        : null,
-    })
+  const dateFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  const sessions = new Map<string, Kline[]>()
+  for (const item of items) {
+    const date = dateFormatter.format(new Date(item.ts))
+    const session = sessions.get(date)
+    if (session) session.push(item)
+    else sessions.set(date, [item])
+  }
+  for (const session of sessions.values()) {
+    for (let index = 0; index < session.length; index += size) {
+      const window = session.slice(index, index + size)
+      const first = window[0]
+      const last = window.at(-1)
+      if (!first || !last) continue
+      const amounts = window.map((item) => item.amount)
+      result.push({
+        ts: first.ts,
+        open: first.open,
+        high: Math.max(...window.map((item) => item.high)),
+        low: Math.min(...window.map((item) => item.low)),
+        close: last.close,
+        volume: window.reduce((total, item) => total + item.volume, 0),
+        amount: amounts.every((amount) => amount !== null)
+          ? amounts.reduce((total, amount) => total + (amount ?? 0), 0)
+          : null,
+      })
+    }
   }
   return result
 }
@@ -204,8 +223,90 @@ async function fetchYahooKlinesFromHost(
       amount: null,
     }]
   })
-  return (period === '4h' ? aggregateBars(items, 4) : items).slice(-limit)
+  if (items.length === 0) throw new HttpError(404, '标的暂无有效行情')
+  return (period === '4h'
+    ? aggregateBars(
+        items,
+        4,
+        market === 'us' ? 'America/New_York' : 'Asia/Shanghai',
+      )
+    : items).slice(-limit)
 }
+
+async function fetchEastmoneyKlines(
+  symbol: string,
+  market: 'cn' | 'hk',
+  period: string,
+  limit: number,
+): Promise<Kline[]> {
+  const normalized = symbol.trim().toUpperCase()
+  const secid = market === 'hk'
+    ? `116.${normalized.padStart(5, '0')}`
+    : `${normalized.startsWith('6') ? '1' : '0'}.${normalized}`
+  const klt = eastmoneyPeriods[period as keyof typeof eastmoneyPeriods]
+  if (!klt) throw new HttpError(400, '周期不受支持')
+  const url = new URL('https://push2his.eastmoney.com/api/qt/stock/kline/get')
+  url.searchParams.set('secid', secid)
+  url.searchParams.set('klt', klt)
+  url.searchParams.set('fqt', '1')
+  url.searchParams.set('lmt', String(Math.min(period === '4h' ? limit * 4 : limit, 5_000)))
+  url.searchParams.set('end', '20500101')
+  url.searchParams.set('fields1', 'f1,f2,f3,f4,f5,f6')
+  url.searchParams.set('fields2', 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61')
+  const response = await fetch(url, {
+    headers: {
+      referer: 'https://quote.eastmoney.com/',
+      'user-agent': 'Midas-Trading-Cloudflare/1.0',
+    },
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (!response.ok) throw new HttpError(503, `东方财富行情暂不可用（HTTP ${response.status}）`)
+  const payload = (await response.json()) as {
+    data?: { klines?: string[] } | null
+  }
+  const closeTime = market === 'hk' ? '16:00:00' : '15:00:00'
+  const items = (payload.data?.klines ?? []).flatMap((line) => {
+    const row = line.split(',')
+    const date = row[0]
+    const open = Number(row[1])
+    const close = Number(row[2])
+    const high = Number(row[3])
+    const low = Number(row[4])
+    const volume = Number(row[5])
+    const amount = Number(row[6])
+    if (!date || !validOhlc(open, high, low, close)) return []
+    const localDate = date.replace(' ', 'T') +
+      (date.includes(' ') && date.length === 16 ? ':00' : '')
+    const timestamp = new Date(
+      `${date.includes(' ') ? localDate : `${date}T${closeTime}`}+08:00`,
+    )
+    if (!Number.isFinite(timestamp.getTime())) return []
+    return [{
+      ts: timestamp.toISOString(),
+      open,
+      high,
+      low,
+      close,
+      volume: Number.isFinite(volume) && volume >= 0 ? volume : 0,
+      amount: Number.isFinite(amount) && amount >= 0 ? amount : null,
+    }]
+  })
+  if (items.length === 0) throw new HttpError(404, '标的暂无有效行情')
+  return (period === '4h'
+    ? aggregateBars(items, 4, 'Asia/Shanghai')
+    : items).slice(-limit)
+}
+
+const eastmoneyPeriods = {
+  '1m': '1',
+  '5m': '5',
+  '15m': '15',
+  '30m': '30',
+  '1h': '60',
+  '4h': '60',
+  '1d': '101',
+  '1w': '102',
+} as const
 
 async function fetchYahooKlines(
   symbol: string,
@@ -226,6 +327,17 @@ async function fetchYahooKlines(
       fallback_used: false,
     }
   } catch (primaryError) {
+    if (market === 'cn' || market === 'hk') {
+      try {
+        return {
+          items: await fetchEastmoneyKlines(symbol, market, period, limit),
+          source: 'Eastmoney public market data',
+          fallback_used: true,
+        }
+      } catch {
+        // Continue to Yahoo query2 so one backup failure does not hide another.
+      }
+    }
     try {
       return {
         items: await fetchYahooKlinesFromHost(
@@ -843,18 +955,29 @@ async function dataSourceHealth(
   env: Env,
   requestId: string,
 ): Promise<Response> {
-  const [stockProbe, cryptoProbe, boards, overview] = await Promise.all([
-    fetchYahooKlines('AAPL', 'us', '1d', 1)
-      .then((result) => ({
-        ok: result.items.length > 0,
-        source: result.source,
-        data_as_of: result.items.at(-1)?.ts ?? null,
-      }))
-      .catch((error) => ({
-        ok: false,
-        source: 'Yahoo Finance query1/query2',
-        error: error instanceof Error ? error.message : String(error),
-      })),
+  const [stockProbes, cryptoProbe, boards, overview] = await Promise.all([
+    Promise.all(([
+      ['cn', '600519'],
+      ['us', 'AAPL'],
+      ['hk', '00700'],
+    ] as const).map(async ([market, symbol]) => {
+      try {
+        const result = await fetchYahooKlines(symbol, market, '1d', 1)
+        return [market, {
+          ok: result.items.length > 0,
+          source: result.source,
+          data_as_of: result.items.at(-1)?.ts ?? null,
+        }] as const
+      } catch (error) {
+        return [market, {
+          ok: false,
+          source: market === 'us'
+            ? 'Yahoo Finance query1/query2'
+            : 'Yahoo Finance/Eastmoney',
+          error: error instanceof Error ? error.message : String(error),
+        }] as const
+      }
+    })),
     fetchCryptoKlines('AGLD/USDT', '1h', 'perp', 1)
       .then((result) => ({
         ok: result.items.length > 0,
@@ -891,9 +1014,12 @@ async function dataSourceHealth(
       },
     ]),
   )
+  const stockStatus = Object.fromEntries(stockProbes)
   const components = {
     crypto_kline: cryptoProbe,
-    stock_kline: stockProbe,
+    cn_kline: stockStatus.cn,
+    us_kline: stockStatus.us,
+    hk_kline: stockStatus.hk,
     cn_board: boardStatus.cn ?? { ok: false },
     us_board: boardStatus.us ?? { ok: false },
     hk_board: boardStatus.hk ?? { ok: false },
