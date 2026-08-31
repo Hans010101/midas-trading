@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
-import { getLocale } from 'next-intl/server'
 import localFont from 'next/font/local'
+import { headers } from 'next/headers'
 
 import { LocaleRuntimeProvider } from '@/components/i18n/locale-runtime-provider'
 import { LocalePreferenceSync } from '@/components/i18n/locale-preference-sync'
@@ -88,9 +88,9 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  // i18n(cookie 模式):locale + messages 从 request.ts(读 NEXT_LOCALE cookie)取。
-  // force-static 页构建期 cookies() 无值 → locale=zh 静态(见 i18n/request.ts)。
-  const locale = await getLocale()
+  // 普通静态页固定中文基线，避免 Cookie 语言与静态 RSC 基线不同导致水合重建；
+  // /en 路由由 middleware 显式标记英文，其余语言偏好在水合后恢复。
+  const locale: Locale = (await headers()).get('x-midas-locale') === 'en' ? 'en' : 'zh'
   return (
     <html
       lang={locale === 'en' ? 'en' : 'zh-CN'}
