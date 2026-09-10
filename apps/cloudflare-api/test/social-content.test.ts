@@ -7,6 +7,7 @@ import {
   eventTemplateFallback,
   extractSymbols,
   ingestSocialContent,
+  parseGdeltTimestamp,
   parseSyndicationFeed,
 } from '../src/social-content'
 
@@ -62,6 +63,16 @@ describe('Binance Square content operations', () => {
       link: 'https://example.com/atom-1',
       occurredAt: Date.parse('2026-07-29T00:00:00Z'),
     }])
+  })
+
+  it('accepts title-only official feeds and parses GDELT compact timestamps', () => {
+    expect(parseSyndicationFeed(`
+      <rss><channel><item>
+        <guid>cftc-1</guid><title>Digital asset advisory</title><description/>
+        <link>https://example.com/cftc-1</link>
+        <pubDate>Thu, 10 Sep 2026 03:00:00 GMT</pubDate>
+      </item></channel></rss>`)[0]?.summary).toBe('Digital asset advisory')
+    expect(parseGdeltTimestamp('20260910T030405Z')).toBe(Date.parse('2026-09-10T03:04:05Z'))
   })
 
   it('keeps an attributed, tagged event draft available when both AI channels are unavailable', async () => {
@@ -134,6 +145,7 @@ describe('Binance Square content operations', () => {
       }
       if (url.includes('/market/trades')) return Response.json({ data: [] })
       if (url.includes('api.llama.fi')) return Response.json({ total24h: 0, protocols: [] })
+      if (url.includes('api.gdeltproject.org')) return Response.json({ articles: [] })
       return new Response('<rss><channel></channel></rss>', { status: 200 })
     })
     const statement = {

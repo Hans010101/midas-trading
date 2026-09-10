@@ -4,6 +4,8 @@ const RSS_MAX_AGE_MS = 8 * 60 * 60_000
 const SOURCE_CONCURRENCY = 2
 const TOKENOMIST_URL = 'https://api.tokenomist.ai/v1/unlock/events/upcoming'
 const COINGECKO_TRENDING_URL = 'https://api.coingecko.com/api/v3/search/trending'
+const GDELT_DOC_URL = 'https://api.gdeltproject.org/api/v2/doc/doc'
+const CRYPTOPANIC_URL = 'https://cryptopanic.com/api/v1/posts/'
 const DEFILLAMA_DEX_URL =
   'https://api.llama.fi/overview/dexs?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyVolume'
 const OKX_PUBLIC_URL = 'https://www.okx.com/api/v5'
@@ -44,6 +46,28 @@ const NEWS_FEEDS = Object.freeze([
     url: 'https://blockworks.co/feed',
     scoreBoost: 5,
   },
+  {
+    source: 'SEC',
+    url: 'https://www.sec.gov/news/pressreleases.rss',
+    scoreBoost: 12,
+  },
+  {
+    source: 'Federal Reserve',
+    url: 'https://www.federalreserve.gov/feeds/press_all.xml',
+    scoreBoost: 12,
+    macro: true,
+  },
+  {
+    source: 'CFTC',
+    url: 'https://www.cftc.gov/RSS/RSSGP/rssgp.xml',
+    scoreBoost: 12,
+  },
+  {
+    source: 'ECB',
+    url: 'https://www.ecb.europa.eu/rss/press.html',
+    scoreBoost: 10,
+    macro: true,
+  },
 ] as const)
 
 const OKX_FLOW_WATCH = Object.freeze([
@@ -75,6 +99,7 @@ type ContentEnv = Readonly<{
   TOKENOMIST_API_KEY?: string
   TOKENOMIST_COMMERCIAL_LICENSE?: string
   COINGECKO_DEMO_API_KEY?: string
+  CRYPTOPANIC_API_TOKEN?: string
 }>
 
 export type SocialContentType = 'news' | 'whale' | 'unlock'
@@ -118,6 +143,10 @@ function isCryptoRelevant(text: string): boolean {
     /(crypto|blockchain|web3|defi|stablecoin|token|coinbase|binance|tether|wallet|altcoin|on[ -]?chain|加密|区块链|稳定币|代币|币安|链上|数字资产)/iu.test(text)
 }
 
+function isMacroRelevant(text: string): boolean {
+  return /(monetary policy|interest rate|federal funds|FOMC|inflation|financial stability|payment system|digital euro|货币政策|利率|通胀|金融稳定|支付系统|数字欧元)/iu.test(text)
+}
+
 function xmlValue(item: string, tag: string): string {
   const match = new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, 'iu').exec(item)
   return match ? decodeXml(match[1] ?? '') : ''
@@ -135,7 +164,7 @@ export function parseSyndicationFeed(xml: string): Array<{
     .flatMap((match) => {
     const item = match[1] ?? ''
     const title = xmlValue(item, 'title')
-    const summary = xmlValue(item, 'description') || xmlValue(item, 'content:encoded')
+    const summary = xmlValue(item, 'description') || xmlValue(item, 'content:encoded') || title
     const link = xmlValue(item, 'link')
     const id = xmlValue(item, 'guid') || link
     const occurredAt = Date.parse(xmlValue(item, 'pubDate'))
@@ -148,7 +177,7 @@ export function parseSyndicationFeed(xml: string): Array<{
     .flatMap((match) => {
       const item = match[1] ?? ''
       const title = xmlValue(item, 'title')
-      const summary = xmlValue(item, 'summary') || xmlValue(item, 'content')
+      const summary = xmlValue(item, 'summary') || xmlValue(item, 'content') || title
       const linkMatch = /<link\b[^>]*href=["']([^"']+)["'][^>]*\/?\s*>/iu.exec(item)
       const link = decodeXml(linkMatch?.[1] ?? '')
       const id = xmlValue(item, 'id') || link
@@ -237,7 +266,10 @@ async function ingestNewsFeed(
   feed: (typeof NEWS_FEEDS)[number],
 ): Promise<number> {
   const response = await fetch(feed.url, {
-    headers: { accept: 'application/rss+xml, application/xml;q=0.9' },
+    headers: {
+      accept: 'application/rss+xml, application/xml;q=0.9',
+      'user-agent': 'MidasTrading/1.0 (+https://midastrade.asia)',
+    },
     signal: AbortSignal.timeout(15_000),
   })
   if (!response.ok) throw new Error(`${feed.source} RSS HTTP ${response.status}`)
@@ -245,7 +277,8 @@ async function ingestNewsFeed(
   let inserted = 0
   for (const item of items) {
     if (item.occurredAt < now - RSS_MAX_AGE_MS || item.occurredAt > now + 5 * 60_000) continue
-    if (!isCryptoRelevant(`${item.title} ${item.summary}`)) continue
+    const text = `${item.title} ${item.summary}`
+    if (!isCryptoRelevant(text) && !('macro' in feed && feed.macro && isMacroRelevant(text))) continue
     inserted += await insertEvent(env, {
       source: feed.source,
       sourceId: item.id,
@@ -256,6 +289,128 @@ async function ingestNewsFeed(
       symbols: extractSymbols(`${item.title} ${item.summary}`),
       score: Math.min(100, eventScore(item.title, item.summary, item.occurredAt) + feed.scoreBoost),
       occurredAt: item.occurredAt,
+    })
+  }
+  return inserted
+}
+
+export function parseGdeltTimestamp(value: string): number {
+  const compact = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/u.exec(value)
+  return compact
+    ? Date.UTC(
+        Number(compact[1]),
+        Number(compact[2]) - 1,
+        Number(compact[3]),
+        Number(compact[4]),
+        Number(compact[5]),
+        Number(compact[6]),
+      )
+    : Date.parse(value)
+}
+
+async function ingestGdelt(env: Env, now: number): Promise<number> {
+  const url = new URL(GDELT_DOC_URL)
+  url.searchParams.set('query', '(cryptocurrency OR bitcoin OR ethereum OR stablecoin OR blockchain OR "digital asset")')
+  url.searchParams.set('mode', 'artlist')
+  url.searchParams.set('maxrecords', '25')
+  url.searchParams.set('timespan', '8h')
+  url.searchParams.set('sort', 'datedesc')
+  url.searchParams.set('format', 'json')
+  const init = {
+    headers: { accept: 'application/json' },
+    signal: AbortSignal.timeout(20_000),
+  }
+  let response = await fetch(url, init)
+  if (response.status === 429) {
+    await response.body?.cancel()
+    await scheduler.wait(5_500)
+    response = await fetch(url, init)
+  }
+  if (!response.ok) throw new Error(`GDELT HTTP ${response.status}`)
+  const payload = await response.json() as {
+    articles?: Array<{
+      url?: unknown
+      title?: unknown
+      seendate?: unknown
+      domain?: unknown
+    }>
+  }
+  let inserted = 0
+  for (const raw of (payload.articles ?? []).slice(0, 25)) {
+    const title = typeof raw.title === 'string' ? raw.title.trim() : ''
+    const sourceUrl = typeof raw.url === 'string' ? raw.url.trim() : ''
+    const occurredAt = parseGdeltTimestamp(typeof raw.seendate === 'string' ? raw.seendate : '')
+    if (!title || !/^https?:\/\//iu.test(sourceUrl) || !Number.isFinite(occurredAt)) continue
+    if (occurredAt < now - RSS_MAX_AGE_MS || occurredAt > now + 5 * 60_000) continue
+    if (!isCryptoRelevant(title)) continue
+    const domain = typeof raw.domain === 'string' ? raw.domain.trim().slice(0, 120) : ''
+    inserted += await insertEvent(env, {
+      source: domain ? `GDELT · ${domain}` : 'GDELT',
+      sourceId: sourceUrl,
+      contentType: 'news',
+      title,
+      summary: title,
+      sourceUrl,
+      symbols: extractSymbols(title),
+      score: Math.min(100, eventScore(title, title, occurredAt) + 2),
+      occurredAt,
+    })
+  }
+  return inserted
+}
+
+async function ingestCryptoPanic(env: Env, now: number): Promise<number> {
+  const token = (env as Env & ContentEnv).CRYPTOPANIC_API_TOKEN?.trim()
+  if (!token) return 0
+  const url = new URL(CRYPTOPANIC_URL)
+  url.searchParams.set('auth_token', token)
+  url.searchParams.set('public', 'true')
+  url.searchParams.set('kind', 'news')
+  const response = await fetch(url, {
+    headers: { accept: 'application/json' },
+    signal: AbortSignal.timeout(15_000),
+  })
+  if (!response.ok) throw new Error(`CryptoPanic HTTP ${response.status}`)
+  const payload = await response.json() as {
+    results?: Array<{
+      id?: unknown
+      title?: unknown
+      description?: unknown
+      published_at?: unknown
+      original_url?: unknown
+      url?: unknown
+      domain?: unknown
+      source?: { title?: unknown }
+      currencies?: Array<{ code?: unknown }>
+    }>
+  }
+  let inserted = 0
+  for (const raw of (payload.results ?? []).slice(0, 25)) {
+    const title = typeof raw.title === 'string' ? raw.title.trim() : ''
+    const summary = typeof raw.description === 'string' && raw.description.trim()
+      ? raw.description.trim()
+      : title
+    const sourceUrl = typeof raw.original_url === 'string'
+      ? raw.original_url.trim()
+      : typeof raw.url === 'string' ? raw.url.trim() : ''
+    const occurredAt = Date.parse(typeof raw.published_at === 'string' ? raw.published_at : '')
+    if (!title || !/^https?:\/\//iu.test(sourceUrl) || !Number.isFinite(occurredAt)) continue
+    if (occurredAt < now - RSS_MAX_AGE_MS || occurredAt > now + 5 * 60_000) continue
+    const sourceTitle = typeof raw.source?.title === 'string' ? raw.source.title.trim() : ''
+    const domain = typeof raw.domain === 'string' ? raw.domain.trim() : ''
+    const currencySymbols = (raw.currencies ?? []).flatMap((currency) =>
+      typeof currency.code === 'string' ? [currency.code.toUpperCase()] : [],
+    )
+    inserted += await insertEvent(env, {
+      source: sourceTitle || domain || 'CryptoPanic',
+      sourceId: String(raw.id ?? sourceUrl),
+      contentType: 'news',
+      title,
+      summary,
+      sourceUrl,
+      symbols: [...new Set([...currencySymbols, ...extractSymbols(`${title} ${summary}`)])].slice(0, 6),
+      score: Math.min(100, eventScore(title, summary, occurredAt) + 3),
+      occurredAt,
     })
   }
   return inserted
@@ -568,6 +723,16 @@ export async function ingestSocialContent(env: Env, now = Date.now()): Promise<v
       source: 'OKX Public Trades',
       enabled: true,
       task: () => ingestOkxFlow(env, now),
+    },
+    {
+      source: 'GDELT',
+      enabled: true,
+      task: () => ingestGdelt(env, now),
+    },
+    {
+      source: 'CryptoPanic',
+      enabled: Boolean(external.CRYPTOPANIC_API_TOKEN?.trim()),
+      task: () => ingestCryptoPanic(env, now),
     },
     {
       source: 'CoinGecko',
