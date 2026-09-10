@@ -59,7 +59,7 @@ const NEWS_FEEDS = Object.freeze([
   },
   {
     source: 'CFTC',
-    url: 'https://www.cftc.gov/RSS/RSSGP/rssgp.xml',
+    url: 'https://www.cftc.gov/PressRoom/PressReleases',
     scoreBoost: 12,
   },
   {
@@ -189,6 +189,28 @@ export function parseSyndicationFeed(xml: string): Array<{
   return [...rss, ...atom]
 }
 
+export function parseCftcPressReleases(html: string): Array<{
+  id: string
+  title: string
+  summary: string
+  link: string
+  occurredAt: number
+}> {
+  return [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/giu)]
+    .slice(0, 20)
+    .flatMap((match) => {
+      const row = match[1] ?? ''
+      const date = /<time\b[^>]*datetime=["']([^"']+)["']/iu.exec(row)?.[1] ?? ''
+      const link = /<a\b[^>]*href=["'](\/PressRoom\/PressReleases\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/iu.exec(row)
+      const title = decodeXml(link?.[2] ?? '')
+      const href = link?.[1] ? new URL(link[1], 'https://www.cftc.gov').toString() : ''
+      const occurredAt = Date.parse(date)
+      return title && href && Number.isFinite(occurredAt)
+        ? [{ id: href, title, summary: title, link: href, occurredAt }]
+        : []
+    })
+}
+
 export function extractSymbols(text: string): string[] {
   const upper = text.toUpperCase()
   const found: string[] = []
@@ -265,15 +287,35 @@ async function ingestNewsFeed(
   now: number,
   feed: (typeof NEWS_FEEDS)[number],
 ): Promise<number> {
-  const response = await fetch(feed.url, {
+  let response = await fetch(feed.url, {
     headers: {
-      accept: 'application/rss+xml, application/xml;q=0.9',
+      accept: feed.source === 'CFTC' ? 'text/html' : 'application/rss+xml, application/xml;q=0.9',
       'user-agent': 'MidasTrading/1.0 (+https://midastrade.asia)',
     },
     signal: AbortSignal.timeout(15_000),
   })
-  if (!response.ok) throw new Error(`${feed.source} RSS HTTP ${response.status}`)
-  const items = parseSyndicationFeed(await response.text())
+  if (!response.ok && feed.source === 'CFTC') {
+    await response.body?.cancel()
+    response = await env.BROWSER.quickAction('content', {
+      url: feed.url,
+      allowResourceTypes: ['document'],
+      setJavaScriptEnabled: false,
+      gotoOptions: { timeout: 30_000, waitUntil: 'domcontentloaded' },
+      actionTimeout: 30_000,
+      cacheTTL: 1_800,
+    })
+  }
+  if (!response.ok) throw new Error(`${feed.source} HTTP ${response.status}`)
+  const body = await response.text()
+  const rendered = feed.source === 'CFTC' && response.headers.get('content-type')?.includes('application/json')
+    ? JSON.parse(body) as BrowserRunContentSuccessResponse
+    : null
+  if (rendered && (!rendered.success || rendered.meta.status >= 400)) {
+    throw new Error(`CFTC HTTP ${rendered.meta.status}`)
+  }
+  const items = feed.source === 'CFTC'
+    ? parseCftcPressReleases(rendered?.result ?? body)
+    : parseSyndicationFeed(body)
   let inserted = 0
   for (const item of items) {
     if (item.occurredAt < now - RSS_MAX_AGE_MS || item.occurredAt > now + 5 * 60_000) continue
@@ -308,6 +350,20 @@ export function parseGdeltTimestamp(value: string): number {
     : Date.parse(value)
 }
 
+type GdeltPayload = Readonly<{
+  articles?: Array<{
+    url?: unknown
+    title?: unknown
+    seendate?: unknown
+    domain?: unknown
+  }>
+}>
+
+export function parseGdeltContent(content: string): GdeltPayload {
+  const document = /<pre\b[^>]*>([\s\S]*?)<\/pre>/iu.exec(content)?.[1] ?? content
+  return JSON.parse(decodeXml(document)) as GdeltPayload
+}
+
 async function ingestGdelt(env: Env, now: number): Promise<number> {
   const url = new URL(GDELT_DOC_URL)
   url.searchParams.set('query', '(cryptocurrency OR bitcoin OR ethereum OR stablecoin OR blockchain OR "digital asset")')
@@ -316,24 +372,30 @@ async function ingestGdelt(env: Env, now: number): Promise<number> {
   url.searchParams.set('timespan', '8h')
   url.searchParams.set('sort', 'datedesc')
   url.searchParams.set('format', 'json')
-  const init = {
-    headers: { accept: 'application/json' },
-    signal: AbortSignal.timeout(20_000),
+  let payload: GdeltPayload | undefined
+  try {
+    const response = await fetch(url, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(12_000),
+    })
+    if (response.ok) payload = await response.json() as GdeltPayload
+    else await response.body?.cancel()
+  } catch {
+    // Browser rendering uses a separate egress when GDELT rate-limits Worker fetches.
   }
-  let response = await fetch(url, init)
-  if (response.status === 429) {
-    await response.body?.cancel()
-    await scheduler.wait(5_500)
-    response = await fetch(url, init)
-  }
-  if (!response.ok) throw new Error(`GDELT HTTP ${response.status}`)
-  const payload = await response.json() as {
-    articles?: Array<{
-      url?: unknown
-      title?: unknown
-      seendate?: unknown
-      domain?: unknown
-    }>
+  if (!payload) {
+    const response = await env.BROWSER.quickAction('content', {
+      url: url.toString(),
+      allowResourceTypes: ['document'],
+      setJavaScriptEnabled: false,
+      gotoOptions: { timeout: 30_000, waitUntil: 'domcontentloaded' },
+      actionTimeout: 30_000,
+      cacheTTL: 1_800,
+    })
+    if (!response.ok) throw new Error(`GDELT browser HTTP ${response.status}`)
+    const rendered = await response.json() as BrowserRunContentSuccessResponse
+    if (!rendered.success || rendered.meta.status >= 400) throw new Error(`GDELT HTTP ${rendered.meta.status}`)
+    payload = parseGdeltContent(rendered.result)
   }
   let inserted = 0
   for (const raw of (payload.articles ?? []).slice(0, 25)) {
