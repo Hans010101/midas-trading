@@ -1,6 +1,7 @@
 import { invokeAi, parseAiJson } from './ai-provider'
 
 const RSS_MAX_AGE_MS = 8 * 60 * 60_000
+const SOURCE_CONCURRENCY = 2
 const TOKENOMIST_URL = 'https://api.tokenomist.ai/v1/unlock/events/upcoming'
 const COINGECKO_TRENDING_URL = 'https://api.coingecko.com/api/v3/search/trending'
 const DEFILLAMA_DEX_URL =
@@ -582,40 +583,42 @@ export async function ingestSocialContent(env: Env, now = Date.now()): Promise<v
       task: () => ingestTokenomist(env, now),
     },
   ]
-  await Promise.all(sources.map(async ({ source, enabled, task }) => {
-    const startedAt = Date.now()
-    if (!enabled) {
-      await recordSourceHealth(env, source, {
-        status: 'disabled',
-        attemptedAt: now,
-        latencyMs: 0,
-      })
-      return
-    }
-    try {
-      const inserted = await task()
-      await recordSourceHealth(env, source, {
-        status: 'healthy',
-        inserted,
-        attemptedAt: now,
-        latencyMs: Date.now() - startedAt,
-      })
-      if (inserted > 0) console.log(JSON.stringify({ event: 'social.ingest', source, inserted }))
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      await recordSourceHealth(env, source, {
-        status: 'error',
-        error: message,
-        attemptedAt: now,
-        latencyMs: Date.now() - startedAt,
-      })
-      console.error(JSON.stringify({
-        event: 'social.ingest_failed',
-        source,
-        error: message,
-      }))
-    }
-  }))
+  for (let index = 0; index < sources.length; index += SOURCE_CONCURRENCY) {
+    await Promise.all(sources.slice(index, index + SOURCE_CONCURRENCY).map(async ({ source, enabled, task }) => {
+      const startedAt = Date.now()
+      if (!enabled) {
+        await recordSourceHealth(env, source, {
+          status: 'disabled',
+          attemptedAt: now,
+          latencyMs: 0,
+        })
+        return
+      }
+      try {
+        const inserted = await task()
+        await recordSourceHealth(env, source, {
+          status: 'healthy',
+          inserted,
+          attemptedAt: now,
+          latencyMs: Date.now() - startedAt,
+        })
+        if (inserted > 0) console.log(JSON.stringify({ event: 'social.ingest', source, inserted }))
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        await recordSourceHealth(env, source, {
+          status: 'error',
+          error: message,
+          attemptedAt: now,
+          latencyMs: Date.now() - startedAt,
+        })
+        console.error(JSON.stringify({
+          event: 'social.ingest_failed',
+          source,
+          error: message,
+        }))
+      }
+    }))
+  }
   await env.DB
     .prepare(
       `UPDATE social_content_events SET status = 'ignored'

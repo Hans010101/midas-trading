@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   cleanSocialPostText,
@@ -6,8 +6,13 @@ import {
   draftContentEvent,
   eventTemplateFallback,
   extractSymbols,
+  ingestSocialContent,
   parseSyndicationFeed,
 } from '../src/social-content'
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 describe('Binance Square content operations', () => {
   it('extracts only relevant coin symbols from Chinese and English news', () => {
@@ -113,5 +118,35 @@ describe('Binance Square content operations', () => {
     expect(cleanSocialPostText(
       '**核心数据：** 正文\n\n仅供参考，不构成投资建议。\n\n来源：PANews https://example.com/news/1',
     )).toBe('核心数据： 正文')
+  })
+
+  it('limits concurrent source fetches so one cron run cannot exhaust Worker connections', async () => {
+    let active = 0
+    let maximum = 0
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      active += 1
+      maximum = Math.max(maximum, active)
+      await scheduler.wait(5)
+      active -= 1
+      const url = String(input)
+      if (url.includes('/public/instruments')) {
+        return Response.json({ data: [{ ctVal: '1', state: 'live' }] })
+      }
+      if (url.includes('/market/trades')) return Response.json({ data: [] })
+      if (url.includes('api.llama.fi')) return Response.json({ total24h: 0, protocols: [] })
+      return new Response('<rss><channel></channel></rss>', { status: 200 })
+    })
+    const statement = {
+      bind: () => statement,
+      first: async () => null,
+      run: async () => ({ meta: { changes: 0 } }),
+    }
+    const testEnv = {
+      DB: { prepare: () => statement },
+    } as unknown as Env
+
+    await ingestSocialContent(testEnv, Date.parse('2026-09-10T02:35:00Z'))
+
+    expect(maximum).toBeLessThanOrEqual(2)
   })
 })
