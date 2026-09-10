@@ -8,8 +8,6 @@ import {
   extractSymbols,
   ingestSocialContent,
   parseCftcPressReleases,
-  parseGdeltContent,
-  parseGdeltTimestamp,
   parseSyndicationFeed,
 } from '../src/social-content'
 
@@ -67,21 +65,19 @@ describe('Binance Square content operations', () => {
     }])
   })
 
-  it('accepts title-only official feeds and parses GDELT compact timestamps', () => {
+  it('accepts title-only official feeds and CFTC press release pages', () => {
     expect(parseSyndicationFeed(`
       <rss><channel><item>
         <guid>cftc-1</guid><title>Digital asset advisory</title><description/>
         <link>https://example.com/cftc-1</link>
         <pubDate>Thu, 10 Sep 2026 03:00:00 GMT</pubDate>
       </item></channel></rss>`)[0]?.summary).toBe('Digital asset advisory')
-    expect(parseGdeltTimestamp('20260910T030405Z')).toBe(Date.parse('2026-09-10T03:04:05Z'))
     expect(parseCftcPressReleases(`
       <table><tr><td><time datetime="2026-09-10T03:00:00Z">09/10/2026</time></td>
       <td><a href="/PressRoom/PressReleases/9999-26">Digital Asset Advisory</a></td></tr></table>`)[0]).toMatchObject({
       title: 'Digital Asset Advisory',
       link: 'https://www.cftc.gov/PressRoom/PressReleases/9999-26',
     })
-    expect(parseGdeltContent('<html><body><pre>{&quot;articles&quot;:[]}</pre></body></html>')).toEqual({ articles: [] })
   })
 
   it('keeps an attributed, tagged event draft available when both AI channels are unavailable', async () => {
@@ -154,7 +150,6 @@ describe('Binance Square content operations', () => {
       }
       if (url.includes('/market/trades')) return Response.json({ data: [] })
       if (url.includes('api.llama.fi')) return Response.json({ total24h: 0, protocols: [] })
-      if (url.includes('api.gdeltproject.org')) return Response.json({ articles: [] })
       return new Response('<rss><channel></channel></rss>', { status: 200 })
     })
     const statement = {

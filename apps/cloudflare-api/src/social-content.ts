@@ -2,10 +2,6 @@ import { invokeAi, parseAiJson } from './ai-provider'
 
 const RSS_MAX_AGE_MS = 8 * 60 * 60_000
 const SOURCE_CONCURRENCY = 2
-const TOKENOMIST_URL = 'https://api.tokenomist.ai/v1/unlock/events/upcoming'
-const COINGECKO_TRENDING_URL = 'https://api.coingecko.com/api/v3/search/trending'
-const GDELT_DOC_URL = 'https://api.gdeltproject.org/api/v2/doc/doc'
-const CRYPTOPANIC_URL = 'https://cryptopanic.com/api/v1/posts/'
 const DEFILLAMA_DEX_URL =
   'https://api.llama.fi/overview/dexs?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyVolume'
 const OKX_PUBLIC_URL = 'https://www.okx.com/api/v5'
@@ -94,13 +90,6 @@ const COIN_ALIASES: Readonly<Record<string, readonly string[]>> = {
   TON: ['TON', 'TONCOIN'],
   HYPE: ['HYPE', 'HYPERLIQUID'],
 }
-
-type ContentEnv = Readonly<{
-  TOKENOMIST_API_KEY?: string
-  TOKENOMIST_COMMERCIAL_LICENSE?: string
-  COINGECKO_DEMO_API_KEY?: string
-  CRYPTOPANIC_API_TOKEN?: string
-}>
 
 export type SocialContentType = 'news' | 'whale' | 'unlock'
 
@@ -336,142 +325,6 @@ async function ingestNewsFeed(
   return inserted
 }
 
-export function parseGdeltTimestamp(value: string): number {
-  const compact = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/u.exec(value)
-  return compact
-    ? Date.UTC(
-        Number(compact[1]),
-        Number(compact[2]) - 1,
-        Number(compact[3]),
-        Number(compact[4]),
-        Number(compact[5]),
-        Number(compact[6]),
-      )
-    : Date.parse(value)
-}
-
-type GdeltPayload = Readonly<{
-  articles?: Array<{
-    url?: unknown
-    title?: unknown
-    seendate?: unknown
-    domain?: unknown
-  }>
-}>
-
-export function parseGdeltContent(content: string): GdeltPayload {
-  const document = /<pre\b[^>]*>([\s\S]*?)<\/pre>/iu.exec(content)?.[1] ?? content
-  return JSON.parse(decodeXml(document)) as GdeltPayload
-}
-
-async function ingestGdelt(env: Env, now: number): Promise<number> {
-  const url = new URL(GDELT_DOC_URL)
-  url.searchParams.set('query', '(cryptocurrency OR bitcoin OR ethereum OR stablecoin OR blockchain OR "digital asset")')
-  url.searchParams.set('mode', 'artlist')
-  url.searchParams.set('maxrecords', '25')
-  url.searchParams.set('timespan', '8h')
-  url.searchParams.set('sort', 'datedesc')
-  url.searchParams.set('format', 'json')
-  const render = async (cacheTTL: number): Promise<BrowserRunContentSuccessResponse> => {
-    const response = await env.BROWSER.quickAction('content', {
-      url: url.toString(),
-      allowResourceTypes: ['document'],
-      setJavaScriptEnabled: false,
-      gotoOptions: { timeout: 30_000, waitUntil: 'domcontentloaded' },
-      actionTimeout: 30_000,
-      cacheTTL,
-    })
-    if (!response.ok) throw new Error(`GDELT browser HTTP ${response.status}`)
-    return response.json() as Promise<BrowserRunContentSuccessResponse>
-  }
-  let rendered = await render(0)
-  if (rendered.meta.status === 429 || /Please limit requests/iu.test(rendered.result)) {
-    await scheduler.wait(15_000)
-    rendered = await render(1_800)
-  }
-  if (!rendered.success || rendered.meta.status >= 400) throw new Error(`GDELT HTTP ${rendered.meta.status}`)
-  const payload = parseGdeltContent(rendered.result)
-  let inserted = 0
-  for (const raw of (payload.articles ?? []).slice(0, 25)) {
-    const title = typeof raw.title === 'string' ? raw.title.trim() : ''
-    const sourceUrl = typeof raw.url === 'string' ? raw.url.trim() : ''
-    const occurredAt = parseGdeltTimestamp(typeof raw.seendate === 'string' ? raw.seendate : '')
-    if (!title || !/^https?:\/\//iu.test(sourceUrl) || !Number.isFinite(occurredAt)) continue
-    if (occurredAt < now - RSS_MAX_AGE_MS || occurredAt > now + 5 * 60_000) continue
-    if (!isCryptoRelevant(title)) continue
-    const domain = typeof raw.domain === 'string' ? raw.domain.trim().slice(0, 120) : ''
-    inserted += await insertEvent(env, {
-      source: domain ? `GDELT · ${domain}` : 'GDELT',
-      sourceId: sourceUrl,
-      contentType: 'news',
-      title,
-      summary: title,
-      sourceUrl,
-      symbols: extractSymbols(title),
-      score: Math.min(100, eventScore(title, title, occurredAt) + 2),
-      occurredAt,
-    })
-  }
-  return inserted
-}
-
-async function ingestCryptoPanic(env: Env, now: number): Promise<number> {
-  const token = (env as Env & ContentEnv).CRYPTOPANIC_API_TOKEN?.trim()
-  if (!token) return 0
-  const url = new URL(CRYPTOPANIC_URL)
-  url.searchParams.set('auth_token', token)
-  url.searchParams.set('public', 'true')
-  url.searchParams.set('kind', 'news')
-  const response = await fetch(url, {
-    headers: { accept: 'application/json' },
-    signal: AbortSignal.timeout(15_000),
-  })
-  if (!response.ok) throw new Error(`CryptoPanic HTTP ${response.status}`)
-  const payload = await response.json() as {
-    results?: Array<{
-      id?: unknown
-      title?: unknown
-      description?: unknown
-      published_at?: unknown
-      original_url?: unknown
-      url?: unknown
-      domain?: unknown
-      source?: { title?: unknown }
-      currencies?: Array<{ code?: unknown }>
-    }>
-  }
-  let inserted = 0
-  for (const raw of (payload.results ?? []).slice(0, 25)) {
-    const title = typeof raw.title === 'string' ? raw.title.trim() : ''
-    const summary = typeof raw.description === 'string' && raw.description.trim()
-      ? raw.description.trim()
-      : title
-    const sourceUrl = typeof raw.original_url === 'string'
-      ? raw.original_url.trim()
-      : typeof raw.url === 'string' ? raw.url.trim() : ''
-    const occurredAt = Date.parse(typeof raw.published_at === 'string' ? raw.published_at : '')
-    if (!title || !/^https?:\/\//iu.test(sourceUrl) || !Number.isFinite(occurredAt)) continue
-    if (occurredAt < now - RSS_MAX_AGE_MS || occurredAt > now + 5 * 60_000) continue
-    const sourceTitle = typeof raw.source?.title === 'string' ? raw.source.title.trim() : ''
-    const domain = typeof raw.domain === 'string' ? raw.domain.trim() : ''
-    const currencySymbols = (raw.currencies ?? []).flatMap((currency) =>
-      typeof currency.code === 'string' ? [currency.code.toUpperCase()] : [],
-    )
-    inserted += await insertEvent(env, {
-      source: sourceTitle || domain || 'CryptoPanic',
-      sourceId: String(raw.id ?? sourceUrl),
-      contentType: 'news',
-      title,
-      summary,
-      sourceUrl,
-      symbols: [...new Set([...currencySymbols, ...extractSymbols(`${title} ${summary}`)])].slice(0, 6),
-      score: Math.min(100, eventScore(title, summary, occurredAt) + 3),
-      occurredAt,
-    })
-  }
-  return inserted
-}
-
 async function sourceEventExists(
   env: Env,
   source: string,
@@ -482,53 +335,6 @@ async function sourceEventExists(
     .bind(source, sourceId)
     .first<{ found: number }>()
   return row?.found === 1
-}
-
-async function ingestCoinGeckoTrending(env: Env, now: number): Promise<number> {
-  const apiKey = (env as Env & ContentEnv).COINGECKO_DEMO_API_KEY?.trim()
-  if (!apiKey) return 0
-  const sourceId = `trending:${Math.floor(now / (2 * 60 * 60_000))}`
-  if (await sourceEventExists(env, 'CoinGecko', sourceId)) return 0
-  const response = await fetch(COINGECKO_TRENDING_URL, {
-    headers: { 'x-cg-demo-api-key': apiKey, accept: 'application/json' },
-    signal: AbortSignal.timeout(15_000),
-  })
-  if (!response.ok) throw new Error(`CoinGecko HTTP ${response.status}`)
-  const payload = await response.json() as {
-    coins?: Array<{
-      item?: {
-        name?: unknown
-        symbol?: unknown
-        market_cap_rank?: unknown
-        data?: { price_change_percentage_24h?: { usd?: unknown } }
-      }
-    }>
-  }
-  const coins = (payload.coins ?? []).slice(0, 7).flatMap((row) => {
-    const name = typeof row.item?.name === 'string' ? row.item.name : ''
-    const symbol = typeof row.item?.symbol === 'string'
-      ? row.item.symbol.toUpperCase()
-      : ''
-    const rank = Number(row.item?.market_cap_rank ?? 0)
-    const change = Number(row.item?.data?.price_change_percentage_24h?.usd ?? 0)
-    return name && symbol
-      ? [{ name, symbol, rank, change: Number.isFinite(change) ? change : 0 }]
-      : []
-  })
-  if (coins.length === 0) return 0
-  return insertEvent(env, {
-    source: 'CoinGecko',
-    sourceId,
-    contentType: 'news',
-    title: `CoinGecko 过去 24 小时热搜币种：${coins.slice(0, 4).map((item) => item.symbol).join('、')}`,
-    summary: coins.map((item, index) =>
-      `${index + 1}. ${item.name} (${item.symbol})，市值排名 ${item.rank || '暂无'}，24H ${item.change >= 0 ? '+' : ''}${item.change.toFixed(2)}%`,
-    ).join('；'),
-    sourceUrl: 'https://www.coingecko.com/en/highlights/trending-crypto',
-    symbols: coins.map((item) => item.symbol),
-    score: 62,
-    occurredAt: now,
-  })
 }
 
 async function ingestDefiLlamaDexTrend(env: Env, now: number): Promise<number> {
@@ -671,53 +477,6 @@ async function ingestOkxFlow(env: Env, now: number): Promise<number> {
   })
 }
 
-async function ingestTokenomist(env: Env, now: number): Promise<number> {
-  const external = env as Env & ContentEnv
-  const apiKey = external.TOKENOMIST_API_KEY?.trim()
-  if (!apiKey || external.TOKENOMIST_COMMERCIAL_LICENSE !== '1') return 0
-  const start = new Date(now).toISOString().slice(0, 10)
-  const end = new Date(now + 7 * 86_400_000).toISOString().slice(0, 10)
-  const url = new URL(TOKENOMIST_URL)
-  url.searchParams.set('minUnlockDate', start)
-  url.searchParams.set('maxUnlockDate', end)
-  url.searchParams.set('minMarketCap', '50000000')
-  url.searchParams.set('minValueToMarketCap', '1')
-  const response = await fetch(url, {
-    headers: { 'x-api-key': apiKey },
-    signal: AbortSignal.timeout(15_000),
-  })
-  if (!response.ok) throw new Error(`Tokenomist HTTP ${response.status}`)
-  const payload = await response.json() as { data?: unknown[] }
-  let inserted = 0
-  for (const raw of (payload.data ?? []).slice(0, 30)) {
-    if (typeof raw !== 'object' || raw === null) continue
-    const item = raw as Record<string, unknown>
-    const upcoming = typeof item.upcomingEvent === 'object' && item.upcomingEvent !== null
-      ? item.upcomingEvent as Record<string, unknown>
-      : {}
-    const cliffs = typeof upcoming.cliffUnlocks === 'object' && upcoming.cliffUnlocks !== null
-      ? upcoming.cliffUnlocks as Record<string, unknown>
-      : {}
-    const symbol = typeof item.tokenSymbol === 'string' ? item.tokenSymbol.toUpperCase() : ''
-    const unlockDate = Date.parse(String(upcoming.unlockDate ?? ''))
-    const unlockValue = Number(cliffs.totalCliffValue ?? 0)
-    const ratio = Number(cliffs.valueToMarketCap ?? 0)
-    if (!symbol || !Number.isFinite(unlockDate)) continue
-    inserted += await insertEvent(env, {
-      source: 'Tokenomist',
-      sourceId: `${symbol}:${new Date(unlockDate).toISOString()}`,
-      contentType: 'unlock',
-      title: `${symbol} 即将迎来代币解锁`,
-      summary: `预计解锁价值 ${unlockValue.toFixed(0)} 美元，约占市值 ${ratio.toFixed(2)}%；时间 ${new Date(unlockDate).toISOString()}。`,
-      sourceUrl: 'https://tokenomist.ai/',
-      symbols: [symbol],
-      score: Math.min(100, 55 + Math.min(30, ratio * 3) + Math.min(15, unlockValue / 10_000_000)),
-      occurredAt: unlockDate,
-    })
-  }
-  return inserted
-}
-
 async function recordSourceHealth(
   env: Env,
   source: string,
@@ -759,7 +518,6 @@ async function recordSourceHealth(
 }
 
 export async function ingestSocialContent(env: Env, now = Date.now()): Promise<void> {
-  const external = env as Env & ContentEnv
   const sources: Array<Readonly<{
     source: string
     enabled: boolean
@@ -779,29 +537,6 @@ export async function ingestSocialContent(env: Env, now = Date.now()): Promise<v
       source: 'OKX Public Trades',
       enabled: true,
       task: () => ingestOkxFlow(env, now),
-    },
-    {
-      source: 'GDELT',
-      enabled: true,
-      task: () => ingestGdelt(env, now),
-    },
-    {
-      source: 'CryptoPanic',
-      enabled: Boolean(external.CRYPTOPANIC_API_TOKEN?.trim()),
-      task: () => ingestCryptoPanic(env, now),
-    },
-    {
-      source: 'CoinGecko',
-      enabled: Boolean(external.COINGECKO_DEMO_API_KEY?.trim()),
-      task: () => ingestCoinGeckoTrending(env, now),
-    },
-    {
-      source: 'Tokenomist',
-      enabled: Boolean(
-        external.TOKENOMIST_API_KEY?.trim() &&
-        external.TOKENOMIST_COMMERCIAL_LICENSE === '1',
-      ),
-      task: () => ingestTokenomist(env, now),
     },
   ]
   for (let index = 0; index < sources.length; index += SOURCE_CONCURRENCY) {
