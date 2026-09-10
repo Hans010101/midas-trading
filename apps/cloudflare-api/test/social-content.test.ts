@@ -164,6 +164,13 @@ describe('Binance Square content operations', () => {
     }
     const testEnv = {
       DB: { prepare: () => statement },
+      BROWSER: {
+        quickAction: async () => Response.json({
+          success: true,
+          result: '<pre>{"articles":[]}</pre>',
+          meta: { status: 200, title: '' },
+        }),
+      },
     } as unknown as Env
 
     await ingestSocialContent(testEnv, Date.parse('2026-09-10T02:35:00Z'))

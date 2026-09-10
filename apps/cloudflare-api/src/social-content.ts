@@ -372,31 +372,25 @@ async function ingestGdelt(env: Env, now: number): Promise<number> {
   url.searchParams.set('timespan', '8h')
   url.searchParams.set('sort', 'datedesc')
   url.searchParams.set('format', 'json')
-  let payload: GdeltPayload | undefined
-  try {
-    const response = await fetch(url, {
-      headers: { accept: 'application/json' },
-      signal: AbortSignal.timeout(12_000),
-    })
-    if (response.ok) payload = await response.json() as GdeltPayload
-    else await response.body?.cancel()
-  } catch {
-    // Browser rendering uses a separate egress when GDELT rate-limits Worker fetches.
-  }
-  if (!payload) {
+  const render = async (cacheTTL: number): Promise<BrowserRunContentSuccessResponse> => {
     const response = await env.BROWSER.quickAction('content', {
       url: url.toString(),
       allowResourceTypes: ['document'],
       setJavaScriptEnabled: false,
       gotoOptions: { timeout: 30_000, waitUntil: 'domcontentloaded' },
       actionTimeout: 30_000,
-      cacheTTL: 1_800,
+      cacheTTL,
     })
     if (!response.ok) throw new Error(`GDELT browser HTTP ${response.status}`)
-    const rendered = await response.json() as BrowserRunContentSuccessResponse
-    if (!rendered.success || rendered.meta.status >= 400) throw new Error(`GDELT HTTP ${rendered.meta.status}`)
-    payload = parseGdeltContent(rendered.result)
+    return response.json() as Promise<BrowserRunContentSuccessResponse>
   }
+  let rendered = await render(0)
+  if (rendered.meta.status === 429 || /Please limit requests/iu.test(rendered.result)) {
+    await scheduler.wait(15_000)
+    rendered = await render(1_800)
+  }
+  if (!rendered.success || rendered.meta.status >= 400) throw new Error(`GDELT HTTP ${rendered.meta.status}`)
+  const payload = parseGdeltContent(rendered.result)
   let inserted = 0
   for (const raw of (payload.articles ?? []).slice(0, 25)) {
     const title = typeof raw.title === 'string' ? raw.title.trim() : ''
