@@ -671,9 +671,11 @@ async function listSocialDrafts(
   )
 }
 
-function compliant(text: string): { passed: boolean; reason: string | null } {
+export function compliant(text: string): { passed: boolean; reason: string | null } {
   const blocked = /(稳赚|保本| guaranteed|无风险|确定涨|确定跌|收益保证)/iu
   if (blocked.test(text)) return { passed: false, reason: '含有收益承诺或确定性表述' }
+  const sensitive = /(民主党|共和党|政治党派|总统选举|博彩|赌博|casino|gambling|democrat|republican)/iu
+  if (sensitive.test(text)) return { passed: false, reason: '涉及政治或博彩高风险主题' }
   return { passed: true, reason: null }
 }
 

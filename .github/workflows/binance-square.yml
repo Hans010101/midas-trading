@@ -1,16 +1,13 @@
 name: Binance Square · 独立内容发布
 
 on:
-  schedule:
-    - cron: '*/10 0-13 * * *'
-    - cron: '0 14 * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: midas-trading-binance-square-${{ github.event_name }}-${{ github.ref }}
+  group: midas-trading-binance-square-publisher
   cancel-in-progress: false
 
 jobs:

@@ -3,6 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { sha256Hex } from '../src/crypto'
 import {
+  compliant,
   handleAdminOperationsRoute,
   isAutoPublishSlot,
   isAutoPublishTimestamp,
@@ -79,6 +80,14 @@ afterEach(() => {
 })
 
 describe('independent Cloudflare administrator controls', () => {
+  it('blocks obvious Binance Square sensitive topics before publishing', () => {
+    expect(compliant('民主党与共和党正在讨论博彩条款')).toEqual({
+      passed: false,
+      reason: '涉及政治或博彩高风险主题',
+    })
+    expect(compliant('BTC 24 小时成交量放大')).toEqual({ passed: true, reason: null })
+  })
+
   it('limits Binance Square publishing opportunities to 08:00-22:00 CST every 10 minutes', () => {
     expect(isAutoPublishSlot(7 * 60 + 40)).toBe(false)
     expect(isAutoPublishSlot(8 * 60)).toBe(true)

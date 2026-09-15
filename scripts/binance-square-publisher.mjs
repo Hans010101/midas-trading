@@ -22,6 +22,10 @@ function isChartQualityRejection(message) {
   return message.startsWith(CHART_FAILURE_PREFIX)
 }
 
+function isContentRejection(code) {
+  return String(code) === '20022'
+}
+
 function headers(apiKey) {
   return {
     'X-Square-OpenAPI-Key': apiKey,
@@ -367,6 +371,17 @@ async function main() {
     }
     if (!response.ok || body.code !== '000000') {
       const message = `币安广场拒绝 [${body.code ?? response.status}] ${body.message ?? '未知错误'}`
+      if (isContentRejection(body.code)) {
+        query(
+          `UPDATE social_drafts
+           SET compliance_passed=0,compliance_reason=${quote(message.slice(0, 500))},
+               status='failed'
+           WHERE id=${candidate.id};`,
+        )
+        failDispatch(dispatch.id, accountKey, message, false)
+        console.log(`内容门禁拦截，本轮跳过：draft=${candidate.id} ${message}`)
+        return
+      }
       failDispatch(dispatch.id, accountKey, message)
       throw new Error(message)
     }
@@ -409,6 +424,9 @@ if (process.argv.includes('--self-test')) {
   assert.equal(isChartQualityRejection('质检未通过：K 线图表状态为 unavailable'), true)
   assert.equal(isChartQualityRejection('质检未通过：K 线有效数据不足（1\/30）'), true)
   assert.equal(isChartQualityRejection('配图上传失败'), false)
+  assert.equal(isContentRejection('20022'), true)
+  assert.equal(isContentRejection(20022), true)
+  assert.equal(isContentRejection('100001001'), false)
   console.log('币安广场发布文本清理自检通过')
 } else {
   main().catch((error) => {
