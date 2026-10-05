@@ -86,6 +86,7 @@ describe('independent Cloudflare administrator controls', () => {
       reason: '涉及政治或博彩高风险主题',
     })
     expect(compliant('BTC 24 小时成交量放大')).toEqual({ passed: true, reason: null })
+    expect(compliant('中性 BTC 新闻', '原始来源 OKX')).toMatchObject({ passed: false })
   })
 
   it('limits Binance Square publishing opportunities to 08:00-22:00 CST every 10 minutes', () => {
@@ -458,6 +459,38 @@ describe('independent Cloudflare administrator controls', () => {
         )
         .run()
     }
+  })
+
+  it('rechecks old approved drafts against original OKX events before manual publishing', async () => {
+    const event = await env.DB.prepare(
+      `INSERT INTO social_content_events
+        (source,source_id,content_type,title,summary,source_url,symbols_json,score,occurred_at,ingested_at)
+       VALUES ('PANews',?,'news','生态更新','OKX 项目新进展','https://example.com/news','[]',80,?,?)
+       RETURNING id`,
+    ).bind(crypto.randomUUID(), Date.now(), Date.now()).first<{ id: number }>()
+    const upstream = vi.fn()
+    vi.stubGlobal('fetch', upstream)
+    for (const account of ['midas_trading', 'legacy_midas']) {
+      const draft = await env.DB.prepare(
+        `INSERT INTO social_drafts
+          (symbol,bias,tweet_text,compliance_passed,status,auto_drafted,has_url,gen_style,provider,model,source_event_id,account_key,created_at)
+         VALUES ('BTC/USDT','中性','生态更新',1,'draft',0,0,'default','test','test',?, ?,?) RETURNING id`,
+      ).bind(account === 'midas_trading' ? event!.id : null, account, Date.now()).first<{ id: number }>()
+      if (account === 'legacy_midas') {
+        await env.DB.prepare("UPDATE social_drafts SET tweet_text = 'OKB 生态更新' WHERE id = ?")
+          .bind(draft!.id).run()
+      }
+      await expect(handleAdminOperationsRoute(
+        request(`/api/v1/admin/x-tweets/${draft!.id}/publish`, {
+          method: 'POST', token: owner.token, body: { platform: 'binance_square' },
+        }),
+        { ...env, BINANCE_SQUARE_PUBLISH_MODE: 'github', GITHUB_PUBLISH_TOKEN: 'test-token' } as Env,
+        'test-okx-policy',
+      )).rejects.toMatchObject({ status: 409, message: '发布策略过滤：涉及 OKX 或关联项目' })
+      expect(await env.DB.prepare('SELECT compliance_passed,status FROM social_drafts WHERE id = ?')
+        .bind(draft!.id).first()).toEqual({ compliance_passed: 0, status: 'failed' })
+    }
+    expect(upstream).not.toHaveBeenCalled()
   })
 
   it('publishes an approved social draft to Binance Square and records the ledger', async () => {

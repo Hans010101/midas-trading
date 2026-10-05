@@ -1,10 +1,10 @@
 import { invokeAi, parseAiJson } from './ai-provider'
+import { isOkxRelated } from './social-policy'
 
 const RSS_MAX_AGE_MS = 8 * 60 * 60_000
 const SOURCE_CONCURRENCY = 2
 const DEFILLAMA_DEX_URL =
   'https://api.llama.fi/overview/dexs?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true&dataType=dailyVolume'
-const OKX_PUBLIC_URL = 'https://www.okx.com/api/v5'
 
 const NEWS_FEEDS = Object.freeze([
   {
@@ -64,13 +64,6 @@ const NEWS_FEEDS = Object.freeze([
     scoreBoost: 10,
     macro: true,
   },
-] as const)
-
-const OKX_FLOW_WATCH = Object.freeze([
-  { symbol: 'BTC', grossMinimum: 500_000, singleMinimum: 100_000 },
-  { symbol: 'ETH', grossMinimum: 500_000, singleMinimum: 100_000 },
-  { symbol: 'SOL', grossMinimum: 150_000, singleMinimum: 50_000 },
-  { symbol: 'BNB', grossMinimum: 100_000, singleMinimum: 30_000 },
 ] as const)
 
 const COIN_ALIASES: Readonly<Record<string, readonly string[]>> = {
@@ -248,6 +241,7 @@ async function insertEvent(
     occurredAt: number
   }>,
 ): Promise<number> {
+  if (isOkxRelated(event.source, event.title, event.summary, event.sourceUrl, ...event.symbols)) return 0
   const result = await env.DB
     .prepare(
       `INSERT OR IGNORE INTO social_content_events
@@ -385,98 +379,6 @@ async function ingestDefiLlamaDexTrend(env: Env, now: number): Promise<number> {
   })
 }
 
-async function ingestOkxFlow(env: Env, now: number): Promise<number> {
-  const sourceId = `market-flow:${Math.floor(now / (2 * 60 * 60_000))}`
-  if (await sourceEventExists(env, 'OKX Public Trades', sourceId)) return 0
-  const watchIndex = Math.floor(now / (15 * 60_000)) % OKX_FLOW_WATCH.length
-  const watch = OKX_FLOW_WATCH[watchIndex]!
-  const instrumentId = `${watch.symbol}-USDT-SWAP`
-  const okxFetch = async (url: string): Promise<Response> => {
-    const init = {
-      headers: { accept: 'application/json' },
-      signal: AbortSignal.timeout(12_000),
-    }
-    let response = await fetch(url, init)
-    if (response.status === 429) {
-      await response.body?.cancel()
-      await scheduler.wait(1_500)
-      response = await fetch(url, init)
-    }
-    return response
-  }
-  const instrumentResponse = await okxFetch(
-    `${OKX_PUBLIC_URL}/public/instruments?instType=SWAP&instId=${instrumentId}`,
-  )
-  if (!instrumentResponse.ok) {
-    throw new Error(`OKX ${instrumentId} instruments HTTP ${instrumentResponse.status}`)
-  }
-  const instrumentPayload = await instrumentResponse.json() as {
-    data?: Array<{ ctVal?: unknown; state?: unknown }>
-  }
-  const contractValue = Number(instrumentPayload.data?.[0]?.ctVal ?? 0)
-  if (contractValue <= 0 || instrumentPayload.data?.[0]?.state !== 'live') return 0
-  const tradesResponse = await okxFetch(
-    `${OKX_PUBLIC_URL}/market/trades?instId=${instrumentId}&limit=500`,
-  )
-  if (!tradesResponse.ok) {
-    throw new Error(`OKX ${instrumentId} trades HTTP ${tradesResponse.status}`)
-  }
-  const tradesPayload = await tradesResponse.json() as {
-    data?: Array<{
-      tradeId?: unknown
-      px?: unknown
-      sz?: unknown
-      side?: unknown
-      ts?: unknown
-    }>
-  }
-  const trades = (tradesPayload.data ?? []).flatMap((trade) => {
-    const price = Number(trade.px ?? 0)
-    const size = Number(trade.sz ?? 0)
-    const timestamp = Number(trade.ts ?? 0)
-    const side = trade.side === 'buy' || trade.side === 'sell' ? trade.side : null
-    const tradeId = typeof trade.tradeId === 'string' ? trade.tradeId : ''
-    const notional = price * size * contractValue
-    return side && tradeId && price > 0 && size > 0 && Number.isFinite(timestamp)
-      ? [{ side, tradeId, timestamp, price, notional }]
-      : []
-  })
-  if (trades.length === 0) return 0
-  const buy = trades.filter((trade) => trade.side === 'buy')
-    .reduce((sum, trade) => sum + trade.notional, 0)
-  const sell = trades.filter((trade) => trade.side === 'sell')
-    .reduce((sum, trade) => sum + trade.notional, 0)
-  const gross = buy + sell
-  const largest = trades.reduce((best, trade) => trade.notional > best.notional ? trade : best)
-  const imbalance = gross > 0 ? Math.abs(buy - sell) / gross : 0
-  if (
-    gross < watch.grossMinimum ||
-    imbalance < 0.3 ||
-    largest.notional < watch.singleMinimum
-  ) return 0
-  const dominant = buy >= sell ? '主动买入' : '主动卖出'
-  const coverageSeconds = Math.max(
-    1,
-    Math.round((Math.max(...trades.map((trade) => trade.timestamp)) -
-      Math.min(...trades.map((trade) => trade.timestamp))) / 1_000),
-  )
-  const score = Math.min(
-    92,
-    58 + imbalance * 30 + Math.min(10, largest.notional / watch.singleMinimum * 3),
-  )
-  return insertEvent(env, {
-    source: 'OKX Public Trades',
-    sourceId,
-    contentType: 'whale',
-    title: `OKX ${watch.symbol} 永续出现大额${dominant}成交信号`,
-    summary: `最近 ${trades.length} 笔公开成交样本覆盖约 ${coverageSeconds} 秒，主动买入约 $${buy.toFixed(0)}，主动卖出约 $${sell.toFixed(0)}，最大单笔约 $${largest.notional.toFixed(0)}。这是成交样本而非链上转账，需结合价格、OI 与资金费率交叉验证。`,
-    sourceUrl: `https://www.okx.com/trade-swap/${watch.symbol.toLowerCase()}-usdt-swap`,
-    symbols: [watch.symbol],
-    score,
-    occurredAt: Math.max(...trades.map((trade) => trade.timestamp)),
-  })
-}
-
 async function recordSourceHealth(
   env: Env,
   source: string,
@@ -532,11 +434,6 @@ export async function ingestSocialContent(env: Env, now = Date.now()): Promise<v
       source: 'DefiLlama',
       enabled: true,
       task: () => ingestDefiLlamaDexTrend(env, now),
-    },
-    {
-      source: 'OKX Public Trades',
-      enabled: true,
-      task: () => ingestOkxFlow(env, now),
     },
   ]
   for (let index = 0; index < sources.length; index += SOURCE_CONCURRENCY) {
@@ -613,6 +510,11 @@ export async function nextContentEvent(
       occurred_at: number
     }>()
   if (!row) return null
+  if (isOkxRelated(row.source, row.title, row.summary, row.source_url, row.symbols_json)) {
+    await env.DB.prepare("UPDATE social_content_events SET status = 'ignored' WHERE id = ?")
+      .bind(row.id).run()
+    return null
+  }
   let symbols: string[] = []
   try {
     const parsed = JSON.parse(row.symbols_json) as unknown

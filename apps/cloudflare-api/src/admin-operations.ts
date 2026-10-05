@@ -12,6 +12,7 @@ import {
 } from './binance-square'
 import { fetchCryptoMarketScan } from './crypto-market'
 import { HttpError, jsonResponse, readJsonObject } from './http'
+import { isOkxRelated, OKX_CONTENT_REASON } from './social-policy'
 import {
   cleanSocialPostText,
   contentTags,
@@ -671,7 +672,8 @@ async function listSocialDrafts(
   )
 }
 
-export function compliant(text: string): { passed: boolean; reason: string | null } {
+export function compliant(text: string, ...context: string[]): { passed: boolean; reason: string | null } {
+  if (isOkxRelated(text, ...context)) return { passed: false, reason: OKX_CONTENT_REASON }
   const blocked = /(稳赚|保本| guaranteed|无风险|确定涨|确定跌|收益保证)/iu
   if (blocked.test(text)) return { passed: false, reason: '含有收益承诺或确定性表述' }
   const sensitive = /(民主党|共和党|政治党派|总统选举|博彩|赌博|casino|gambling|democrat|republican)/iu
@@ -748,7 +750,7 @@ async function createSocialDrafts(
     const event = await nextContentEvent(env, preferredEventTypes)
     if (event) {
       const drafted = await draftContentEvent(env, event)
-      const gate = compliant(drafted.text)
+      const gate = compliant(drafted.text, event.source, event.title, event.summary, event.sourceUrl, ...event.symbols)
       const row = await env.DB
         .prepare(
           `INSERT INTO social_drafts
@@ -810,7 +812,7 @@ async function createSocialDrafts(
   try {
     const scan = await fetchCryptoMarketScan(60)
     quotes = scan
-      .filter((item) => !recentSymbols.has(item.symbol))
+      .filter((item) => !recentSymbols.has(item.symbol) && !isOkxRelated(item.symbol))
       .slice(0, 12)
       .map((item) => ({
         symbol: item.symbol,
@@ -843,8 +845,9 @@ async function createSocialDrafts(
         last_point: number
         change_pct: number
       }>()
-    quotes = fallback.results.filter((item) => !recentSymbols.has(item.symbol))
-    if (quotes.length === 0) quotes = fallback.results
+    const allowed = fallback.results.filter((item) => !isOkxRelated(item.symbol, item.name))
+    quotes = allowed.filter((item) => !recentSymbols.has(item.symbol))
+    if (quotes.length === 0) quotes = allowed
   }
   if (quotes.length === 0) throw new HttpError(409, '暂无可用市场数据')
   const draftCount = autoDrafted ? 1 : 2
@@ -897,7 +900,7 @@ async function createSocialDrafts(
       const baseSymbol = symbol.split('/')[0]?.toUpperCase() ?? 'BTC'
       text = `${text}\n\n${contentTags([baseSymbol], `market:${symbol}:${timestamp}`).join(' ')}`
     }
-    const gate = compliant(text)
+    const gate = compliant(text, symbol)
     const row = await env.DB
       .prepare(
         `INSERT INTO social_drafts
@@ -1436,8 +1439,12 @@ async function dispatchSocialDraft(
 ): Promise<DispatchResult> {
   const draft = await env.DB
     .prepare(
-      `SELECT id, symbol, tweet_text, compliance_passed, content_type, account_key
-       FROM social_drafts WHERE id = ?`,
+      `SELECT d.id, d.symbol, d.tweet_text, d.compliance_passed, d.content_type, d.account_key,
+              e.source AS event_source, e.title AS event_title,
+              e.summary AS event_summary, e.source_url AS event_source_url
+       FROM social_drafts d
+       LEFT JOIN social_content_events e ON e.id = d.source_event_id
+       WHERE d.id = ?`,
     )
     .bind(draftId)
     .first<{
@@ -1447,10 +1454,13 @@ async function dispatchSocialDraft(
       compliance_passed: number
       content_type: string
       account_key: BinanceSquareAccountKey
+      event_source: string | null
+      event_title: string | null
+      event_summary: string | null
+      event_source_url: string | null
     }>()
   if (!draft) throw new HttpError(404, '推文草稿不存在')
   if (draft.compliance_passed !== 1) throw new HttpError(409, '合规门禁未通过')
-
   const existing = await env.DB
     .prepare(
       `SELECT id, status, url, error FROM social_dispatches
@@ -1465,6 +1475,13 @@ async function dispatchSocialDraft(
       url: existing.url,
       error: null,
     }
+  }
+  if (isOkxRelated(draft.tweet_text, draft.symbol, draft.event_source,
+    draft.event_title, draft.event_summary, draft.event_source_url)) {
+    await env.DB.prepare(
+      "UPDATE social_drafts SET compliance_passed = 0, compliance_reason = ?, status = 'failed' WHERE id = ?",
+    ).bind(OKX_CONTENT_REASON, draft.id).run()
+    throw new HttpError(409, OKX_CONTENT_REASON)
   }
 
   const now = Date.now()
@@ -1641,8 +1658,11 @@ async function autoCandidate(
 ): Promise<CreatedSocialDraft | null> {
   const row = await env.DB
     .prepare(
-      `SELECT d.id, d.symbol, d.tweet_text, d.compliance_passed
+      `SELECT d.id, d.symbol, d.tweet_text, d.compliance_passed,
+              e.source AS event_source, e.title AS event_title,
+              e.summary AS event_summary, e.source_url AS event_source_url
        FROM social_drafts d
+       LEFT JOIN social_content_events e ON e.id = d.source_event_id
        WHERE d.auto_drafted = 1
          AND d.account_key = ?
          AND d.gen_style = 'default'
@@ -1692,7 +1712,18 @@ async function autoCandidate(
       symbol: string
       tweet_text: string
       compliance_passed: number
+      event_source: string | null
+      event_title: string | null
+      event_summary: string | null
+      event_source_url: string | null
     }>()
+  if (row && isOkxRelated(row.tweet_text, row.symbol, row.event_source,
+    row.event_title, row.event_summary, row.event_source_url)) {
+    await env.DB.prepare(
+      "UPDATE social_drafts SET compliance_passed = 0, compliance_reason = ?, status = 'failed' WHERE id = ?",
+    ).bind(OKX_CONTENT_REASON, row.id).run()
+    return null
+  }
   return row
     ? {
         id: row.id,

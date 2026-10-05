@@ -1,3 +1,4 @@
+import { env } from 'cloudflare:workers'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -7,6 +8,7 @@ import {
   eventTemplateFallback,
   extractSymbols,
   ingestSocialContent,
+  nextContentEvent,
   parseCftcPressReleases,
   parseSyndicationFeed,
 } from '../src/social-content'
@@ -16,6 +18,18 @@ afterEach(() => {
 })
 
 describe('Binance Square content operations', () => {
+  it('ignores legacy pending events whose original facts mention OKX before drafting', async () => {
+    const event = await env.DB.prepare(
+      `INSERT INTO social_content_events
+        (source,source_id,content_type,title,summary,source_url,symbols_json,score,occurred_at,ingested_at)
+       VALUES ('PANews',?,'whale','BTC 资金流观察','欧易公开市场数据','https://example.com/news','["BTC"]',100,?,?)
+       RETURNING id`,
+    ).bind(crypto.randomUUID(), Date.now(), Date.now()).first<{ id: number }>()
+    expect(await nextContentEvent(env, ['whale'])).toBeNull()
+    expect(await env.DB.prepare('SELECT status FROM social_content_events WHERE id = ?')
+      .bind(event!.id).first()).toEqual({ status: 'ignored' })
+  })
+
   it('extracts only relevant coin symbols from Chinese and English news', () => {
     expect(extractSymbols('比特币 ETF 与 Solana 生态进展，同时关注 $ARB')).toEqual([
       'BTC',
@@ -145,10 +159,7 @@ describe('Binance Square content operations', () => {
       await scheduler.wait(5)
       active -= 1
       const url = String(input)
-      if (url.includes('/public/instruments')) {
-        return Response.json({ data: [{ ctVal: '1', state: 'live' }] })
-      }
-      if (url.includes('/market/trades')) return Response.json({ data: [] })
+      expect(url).not.toContain('okx.com')
       if (url.includes('api.llama.fi')) return Response.json({ total24h: 0, protocols: [] })
       return new Response('<rss><channel></channel></rss>', { status: 200 })
     })

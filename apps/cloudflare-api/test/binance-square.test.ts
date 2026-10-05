@@ -4,6 +4,7 @@ import {
   binanceSquareEnabled,
   publishToBinanceSquare,
 } from '../src/binance-square'
+import { isOkxRelated, OKX_CONTENT_REASON } from '../src/social-policy'
 
 const testEnv = (key = 'test-square-key') => ({
   BINANCE_SQUARE_API_KEY: key,
@@ -14,6 +15,24 @@ afterEach(() => {
 })
 
 describe('Binance Square publishing adapter', () => {
+  it('filters OKX aliases, related tokens and original sources for both accounts without uploading or posting', async () => {
+    for (const text of ['OKX 上线公告', 'okex.com', '欧易钱包', '欧意交易所',
+      'ＯＫＸ 新闻', 'O\u200bkX 公告', 'OKB/USDT', '$OKT', 'X Layer 生态', 'OKTChain 升级']) {
+      expect(isOkxRelated(text)).toBe(true)
+    }
+    expect(isOkxRelated('中性 BTC 新闻', 'OKX Public Trades')).toBe(true)
+    expect(isOkxRelated('Bitcoin lookback period', 'BTC/USDT', 'CoinDesk')).toBe(false)
+    const upstream = vi.fn()
+    vi.stubGlobal('fetch', upstream)
+    for (const account of ['midas_trading', 'legacy_midas'] as const) {
+      await expect(publishToBinanceSquare(testEnv(), '欧易 OKX 公告',
+        new ArrayBuffer(4), account)).resolves.toMatchObject({
+        success: false, error: OKX_CONTENT_REASON, imageUrl: null,
+      })
+    }
+    expect(upstream).not.toHaveBeenCalled()
+  })
+
   it('sends the dedicated key only in the Square header and returns the post link', async () => {
     const upstream = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe(

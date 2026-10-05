@@ -1,3 +1,5 @@
+import { isOkxRelated, OKX_CONTENT_REASON } from './social-policy'
+
 const CONTENT_ENDPOINT =
   'https://www.binance.com/bapi/composite/v1/public/pgc/openApi/content/add'
 const IMAGE_PRESIGN_ENDPOINT =
@@ -130,6 +132,12 @@ export async function publishToBinanceSquare(
   imageBytes?: ArrayBuffer | null,
   accountKey: BinanceSquareAccountKey = 'midas_trading',
 ): Promise<BinanceSquarePublishResult> {
+  if (isOkxRelated(text)) {
+    return {
+      success: false, postId: null, url: null, error: OKX_CONTENT_REASON,
+      imageUrl: null, imageError: null,
+    }
+  }
   const apiKey = apiKeyForAccount(env, accountKey)
   if (!apiKey) {
     return {

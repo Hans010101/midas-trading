@@ -32,7 +32,7 @@ The legacy credential must be installed independently in both the Cloudflare Wor
 | Midas Trading market data | Active | Market ranking, K-line analysis, chart screenshot |
 | PANews, Cointelegraph CN/EN, CoinDesk, Decrypt, The Block, Blockworks | Active | Independent RSS/Atom news inputs; facts are rewritten and source-linked |
 | DefiLlama | Active, no key | DEX market volume and protocol activity; free public data only |
-| OKX Public Trades | Active, no key | Rotating BTC, ETH, SOL, and BNB monitor with at most one qualified two-hour large perpetual-market flow sample; never labelled as an on-chain transfer |
+| OKX and related projects | Blocked from Square publishing | Both accounts exclude OKX/OKEx/欧易/欧意, OKB, OKT and X Layer; the OKX social-content collector is disabled |
 | CoinGecko Demo | Connector ready, off by default | Optional trending-asset signal; requires a free Demo key and source attribution |
 | CoinGlass | Not enabled | No free API plan; commercial use requires a paid commercial tier |
 | Arkham | Not enabled | API access approval, key, and credits are required; no assumed free production allowance |
@@ -49,6 +49,8 @@ Every ingestion source writes an independent health record. The admin panel show
 Events are scored on freshness and market impact. Security incidents, regulation, rates, ETF developments, liquidations, listings, unlocks, and whale activity receive higher weights. Source ID uniqueness, event status, a two-hour same-symbol cooldown, and the platform dispatch ledger prevent duplicates while supporting the higher operating cadence.
 
 The AI prompt cannot add facts, promises, or deterministic price calls. The existing compliance gate remains the final block. Tags are appended by deterministic code, not by the model: the related assets come first, then the daily major-asset pool (`BTC`, `ETH`, `SOL`, `BNB`) fills the post to 2-4 unique cashtags.
+
+The OKX exclusion applies to both automatic and manual posts. It checks the post text, symbol, original event title, summary, source and source URL, including the material used for news cards. Matching events are skipped before drafting; existing unpublished drafts are blocked, and the independent publisher checks again before rendering or uploading media. Policy-filtered content does not count as an account failure.
 
 ## Media pipeline
 
