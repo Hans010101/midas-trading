@@ -4,7 +4,7 @@ import {
   binanceSquareEnabled,
   publishToBinanceSquare,
 } from '../src/binance-square'
-import { isOkxRelated, OKX_CONTENT_REASON } from '../src/social-policy'
+import { isSquareCompetitorRelated, SQUARE_COMPETITOR_REASON } from '../src/social-policy'
 
 const testEnv = (key = 'test-square-key') => ({
   BINANCE_SQUARE_API_KEY: key,
@@ -15,20 +15,30 @@ afterEach(() => {
 })
 
 describe('Binance Square publishing adapter', () => {
-  it('filters OKX aliases, related tokens and original sources for both accounts without uploading or posting', async () => {
+  it('filters competitor brands, related projects and original sources for both accounts without uploading or posting', async () => {
     for (const text of ['OKX 上线公告', 'okex.com', '欧易钱包', '欧意交易所',
-      'ＯＫＸ 新闻', 'O\u200bkX 公告', 'OKB/USDT', '$OKT', 'X Layer 生态', 'OKTChain 升级']) {
-      expect(isOkxRelated(text)).toBe(true)
+      'ＯＫＸ 新闻', 'O\u200bkX 公告', 'OKB/USDT', '$OKT', 'X Layer 生态', 'OKTChain 升级',
+      'COINBASE 上市公告', 'Ｃｏｉｎｂａｓｅ 钱包', 'Coin\u200bbase Prime', 'coin base exchange',
+      '币库交易所', '科因贝斯', 'Kraken Pro 公告', 'Ｋｒａｋｅｎ', '海妖交易所', '克拉肯',
+      'Base 链升级', 'Base network TVL', 'https://base.org', 'Base App 更新',
+      'cbBTC', '$cbETH', 'cbXRP/USDT', '$COIN', 'Ink 生态', 'Ink L2',
+      'https://inkonchain.com', '$INK', 'INK/USDT']) {
+      expect(isSquareCompetitorRelated(text)).toBe(true)
     }
-    expect(isOkxRelated('中性 BTC 新闻', 'OKX Public Trades')).toBe(true)
-    expect(isOkxRelated('Bitcoin lookback period', 'BTC/USDT', 'CoinDesk')).toBe(false)
+    expect(isSquareCompetitorRelated('中性 BTC 新闻', 'OKX Public Trades')).toBe(true)
+    expect(isSquareCompetitorRelated('中性 BTC 新闻', 'https://blog.kraken.com/news')).toBe(true)
+    expect(isSquareCompetitorRelated('生态更新', 'https://www.coinbase.com/blog')).toBe(true)
+    expect(isSquareCompetitorRelated('Bitcoin lookback period, base case and base currency',
+      'BTC/USDT', 'CoinDesk', 'linking markets')).toBe(false)
     const upstream = vi.fn()
     vi.stubGlobal('fetch', upstream)
     for (const account of ['midas_trading', 'legacy_midas'] as const) {
-      await expect(publishToBinanceSquare(testEnv(), '欧易 OKX 公告',
-        new ArrayBuffer(4), account)).resolves.toMatchObject({
-        success: false, error: OKX_CONTENT_REASON, imageUrl: null,
-      })
+      for (const text of ['欧易 OKX 公告', 'Coinbase 钱包更新', 'Kraken 上市公告']) {
+        await expect(publishToBinanceSquare(testEnv(), text,
+          new ArrayBuffer(4), account)).resolves.toMatchObject({
+          success: false, error: SQUARE_COMPETITOR_REASON, imageUrl: null,
+        })
+      }
     }
     expect(upstream).not.toHaveBeenCalled()
   })

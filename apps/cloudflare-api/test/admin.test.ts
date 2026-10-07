@@ -461,11 +461,11 @@ describe('independent Cloudflare administrator controls', () => {
     }
   })
 
-  it('rechecks old approved drafts against original OKX events before manual publishing', async () => {
+  it('rechecks old approved drafts against original competitor events before manual publishing', async () => {
     const event = await env.DB.prepare(
       `INSERT INTO social_content_events
         (source,source_id,content_type,title,summary,source_url,symbols_json,score,occurred_at,ingested_at)
-       VALUES ('PANews',?,'news','生态更新','OKX 项目新进展','https://example.com/news','[]',80,?,?)
+       VALUES ('PANews',?,'news','生态更新','Coinbase 项目新进展','https://example.com/news','[]',80,?,?)
        RETURNING id`,
     ).bind(crypto.randomUUID(), Date.now(), Date.now()).first<{ id: number }>()
     const upstream = vi.fn()
@@ -477,7 +477,7 @@ describe('independent Cloudflare administrator controls', () => {
          VALUES ('BTC/USDT','中性','生态更新',1,'draft',0,0,'default','test','test',?, ?,?) RETURNING id`,
       ).bind(account === 'midas_trading' ? event!.id : null, account, Date.now()).first<{ id: number }>()
       if (account === 'legacy_midas') {
-        await env.DB.prepare("UPDATE social_drafts SET tweet_text = 'OKB 生态更新' WHERE id = ?")
+        await env.DB.prepare("UPDATE social_drafts SET tweet_text = 'Kraken 生态更新' WHERE id = ?")
           .bind(draft!.id).run()
       }
       await expect(handleAdminOperationsRoute(
@@ -485,8 +485,8 @@ describe('independent Cloudflare administrator controls', () => {
           method: 'POST', token: owner.token, body: { platform: 'binance_square' },
         }),
         { ...env, BINANCE_SQUARE_PUBLISH_MODE: 'github', GITHUB_PUBLISH_TOKEN: 'test-token' } as Env,
-        'test-okx-policy',
-      )).rejects.toMatchObject({ status: 409, message: '发布策略过滤：涉及 OKX 或关联项目' })
+        'test-competitor-policy',
+      )).rejects.toMatchObject({ status: 409, message: '发布策略过滤：涉及 OKX、Coinbase、Kraken 或关联项目' })
       expect(await env.DB.prepare('SELECT compliance_passed,status FROM social_drafts WHERE id = ?')
         .bind(draft!.id).first()).toEqual({ compliance_passed: 0, status: 'failed' })
     }

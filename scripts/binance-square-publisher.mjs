@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { isOkxRelated, OKX_CONTENT_REASON } from '../apps/cloudflare-api/src/social-policy.ts'
+import { isSquareCompetitorRelated, SQUARE_COMPETITOR_REASON } from '../apps/cloudflare-api/src/social-policy.ts'
 
 import {
   createSquareMedia,
@@ -103,31 +103,31 @@ function cstMinute() {
   return value('hour') * 60 + value('minute')
 }
 
-async function filterOkxQueue() {
+async function filterCompetitorQueue() {
   const events = query(`SELECT id,source,title,summary,source_url,symbols_json
     FROM social_content_events WHERE status='pending'`)
-    .filter((event) => isOkxRelated(event.source, event.title, event.summary, event.source_url, event.symbols_json))
+    .filter((event) => isSquareCompetitorRelated(event.source, event.title, event.summary, event.source_url, event.symbols_json))
   const drafts = query(`SELECT d.id,d.account_key,d.tweet_text,d.symbol,
       e.source,e.title,e.summary,e.source_url
     FROM social_drafts d LEFT JOIN social_content_events e ON e.id=d.source_event_id
     WHERE d.account_key IN ('midas_trading','legacy_midas') AND d.compliance_passed=1
       AND d.status<>'published' AND NOT EXISTS (
         SELECT 1 FROM social_dispatches sd WHERE sd.draft_id=d.id AND sd.status='success')`)
-    .filter((draft) => isOkxRelated(draft.tweet_text, draft.symbol, draft.source, draft.title, draft.summary, draft.source_url))
+    .filter((draft) => isSquareCompetitorRelated(draft.tweet_text, draft.symbol, draft.source, draft.title, draft.summary, draft.source_url))
   if (events.length) {
     query(`UPDATE social_content_events SET status='ignored'
       WHERE status='pending' AND id IN (${events.map((event) => Number(event.id)).join(',')})`)
   }
   if (drafts.length) {
     const ids = drafts.map((draft) => Number(draft.id)).join(',')
-    query(`UPDATE social_drafts SET compliance_passed=0,compliance_reason=${quote(OKX_CONTENT_REASON)},status='failed'
+    query(`UPDATE social_drafts SET compliance_passed=0,compliance_reason=${quote(SQUARE_COMPETITOR_REASON)},status='failed'
       WHERE id IN (${ids}) AND status<>'published' AND NOT EXISTS (
         SELECT 1 FROM social_dispatches sd WHERE sd.draft_id=social_drafts.id AND sd.status='success');
-      UPDATE social_dispatches SET status='failed',error=${quote(OKX_CONTENT_REASON)},updated_at=${Date.now()}
+      UPDATE social_dispatches SET status='failed',error=${quote(SQUARE_COMPETITOR_REASON)},updated_at=${Date.now()}
       WHERE draft_id IN (${ids}) AND status='pending' AND platform='binance_square';`)
   }
   query("DELETE FROM social_source_health WHERE source='OKX Public Trades'")
-  console.log(JSON.stringify({ event: 'social.okx_queue_filtered', events: events.length,
+  console.log(JSON.stringify({ event: 'social.competitor_queue_filtered', events: events.length,
     drafts: drafts.length, accounts: Object.fromEntries([...ACCOUNT_KEYS].map((key) =>
       [key, drafts.filter((draft) => draft.account_key === key).length])) }))
 }
@@ -299,16 +299,16 @@ async function main() {
     console.log('暂无待发布合规草稿，等待下一轮')
     return
   }
-  if (isOkxRelated(candidate.tweet_text, candidate.symbol, candidate.event_source,
+  if (isSquareCompetitorRelated(candidate.tweet_text, candidate.symbol, candidate.event_source,
     candidate.event_title, candidate.event_summary, candidate.event_source_url)) {
     query(
       `UPDATE social_drafts SET compliance_passed=0,
-         compliance_reason=${quote(OKX_CONTENT_REASON)},status='failed'
+         compliance_reason=${quote(SQUARE_COMPETITOR_REASON)},status='failed'
        WHERE id=${candidate.id};
-       UPDATE social_dispatches SET status='failed',error=${quote(OKX_CONTENT_REASON)},updated_at=${now}
+       UPDATE social_dispatches SET status='failed',error=${quote(SQUARE_COMPETITOR_REASON)},updated_at=${now}
        WHERE draft_id=${candidate.id} AND platform='binance_square' AND status='pending';`,
     )
-    console.log(`内容策略过滤：account=${accountKey} draft=${candidate.id} ${OKX_CONTENT_REASON}`)
+    console.log(`内容策略过滤：account=${accountKey} draft=${candidate.id} ${SQUARE_COMPETITOR_REASON}`)
     return
   }
 
@@ -450,8 +450,10 @@ async function main() {
 }
 
 if (process.argv.includes('--self-test')) {
-  assert.equal(isOkxRelated('中性市场观察', 'OKX Public Trades'), true)
-  assert.equal(isOkxRelated('仅分析 BTC/USDT'), false)
+  assert.equal(isSquareCompetitorRelated('中性市场观察', 'OKX Public Trades'), true)
+  assert.equal(isSquareCompetitorRelated('中性市场观察', 'Coinbase'), true)
+  assert.equal(isSquareCompetitorRelated('中性市场观察', 'Kraken'), true)
+  assert.equal(isSquareCompetitorRelated('仅分析 BTC/USDT'), false)
   assert.equal(
     cleanPublishText('正文。\n\n仅供参考，不构成投资建议。\n#NEIRO #点金Midas', 'legacy_midas'),
     '正文。',
@@ -473,7 +475,7 @@ if (process.argv.includes('--self-test')) {
   assert.equal(isContentRejection('100001001'), false)
   console.log('币安广场发布文本清理自检通过')
 } else {
-  (process.argv.includes('--filter-okx-queue') ? filterOkxQueue() : main()).catch((error) => {
+  (process.argv.includes('--filter-competitor-queue') ? filterCompetitorQueue() : main()).catch((error) => {
     console.error(error instanceof Error ? error.message : String(error))
     process.exitCode = 1
   })

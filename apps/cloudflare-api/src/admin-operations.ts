@@ -12,7 +12,7 @@ import {
 } from './binance-square'
 import { fetchCryptoMarketScan } from './crypto-market'
 import { HttpError, jsonResponse, readJsonObject } from './http'
-import { isOkxRelated, OKX_CONTENT_REASON } from './social-policy'
+import { isSquareCompetitorRelated, SQUARE_COMPETITOR_REASON } from './social-policy'
 import {
   cleanSocialPostText,
   contentTags,
@@ -673,7 +673,7 @@ async function listSocialDrafts(
 }
 
 export function compliant(text: string, ...context: string[]): { passed: boolean; reason: string | null } {
-  if (isOkxRelated(text, ...context)) return { passed: false, reason: OKX_CONTENT_REASON }
+  if (isSquareCompetitorRelated(text, ...context)) return { passed: false, reason: SQUARE_COMPETITOR_REASON }
   const blocked = /(稳赚|保本| guaranteed|无风险|确定涨|确定跌|收益保证)/iu
   if (blocked.test(text)) return { passed: false, reason: '含有收益承诺或确定性表述' }
   const sensitive = /(民主党|共和党|政治党派|总统选举|博彩|赌博|casino|gambling|democrat|republican)/iu
@@ -812,7 +812,7 @@ async function createSocialDrafts(
   try {
     const scan = await fetchCryptoMarketScan(60)
     quotes = scan
-      .filter((item) => !recentSymbols.has(item.symbol) && !isOkxRelated(item.symbol))
+      .filter((item) => !recentSymbols.has(item.symbol) && !isSquareCompetitorRelated(item.symbol))
       .slice(0, 12)
       .map((item) => ({
         symbol: item.symbol,
@@ -845,7 +845,7 @@ async function createSocialDrafts(
         last_point: number
         change_pct: number
       }>()
-    const allowed = fallback.results.filter((item) => !isOkxRelated(item.symbol, item.name))
+    const allowed = fallback.results.filter((item) => !isSquareCompetitorRelated(item.symbol, item.name))
     quotes = allowed.filter((item) => !recentSymbols.has(item.symbol))
     if (quotes.length === 0) quotes = allowed
   }
@@ -1476,12 +1476,12 @@ async function dispatchSocialDraft(
       error: null,
     }
   }
-  if (isOkxRelated(draft.tweet_text, draft.symbol, draft.event_source,
+  if (isSquareCompetitorRelated(draft.tweet_text, draft.symbol, draft.event_source,
     draft.event_title, draft.event_summary, draft.event_source_url)) {
     await env.DB.prepare(
       "UPDATE social_drafts SET compliance_passed = 0, compliance_reason = ?, status = 'failed' WHERE id = ?",
-    ).bind(OKX_CONTENT_REASON, draft.id).run()
-    throw new HttpError(409, OKX_CONTENT_REASON)
+    ).bind(SQUARE_COMPETITOR_REASON, draft.id).run()
+    throw new HttpError(409, SQUARE_COMPETITOR_REASON)
   }
 
   const now = Date.now()
@@ -1717,11 +1717,11 @@ async function autoCandidate(
       event_summary: string | null
       event_source_url: string | null
     }>()
-  if (row && isOkxRelated(row.tweet_text, row.symbol, row.event_source,
+  if (row && isSquareCompetitorRelated(row.tweet_text, row.symbol, row.event_source,
     row.event_title, row.event_summary, row.event_source_url)) {
     await env.DB.prepare(
       "UPDATE social_drafts SET compliance_passed = 0, compliance_reason = ?, status = 'failed' WHERE id = ?",
-    ).bind(OKX_CONTENT_REASON, row.id).run()
+    ).bind(SQUARE_COMPETITOR_REASON, row.id).run()
     return null
   }
   return row

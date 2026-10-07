@@ -1,4 +1,4 @@
-import { isOkxRelated, OKX_CONTENT_REASON } from './social-policy'
+import { isSquareCompetitorRelated, SQUARE_COMPETITOR_REASON } from './social-policy'
 
 const CONTENT_ENDPOINT =
   'https://www.binance.com/bapi/composite/v1/public/pgc/openApi/content/add'
@@ -132,9 +132,9 @@ export async function publishToBinanceSquare(
   imageBytes?: ArrayBuffer | null,
   accountKey: BinanceSquareAccountKey = 'midas_trading',
 ): Promise<BinanceSquarePublishResult> {
-  if (isOkxRelated(text)) {
+  if (isSquareCompetitorRelated(text)) {
     return {
-      success: false, postId: null, url: null, error: OKX_CONTENT_REASON,
+      success: false, postId: null, url: null, error: SQUARE_COMPETITOR_REASON,
       imageUrl: null, imageError: null,
     }
   }

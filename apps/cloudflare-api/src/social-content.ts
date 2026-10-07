@@ -1,5 +1,5 @@
 import { invokeAi, parseAiJson } from './ai-provider'
-import { isOkxRelated } from './social-policy'
+import { isSquareCompetitorRelated } from './social-policy'
 
 const RSS_MAX_AGE_MS = 8 * 60 * 60_000
 const SOURCE_CONCURRENCY = 2
@@ -241,7 +241,7 @@ async function insertEvent(
     occurredAt: number
   }>,
 ): Promise<number> {
-  if (isOkxRelated(event.source, event.title, event.summary, event.sourceUrl, ...event.symbols)) return 0
+  if (isSquareCompetitorRelated(event.source, event.title, event.summary, event.sourceUrl, ...event.symbols)) return 0
   const result = await env.DB
     .prepare(
       `INSERT OR IGNORE INTO social_content_events
@@ -510,7 +510,7 @@ export async function nextContentEvent(
       occurred_at: number
     }>()
   if (!row) return null
-  if (isOkxRelated(row.source, row.title, row.summary, row.source_url, row.symbols_json)) {
+  if (isSquareCompetitorRelated(row.source, row.title, row.summary, row.source_url, row.symbols_json)) {
     await env.DB.prepare("UPDATE social_content_events SET status = 'ignored' WHERE id = ?")
       .bind(row.id).run()
     return null

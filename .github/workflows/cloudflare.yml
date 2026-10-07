@@ -104,8 +104,8 @@ jobs:
       - name: 部署 API Worker
         run: pnpm --filter @midas-trading/cloudflare-api exec wrangler deploy --message "${GITHUB_SHA}"
 
-      - name: 过滤禁止发布的 OKX 队列
-        run: node scripts/binance-square-publisher.mjs --filter-okx-queue
+      - name: 过滤禁止发布的竞品队列
+        run: node scripts/binance-square-publisher.mjs --filter-competitor-queue
 
   deploy-web:
     name: 部署 · Web Worker
