@@ -101,11 +101,11 @@ jobs:
       - name: 应用远端 D1 migrations
         run: pnpm --filter @midas-trading/cloudflare-api exec wrangler d1 migrations apply midas-trading-db --remote
 
-      - name: 部署 API Worker
-        run: pnpm --filter @midas-trading/cloudflare-api exec wrangler deploy --message "${GITHUB_SHA}"
-
       - name: 过滤禁止发布的竞品队列
         run: node scripts/binance-square-publisher.mjs --filter-competitor-queue
+
+      - name: 部署 API Worker
+        run: pnpm --filter @midas-trading/cloudflare-api exec wrangler deploy --message "${GITHUB_SHA}"
 
   deploy-web:
     name: 部署 · Web Worker
