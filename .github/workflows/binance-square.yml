@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_ACCOUNT_ID: 'a828bebda1f352216c7d7da425bad17a'
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       SQUARE_ACCOUNT_KEY: ${{ matrix.account_key }}
       BINANCE_SQUARE_PRIMARY_API_KEY: ${{ secrets.BINANCE_SQUARE_API_KEY }}

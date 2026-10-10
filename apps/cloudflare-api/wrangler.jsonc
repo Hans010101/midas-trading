@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "midas-trading-api",
+  "account_id": "a828bebda1f352216c7d7da425bad17a",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-27",
   "compatibility_flags": ["nodejs_compat"],
@@ -13,10 +14,6 @@
     "binding": "BROWSER"
   },
   "routes": [
-    {
-      "pattern": "midas-trading-api.openclaw007.online",
-      "custom_domain": true
-    },
     {
       "pattern": "feishu-api.midastrade.asia",
       "custom_domain": true
@@ -41,7 +38,7 @@
     {
       "binding": "DB",
       "database_name": "midas-trading-db",
-      "database_id": "46969153-ff86-4cf1-b013-617d280d3536",
+      "database_id": "a5557522-da75-4ced-b6c7-742bf6b2657b",
       "migrations_dir": "migrations"
     }
   ],

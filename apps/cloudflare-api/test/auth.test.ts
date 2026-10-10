@@ -164,7 +164,7 @@ describe('independent alerts and notification settings', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(3)
     expect(fetchMock.mock.calls[1]?.[1]?.body as string).toContain(
-      'midas-trading-api.openclaw007.online',
+      'api.midastrade.asia',
     )
     expect(fetchMock.mock.calls[1]?.[1]?.body as string).toContain(
       'callback_query',

@@ -19,7 +19,7 @@
     {
       "binding": "DB",
       "database_name": "midas-trading-db-test",
-      "database_id": "46969153-ff86-4cf1-b013-617d280d3536",
+      "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "migrations"
     }
   ],

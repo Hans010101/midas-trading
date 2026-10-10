@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "midas-trading",
+  "account_id": "a828bebda1f352216c7d7da425bad17a",
   "main": ".open-next/worker.js",
   "workers_dev": true,
   "preview_urls": false,

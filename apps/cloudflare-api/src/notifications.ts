@@ -13,7 +13,7 @@ import {
 } from './telegram-bot'
 
 const BIND_TTL_MS = 10 * 60 * 1_000
-const TELEGRAM_WEBHOOK_ORIGIN = 'https://midas-trading-api.openclaw007.online'
+const TELEGRAM_WEBHOOK_ORIGIN = 'https://api.midastrade.asia'
 const TIME_ZONES = new Set([
   'Asia/Shanghai',
   'Asia/Tokyo',

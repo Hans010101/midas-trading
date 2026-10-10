@@ -1,6 +1,8 @@
 # 点金 Midas
 
-> 面向 **A 股 / 美股 / 加密** 三市场的 AI 原生分析终端。
+> **运行状态（2026-10-10）：本项目继续独立运行，未退役。** 生产地址为 https://midastrade.asia，部署账户为 Cloudflare 002（`a828bebda1f352216c7d7da425bad17a`）。API 使用同账户的 `midas-trading-db`（`a5557522-da75-4ced-b6c7-742bf6b2657b`）；点金雷达与点金 Midas 的币安广场发布器继续属于本项目。不要与独立的点金手项目或其退役模块混淆。
+
+> 面向 **A 股 / 美股 / 港股 / 加密** 四市场的 AI 原生分析终端。
 > **仅虚拟资金交易,永不接真实下单。**
 
 [![Status](https://img.shields.io/badge/M0-near%20complete-C8102E)]() [![License](https://img.shields.io/badge/license-Private-B8860B)]()
