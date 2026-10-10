@@ -235,6 +235,9 @@ export default {
     const socialPublishSlot = isAutoPublishTimestamp(controller.scheduledTime)
     const tasks: Array<{ name: string; promise: Promise<void> }> = socialPublishSlot
       ? [{
+          name: 'market_refresh',
+          promise: refreshGlobalOverview(env).then(() => undefined),
+        }, {
           name: 'admin_operations',
           promise: runAdminOperationsCron(env, controller.scheduledTime),
         }]

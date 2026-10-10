@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { routeRequest } from '../src/index'
+import worker, { routeRequest } from '../src/index'
+
+afterEach(() => vi.unstubAllGlobals())
 
 const config = {
   environment: 'test',
@@ -9,6 +11,38 @@ const config = {
 } as const
 
 describe('Cloudflare API routing', () => {
+  it('refreshes global quotes during a publishing slot', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      return url.hostname === 'query1.finance.yahoo.com'
+        ? Response.json({ chart: { result: [{ meta: {
+            regularMarketPrice: 100,
+            chartPreviousClose: 90,
+            regularMarketTime: 1791626400,
+          } }] } })
+        : Response.json({ result: {} })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const statement = {
+      bind: (..._values: unknown[]) => statement,
+      all: async () => ({ results: [] }),
+      run: async () => ({ meta: { changes: 0 } }),
+    }
+    const batch = vi.fn(async () => [])
+    const env = {
+      ENVIRONMENT: 'test',
+      DB: { prepare: () => statement, batch },
+    } as unknown as Env
+    const tasks: Promise<unknown>[] = []
+    const ctx = { waitUntil: (task: Promise<unknown>) => tasks.push(task) } as unknown as ExecutionContext
+
+    await worker.scheduled({ scheduledTime: Date.parse('2026-10-10T10:00:00Z') } as ScheduledController, env, ctx)
+    await Promise.all(tasks)
+
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('query1.finance.yahoo.com'))).toBe(true)
+    expect(batch).toHaveBeenCalledWith(expect.arrayContaining([statement]))
+  })
+
   it('returns an independent health response', async () => {
     const response = await routeRequest(
       new Request('https://api.example.test/api/v1/health'),
