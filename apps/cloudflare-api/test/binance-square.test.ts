@@ -15,6 +15,21 @@ afterEach(() => {
 })
 
 describe('Binance Square publishing adapter', () => {
+  it('does not fall back to publishing text after an explicit image rejection', async () => {
+    const upstream = vi.fn()
+      .mockResolvedValueOnce(Response.json({ code: '000000', data: {
+        presignedUrl: 'https://upload.example/image', fileTicket: 'ticket',
+      } }))
+      .mockResolvedValueOnce(new Response(''))
+      .mockResolvedValueOnce(Response.json({ code: '000000', data: {
+        status: 2, failedReason: 'Image rejected',
+      } }))
+    vi.stubGlobal('fetch', upstream)
+    await expect(publishToBinanceSquare(testEnv(), '市场观察', new ArrayBuffer(4)))
+      .resolves.toMatchObject({ success: false, error: '图片处理被拒绝：Image rejected' })
+    expect(upstream).toHaveBeenCalledTimes(3)
+  })
+
   it('filters competitor brands, related projects and original sources for both accounts without uploading or posting', async () => {
     for (const text of ['OKX 上线公告', 'okex.com', '欧易钱包', '欧意交易所',
       'ＯＫＸ 新闻', 'O\u200bkX 公告', 'OKB/USDT', '$OKT', 'X Layer 生态', 'OKTChain 升级',

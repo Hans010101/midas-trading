@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { isSquareCompetitorRelated, SQUARE_COMPETITOR_REASON } from '../apps/cloudflare-api/src/social-policy.ts'
+import { SquareImageError, uploadSquareImage } from '../apps/cloudflare-api/src/binance-square-image.ts'
 
 import {
   createSquareMedia,
@@ -10,10 +11,6 @@ import {
 const DATABASE = 'midas-trading-db'
 const CONTENT_ENDPOINT =
   'https://www.binance.com/bapi/composite/v1/public/pgc/openApi/content/add'
-const IMAGE_PRESIGN_ENDPOINT =
-  'https://www.binance.com/bapi/composite/v2/public/pgc/openApi/image/presignedUrl'
-const IMAGE_STATUS_ENDPOINT =
-  'https://www.binance.com/bapi/composite/v2/public/pgc/openApi/image/imageStatus'
 const SYMBOL_COOLDOWN_MS = 45 * 60_000
 const CHART_FAILURE_COOLDOWN_MS = 24 * 60 * 60_000
 const CHART_FAILURE_PREFIX = '质检未通过：K 线'
@@ -21,6 +18,14 @@ const ACCOUNT_KEYS = new Set(['midas_trading', 'legacy_midas'])
 
 function isChartQualityRejection(message) {
   return message.startsWith(CHART_FAILURE_PREFIX)
+}
+
+function mediaFailurePolicy(error) {
+  return {
+    accountFailure: error instanceof SquareImageError && error.kind === 'account',
+    rejectDraft: isChartQualityRejection(error instanceof Error ? error.message : String(error)) ||
+      (error instanceof SquareImageError && error.kind === 'rejected'),
+  }
 }
 
 function isContentRejection(code) {
@@ -155,44 +160,6 @@ function ensureBrowserRuntime() {
     ['exec', 'playwright', 'install', '--with-deps', 'chromium'],
     { stdio: 'inherit' },
   )
-}
-
-async function uploadImage(apiKey, bytes, kind) {
-  const presignResponse = await fetch(IMAGE_PRESIGN_ENDPOINT, {
-    method: 'POST',
-    headers: headers(apiKey),
-    body: JSON.stringify({ imageName: `midas-${kind}-${Date.now()}.png` }),
-    signal: AbortSignal.timeout(30_000),
-  })
-  const presign = await presignResponse.json()
-  const data = presign && typeof presign.data === 'object' ? presign.data : {}
-  const url = typeof data.presignedUrl === 'string' ? data.presignedUrl : ''
-  const ticket = typeof data.fileTicket === 'string' ? data.fileTicket : ''
-  if (!presignResponse.ok || !url || !ticket) {
-    throw new Error(`图片预签名失败 [${presign.code ?? presignResponse.status}]`)
-  }
-  const put = await fetch(url, {
-    method: 'PUT',
-    headers: { 'content-type': 'image/png' },
-    body: bytes,
-    signal: AbortSignal.timeout(30_000),
-  })
-  if (!put.ok) throw new Error(`图片上传 HTTP ${put.status}`)
-  for (let attempt = 0; attempt < 15; attempt += 1) {
-    const statusResponse = await fetch(IMAGE_STATUS_ENDPOINT, {
-      method: 'POST',
-      headers: headers(apiKey),
-      body: JSON.stringify({ fileTicket: ticket }),
-      signal: AbortSignal.timeout(30_000),
-    })
-    const status = await statusResponse.json()
-    const statusData = status && typeof status.data === 'object' ? status.data : {}
-    if (statusData.status === 1 && typeof statusData.imageUrl === 'string') {
-      return statusData.imageUrl
-    }
-    await new Promise((resolve) => setTimeout(resolve, 2_000))
-  }
-  throw new Error('图片处理超时')
 }
 
 async function main() {
@@ -354,7 +321,7 @@ async function main() {
     try {
       ensureBrowserRuntime()
       const media = await createSquareMedia(candidate)
-      imageUrl = await uploadImage(apiKey, media.bytes, media.kind)
+      imageUrl = await uploadSquareImage(apiKey, media.bytes, media.kind)
       query(
         `UPDATE social_drafts SET image_key=${quote(imageUrl)}
          WHERE id=${candidate.id};`,
@@ -362,19 +329,18 @@ async function main() {
       console.log(`配图已就绪：${media.kind}`)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      if (candidate.content_type === 'market_analysis') {
-        query(
+      const policy = mediaFailurePolicy(error)
+      if (candidate.content_type === 'market_analysis' || policy.rejectDraft || policy.accountFailure) {
+        if (policy.rejectDraft) query(
           `UPDATE social_drafts
            SET compliance_passed=0,compliance_reason=${quote(message.slice(0, 500))},
                status='failed',image_key=NULL
            WHERE id=${candidate.id};`,
         )
-        failDispatch(dispatch.id, accountKey, message, !isChartQualityRejection(message))
-        if (isChartQualityRejection(message)) {
-          console.log(`质检拦截，本轮跳过：${candidate.symbol} ${message}`)
-          return
-        }
-        throw new Error(message)
+        failDispatch(dispatch.id, accountKey, message, policy.accountFailure)
+        if (policy.accountFailure) throw new Error(message)
+        console.log(`${policy.rejectDraft ? '配图质检拦截' : '配图暂不可用，保留草稿待重试'}：${candidate.symbol} ${message}`)
+        return
       }
       console.error(`配图生成/上传失败，降级为纯文字：${message}`)
     }
@@ -473,6 +439,14 @@ if (process.argv.includes('--self-test')) {
   assert.equal(isContentRejection('20022'), true)
   assert.equal(isContentRejection(20022), true)
   assert.equal(isContentRejection('100001001'), false)
+  for (const error of [new SquareImageError('图片处理超时'), new TypeError('fetch failed')]) {
+    assert.deepEqual(mediaFailurePolicy(error), { accountFailure: false, rejectDraft: false })
+  }
+  for (const error of [new SquareImageError('图片拒绝', 'rejected'), new Error('质检未通过：K 线图表状态为 unavailable')]) {
+    assert.deepEqual(mediaFailurePolicy(error), { accountFailure: false, rejectDraft: true })
+  }
+  assert.deepEqual(mediaFailurePolicy(new SquareImageError('API key expired', 'account')),
+    { accountFailure: true, rejectDraft: false })
   console.log('币安广场发布文本清理自检通过')
 } else {
   (process.argv.includes('--filter-competitor-queue') ? filterCompetitorQueue() : main()).catch((error) => {

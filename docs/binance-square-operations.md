@@ -62,7 +62,7 @@ For market-analysis posts only:
 3. The image is uploaded through Binance Square's presigned upload API.
 4. The returned image URL is attached to the post and recorded on the draft.
 
-Screenshot or image-upload failure degrades to a vetted text post and is logged; it does not trip the publishing circuit by itself. A post API failure still counts toward the three-failure circuit breaker.
+Market-analysis posts require a valid chart: empty/unavailable/flat charts and rejected images block that draft, not the account. Image processing is polled for up to 120 seconds; transient screenshot/upload failures retain the draft for a later scheduled attempt without tripping the account circuit. News cards may fall back to vetted text on transient image failure. Image API credential/business errors and post API failures still count toward the three-failure circuit breaker; content rejection remains draft-scoped. Both the GitHub publisher and Worker use the same image status parser, including upstream rejection reasons.
 
 ## Operating metrics
 
