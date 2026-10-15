@@ -35,6 +35,8 @@ describe('Binance Square publishing adapter', () => {
       'ＯＫＸ 新闻', 'O\u200bkX 公告', 'OKB/USDT', '$OKT', 'X Layer 生态', 'OKTChain 升级',
       'COINBASE 上市公告', 'Ｃｏｉｎｂａｓｅ 钱包', 'Coin\u200bbase Prime', 'coin base exchange',
       '币库交易所', '科因贝斯', 'Kraken Pro 公告', 'Ｋｒａｋｅｎ', '海妖交易所', '克拉肯',
+      'Upbit 上币公告', 'UPBIT 钱包', 'Ｕｐｂｉｔ', 'Up\u200bbit', 'Up-bit', 'Up Bit',
+      '업비트 신규 거래지원', 'Dunamu 公司新闻', '두나무', 'https://global.upbit.com',
       'Base 链升级', 'Base network TVL', 'https://base.org', 'Base App 更新',
       'cbBTC', '$cbETH', 'cbXRP/USDT', '$COIN', 'Ink 生态', 'Ink L2',
       'https://inkonchain.com', '$INK', 'INK/USDT']) {
@@ -43,12 +45,15 @@ describe('Binance Square publishing adapter', () => {
     expect(isSquareCompetitorRelated('中性 BTC 新闻', 'OKX Public Trades')).toBe(true)
     expect(isSquareCompetitorRelated('中性 BTC 新闻', 'https://blog.kraken.com/news')).toBe(true)
     expect(isSquareCompetitorRelated('生态更新', 'https://www.coinbase.com/blog')).toBe(true)
+    expect(isSquareCompetitorRelated('中性 BTC 新闻', 'Upbit')).toBe(true)
+    expect(isSquareCompetitorRelated('生态更新', 'https://www.dunamu.com/news')).toBe(true)
     expect(isSquareCompetitorRelated('Bitcoin lookback period, base case and base currency',
       'BTC/USDT', 'CoinDesk', 'linking markets')).toBe(false)
+    expect(isSquareCompetitorRelated('Bitcoin uptrend: BTC/USDT', 'CoinDesk')).toBe(false)
     const upstream = vi.fn()
     vi.stubGlobal('fetch', upstream)
     for (const account of ['midas_trading', 'legacy_midas'] as const) {
-      for (const text of ['欧易 OKX 公告', 'Coinbase 钱包更新', 'Kraken 上市公告']) {
+      for (const text of ['欧易 OKX 公告', 'Coinbase 钱包更新', 'Kraken 上市公告', 'Upbit 上币公告', 'Dunamu 公司新闻']) {
         await expect(publishToBinanceSquare(testEnv(), text,
           new ArrayBuffer(4), account)).resolves.toMatchObject({
           success: false, error: SQUARE_COMPETITOR_REASON, imageUrl: null,

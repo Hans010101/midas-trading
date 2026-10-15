@@ -419,6 +419,9 @@ if (process.argv.includes('--self-test')) {
   assert.equal(isSquareCompetitorRelated('中性市场观察', 'OKX Public Trades'), true)
   assert.equal(isSquareCompetitorRelated('中性市场观察', 'Coinbase'), true)
   assert.equal(isSquareCompetitorRelated('中性市场观察', 'Kraken'), true)
+  assert.equal(isSquareCompetitorRelated('中性市场观察', 'Upbit'), true)
+  assert.equal(isSquareCompetitorRelated('업비트 上币公告'), true)
+  assert.equal(isSquareCompetitorRelated('中性市场观察', 'https://www.dunamu.com/news'), true)
   assert.equal(isSquareCompetitorRelated('仅分析 BTC/USDT'), false)
   assert.equal(
     cleanPublishText('正文。\n\n仅供参考，不构成投资建议。\n#NEIRO #点金Midas', 'legacy_midas'),

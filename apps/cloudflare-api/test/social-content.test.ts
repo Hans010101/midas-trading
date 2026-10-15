@@ -18,13 +18,13 @@ afterEach(() => {
 })
 
 describe('Binance Square content operations', () => {
-  it('ignores legacy pending events whose original facts mention OKX before drafting', async () => {
+  it.each(['欧易公开市场数据', 'Upbit 上币公告', 'Dunamu 交易所业务'])('ignores legacy competitor events before drafting: %s', async (summary) => {
     const event = await env.DB.prepare(
       `INSERT INTO social_content_events
         (source,source_id,content_type,title,summary,source_url,symbols_json,score,occurred_at,ingested_at)
-       VALUES ('PANews',?,'whale','BTC 资金流观察','欧易公开市场数据','https://example.com/news','["BTC"]',100,?,?)
+       VALUES ('PANews',?,'whale','BTC 资金流观察',?,'https://example.com/news','["BTC"]',100,?,?)
        RETURNING id`,
-    ).bind(crypto.randomUUID(), Date.now(), Date.now()).first<{ id: number }>()
+    ).bind(crypto.randomUUID(), summary, Date.now(), Date.now()).first<{ id: number }>()
     expect(await nextContentEvent(env, ['whale'])).toBeNull()
     expect(await env.DB.prepare('SELECT status FROM social_content_events WHERE id = ?')
       .bind(event!.id).first()).toEqual({ status: 'ignored' })
