@@ -19,7 +19,8 @@ jobs:
         include:
           - account_key: midas_trading
           - account_key: legacy_midas
-    runs-on: ubuntu-latest
+    # Playwright 1.60 does not support the ubuntu-latest move to Ubuntu 26.04.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       CLOUDFLARE_ACCOUNT_ID: 'a828bebda1f352216c7d7da425bad17a'
@@ -43,6 +44,9 @@ jobs:
 
       - name: 安装锁定依赖
         run: pnpm install --frozen-lockfile
+
+      - name: 安装截图浏览器（失败必须告警）
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: 检查队列并发布一条合规草稿
         run: |

@@ -153,15 +153,6 @@ function failDispatch(dispatchId, accountKey, message, accountFailure = true) {
   )
 }
 
-function ensureBrowserRuntime() {
-  if (process.env.CI !== 'true') return
-  execFileSync(
-    'pnpm',
-    ['exec', 'playwright', 'install', '--with-deps', 'chromium'],
-    { stdio: 'inherit' },
-  )
-}
-
 async function main() {
   const accountKey = process.env.SQUARE_ACCOUNT_KEY?.trim() || 'midas_trading'
   if (!ACCOUNT_KEYS.has(accountKey)) throw new Error(`未知币安广场账户：${accountKey}`)
@@ -319,7 +310,6 @@ async function main() {
     : null
   if (!imageUrl) {
     try {
-      ensureBrowserRuntime()
       const media = await createSquareMedia(candidate)
       imageUrl = await uploadSquareImage(apiKey, media.bytes, media.kind)
       query(
