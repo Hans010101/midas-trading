@@ -18,16 +18,27 @@ const feeds = [
 ] as const
 type Feed = (typeof feeds)[number]
 type Headline = { title: string; link: string; occurredAt: number }
+type WireMarket = 'cn' | 'hk' | 'us'
+const wireMarketTerms: Record<WireMarket, RegExp> = {
+  cn: /A\s*股|沪指|沪深|深[证成]|上[证交]|科创板|创业板|北交所|沪股通|深股通|证监会|茅台/iu,
+  hk: /港股|恒[生指]|港交所|香港|恒科|港元|南向资金|腾讯|美团|小米集团|快手|港币/iu,
+  us: /美股|道指|道琼斯|纳指|纳斯达克|标普|纽交所|美债|盘前|盘后|美国FDA|英伟达|特斯拉/iu,
+}
 type Snapshot = { feed: string; checked_at: number; items_json: string }
 
-function parseWire(body: string): Headline[] {
+function parseWire(body: string, market: WireMarket): Headline[] {
   const items: unknown = JSON.parse(body)?.data?.items
-  if (!Array.isArray(items)) throw new Error('Invalid wire response')
+  if (!Array.isArray(items) || !items.some(item => typeof item?.uri === 'string' && typeof item.content_text === 'string' && Number.isFinite(item.display_time))) throw new Error('Invalid wire response')
+  const channelName = (market === 'cn' ? 'a' : market) + '-stock-channel'
   return items.flatMap(item => {
     if (!item || item.is_priced || typeof item.uri !== 'string' || typeof item.display_time !== 'number') return []
     const content = typeof item.content_text === 'string' ? item.content_text.trim() : ''
     const title = typeof item.title === 'string' && item.title.trim()
       ? item.title : (content.match(/^[^\n。！？]+[。！？]?/u)?.[0] ?? '')
+    // The publisher also sends general world news to all three equity wires.
+    const shared = Array.isArray(item.channels) && item.channels.some((channel: unknown) =>
+      channel === 'global-channel' || (typeof channel === 'string' && channel.endsWith('-stock-channel') && channel !== channelName))
+    if (shared && !wireMarketTerms[market].test(title + ' ' + content)) return []
     // Some equity wires syndicate general news or standalone coin price ticks.
     if (/地震|消防救援/u.test(title) && !/股|市场|保[险險]|上市|停[产產]|供[应應]/u.test(title)) return []
     if (/比特币|以太坊/u.test(title) && !/股票|股价|公司|ETF|上市|港股|美股/iu.test(title)) return []
@@ -47,9 +58,9 @@ function parseEastmoney(body: string): Headline[] {
 }
 
 function parseFeed(feed: Feed, body: string, now: number): Headline[] {
-  const entries = feed.id === 'eastmoney' ? parseEastmoney(body)
-    : feed.url.startsWith(WSCN) ? parseWire(body) : parseSyndicationFeed(body)
-  return entries.flatMap(item => {
+  const wire = feed.id === 'cn' || feed.id === 'hk' || feed.id === 'us'
+  const entries = wire ? parseWire(body, feed.id) : feed.id === 'eastmoney' ? parseEastmoney(body) : parseSyndicationFeed(body)
+  const valid = entries.flatMap(item => {
     if (!Number.isFinite(item.occurredAt) || item.occurredAt <= 0 || item.occurredAt > now + 300_000) return []
     const url = URL.canParse(item.link) ? new URL(item.link) : null
     if (!url || url.protocol !== 'https:' || url.host !== feed.host || url.username || url.password || url.pathname === '/') return []
@@ -59,6 +70,8 @@ function parseFeed(feed: Feed, body: string, now: number): Headline[] {
     if (clean.length < 4) return []
     return [{ title: clean.length > 115 ? clean.slice(0, 114) + '…' : clean, link: url.href, occurredAt: item.occurredAt }]
   })
+  if (!valid.length && !(wire && !entries.length)) throw new Error('No valid headlines')
+  return valid
 }
 
 async function snapshots(db: D1Database) {
@@ -74,7 +87,6 @@ export async function refreshIndustryNews(db: D1Database, now = Date.now()) {
     })
     if (!res.ok) throw new Error('HTTP ' + res.status)
     const fresh = parseFeed(feed, await res.text(), now)
-    if (!fresh.length) throw new Error('No valid headlines')
     const old = previous.find(row => row.feed === feed.id)
     const byLink = new Map<string, Headline>()
     for (const item of [...(old ? JSON.parse(old.items_json) as Headline[] : []), ...fresh]) {

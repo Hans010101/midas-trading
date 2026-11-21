@@ -14,7 +14,7 @@ it('keeps attributed, deduplicated wire and RSS headlines through a partial outa
   vi.stubGlobal('fetch', async (input: string) => {
     if (input.includes('awtmt.com')) {
       if (outage) return Response.json({ data: { items: [] } })
-      return Response.json({ data: { items: [wire, { ...wire, is_priced: true, uri: wire.uri + 'paid' },
+      return Response.json({ data: { items: [wire, { ...wire, title: '国际体育比赛今日开幕', content_text: '国际体育比赛今日开幕', channels: ['global-channel'], uri: wire.uri + 'sports' }, { ...wire, is_priced: true, uri: wire.uri + 'paid' },
         { ...wire, uri: 'https://unknown.test/bad' }, { ...wire, display_time: now / 1000 + 600, uri: wire.uri + 'future' }] } })
     }
     if (input.includes('np-listapi.eastmoney.com')) return Response.json({ data: { list: [{ title: chinaTitle,
