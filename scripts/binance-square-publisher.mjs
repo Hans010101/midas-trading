@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { isSquareCompetitorRelated, SQUARE_COMPETITOR_REASON } from '../apps/cloudflare-api/src/social-policy.ts'
+import { isSquareCompetitorRelated, SQUARE_COMPETITOR_REASON, squareQuotaDay } from '../apps/cloudflare-api/src/social-policy.ts'
 import { SquareImageError, uploadSquareImage } from '../apps/cloudflare-api/src/binance-square-image.ts'
 
 import {
@@ -170,6 +170,7 @@ async function main() {
   }
 
   const now = Date.now()
+  const [dayStart, dayEnd] = squareQuotaDay(now)
   // Explicit admin requests must not depend on the automatic-publishing
   // switch. They were already authenticated, compliance-checked and rate
   // checked by the API before this pending ledger row was created.
@@ -205,7 +206,7 @@ async function main() {
       `SELECT COUNT(*) AS count FROM social_dispatches
        WHERE source='auto' AND platform='binance_square' AND status='success'
          AND account_key=${quote(accountKey)}
-         AND date(updated_at/1000,'unixepoch','+8 hours')=date('now','+8 hours')`,
+         AND updated_at >= ${dayStart} AND updated_at < ${dayEnd}`,
     )[0]
     if (Number(used?.count ?? 0) >= Number(config.daily_limit)) {
       console.log(`今日已达到 ${config.daily_limit} 条自动发布上限，跳过`)
@@ -271,13 +272,12 @@ async function main() {
   }
 
   const guard = query(
-    `SELECT
-       SUM(CASE WHEN date(updated_at/1000,'unixepoch','+8 hours')=
-                         date('now','+8 hours') THEN 1 ELSE 0 END) AS today,
-       MAX(updated_at) AS last_at
+    `SELECT COUNT(*) AS today,
+       (SELECT MAX(updated_at) FROM social_dispatches
+        WHERE platform='binance_square' AND status='success' AND account_key=${quote(accountKey)}) AS last_at
      FROM social_dispatches
-     WHERE platform='binance_square' AND status='success'
-       AND account_key=${quote(accountKey)}`,
+     WHERE platform='binance_square' AND status='success' AND account_key=${quote(accountKey)}
+       AND updated_at >= ${dayStart} AND updated_at < ${dayEnd}`,
   )[0]
   if (Number(guard?.today ?? 0) >= 100) {
     console.log('币安广场今日已达到 100 条官方上限，保留队列等待')

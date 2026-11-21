@@ -1,5 +1,12 @@
 export const SQUARE_COMPETITOR_REASON = '发布策略过滤：涉及 OKX、Coinbase、Kraken、Upbit 或关联项目'
 
+export function squareQuotaDay(timestamp: number): [number, number] {
+  const day = 86_400_000
+  const shanghaiOffset = 8 * 3_600_000
+  const start = Math.floor((timestamp + shanghaiOffset) / day) * day - shanghaiOffset
+  return [start, start + day]
+}
+
 export function isSquareCompetitorRelated(...values: readonly (string | null | undefined)[]): boolean {
   const text = values.filter((value): value is string => typeof value === 'string')
     .map((value) => value.normalize('NFKC').replace(/[\u200b-\u200d\ufeff]/gu, '')).join('\n')

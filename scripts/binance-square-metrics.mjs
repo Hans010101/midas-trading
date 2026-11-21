@@ -116,24 +116,30 @@ async function main() {
   const now = Date.now()
   const since = now - 7 * 24 * 60 * 60_000
   const dispatches = query(
-    `SELECT id,account_key,url,platform_post_id
-     FROM social_dispatches
-     WHERE platform='binance_square' AND status='success'
-       AND (metrics_updated_at IS NULL OR (created_at>=${since}
-         AND metrics_updated_at < CASE
-         WHEN created_at>=${now - 24 * 60 * 60_000} THEN ${now - 10 * 60_000}
-         ELSE ${now - 6 * 60 * 60_000} END))
-     ORDER BY metrics_updated_at IS NOT NULL,created_at DESC
-     LIMIT 120`,
+    `SELECT id,account_key,url,platform_post_id FROM (
+       SELECT id,account_key,url,platform_post_id,created_at,0 AS priority
+       FROM social_dispatches
+       WHERE platform='binance_square' AND status='success' AND metrics_updated_at IS NULL
+       UNION ALL
+       SELECT id,account_key,url,platform_post_id,created_at,1 AS priority
+       FROM social_dispatches
+       WHERE platform='binance_square' AND status='success' AND metrics_updated_at IS NOT NULL
+         AND created_at>=${since} AND metrics_updated_at < CASE
+           WHEN created_at>=${now - 24 * 60 * 60_000} THEN ${now - 10 * 60_000}
+           ELSE ${now - 6 * 60 * 60_000} END
+     ) ORDER BY priority,created_at DESC,id DESC LIMIT 120`,
   )
   const accounts = query(
     `SELECT account_key,platform_user_id,follower_updated_at,historical_metrics_updated_at
      FROM social_automation_accounts ORDER BY slot_offset_minutes`,
   )
-  const trackedPosts = query(
+  const historyAccounts = accounts.filter((account) => account.platform_user_id &&
+    (!account.historical_metrics_updated_at || now - Number(account.historical_metrics_updated_at) >= 24 * 60 * 60_000))
+  const trackedPosts = historyAccounts.length ? query(
     `SELECT account_key,url,platform_post_id FROM social_dispatches
-     WHERE platform='binance_square' AND status='success'`,
-  )
+     WHERE platform='binance_square' AND status='success'
+       AND account_key IN (${historyAccounts.map((account) => quote(account.account_key)).join(',')})`,
+  ) : []
   const metrics = []
   const accountUids = new Map(
     accounts
@@ -168,11 +174,8 @@ async function main() {
   }))
 
   const history = []
-  for (const account of accounts) {
-    const squareUid = accountUids.get(account.account_key)
-    const stale = !account.historical_metrics_updated_at ||
-      now - Number(account.historical_metrics_updated_at) >= 24 * 60 * 60_000
-    if (!squareUid || !stale) continue
+  for (const account of historyAccounts) {
+    const squareUid = account.platform_user_id
     try {
       const result = await historicalMetrics(squareUid, trackedIds.get(account.account_key) ?? new Set(), since)
       history.push({ accountKey: account.account_key, ...result })

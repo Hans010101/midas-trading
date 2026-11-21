@@ -12,7 +12,7 @@ import {
 } from './binance-square'
 import { fetchCryptoMarketScan } from './crypto-market'
 import { HttpError, jsonResponse, readJsonObject } from './http'
-import { isSquareCompetitorRelated, SQUARE_COMPETITOR_REASON } from './social-policy'
+import { isSquareCompetitorRelated, SQUARE_COMPETITOR_REASON, squareQuotaDay } from './social-policy'
 import {
   cleanSocialPostText,
   contentTags,
@@ -1491,10 +1491,9 @@ async function dispatchSocialDraft(
         `SELECT COUNT(*) AS count FROM social_dispatches
          WHERE platform = ? AND status = 'success'
            AND account_key = ?
-           AND date(updated_at / 1000, 'unixepoch', '+8 hours') =
-               date(? / 1000, 'unixepoch', '+8 hours')`,
+           AND updated_at >= ? AND updated_at < ?`,
       )
-      .bind(platform, draft.account_key, now)
+      .bind(platform, draft.account_key, ...squareQuotaDay(now))
       .first<{ count: number }>(),
     env.DB
       .prepare(
@@ -1810,10 +1809,9 @@ async function runSocialAccountAutomation(
       `SELECT COUNT(*) AS count FROM social_dispatches
        WHERE source = 'auto' AND platform = 'binance_square' AND status = 'success'
          AND account_key = ?
-         AND date(updated_at / 1000, 'unixepoch', '+8 hours') =
-             date(? / 1000, 'unixepoch', '+8 hours')`,
+         AND updated_at >= ? AND updated_at < ?`,
     )
-    .bind(accountKey, timestamp)
+    .bind(accountKey, ...squareQuotaDay(timestamp))
     .first<{ count: number }>()
   if (Number(used?.count ?? 0) >= config.daily_limit) return
 

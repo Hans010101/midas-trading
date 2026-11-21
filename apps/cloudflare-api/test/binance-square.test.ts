@@ -4,7 +4,7 @@ import {
   binanceSquareEnabled,
   publishToBinanceSquare,
 } from '../src/binance-square'
-import { isSquareCompetitorRelated, SQUARE_COMPETITOR_REASON } from '../src/social-policy'
+import { isSquareCompetitorRelated, SQUARE_COMPETITOR_REASON, squareQuotaDay } from '../src/social-policy'
 
 const testEnv = (key = 'test-square-key') => ({
   BINANCE_SQUARE_API_KEY: key,
@@ -15,6 +15,12 @@ afterEach(() => {
 })
 
 describe('Binance Square publishing adapter', () => {
+  it('resets both account quotas exactly at Shanghai midnight', () => {
+    const midnight = Date.parse('2026-11-20T16:00:00Z')
+    expect(squareQuotaDay(midnight - 1)).toEqual([midnight - 86_400_000, midnight])
+    expect(squareQuotaDay(midnight)).toEqual([midnight, midnight + 86_400_000])
+  })
+
   it('does not fall back to publishing text after an explicit image rejection', async () => {
     const upstream = vi.fn()
       .mockResolvedValueOnce(Response.json({ code: '000000', data: {
