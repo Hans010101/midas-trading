@@ -283,6 +283,16 @@ describe('independent Cloudflare administrator controls', () => {
       }),
     )
     expect(tracked.status).toBe(202)
+    for (const fields of [
+      { ref_host: 'gemini.google.com' }, { ref_host: 'google.com' },
+      { ref_host: 'google.com.example.org' }, { utm_source: 'chatgpt.com' },
+    ]) {
+      const visit = await exports.default.fetch(new Request('https://midas-trading-api.internal/api/v1/track/visit', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ visitor_id: 'referral-test-visitor', ...fields }),
+      }))
+      expect(visit.status).toBe(202)
+    }
 
     const stats = await exports.default.fetch(
       request('/api/v1/admin/visit-stats?days=7', { token: owner.token }),
@@ -305,6 +315,9 @@ describe('independent Cloudflare administrator controls', () => {
     await expect(sources.json()).resolves.toMatchObject({
       sources: expect.arrayContaining([
         expect.objectContaining({ source: 'utm:newsletter' }),
+        expect.objectContaining({ source: 'ai-referral', pv: 2 }),
+        expect.objectContaining({ source: 'search-referral', pv: 1 }),
+        expect.objectContaining({ source: 'referral', pv: 1 }),
       ]),
       top_referrers: expect.arrayContaining([
         expect.objectContaining({ referrer: 'example.com' }),

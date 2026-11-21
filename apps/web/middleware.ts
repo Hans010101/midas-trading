@@ -144,15 +144,13 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
 
   // SEO 批6:AI/搜索爬虫计数(GEO 领先指标)· bot UA 独立于 PV 计。★只发 bot 名 · UA 不发。
   //   爬虫不跑 Next 客户端、不会带预取头,故与下方 PV 的预取排除无关(爬虫计数不受 Bug B 修复影响)。
-  if (isGetOk) {
-    const bot = classifyCrawler(ua)
-    if (bot) postTrack('/api/v1/track/crawler', { bot })
-  }
+  const bot = isGetOk ? classifyCrawler(ua) : null
+  if (bot) postTrack('/api/v1/track/crawler', { bot })
 
   // ── 人类 PV/UV(排除 bot + ★排除 Next 预取)+ 来源归因 ──
   //   ★Bug B:预取请求(next-router-prefetch 等)是推测加载、非真实浏览 → 不计 PV;
   //   真软导航(点击)不带预取头 → isPrefetchRequest=false → 照常计 PV。
-  const isPageView = isGetOk && !BOT_RE.test(ua) && !isPrefetchRequest(req.headers)
+  const isPageView = isGetOk && !bot && !BOT_RE.test(ua) && !isPrefetchRequest(req.headers)
   if (isPageView) {
     let vid = req.cookies.get(VID_COOKIE)?.value
     if (!vid || vid.length < 8) {

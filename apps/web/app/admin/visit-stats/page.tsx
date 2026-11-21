@@ -302,14 +302,16 @@ export default function AdminVisitStatsPage() {
                 title="流量来源"
                 sub={`归因 PV ${srcQuery.data?.total_attributed_pv ?? 0}`}
                 rows={(srcQuery.data?.sources ?? []).map((s) => ({
-                  label: s.source,
+                  label: s.source === 'ai-referral' ? (locale === 'en' ? 'AI referrals' : 'AI 引荐')
+                    : s.source === 'search-referral' ? (locale === 'en' ? 'Search referrals' : '搜索引荐')
+                    : s.source,
                   value: s.pv,
                 }))}
                 empty="暂无来源数据(有来路的访问上线后渐显)"
               />
               <RankCard
                 title="AI / 搜索爬虫"
-                sub="GEO 领先指标 · 被抓取次数"
+                sub={locale === 'en' ? 'Requests by crawler user agent' : '按爬虫标识统计请求次数'}
                 rows={(srcQuery.data?.crawlers ?? []).map((c) => ({
                   label: c.bot,
                   value: c.hits,

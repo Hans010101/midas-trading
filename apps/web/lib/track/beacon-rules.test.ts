@@ -74,6 +74,9 @@ describe('classifyCrawler · 爬虫仍独立计数(不受 Bug B 影响)', () => 
     expect(classifyCrawler('Mozilla/5.0 (compatible; Googlebot/2.1)')).toBe('search:Googlebot')
     expect(classifyCrawler('Mozilla/5.0 (compatible; ClaudeBot/1.0)')).toBe('ClaudeBot')
   })
+  it.each(['Claude-SearchBot', 'Claude-User', 'Claude-Agent', 'ChatGPT-User', 'Perplexity-User'])('recognizes %s separately from reader traffic', (bot) => {
+    expect(classifyCrawler(`Mozilla/5.0 (compatible; ${bot}/1.0)`)).toBe(bot)
+  })
   it('真人浏览器 UA → null(不计爬虫)', () => {
     expect(classifyCrawler('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120')).toBeNull()
   })

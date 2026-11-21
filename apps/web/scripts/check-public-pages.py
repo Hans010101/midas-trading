@@ -45,7 +45,7 @@ class Document(HTMLParser):
 
 
 def check(path):
-    request = Request(BASE + path, headers={"User-Agent": "Midas-DeploymentCheck/1.0"})
+    request = Request(BASE + path, headers={"User-Agent": "Midas-DeploymentMonitor/1.0"})
     with urlopen(request, timeout=30) as response:
         page = Document()
         page.feed(response.read().decode("utf-8"))

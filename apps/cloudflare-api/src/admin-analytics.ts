@@ -218,15 +218,25 @@ async function sourceStats(
   const [sources, crawlers, referrers] = await Promise.all([
     env.DB
       .prepare(
-        `SELECT source, COUNT(*) AS pv
-         FROM web_visit_events
-         WHERE visit_date >= ?
-         GROUP BY source
-         ORDER BY pv DESC
-         LIMIT 20`,
+        `WITH visits AS (
+           SELECT CASE
+             WHEN LOWER(source) = 'utm:chatgpt.com' THEN 'ai-referral'
+             WHEN source <> 'referral' THEN source
+             WHEN referrer IN ('chatgpt.com', 'chat.openai.com', 'perplexity.ai', 'claude.ai',
+               'gemini.google.com', 'copilot.microsoft.com', 'kimi.com', 'kimi.moonshot.cn',
+               'chat.deepseek.com', 'doubao.com', 'metaso.cn', 'you.com') THEN 'ai-referral'
+             WHEN referrer IN ('google.com', 'google.com.hk', 'google.co.uk', 'google.ca',
+               'google.com.tw', 'google.com.sg', 'google.co.jp', 'bing.com', 'cn.bing.com',
+               'baidu.com', 'm.baidu.com', 'duckduckgo.com', 'search.yahoo.com',
+               'search.brave.com', 'so.com', 'sogou.com') THEN 'search-referral'
+             ELSE source END AS channel
+           FROM web_visit_events WHERE visit_date >= ?
+         )
+         SELECT channel AS source, COUNT(*) AS pv, SUM(COUNT(*)) OVER () AS total
+         FROM visits GROUP BY channel ORDER BY pv DESC, channel LIMIT 20`,
       )
       .bind(start)
-      .all<{ source: string; pv: number }>(),
+      .all<{ source: string; pv: number; total: number }>(),
     env.DB
       .prepare(
         `SELECT bot, COUNT(*) AS hits
@@ -266,7 +276,7 @@ async function sourceStats(
         referrer: row.referrer,
         pv: Number(row.pv),
       })),
-      total_attributed_pv: sourceRows.reduce((sum, row) => sum + row.pv, 0),
+      total_attributed_pv: Number(sources.results[0]?.total ?? 0),
     },
     200,
     requestId,
