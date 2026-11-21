@@ -2,8 +2,6 @@ import type { Metadata } from 'next'
 
 import { LegalP, LegalPage } from '@/components/legal/legal-page'
 
-export const dynamic = 'force-static'
-
 export const metadata: Metadata = {
   title: 'Free Service Notice',
   description: 'Midas Trading currently has no paid subscription, renewal or paid-feature checkout.',

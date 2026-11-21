@@ -18,6 +18,7 @@ import { TopNav } from '@/components/layout/top-nav'
 import { CnSections } from '@/components/market-home/cn-sections'
 import { HkSections } from '@/components/market-home/hk-sections'
 import { QuoteCard } from '@/components/market-home/index-card'
+import { MarketHeading } from '@/components/market-home/market-heading'
 import { UsSections } from '@/components/market-home/us-sections'
 import { DataTimestamp, EmptyState, LoadingNote } from '@/components/ui/state'
 import { useRuntimeDocumentTitle } from '@/hooks/use-runtime-document-title'
@@ -51,6 +52,7 @@ export function MarketHomePage({ market }: { market: MarketKind }) {
 
       <main className="flex-1">
         <div className="mx-auto max-w-[1600px] px-3 py-4 sm:px-6 sm:py-5">
+          <MarketHeading market={market} title={title[locale]} />
           <div className="mb-3 flex items-center justify-between">
             <h2 className="font-serif text-sm font-bold text-foreground">
               {locale === 'en' ? 'Market indices' : '大盘指数'}

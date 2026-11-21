@@ -141,6 +141,11 @@ jobs:
     timeout-minutes: 10
 
     steps:
+      - uses: actions/checkout@v6
+
+      - name: 检查公开页面与词典引用
+        run: python3 apps/web/scripts/check-public-pages.py
+
       - name: 检查 API 与 Web
         shell: bash
         run: |

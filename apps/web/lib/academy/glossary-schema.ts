@@ -7,11 +7,13 @@
 
 import type { AcademyLocale } from '@/content/academy/localized-catalog'
 import { getGlossary } from '@/lib/academy'
+import { glossaryAnchorId } from '@/lib/glossary-terms'
 import { PRODUCTION_WEB_URL } from '@/lib/site'
 
 const BASE = PRODUCTION_WEB_URL
 
 interface GlossaryTerm {
+  id: string
   name: string
   definition: string
 }
@@ -39,7 +41,8 @@ function parseGlossaryTerms(md: string, locale: AcademyLocale): GlossaryTerm[] {
       }
       if (/^###\s/.test(lines[j])) break // 撞到下一词条 · 停
     }
-    if (name && definition) terms.push({ name, definition })
+    const id = glossaryAnchorId(h[0].replace(/^###\s+/, ''))
+    if (id && name && definition) terms.push({ id, name, definition })
   }
   return terms
 }
@@ -59,6 +62,8 @@ export function buildGlossaryTermSet(locale: AcademyLocale = 'zh') {
     url: `${BASE}${path}`,
     hasDefinedTerm: terms.map((t) => ({
       '@type': 'DefinedTerm',
+      '@id': `${BASE}${path}#${encodeURIComponent(t.id)}`,
+      url: `${BASE}${path}#${encodeURIComponent(t.id)}`,
       name: t.name,
       description: t.definition,
       inDefinedTermSet: termSetId,

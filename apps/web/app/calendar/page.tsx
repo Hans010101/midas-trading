@@ -230,7 +230,7 @@ export default function EconCalendarPage() {
       <TopNav />
       <main className="flex-1">
         <div className="mx-auto max-w-5xl px-6 py-6">
-          {/* 筛选(仅地区)+ 保鲜标注(last-run 口径)。页内不设大标题:导航 Tab 已有同名入口 */}
+          <h1 className="sr-only">{locale === 'en' ? 'Economic calendar' : '财经日历'}</h1>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-3">
             <div className="inline-flex rounded-lg border border-paper bg-surface-card p-0.5">

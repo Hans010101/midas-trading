@@ -14,6 +14,8 @@
 
 import { Children, isValidElement, type ReactNode } from 'react'
 
+export { glossaryAnchorId } from './glossary-terms'
+
 /** 递归把 react-markdown 传给组件的 children 拍平成纯文本(词典标题无内联格式,足够)。 */
 export function reactChildrenToText(children: ReactNode): string {
   let text = ''
@@ -25,19 +27,4 @@ export function reactChildrenToText(children: ReactNode): string {
     }
   })
   return text
-}
-
-/**
- * 从词典标题文本生成锚点 id;不符合「N. 术语名」格式(普通文章 h3)→ 返回 null。
- * 规则:去前导「N. 」→ 去结尾英文/中文括注 → trim → 去所有空白(HTML id 不能含空白;保留中文/斜杠/加号)。
- */
-export function glossaryAnchorId(headingText: string): string | null {
-  const m = headingText.match(/^\s*\d+\.\s*(.+)$/s)
-  if (!m) return null
-  let term = m[1].trim()
-  // 去掉结尾一段英文/中文括注,如 " (Long)" / "（蜡烛图）" / " (上影线 / 下影线)"
-  term = term.replace(/[（(][^（()）]*[)）]\s*$/, '').trim()
-  if (!term) return null
-  // HTML id 不能含空白 → 去掉所有空白;中文 / 斜杠 / 加号保留
-  return term.replace(/\s+/g, '')
 }

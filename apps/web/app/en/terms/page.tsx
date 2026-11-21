@@ -2,8 +2,6 @@ import type { Metadata } from 'next'
 
 import { LegalH2, LegalP, LegalPage, LegalUL } from '@/components/legal/legal-page'
 
-export const dynamic = 'force-static'
-
 export const metadata: Metadata = {
   title: 'Terms of Service',
   description: 'Terms governing use of the Midas Trading virtual-trading and education platform.',

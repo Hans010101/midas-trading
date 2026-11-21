@@ -25,6 +25,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { BollScanList } from '@/components/crypto/boll-scan-list'
 import { TopNav } from '@/components/layout/top-nav'
+import { MarketHeading } from '@/components/market-home/market-heading'
+import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import { DataTimestamp } from '@/components/ui/state'
 import { useIndicatorPrefs } from '@/hooks/use-indicator-prefs'
 import {
@@ -80,6 +82,7 @@ function fgClassZh(c: string): string {
 }
 
 export function CryptoMarketPage() {
+  const { locale } = useRuntimeLocale()
   const [sortKey, setSortKey] = useState<SortKey>('chgPct')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [query, setQuery] = useState('')
@@ -212,7 +215,7 @@ export function CryptoMarketPage() {
 
       <main className="flex-1">
         <div className="mx-auto max-w-[1600px] px-3 py-4 sm:px-6 sm:py-5">
-          {/* H1「加密市场」已删 · 顶部市场切换 Tab 已有「加密」· 标题冗余。 */}
+          <MarketHeading market="crypto" title={locale === 'en' ? 'USDT perpetual futures' : 'USDT 永续合约行情'} />
           {/* 顶部 4 指标卡 */}
           <div className="mb-5 grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
             <MetricCard

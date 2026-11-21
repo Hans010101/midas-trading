@@ -1,6 +1,8 @@
 import Image from 'next/image'
 import Link from 'next/link'
 
+import { PublicLanguageLink } from './public-language-link'
+
 export function PublicSiteShell({
   children,
   english = false,
@@ -24,9 +26,7 @@ export function PublicSiteShell({
             <Link href={`${prefix}/research/methodology`} className="hidden hover:text-midas-red sm:inline">
               {english ? 'Methodology' : '研究方法'}
             </Link>
-            <Link href={english ? '/' : '/en'} className="hover:text-midas-red">
-              {english ? '中文' : 'English'}
-            </Link>
+            <PublicLanguageLink english={english} />
           </nav>
         </div>
       </header>

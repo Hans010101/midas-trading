@@ -122,7 +122,7 @@ export default function LabPage() {
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <TopNav />
       <main className="mx-auto w-full max-w-5xl px-6 py-8">
-        {/* 大标题已删(同 assistant 页口径):TopNav 高亮 + LabNav 已标位,重复是噪声 */}
+        <h1 className="sr-only">{locale === 'en' ? 'Strategy Lab' : '策略研究室'}</h1>
         <LabNav />
 
         {authStatus === 'unauthenticated' ? (

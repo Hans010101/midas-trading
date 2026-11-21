@@ -61,8 +61,13 @@ export function buildArticleSchema(input: {
     inLanguage: english ? 'en' : 'zh-CN',
     url,
     mainEntityOfPage: url,
-    author: { '@id': RESEARCH_TEAM_ID },
-    publisher: { '@id': ORG_ID },
+    author: {
+      '@type': 'Organization',
+      '@id': RESEARCH_TEAM_ID,
+      name: english ? researchTeamSchema.alternateName : researchTeamSchema.name,
+      url: `${BASE}${english ? '/en' : ''}/research/team`,
+    },
+    publisher: { '@type': 'Organization', '@id': ORG_ID, name: organizationSchema.name, url: BASE },
     image: `${BASE}/brand/seal.png`,
     // ★date 缺失时【不输出】该字段(保持原「无日期」兜底 · 宁缺毋假,绝不造假日期)。
     ...(input.datePublished ? { datePublished: input.datePublished } : {}),

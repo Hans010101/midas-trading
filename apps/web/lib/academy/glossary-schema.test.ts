@@ -13,5 +13,14 @@ describe('buildGlossaryTermSet', () => {
     expect(zh.hasDefinedTerm.length).toBeGreaterThan(80)
     expect(en.hasDefinedTerm.length).toBeGreaterThan(80)
     expect(en.hasDefinedTerm[0]?.description).toBeTruthy()
+    for (const glossary of [zh, en]) {
+      const urls = glossary.hasDefinedTerm.map((term) => term.url)
+      expect(new Set(urls).size).toBe(glossary.hasDefinedTerm.length)
+      for (const term of glossary.hasDefinedTerm) {
+        expect(term.url).toBe(term['@id'])
+        expect(term.url.startsWith(glossary.url + '#')).toBe(true)
+        expect(new URL(term.url).hash.length).toBeGreaterThan(1)
+      }
+    }
   })
 })

@@ -62,7 +62,8 @@ export function GlobalOverviewPage() {
 
       <main className="flex-1">
         <div className="mx-auto max-w-[1600px] px-3 py-4 sm:px-6 sm:py-5">
-          <div className="mb-3 flex justify-end">
+          <div className="mb-3 flex items-center justify-between">
+            <h1 className="font-serif text-base font-bold">{en ? 'Global market overview' : '全球市场总览'}</h1>
             <DataTimestamp value={q.data?.as_of} locale={locale} />
           </div>
           {q.isPending && <LoadingNote className="py-10" />}

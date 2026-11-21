@@ -77,10 +77,6 @@ export const metadata: Metadata = {
       '加密 · 美股 · A 股 · 港股四市场 AI 分析终端:AI 决策卡 · 缠论标注 · 策略研究。',
     images: ['/marketing/global.png'],
   },
-  alternates: {
-    canonical: '/',
-    languages: { 'zh-CN': '/', en: '/en', 'x-default': '/' },
-  },
 }
 
 export default async function RootLayout({
@@ -126,7 +122,7 @@ export default async function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "(function(){try{var m=document.cookie.match(/(?:^|; )NEXT_LOCALE=([^;]+)/);var l=m&&decodeURIComponent(m[1])==='en'?'en':'zh';document.documentElement.lang=l==='en'?'en':'zh-CN';document.documentElement.dataset.locale=l;}catch(e){}})();",
+              "(function(){var en=location.pathname==='/en'||location.pathname.startsWith('/en/')||/(?:^|; )NEXT_LOCALE=en(?:;|$)/.test(document.cookie);document.documentElement.lang=en?'en':'zh-CN';document.documentElement.dataset.locale=en?'en':'zh';})();",
           }}
         />
         <LocaleRuntimeProvider initialLocale={locale as Locale}>

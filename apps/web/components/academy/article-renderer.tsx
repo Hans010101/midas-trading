@@ -40,7 +40,7 @@ const components: Components = {
         id={id}
         className="mb-2 mt-6 scroll-mt-24 font-serif text-base font-bold text-gold"
       >
-        {children}
+        {id ? <a href={`#${encodeURIComponent(id)}`} className="hover:underline">{children}</a> : children}
       </h3>
     )
   },

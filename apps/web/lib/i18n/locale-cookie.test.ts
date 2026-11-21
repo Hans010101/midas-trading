@@ -16,6 +16,12 @@ describe('locale cookie', () => {
     expect(getLocaleCookie()).toBe('zh')
   })
 
+  it('ignores a malformed stored preference', () => {
+    document.cookie = 'NEXT_LOCALE=%; path=/'
+    expect(hasLocaleCookie()).toBe(false)
+    expect(getLocaleCookie()).toBe('zh')
+  })
+
   it('persists both supported locales', () => {
     setLocaleCookie('en')
     expect(hasLocaleCookie()).toBe(true)

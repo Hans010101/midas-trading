@@ -112,7 +112,7 @@ export default function LabAssistantPage() {
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <TopNav />
       <main className="mx-auto w-full max-w-5xl px-6 py-8">
-        {/* v1.1:大标题删除 —— TopNav「策略研究室」高亮 + LabNav 已标明位置,第三遍重复是噪声 */}
+        <h1 className="sr-only">{locale === 'en' ? 'AI Sandbox Assistant' : 'AI 沙盘助手'}</h1>
         <LabNav />
 
         {authStatus === 'unauthenticated' ? (

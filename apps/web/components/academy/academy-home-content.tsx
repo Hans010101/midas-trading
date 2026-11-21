@@ -25,6 +25,12 @@ export function AcademyHomeContent() {
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-6">
+      {!en && (
+        <header className="mb-6">
+          <h1 className="font-serif text-2xl font-bold">交易训练营</h1>
+          <p className="mt-2 text-sm text-muted-foreground">从读懂 K 线到建立交易体系，按六个阶段学习 {articles.length} 篇免费课程。</p>
+        </header>
+      )}
       {en && (
         <section className="mb-8 overflow-hidden rounded-2xl border border-paper bg-cream shadow-sm">
           <div className="grid gap-8 px-6 py-8 md:grid-cols-[1.45fr_0.8fr] md:px-8 md:py-10">

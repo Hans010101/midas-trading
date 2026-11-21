@@ -52,6 +52,13 @@ import { cn } from '@/lib/utils'
 
 export const dynamic = 'force-static'
 
+export const metadata = {
+  alternates: {
+    canonical: '/',
+    languages: { 'zh-CN': '/', en: '/en', 'x-default': '/' },
+  },
+}
+
 export default function HomePage() {
   return (
     <main className="relative flex min-h-screen flex-col bg-background text-foreground">
@@ -296,24 +303,28 @@ function Markets() {
       <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
         <MarketCard
           icon={<Bitcoin className="h-6 w-6 text-midas-red" />}
+          href="/crypto-market"
           name="加密"
-          desc="Binance 行情源 · 主流币种全覆盖"
+          desc="USDT 永续合约 · 资金费率与持仓量"
           examples="BTC/USDT · ETH/USDT · SOL/USDT"
         />
         <MarketCard
           icon={<Globe className="h-6 w-6 text-midas-red" />}
+          href="/us-market"
           name="美股"
           desc="纳斯达克 · NYSE · 后复权"
           examples="NVDA · AAPL · TSLA"
         />
         <MarketCard
           icon={<BarChart3 className="h-6 w-6 text-midas-red" />}
+          href="/cn-market"
           name="A 股"
           desc="沪深全市场 · 复权口径透明"
           examples="600519 · 000001 · 300750"
         />
         <MarketCard
           icon={<Landmark className="h-6 w-6 text-midas-red" />}
+          href="/hk-market"
           name="港股"
           desc="恒生指数 · 国企指数 · 港交所主板"
           examples="00700 · 09988 · 03690"
@@ -325,15 +336,16 @@ function Markets() {
 
 
 interface MarketCardProps {
+  href: string
   icon: React.ReactNode
   name: string
   desc: string
   examples: string
 }
 
-function MarketCard({ icon, name, desc, examples }: MarketCardProps) {
+function MarketCard({ href, icon, name, desc, examples }: MarketCardProps) {
   return (
-    <div className="rounded-xl border border-paper bg-surface-card p-6 transition-all hover:border-midas-red hover:shadow-md">
+    <Link href={href} prefetch={false} className="rounded-xl border border-paper bg-surface-card p-6 transition-all hover:border-midas-red hover:shadow-md">
       <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-midas-red-glow/40">
         {icon}
       </div>
@@ -342,7 +354,7 @@ function MarketCard({ icon, name, desc, examples }: MarketCardProps) {
       <p className="mt-3 font-mono text-xs text-muted-foreground/70">
         {examples}
       </p>
-    </div>
+    </Link>
   )
 }
 

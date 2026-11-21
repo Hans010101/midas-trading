@@ -27,7 +27,7 @@
 　72. Doji ／ 73. Engulfing Pattern ／ 74. Head and Shoulders Top / Bottom ／ 75. Double Top / Double Bottom ／ 76. Gap ／ 77. Elliott Wave Theory ／ 78. Trendline and Channel Line
 
 **Chan Theory**
-　53. Chan Theory (Chan Zhong Shuo Chan Theory) ／ 54. K-Line Inclusion Relationship ／ 55. Fractal (Top Fractal / Bottom Fractal) ／ 56. Stroke ／ 57. Segment ／ 58. Central Hub ／ 59. Divergence ／ 60. Chan Theory Buy/Sell Points (Type 1, 2, 3 Buy/Sell Points)
+　53. Chan Theory (Chan Zhong Shuo Chan Theory) ／ 54. K-Line Inclusion Relationship ／ 55. Fractal (Top Fractal / Bottom Fractal) ／ 56. Stroke ／ 57. Segment ／ 58. Central Hub ／ 59. Chan Theory Divergence ／ 60. Chan Theory Buy/Sell Points (Type 1, 2, 3 Buy/Sell Points)
 
 **Strategies & Arbitrage**
 　83. Grid Trading ／ 84. Martingale ／ 85. Arbitrage ／ 86. Left-side Trading / Right-side Trading
@@ -773,7 +773,7 @@
 
 ---
 
-### 59. Divergence
+### 59. Chan Theory Divergence
 
 **One-sentence Definition:** Divergence is a Chan Theory term referring to a situation where the strength of a later segment in a trend is significantly weaker than the preceding segment in the same direction.
 

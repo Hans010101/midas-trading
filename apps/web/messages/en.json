@@ -189,7 +189,7 @@
     },
     "markets": {
       "a_shares": "A-shares / Full Shanghai and Shenzhen markets, transparent adjustment methodology / 600519, 000001, 300750",
-      "crypto": "Crypto / Binance data source, all major tokens covered / BTC/USDT, ETH/USDT, SOL/USDT",
+      "crypto": "Crypto / USDT perpetual futures, funding rates and open interest / BTC/USDT, ETH/USDT, SOL/USDT",
       "hk_stocks": "HK stocks / Hang Seng Index, Mainland Enterprises Index, HKEX main board / 00700, 09988, 03690",
       "subtitle": "One terminal covering the world's leading trading markets",
       "title": "Four markets, unified experience",
@@ -987,7 +987,7 @@
       "factorSandbox": "11-Factor Structure Sandbox",
       "backtestLab": "Backtesting Lab",
       "zeroRisk": "Zero Real-Money Risk",
-      "cryptoSource": "Binance market data · major crypto coverage",
+      "cryptoSource": "USDT perpetual futures · funding rates and open interest",
       "usSource": "Nasdaq · NYSE · adjusted prices",
       "cnSource": "Shanghai & Shenzhen markets · transparent adjustments",
       "hkSource": "Hang Seng · HSCEI · HKEX Main Board",

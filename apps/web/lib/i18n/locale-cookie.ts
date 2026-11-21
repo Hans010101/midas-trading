@@ -10,7 +10,11 @@ import { defaultLocale, isLocale, LOCALE_COOKIE, type Locale } from '@/i18n/rout
 function readLocaleCookie(): string | null {
   if (typeof document === 'undefined') return null
   const match = document.cookie.match(new RegExp(`(?:^|; )${LOCALE_COOKIE}=([^;]+)`))
-  return match ? decodeURIComponent(match[1]) : null
+  try {
+    return match ? decodeURIComponent(match[1]) : null
+  } catch {
+    return null
+  }
 }
 
 export function getLocaleCookie(): Locale {

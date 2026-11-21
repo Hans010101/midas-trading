@@ -100,6 +100,13 @@ export function AcademyArticleContent({
                 />
               </div>
 
+              <p className="mt-6 text-sm text-muted-foreground">
+                {english ? 'Written by ' : '作者　'}
+                <Link href={english ? '/en/research/team' : '/research/team'} className="underline">
+                  {english ? 'Midas Trading Research Team' : 'Midas Trading 研究团队'}
+                </Link>
+              </p>
+
               {interactives && <ArticleInteractives keys={interactives} />}
               <ArticleQuiz key={`${slug}-${locale}`} questions={quiz} slug={slug} />
 

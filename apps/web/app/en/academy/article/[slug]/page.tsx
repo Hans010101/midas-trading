@@ -40,7 +40,12 @@ export default async function EnglishAcademyArticlePage({ params }: { params: Pr
         buildBreadcrumbSchema({ stageName, stageSlug: meta.stage, title: meta.title, slug, locale: 'en' }),
       ]} />
       <nav className="mb-7 text-sm text-muted-foreground"><Link href="/en/academy" className="hover:text-midas-red">Academy</Link> / <Link href={`/en/academy/stage/${meta.stage}`} className="hover:text-midas-red">{stageName}</Link></nav>
-      <article className="mx-auto max-w-[72ch]"><ArticleRenderer markdown={markdown} locale="en" /></article>
+      <article className="mx-auto max-w-[72ch]">
+        <ArticleRenderer markdown={markdown} locale="en" />
+        <p className="mt-6 text-sm text-muted-foreground">
+          Written by <Link href="/en/research/team" className="underline">Midas Trading Research Team</Link>
+        </p>
+      </article>
       <nav className="mx-auto mt-10 flex max-w-[72ch] justify-between gap-4 border-t border-paper pt-6 text-sm">
         {adjacent.prev ? <Link href={`/en/academy/article/${adjacent.prev.slug}`} className="hover:text-midas-red">← {adjacent.prev.title}</Link> : <span />}
         {adjacent.next ? <Link href={`/en/academy/article/${adjacent.next.slug}`} className="text-right hover:text-midas-red">{adjacent.next.title} →</Link> : <span />}

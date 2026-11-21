@@ -21,6 +21,7 @@
  */
 
 import { auth } from '@/auth'
+import { ACADEMY_ARTICLES } from '@/content/academy/manifest'
 import { NextResponse } from 'next/server'
 import type { NextFetchEvent, NextRequest } from 'next/server'
 
@@ -31,6 +32,7 @@ import { BOT_RE, classifyCrawler, extractRefHost, isPrefetchRequest } from '@/li
 // /admin:未登录跳登录(仅 UX · 真正边界 = 后端 AdminDep 403,普通用户进页也只看到无权限提示)
 const PROTECTED = ['/account', '/settings', '/portfolio', '/dashboard', '/admin']
 const AUTH_PAGES = ['/login', '/register']
+const articleSlugs = new Set(ACADEMY_ARTICLES.map(({ slug }) => slug))
 
 const VID_COOKIE = 'mid_vid'
 const VID_MAX_AGE = 60 * 60 * 24 * 365 // 1 年
@@ -80,9 +82,8 @@ const runAuth = auth((req) => {
   }
 
   const requestHeaders = new Headers(req.headers)
-  if (url.pathname === '/en' || url.pathname.startsWith('/en/')) {
-    requestHeaders.set('x-midas-locale', 'en')
-  }
+  const english = url.pathname === '/en' || url.pathname.startsWith('/en/')
+  requestHeaders.set('x-midas-locale', english ? 'en' : 'zh')
   return NextResponse.next({ request: { headers: requestHeaders } })
 })
 
@@ -100,6 +101,20 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
     url.hostname = 'midastrade.asia'
     url.port = ''
     return NextResponse.redirect(url, 308)
+  }
+
+  // A streamed notFound() arrives after the 200 headers have already been sent.
+  const article = req.nextUrl.pathname.match(/^\/(?:en\/)?academy\/article\/([^/]+)\/?$/)
+  if (article) {
+    let slug = article[1]
+    try {
+      slug = decodeURIComponent(slug)
+    } catch {
+      // Malformed escapes cannot match a catalog slug.
+    }
+    if (!articleSlugs.has(slug)) {
+      return NextResponse.rewrite(new URL('/_not-found', req.url), { status: 404 })
+    }
   }
 
   const res =

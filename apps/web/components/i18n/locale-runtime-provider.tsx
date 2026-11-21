@@ -1,6 +1,7 @@
 'use client'
 
 import { NextIntlClientProvider } from 'next-intl'
+import { usePathname } from 'next/navigation'
 import {
   createContext,
   useCallback,
@@ -36,23 +37,20 @@ export function LocaleRuntimeProvider({
   initialLocale: Locale
   children: React.ReactNode
 }) {
-  const [locale, setLocaleState] = useState<Locale>(initialLocale)
+  const pathname = usePathname()
+  const [preference, setLocaleState] = useState<Locale>(initialLocale)
+  const locale = pathname === '/en' || pathname.startsWith('/en/') ? 'en' : preference
 
   const setLocale = useCallback((next: Locale) => {
     setLocaleCookie(next)
     setLocaleState(next)
-    applyDocumentLocale(next)
   }, [])
 
   // Static routes are built in Chinese. On hydration, honor the persisted cookie
   // so reloads keep the selected language without forcing every page dynamic.
   useEffect(() => {
-    const persisted = getLocaleCookie()
-    if (persisted !== locale) {
-      setLocaleState(persisted)
-    }
-    applyDocumentLocale(persisted)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    setLocaleState(getLocaleCookie())
+  }, [])
 
   useEffect(() => {
     applyDocumentLocale(locale)
