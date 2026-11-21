@@ -66,6 +66,9 @@ if __name__ == "__main__":
     check("/lab/assistant")
     check("/en/privacy")
     for locale in ("", "/en"):
+        news = check(locale + "/news")
+        for market in ("cn", "us", "hk", "crypto", "macro"):
+            assert locale + "/news?market=" + market in news.links, (locale, market)
         page = check(locale + "/academy/article/C8")
         article = next(s for s in page.schemas if s.get("@type") == "Article")
         assert page.meta["og:title"] == page.meta["twitter:title"] == article["headline"]

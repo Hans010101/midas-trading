@@ -18,7 +18,7 @@
  */
 
 import Link from 'next/link'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { usePathname, useRouter } from 'next/navigation'
 
 import { detailMarketOf, homeMarketOf, resolveActiveMarket } from '@/lib/market-nav'
@@ -32,6 +32,7 @@ import type { Market } from '@midas/shared'
 const NAV_MARKETS: readonly Market[] = ['crypto', 'us', 'cn', 'hk']
 
 export function MarketSwitcher({ className }: { className?: string }) {
+  const locale = useLocale()
   const t = useTranslations('runtime.shortNav')
   const pathname = usePathname()
   const router = useRouter()
@@ -157,6 +158,9 @@ export function MarketSwitcher({ className }: { className?: string }) {
         )}
       >
         {t('academy')}
+      </Link>
+      <Link href={locale === 'en' ? '/en/news' : '/news'} className="whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium text-muted-foreground hover:bg-midas-red-glow hover:text-foreground">
+        {t('news')}
       </Link>
       <Link
         href="/calendar"

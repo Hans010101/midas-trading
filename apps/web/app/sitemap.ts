@@ -35,6 +35,7 @@ const STATIC_PAGES: Array<[path: string, priority: number]> = [
   ['/academy', 0.9],
   ['/academy/glossary', 0.9],
   ['/calendar', 0.6],
+  ['/news', 0.8],
   ['/about', 0.5],
   ['/research/methodology', 0.6],
   ['/research/team', 0.5],
@@ -47,6 +48,7 @@ const STATIC_PAGES: Array<[path: string, priority: number]> = [
 const BILINGUAL_STATIC_PAGES: Array<[zh: string, en: string, priority: number]> = [
   ['/', '/en', 1.0],
   ['/about', '/en/about', 0.5],
+  ['/news', '/en/news', 0.8],
   ['/academy', '/en/academy', 0.9],
   ['/academy/glossary', '/en/academy/glossary', 0.9],
   ['/research/methodology', '/en/research/methodology', 0.6],
@@ -76,7 +78,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const staticEntries: MetadataRoute.Sitemap = STATIC_PAGES.map(([path, priority]) => ({
     url: `${BASE}${path}`,
     priority,
-    changeFrequency: path === '/' ? 'weekly' : 'monthly',
+    changeFrequency: path === '/news' ? 'hourly' : path === '/' ? 'weekly' : 'monthly',
     ...staticAlternates(path),
   }))
 
@@ -98,7 +100,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const englishStaticEntries: MetadataRoute.Sitemap = BILINGUAL_STATIC_PAGES.map(([zh, en, priority]) => ({
     url: `${BASE}${en}`,
     priority,
-    changeFrequency: 'monthly',
+    changeFrequency: zh === '/news' ? 'hourly' : 'monthly',
     alternates: alternates(zh, en),
   }))
 

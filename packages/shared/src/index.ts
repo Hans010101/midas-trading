@@ -9,6 +9,19 @@ export const SHARED_PACKAGE_VERSION = '0.1.0' as const
 // =====================
 
 export type Market = 'cn' | 'us' | 'crypto' | 'hk'
+export type IndustryMarket = Market | 'macro'
+export interface IndustryBulletin {
+  title: string
+  publishedAt: number
+  markets: IndustryMarket[]
+  sources: { name: string; url: string }[]
+}
+export interface IndustryNews {
+  updatedAt: number
+  delayedMarkets: IndustryMarket[]
+  items: IndustryBulletin[]
+}
+
 export type Period = '1m' | '5m' | '15m' | '30m' | '1h' | '1d' | '1w'
 
 export const MARKETS = ['cn', 'us', 'crypto', 'hk'] as const satisfies readonly Market[]

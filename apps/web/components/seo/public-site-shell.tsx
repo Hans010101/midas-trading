@@ -19,7 +19,8 @@ export function PublicSiteShell({
             <Image src="/brand/seal.png" alt="Midas Trading" width={32} height={32} />
             <span className="font-serif text-lg font-bold text-midas-red">Midas Trading</span>
           </Link>
-          <nav className="flex items-center gap-5 text-sm text-muted-foreground">
+          <nav className="flex items-center gap-3 text-sm text-muted-foreground sm:gap-5">
+            <Link href={prefix + '/news'} className="hover:text-midas-red">{english ? 'News' : '快讯'}</Link>
             <Link href={`${prefix}/academy`} className="hover:text-midas-red">
               {english ? 'Academy' : '训练营'}
             </Link>

@@ -141,6 +141,7 @@ function TopNav() {
         </nav>
 
         <div className="flex items-center gap-3">
+          <Link href="/news" className="whitespace-nowrap text-sm text-muted-foreground hover:text-foreground">行业快讯</Link>
           <Link
             href="/en"
             className="text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -502,6 +503,7 @@ function Footer() {
               { label: '市场', href: '/global' },
               { label: 'AI 沙盘助手', href: '#sandbox' },
               { label: '策略研究室', href: '#lab' },
+              { label: '行业快讯', href: '/news' },
               { label: '训练营', href: '/academy' },
               { label: '交易词典', href: '/academy/glossary' },
               ...(MEMBERSHIP_GATING_ENABLED

@@ -19,6 +19,7 @@ import { handleBacktestRoute } from './backtest'
 import { handleBotPresetRoute } from './bot-preset'
 import { handleBollScanRoute, runTelegramMarketCron } from './boll-scan'
 import { handleCryptoMarketRoute } from './crypto-market'
+import { handleIndustryNewsRoute, refreshIndustryNews } from './industry-news'
 import { handleEconRoute, refreshEconCalendar, runEconReminderScan } from './econ'
 import { handleChanAnalysisRoute } from './chan-analysis'
 import {
@@ -166,6 +167,7 @@ export default {
         (await handleAcademyRoute(request, env, requestId)) ??
         (await handleBollScanRoute(request, env, requestId)) ??
         (await handleCryptoMarketRoute(request, requestId)) ??
+        (await handleIndustryNewsRoute(request, env, requestId)) ??
         (await handleEconRoute(request, env, requestId)) ??
         (await handleOverviewRoute(request, env, requestId)) ??
         (await handleMarketHomeRoute(request, env, requestId)) ??
@@ -231,6 +233,10 @@ export default {
     env: Env,
     ctx: ExecutionContext,
   ): Promise<void> {
+    if (controller.cron === '2,17,32,47 * * * *') {
+      ctx.waitUntil(refreshIndustryNews(env.DB, controller.scheduledTime))
+      return
+    }
     const minute = new Date(controller.scheduledTime).getUTCMinutes()
     const socialPublishSlot = isAutoPublishTimestamp(controller.scheduledTime)
     const tasks: Array<{ name: string; promise: Promise<void> }> = socialPublishSlot

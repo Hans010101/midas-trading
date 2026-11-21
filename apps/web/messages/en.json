@@ -819,6 +819,7 @@
       "userMenu": "User Menu"
     },
     "shortNav": {
+      "news": "News",
       "aria": "Primary Navigation",
       "global": "Global",
       "crypto": "Crypto",

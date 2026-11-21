@@ -56,6 +56,10 @@ Midas Trading(${BASE})提供:跨市场 K 线与行情、AI 决策卡与结构诊
 
 ${sections.join('\n\n')}
 
+## 行业快讯
+
+- [四市场行业快讯](${BASE}/news) · [Market news in English](${BASE}/en/news)。按发布时间整理加密、A 股、美股、港股与宏观资讯，每条链接到发布方原文。
+
 ## 名词词典
 
 - [交易名词词典](${BASE}/academy/glossary): 覆盖 K线形态、技术指标、缠论、合约与衍生品、
