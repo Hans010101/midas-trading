@@ -20,6 +20,7 @@
 import Link from 'next/link'
 import { useLocale, useTranslations } from 'next-intl'
 import { usePathname, useRouter } from 'next/navigation'
+import { useEffect, useRef } from 'react'
 
 import { detailMarketOf, homeMarketOf, resolveActiveMarket } from '@/lib/market-nav'
 import { useWorkbenchStore } from '@/lib/store/workbench-store'
@@ -36,6 +37,7 @@ export function MarketSwitcher({ className }: { className?: string }) {
   const t = useTranslations('runtime.shortNav')
   const pathname = usePathname()
   const router = useRouter()
+  const newsLink = useRef<HTMLAnchorElement>(null)
   const storeMarket = useWorkbenchStore((s) => s.market)
   const setMarket = useWorkbenchStore((s) => s.setMarket)
 
@@ -52,9 +54,18 @@ export function MarketSwitcher({ className }: { className?: string }) {
   const onLab = pathname?.startsWith('/lab') ?? false
   // 训练营(教学内容)· 非市场 · /academy 及子页(stage/article/glossary)都算 · 单独高亮
   const onAcademy = pathname?.startsWith('/academy') ?? false
+  const onNews = pathname === '/news' || pathname === '/en/news'
   // 财经日历(PR-A)· 非市场中性页 · 单独高亮(market-nav 白名单默认不亮市场 Tab,无需改)
   const onCalendar = pathname?.startsWith('/calendar') ?? false
   const active = resolveActiveMarket(pathname, storeMarket)
+
+  useEffect(() => {
+    const link = newsLink.current
+    const nav = link?.parentElement
+    if (onNews && link && nav && nav.scrollWidth > nav.clientWidth) {
+      nav.scrollLeft += link.getBoundingClientRect().left - nav.getBoundingClientRect().left
+    }
+  }, [onNews, locale])
 
   function handleSelect(m: Market) {
     // 港股(hk)阶段二单元3:行情页(/hk-market 策展池 18 只列表)已上线 →
@@ -159,7 +170,17 @@ export function MarketSwitcher({ className }: { className?: string }) {
       >
         {t('academy')}
       </Link>
-      <Link href={locale === 'en' ? '/en/news' : '/news'} className="whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium text-muted-foreground hover:bg-midas-red-glow hover:text-foreground">
+      <Link
+        ref={newsLink}
+        href={locale === 'en' ? '/en/news' : '/news'}
+        aria-current={onNews ? 'page' : undefined}
+        className={cn(
+          'whitespace-nowrap rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors',
+          onNews
+            ? 'bg-midas-red text-primary-foreground'
+            : 'text-muted-foreground hover:bg-midas-red-glow hover:text-foreground',
+        )}
+      >
         {t('news')}
       </Link>
       <Link

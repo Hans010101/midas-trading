@@ -39,7 +39,8 @@ export function LocaleRuntimeProvider({
 }) {
   const pathname = usePathname()
   const [preference, setLocaleState] = useState<Locale>(initialLocale)
-  const locale = pathname === '/en' || pathname.startsWith('/en/') ? 'en' : preference
+  const englishRoute = pathname === '/en' || pathname.startsWith('/en/')
+  const locale = englishRoute ? 'en' : (pathname === '/news' ? 'zh' : preference)
 
   const setLocale = useCallback((next: Locale) => {
     setLocaleCookie(next)

@@ -67,6 +67,7 @@ if __name__ == "__main__":
     check("/en/privacy")
     for locale in ("", "/en"):
         news = check(locale + "/news")
+        assert {"/watchlist", "/lab/assistant", "/calendar"} <= news.links, (locale, "missing product navigation")
         for market in ("cn", "us", "hk", "crypto", "macro"):
             assert locale + "/news?market=" + market in news.links, (locale, market)
         page = check(locale + "/academy/article/C8")

@@ -1,5 +1,6 @@
 'use client'
 
+import { RefreshCw } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useTransition } from 'react'
 
@@ -13,7 +14,8 @@ export function RefreshNews({ english }: { english: boolean }) {
     return () => window.clearInterval(timer)
   }, [router])
   return <button type="button" disabled={pending} onClick={() => startTransition(() => router.refresh())}
-    className="text-xs text-muted-foreground underline underline-offset-4 hover:text-midas-red">
+    className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-surface-subtle hover:text-foreground focus-visible:outline-midas-red disabled:opacity-60">
+    <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
     {pending ? (english ? 'Refreshing…' : '刷新中…') : (english ? 'Refresh' : '刷新')}
   </button>
 }
