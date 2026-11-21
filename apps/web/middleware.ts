@@ -21,7 +21,8 @@
  */
 
 import { auth } from '@/auth'
-import { ACADEMY_ARTICLES } from '@/content/academy/manifest'
+import { ACADEMY_ARTICLES, ACADEMY_STAGES } from '@/content/academy/manifest'
+import { isCuratedSymbol, isDetailMarket } from '@/lib/seo/detail-symbols'
 import { NextResponse } from 'next/server'
 import type { NextFetchEvent, NextRequest } from 'next/server'
 
@@ -33,6 +34,7 @@ import { BOT_RE, classifyCrawler, extractRefHost, isPrefetchRequest } from '@/li
 const PROTECTED = ['/account', '/settings', '/portfolio', '/dashboard', '/admin']
 const AUTH_PAGES = ['/login', '/register']
 const articleSlugs = new Set(ACADEMY_ARTICLES.map(({ slug }) => slug))
+const stageSlugs = new Set(ACADEMY_STAGES.map(({ slug }) => slug))
 
 const VID_COOKIE = 'mid_vid'
 const VID_MAX_AGE = 60 * 60 * 24 * 365 // 1 年
@@ -104,16 +106,30 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
   }
 
   // A streamed notFound() arrives after the 200 headers have already been sent.
-  const article = req.nextUrl.pathname.match(/^\/(?:en\/)?academy\/article\/([^/]+)\/?$/)
-  if (article) {
-    let slug = article[1]
+  const path = req.nextUrl.pathname
+  const catalog = path.match(/^\/(?:en\/)?academy\/(article|stage)\/([^/]+)\/?$/)
+  const detail = path.match(/^\/(crypto|us|cn|hk)\/([^/]+)\/?$/)
+  const entry = catalog ?? detail
+  let noindex = /^\/(?:crypto|us|cn|hk)-preview\/?$/.test(path)
+  if (entry) {
+    const section = entry[1]
+    let slug = ''
     try {
-      slug = decodeURIComponent(slug)
+      slug = decodeURIComponent(entry[2])
     } catch {
-      // Malformed escapes cannot match a catalog slug.
+      // Invalid escapes leave the slug empty.
     }
-    if (!articleSlugs.has(slug)) {
-      return NextResponse.rewrite(new URL('/_not-found', req.url), { status: 404 })
+    const valid = isDetailMarket(section)
+      ? /^[\p{L}\p{N}^][\p{L}\p{N}^._=:-]*$/u.test(slug)
+      : (section === 'stage' ? stageSlugs : articleSlugs).has(slug)
+    if (!valid) return NextResponse.rewrite(new URL('/_not-found', req.url), { status: 404 })
+    if (isDetailMarket(section)) {
+      noindex = !isCuratedSymbol(section, slug)
+      if (!noindex && slug !== slug.toUpperCase()) {
+        const canonical = req.nextUrl.clone()
+        canonical.pathname = '/' + section + '/' + slug.toUpperCase()
+        return NextResponse.redirect(canonical, 308)
+      }
     }
   }
 
@@ -124,6 +140,8 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
         e: NextFetchEvent,
       ) => Promise<NextResponse | undefined>
     )(req, event)) ?? NextResponse.next()
+
+  if (noindex) res.headers.set('X-Robots-Tag', 'noindex, follow')
 
   // ── 访问埋点 · 仅页面文档 GET · 非重定向(<300)──
   const ua = req.headers.get('user-agent') ?? ''
@@ -180,5 +198,10 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
 
 // 不拦截静态资源 / API 路由 / _next 内部(带扩展名的静态资源由 .*\..* 排除)
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)'],
+  matcher: [
+    '/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)',
+    '/:market(crypto|us|cn|hk)/:symbol',
+    '/academy/:section(article|stage)/:slug',
+    '/en/academy/:section(article|stage)/:slug',
+  ],
 }

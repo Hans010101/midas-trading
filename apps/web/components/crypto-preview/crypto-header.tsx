@@ -64,7 +64,7 @@ export function CryptoHeader({
     <header className="border-b border-paper bg-surface-card px-3 py-3 sm:px-4">
       <div className="mx-auto flex max-w-[1680px] flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex items-baseline gap-2">
-          <span className="font-serif text-2xl font-bold">{klineSymbol}</span>
+          <h1 className="font-serif text-2xl font-bold">{klineSymbol}</h1>
           <span className={cn('font-mono text-lg font-bold', up ? 'text-up' : 'text-down')}>
             {price !== null ? `$${price.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '—'}
           </span>

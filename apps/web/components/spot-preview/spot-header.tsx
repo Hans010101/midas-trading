@@ -62,8 +62,10 @@ export function SpotHeader({ symbol, name, market, period, onPeriodChange }: Spo
     <header className="border-b border-paper bg-surface-card px-6 py-3">
       <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-6 gap-y-2">
         <div className="flex items-baseline gap-2">
-          <span className="font-serif text-2xl font-bold">{symbol}</span>
-          {name && <span className="text-sm text-muted-foreground">{name}</span>}
+          <h1 className="flex items-baseline gap-2">
+            <span className="font-serif text-2xl font-bold">{symbol}</span>
+            {name && name !== symbol && <span className="text-sm text-muted-foreground">{name}</span>}
+          </h1>
           <span className={cn('font-mono text-lg font-bold', up ? 'text-up' : 'text-down')}>
             {price !== null ? fmtPrice(price, market) : '—'}
           </span>

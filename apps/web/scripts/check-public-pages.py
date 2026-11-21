@@ -44,9 +44,13 @@ class Document(HTMLParser):
             self.schemas.extend(schema if isinstance(schema, list) else [schema])
 
 
-def check(path):
+def fetch(path):
     request = Request(BASE + path, headers={"User-Agent": "Midas-DeploymentMonitor/1.0"})
-    with urlopen(request, timeout=30) as response:
+    return urlopen(request, timeout=30)
+
+
+def check(path):
+    with fetch(path) as response:
         page = Document()
         page.feed(response.read().decode("utf-8"))
     assert page.canonical == BASE + path, (path, page.canonical)
@@ -73,9 +77,17 @@ if __name__ == "__main__":
             anchor = urlsplit(url).fragment
             assert url == term["@id"] and url.startswith(BASE + path + "#"), url
             assert unquote(anchor) in page.ids and "#" + anchor in page.links, url
-        try:
-            with urlopen(BASE + prefix + "/academy/article/missing-lesson", timeout=30) as response:
-                raise AssertionError(f"Missing lesson returned HTTP {response.status}")
-        except HTTPError as error:
-            assert error.code == 404, error
         print(f"{path}: {len(terms)} unique definitions with working permalinks")
+    for path in ("/academy/article/missing-lesson", "/en/academy/article/missing-lesson",
+                 "/academy/stage/missing-stage", "/en/academy/stage/missing-stage", "/us/INVALID%40%40"):
+        try:
+            with fetch(path) as response:
+                raise AssertionError(f"{path} returned HTTP {response.status}")
+        except HTTPError as error:
+            assert error.code == 404, (path, error.code)
+    for path in ("/us/PLTR", "/us/BRK.B", "/us-preview?symbol=PLTR"):
+        with fetch(path) as response:
+            assert "noindex" in response.headers.get("X-Robots-Tag", ""), path
+    check("/academy/stage/basics")
+    with fetch("/us/aapl") as response:
+        assert response.geturl() == BASE + "/us/AAPL", response.geturl()
