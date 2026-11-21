@@ -16,6 +16,7 @@ import { notFound } from 'next/navigation'
 
 import { AcademyArticleContent } from '@/components/academy/academy-article-content'
 import { JsonLd } from '@/components/seo/json-ld'
+import { shuffleQuestion } from '@/lib/quiz-shuffle'
 import { ARTICLE_DATES } from '@/lib/seo/article-dates'
 import { articleImage, buildArticleSchema, buildBreadcrumbSchema } from '@/lib/seo/schema'
 import { getInteractives } from '@/content/academy/interactives'
@@ -63,6 +64,10 @@ export async function generateMetadata({
   }
 }
 
+function prepareQuiz(question: QuizQuestion): QuizQuestion {
+  return { ...question, ...shuffleQuestion(question) }
+}
+
 export default async function AcademyArticlePage({
   params,
 }: {
@@ -79,10 +84,8 @@ export default async function AcademyArticlePage({
   const stageEn = getStage(metaEn.stage, 'en')
   const { prev, next } = getAdjacentArticles(slug)
   const adjacentEn = getAdjacentArticles(slug, 'en')
-  const quiz = getQuiz(slug)
-  const quizEn = (
-    englishQuizzes as Record<string, QuizQuestion[]>
-  )[slug] ?? []
+  const quiz = getQuiz(slug).map(prepareQuiz)
+  const quizEn = ((englishQuizzes as Record<string, QuizQuestion[]>)[slug] ?? []).map(prepareQuiz)
   const practice = getPractice(slug)
   const interactives = getInteractives(slug)
   const glossaryAliases = getGlossaryAliases()

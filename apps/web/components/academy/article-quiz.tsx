@@ -4,7 +4,7 @@
  * 训练营随堂小测 · 训练营第一个交互组件(client · React state)。
  *
  * 刀1.5 升级:
- * ① 选项前端运行时洗牌(Fisher-Yates · useState 惰性初始化【挂载洗一次】· 判定用洗牌后下标)
+ * ① 服务端洗牌，首屏和答题共用同一套题序。
  *    —— 修正题库正确答案扎堆 B 位;题库数据零改;新增题自动享受打散。
  * ② 答完本篇所有题(每题都选过)→ 自动标记学完(复用刀1 POST /academy/progress/complete)·
  *    幂等(已完成/未登录/进行中不重复触发,见 shouldAutoMark)· 删手动按钮 · 保留「已学完」反馈。
@@ -21,7 +21,6 @@ import { useRuntimeLocale } from '@/components/i18n/locale-runtime-provider'
 import type { QuizQuestion } from '@/content/academy/quizzes'
 import { useAcademyProgress, useMarkComplete } from '@/hooks/use-academy-progress'
 import { shouldAutoMark } from '@/lib/academy-progress-calc'
-import { shuffleQuestion } from '@/lib/quiz-shuffle'
 import { cn } from '@/lib/utils'
 
 /** 选项序号 → A / B / C / D */
@@ -29,9 +28,9 @@ function optionLabel(index: number): string {
   return String.fromCharCode(65 + index)
 }
 
-export function ArticleQuiz({ questions, slug }: { questions: QuizQuestion[]; slug: string }) {
-  // ★ 挂载时洗一次(惰性初始化)· 不每次 render 重洗(否则选完选项跳位)。文章切换由父组件 key=slug 强制重挂。
-  const [shuffled] = useState(() => questions.map((q) => shuffleQuestion(q)))
+export function ArticleQuiz({ questions: initialQuestions, slug }: { questions: QuizQuestion[]; slug: string }) {
+  // Keep the current attempt's order if the router refreshes its server payload.
+  const [questions] = useState(initialQuestions)
   // 每题选中的(洗牌后)选项下标;未答的题不在 map 中
   const [picked, setPicked] = useState<Record<number, number>>({})
   const { locale } = useRuntimeLocale()
@@ -76,10 +75,9 @@ export function ArticleQuiz({ questions, slug }: { questions: QuizQuestion[]; sl
 
       <div className="space-y-5">
         {questions.map((q, qi) => {
-          const sq = shuffled[qi] // 洗牌后的 options + answerIndex
           const chosen = picked[qi]
           const answered = chosen !== undefined
-          const isRight = answered && chosen === sq.answerIndex
+          const isRight = answered && chosen === q.answerIndex
           return (
             <div
               key={qi}
@@ -95,9 +93,9 @@ export function ArticleQuiz({ questions, slug }: { questions: QuizQuestion[]; sl
 
               {/* 选项(洗牌后顺序)*/}
               <ul className="mt-3 space-y-2">
-                {sq.options.map((opt, oi) => {
+                {q.options.map((opt, oi) => {
                   const isChosen = chosen === oi
-                  const isCorrect = oi === sq.answerIndex
+                  const isCorrect = oi === q.answerIndex
                   const showCorrect = answered && isCorrect
                   const showWrong = answered && isChosen && !isCorrect
                   return (
@@ -151,8 +149,8 @@ export function ArticleQuiz({ questions, slug }: { questions: QuizQuestion[]; sl
                     {isRight
                       ? (en ? '✓ Correct' : '✓ 回答正确')
                       : (en
-                          ? `✗ Not quite · Correct answer: ${optionLabel(sq.answerIndex)}`
-                          : `✗ 回答错误 · 正确答案 ${optionLabel(sq.answerIndex)}`)}
+                          ? `✗ Not quite · Correct answer: ${optionLabel(q.answerIndex)}`
+                          : `✗ 回答错误 · 正确答案 ${optionLabel(q.answerIndex)}`)}
                   </p>
                   <p>{q.explanation}</p>
                 </div>
