@@ -8,7 +8,7 @@ const feeds = [
   { id: 'cn', name: '华尔街见闻', market: 'cn', host: 'wallstreetcn.com', url: WSCN + 'a-stock-channel' },
   { id: 'us', name: '华尔街见闻', market: 'us', host: 'wallstreetcn.com', url: WSCN + 'us-stock-channel' },
   { id: 'hk', name: '华尔街见闻', market: 'hk', host: 'wallstreetcn.com', url: WSCN + 'hk-stock-channel' },
-  { id: 'eastmoney', name: '东方财富', market: 'cn', host: 'finance.eastmoney.com', url: 'https://np-listapi.eastmoney.com/comm/web/getNewsByColumns?client=web&biz=web_news_col&column=374&order=1&needInteractData=0&page_index=1&page_size=20&req_trace=midasnews' },
+  { id: 'eastmoney', name: '东方财富', market: 'cn', host: 'finance.eastmoney.com', url: 'https://np-listapi.eastmoney.com/comm/web/getNewsByColumns?client=web&biz=web_news_col&column=416&order=1&needInteractData=0&page_index=1&page_size=20&req_trace=midasnews' },
   { id: 'wsj', name: 'The Wall Street Journal', market: 'us', host: 'www.wsj.com', url: 'https://feeds.content.dowjones.io/public/rss/RSSMarketsMain' },
   { id: 'hkex', name: '香港交易所', market: 'hk', host: 'www.hkex.com.hk', url: 'https://www.hkex.com.hk/Services/RSS-Feeds/News-Releases?sc_lang=zh-HK' },
   { id: 'rthk', name: '香港电台财经', market: 'hk', host: 'news.rthk.hk', url: 'https://rthk.hk/rthk/news/rss/c_expressnews_cfinance.xml' },
@@ -63,7 +63,8 @@ function parseFeed(feed: Feed, body: string, now: number): Headline[] {
   const valid = entries.flatMap(item => {
     if (!Number.isFinite(item.occurredAt) || item.occurredAt <= 0 || item.occurredAt > now + 300_000) return []
     const url = URL.canParse(item.link) ? new URL(item.link) : null
-    if (!url || url.protocol !== 'https:' || url.host !== feed.host || url.username || url.password || url.pathname === '/') return []
+    if (!url || url.protocol !== 'https:' || url.username || url.password || url.pathname === '/') return []
+    if (url.host !== feed.host && !(feed.id === 'eastmoney' && ['bank.eastmoney.com', 'insurance.eastmoney.com', 'stock.eastmoney.com'].includes(url.host))) return []
     url.hash = ''
     for (const key of [...url.searchParams.keys()]) if (key.startsWith('utm_')) url.searchParams.delete(key)
     const clean = item.title.replace(/\s+/gu, ' ').trim()

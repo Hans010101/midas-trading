@@ -18,7 +18,8 @@ it('keeps attributed, deduplicated wire and RSS headlines through a partial outa
         { ...wire, uri: 'https://unknown.test/bad' }, { ...wire, display_time: now / 1000 + 600, uri: wire.uri + 'future' }] } })
     }
     if (input.includes('np-listapi.eastmoney.com')) return Response.json({ data: { list: [{ title: chinaTitle,
-      uniqueUrl: 'http://finance.eastmoney.com/a/company.html', showTime: '2026-11-21 20:58:10' }] } })
+      uniqueUrl: 'http://bank.eastmoney.com/a/company.html', showTime: '2026-11-21 20:58:10' },
+      { title: 'Untrusted destination', uniqueUrl: 'https://bank.eastmoney.com.example.org/a/bad', showTime: '2026-11-21 20:58:10' }] } })
     if (input.includes('federalreserve.gov')) return new Response(feed('www.federalreserve.gov'))
     if (input.includes('panewslab.com')) return new Response(feed('www.panewslab.com'))
     return new Response(null, { status: 503 })
@@ -27,7 +28,7 @@ it('keeps attributed, deduplicated wire and RSS headlines through a partial outa
   const result = await readIndustryNews(env.DB, now)
   expect(result.items).toHaveLength(3)
   expect(result.items[2]).toEqual({ title: chinaTitle, publishedAt: Date.UTC(2026, 10, 21, 12, 58, 10), markets: ['cn'],
-    sources: [{ name: '东方财富', url: 'https://finance.eastmoney.com/a/company.html' }] })
+    sources: [{ name: '东方财富', url: 'https://bank.eastmoney.com/a/company.html' }] })
   expect(result.items[0]).toEqual({ title: '两地上市公司公布季度业绩。', publishedAt: now,
     markets: ['cn', 'us', 'hk'], sources: [{ name: '华尔街见闻', url: wire.uri }] })
   expect(result.items[1]?.markets).toEqual(['crypto', 'macro'])
