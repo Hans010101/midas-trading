@@ -17,7 +17,7 @@ import { notFound } from 'next/navigation'
 import { AcademyArticleContent } from '@/components/academy/academy-article-content'
 import { JsonLd } from '@/components/seo/json-ld'
 import { ARTICLE_DATES } from '@/lib/seo/article-dates'
-import { buildArticleSchema, buildBreadcrumbSchema } from '@/lib/seo/schema'
+import { articleImage, buildArticleSchema, buildBreadcrumbSchema } from '@/lib/seo/schema'
 import { getInteractives } from '@/content/academy/interactives'
 import { getPractice, buildPracticeHref } from '@/content/academy/practice'
 import { getQuiz } from '@/content/academy/quizzes'
@@ -46,6 +46,7 @@ export async function generateMetadata({
   const stage = getStage(meta.stage)
   const description = `${meta.excerpt}(${stage?.name ?? '点金训练营'})`
   const canonical = `/academy/article/${slug}`
+  const card = { title: meta.title, description, images: [articleImage(getArticleBySlug(slug))] }
   return {
     title: meta.title,
     description,
@@ -57,7 +58,8 @@ export async function generateMetadata({
         'x-default': canonical,
       },
     },
-    openGraph: { title: meta.title, description, url: canonical },
+    openGraph: { ...card, url: canonical, type: 'article', locale: 'zh_CN' },
+    twitter: { ...card, card: 'summary_large_image' },
   }
 }
 
@@ -93,7 +95,7 @@ export default async function AcademyArticlePage({
       <JsonLd
         data={[
           buildArticleSchema({
-            title: meta.title, excerpt: meta.excerpt, slug, stageName,
+            markdown, title: meta.title, excerpt: meta.excerpt, slug, stageName,
             datePublished: ARTICLE_DATES[slug]?.published,
             dateModified: ARTICLE_DATES[slug]?.modified,
           }),

@@ -40,9 +40,15 @@ export const websiteSchema = {
   publisher: { '@id': ORG_ID },
 } as const
 
+export function articleImage(markdown: string | null): string {
+  const illustration = markdown?.match(/!\[[^\]\n]*\]\((\/academy-img\/[\p{L}\p{N}_-]+\.png)\)/u)?.[1]
+  return new URL(illustration ?? '/brand/seal.png', BASE).href
+}
+
 /** 文章 Article schema(每篇 · 喂富摘要 + AI 引擎引用)· date 由 GEO TL;DR刀 git 回填
  *  (见 lib/seo/article-dates.ts · AI 新鲜度信号)· 缺失仍走原「无日期」兜底(宁缺毋假)。 */
 export function buildArticleSchema(input: {
+  markdown: string
   title: string
   excerpt: string
   slug: string
@@ -68,7 +74,7 @@ export function buildArticleSchema(input: {
       url: `${BASE}${english ? '/en' : ''}/research/team`,
     },
     publisher: { '@type': 'Organization', '@id': ORG_ID, name: organizationSchema.name, url: BASE },
-    image: `${BASE}/brand/seal.png`,
+    image: articleImage(input.markdown),
     // ★date 缺失时【不输出】该字段(保持原「无日期」兜底 · 宁缺毋假,绝不造假日期)。
     ...(input.datePublished ? { datePublished: input.datePublished } : {}),
     ...(input.dateModified ? { dateModified: input.dateModified } : {}),

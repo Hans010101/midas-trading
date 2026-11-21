@@ -17,6 +17,7 @@ class Document(HTMLParser):
         self.ids = set()
         self.links = set()
         self.schemas = []
+        self.meta = {}
         self.in_schema = False
 
     def handle_starttag(self, tag, attributes):
@@ -25,6 +26,8 @@ class Document(HTMLParser):
             self.lang = attrs.get("lang")
         if tag == "link" and attrs.get("rel") == "canonical":
             self.canonical = attrs.get("href")
+        if tag == "meta":
+            self.meta[attrs.get("property") or attrs.get("name")] = attrs.get("content")
         if tag == "a":
             self.links.add(attrs.get("href"))
         if tag == "h1":
@@ -62,7 +65,12 @@ def check(path):
 if __name__ == "__main__":
     check("/lab/assistant")
     check("/en/privacy")
-    check("/en/academy/article/C8")
+    for locale in ("", "/en"):
+        page = check(locale + "/academy/article/C8")
+        article = next(s for s in page.schemas if s.get("@type") == "Article")
+        assert page.meta["og:title"] == page.meta["twitter:title"] == article["headline"]
+        assert page.meta["og:image"] == page.meta["twitter:image"] == article["image"]
+        assert unquote(urlsplit(article["image"]).path) == "/academy-img/C8-配图1.png"
     for market in ("cn", "us", "hk", "crypto"):
         page = check(f"/{market}-market")
         assert any(link and link.startswith(f"/{market}/") for link in page.links), market
