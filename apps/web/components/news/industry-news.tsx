@@ -1,7 +1,7 @@
 import type { IndustryMarket, IndustryNews } from '@midas/shared'
 import { ArrowDown } from 'lucide-react'
 import Link from 'next/link'
-import { RefreshNews } from './refresh-news'
+import { NewsReadingPosition, RefreshNews } from './refresh-news'
 
 import { TopNav } from '@/components/layout/top-nav'
 import { PublicSiteFooter } from '@/components/seo/public-site-shell'
@@ -62,6 +62,7 @@ export async function NewsTimeline({ searchParams, english = false }: { searchPa
   const more = typeof query.more === 'string' ? Number(query.more) : 0
   const endPage = page + (Number.isSafeInteger(more) ? Math.max(0, Math.min(more, pages - page)) : 0)
   const slice = items.slice((page - 1) * pageSize, endPage * pageSize)
+  const nextStory = items[endPage * pageSize]
   const delayed = data?.delayedMarkets.filter(key => market === 'all' || market === key) ?? []
   const byDay = new Map<string, typeof slice>()
   for (const item of slice) {
@@ -131,7 +132,7 @@ export async function NewsTimeline({ searchParams, english = false }: { searchPa
                 {headlines.map(item => {
                   const first = item.sources[0]!
                   const priority = priorityLabels[item.priority][english ? 1 : 0]
-                  return <li key={first.url} className={cn('px-2 py-2.5 sm:px-3', item.priority === 3 && 'bg-amber-50/80 dark:bg-amber-950/25')}>
+                  return <li id={'headline-' + first.url} key={first.url} className={cn('px-2 py-2.5 sm:px-3', item.priority === 3 && 'bg-amber-50/80 dark:bg-amber-950/25')}>
                     <article className="grid grid-cols-[2.75rem_minmax(0,1fr)] items-baseline gap-x-2 sm:grid-cols-[3.5rem_minmax(0,1fr)]">
                       <time dateTime={new Date(item.publishedAt).toISOString()} className="font-mono text-xs tabular-nums text-muted-foreground">
                         {clock.format(item.publishedAt)}
@@ -161,12 +162,13 @@ export async function NewsTimeline({ searchParams, english = false }: { searchPa
           ))}
           {(page > 1 || endPage < pages) && <nav aria-label={english ? 'More headlines' : '更多快讯'} className="mt-4 flex items-center justify-center gap-4 text-sm">
             {page > 1 && <Link prefetch={false} className="text-midas-red hover:underline" href={href(market, days, page - 1)}>{english ? 'Newer headlines' : '查看较新快讯'}</Link>}
-            {endPage < pages && <Link prefetch={false} scroll={false}
+            {nextStory && <Link prefetch={false} scroll={false}
               className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 hover:bg-surface-subtle focus-visible:outline-midas-red"
-              href={href(market, days, page, endPage - page + 1)}>
+              href={href(market, days, page, endPage - page + 1) + '#' + encodeURIComponent('headline-' + nextStory.sources[0]!.url)}>
               {english ? 'Load older headlines' : '加载更早快讯'}<ArrowDown aria-hidden="true" className="h-3.5 w-3.5" />
             </Link>}
           </nav>}
+          <NewsReadingPosition endPage={endPage} />
         </section>
       </main>
       <PublicSiteFooter english={english} />

@@ -19,3 +19,17 @@ export function RefreshNews({ english }: { english: boolean }) {
     {pending ? (english ? 'Refreshing…' : '刷新中…') : (english ? 'Refresh' : '刷新')}
   </button>
 }
+
+// A streamed route can resolve its fragment before the new headlines reach the DOM.
+export function NewsReadingPosition({ endPage }: { endPage: number }) {
+  useEffect(() => {
+    if (!location.hash.startsWith('#headline-')) return
+    const row = Array.from(document.querySelectorAll<HTMLLIElement>('li[id^="headline-"]'))
+      .find(item => '#' + encodeURIComponent(item.id) === location.hash)
+    if (row) {
+      row.scrollIntoView({ block: 'start' })
+      row.querySelector<HTMLAnchorElement>('h3 a')?.focus({ preventScroll: true })
+    }
+  }, [endPage])
+  return null
+}
